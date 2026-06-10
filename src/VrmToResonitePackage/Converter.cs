@@ -38,6 +38,7 @@ internal static class Converter
             DisablePlatformInterfaces = true,
         };
 
+        LocalDbMaintenance.ValidateOrReset(launchOptions.DataDirectory);
         await runner.Initialize(launchOptions).ConfigureAwait(false);
         Console.WriteLine("エンジン起動完了。変換を開始します。");
 

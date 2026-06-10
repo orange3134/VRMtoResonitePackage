@@ -60,6 +60,10 @@ internal static class MaterialTuner
         {
             case "blend":
                 material.BlendMode.Value = BlendMode.Alpha;
+                // Alpha blending defaults to the transparent queue (3000), which can
+                // break sorting badly on converted MToon avatars; the opaque queue
+                // (2000) avoids the worst artifacts.
+                material.RenderQueue.Value = 2000;
                 break;
             case "mask":
                 material.BlendMode.Value = BlendMode.Cutout;
