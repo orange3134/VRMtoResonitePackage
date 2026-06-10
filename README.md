@@ -16,6 +16,9 @@ VRMアバターを **.resonitepackage** に変換するWindows用ツールです
     アウェイインジケーター等（ゲーム内のAvatarCreator相当）
   - **視線・まばたき**: VRMのexpression（blink/blinkLeft/blinkRight）から目のセットアップ
     （EyeRotationDriverのMaxSwingはVRM向けに4へ調整）
+  - **視点位置**: 目ボーンの中点から眉間（顔表面）へ自動オフセット
+  - **アバター保護**: SimpleAvatarProtectionを既定で付与（インポートした人が所有者に）
+  - **AvatarRenderSettings**: NearClip=0.075で前髪が一人称視点を遮る問題を回避
   - **手の向き**: ボーン位置から決定論的に計算（+Z=中指方向、+Y=手の甲）
   - **リップシンク**: VRMの母音表情（あいうえお）をResoniteのビセームに直結。
     Resoniteの名前推測が目のシェイプキー等を誤登録した場合は自動解除
@@ -49,6 +52,8 @@ VrmToResonitePackage.exe <model.vrm> [model2.vrm ...] [オプション]
   --no-avatar              アバターセットアップを行わずモデルのみ変換
   --face-tracking          フェイストラッキング用のAvatarExpressionDriverを生成
                            （対応アバター以外では誤登録の元になるため既定では無効）
+  --no-protection          SimpleAvatarProtection（アバター保護）を付けない
+                           （既定で付与。インポートした人が所有者になる）
   --height <m>             アバターの身長をメートル指定でリスケール
   --keep-working-files     作業用一時ファイルを残す（デバッグ用）
   --inspect                変換せず、.resonitepackageの中身を表示（検証用）

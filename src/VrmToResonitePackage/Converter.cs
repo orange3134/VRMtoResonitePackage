@@ -170,7 +170,7 @@ internal static class Converter
                 else
                 {
                     Console.WriteLine("アバターをセットアップ中...");
-                    AvatarSetup.Build(root, vrm, options.TargetHeight, options.FaceTracking);
+                    AvatarSetup.Build(root, vrm, options.TargetHeight, options.FaceTracking, !options.NoProtection);
                     MaterialTuner.Apply(root, assetsSlot, vrm);
                     SpringBoneSetup.Apply(root, vrm);
                 }

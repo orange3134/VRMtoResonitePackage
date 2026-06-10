@@ -128,6 +128,7 @@ internal sealed class CliOptions
     public bool ShowHelp { get; set; }
     public bool NoAvatar { get; set; }
     public bool FaceTracking { get; set; }
+    public bool NoProtection { get; set; }
     public bool KeepWorkingFiles { get; set; }
     public float? TargetHeight { get; set; }
     public bool InspectMode { get; set; }
@@ -158,6 +159,9 @@ internal sealed class CliOptions
                     break;
                 case "--face-tracking":
                     options.FaceTracking = true;
+                    break;
+                case "--no-protection":
+                    options.NoProtection = true;
                     break;
                 case "--inspect":
                     options.InspectMode = true;
@@ -217,6 +221,7 @@ internal sealed class CliOptions
         Console.WriteLine("  --resonite-path <dir>    Resoniteのインストールフォルダ");
         Console.WriteLine("  --no-avatar              アバターセットアップを行わずモデルのみ変換");
         Console.WriteLine("  --face-tracking          フェイストラッキング用AvatarExpressionDriverを生成");
+        Console.WriteLine("  --no-protection          SimpleAvatarProtection（アバター保護）を付けない");
         Console.WriteLine("  --height <m>             アバターの身長をメートル指定でリスケール");
         Console.WriteLine("  --keep-working-files     作業用一時ファイルを残す（デバッグ用）");
         Console.WriteLine("  -h, --help               このヘルプ");

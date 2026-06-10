@@ -74,7 +74,8 @@ internal static class AvatarSetup
         ["rightLittleDistal"] = BodyNode.RightPinky_Distal,
     };
 
-    public static void Build(Slot root, VrmModel vrm, float? targetHeight, bool setupFaceTracking = false)
+    public static void Build(Slot root, VrmModel vrm, float? targetHeight, bool setupFaceTracking = false,
+        bool protect = true)
     {
         Dictionary<string, Slot> slotsByName = SlotIndex.Build(root);
 
@@ -159,6 +160,23 @@ internal static class AvatarSetup
         root.AttachComponent<AvatarRoot>();
         grabbable.CustomCanGrabCheck.Target = Grabbable.UserRootGrabCheck;
 
+        if (protect)
+        {
+            // Headless there is no signed-in user, but ReassignUserOnPackageImport
+            // (default true) hands ownership to whoever imports the package in Resonite.
+            root.AttachComponent<SimpleAvatarProtection>();
+            foreach (SkinnedMeshRenderer renderer in root.GetComponentsInChildren<SkinnedMeshRenderer>())
+            {
+                renderer.Slot.AttachComponent<SimpleAvatarProtection>();
+            }
+        }
+
+        // Pull the near clip in so long bangs don't occlude the first-person view.
+        Slot renderSettingsSlot = root.AddSlot("AvatarRenderSettings");
+        AvatarRenderSettings renderSettings = renderSettingsSlot.AttachComponent<AvatarRenderSettings>();
+        renderSettings.NearClip.Value = 0.075f;
+        renderSettings.FarClip.Value = null;
+
         AvatarCreator.EnsureVoiceOutput(root, rig, volumeMeter: true);
         HashSet<IField<float>> vrmVisemeFields = SetupVisemesFromVrm(root, vrm);
         CleanupMisassignedVisemes(root, vrmVisemeFields);
@@ -214,25 +232,40 @@ internal static class AvatarSetup
 
     // ---------------------------------------------------------------- alignment
 
+    /// <summary>
+    /// Computes the first-person view position. The raw eye-bone midpoint sits inside
+    /// the face mesh, so the view is pushed out to roughly the glabella (between the
+    /// eyebrows, on the face surface) — the common convention for Resonite avatars.
+    /// The offsets scale with the distance between the eye bones.
+    /// </summary>
     private static float3 ComputeEyePosition(BipedRig rig, VrmModel vrm, float3 up, float3 forward)
     {
         Slot leftEye = rig.TryGetBone(BodyNode.LeftEye);
         Slot rightEye = rig.TryGetBone(BodyNode.RightEye);
         if (leftEye != null && rightEye != null)
         {
-            return (leftEye.GlobalPosition + rightEye.GlobalPosition) * 0.5f;
+            float3 eyeMid = (leftEye.GlobalPosition + rightEye.GlobalPosition) * 0.5f;
+            float eyeDistance = MathX.Distance(leftEye.GlobalPosition, rightEye.GlobalPosition);
+            float forwardOffset = MathX.Clamp(eyeDistance * 0.7f, 0.03f, 0.09f);
+            float upOffset = MathX.Clamp(eyeDistance * 0.2f, 0.005f, 0.025f);
+            return eyeMid + forward * forwardOffset + up * upOffset;
         }
 
         Slot head = rig[BodyNode.Head];
         float scale = MathX.Abs(head.GlobalScale.y);
+        float3 basePosition;
         if (vrm.FirstPersonOffset.HasValue)
         {
             System.Numerics.Vector3 offset = vrm.FirstPersonOffset.Value;
-            return head.GlobalPosition
-                   + up * offset.Y * scale
-                   + forward * MathX.Abs(offset.Z) * scale;
+            basePosition = head.GlobalPosition
+                           + up * offset.Y * scale
+                           + forward * MathX.Abs(offset.Z) * scale;
         }
-        return head.GlobalPosition + up * 0.06f * scale + forward * 0.05f * scale;
+        else
+        {
+            basePosition = head.GlobalPosition + up * 0.06f * scale;
+        }
+        return basePosition + forward * 0.06f * scale + up * 0.01f * scale;
     }
 
     /// <summary>
@@ -251,13 +284,25 @@ internal static class AvatarSetup
         reference.GlobalPosition = hand.GlobalPosition;
         reference.GlobalRotation = handRotation;
 
-        // Tool anchors share the same convention, sitting forward along the fingers.
-        foreach (string name in new[] { "Tooltip", "Grabber", "Shelf" })
-        {
-            Slot anchor = reference.AddSlot(name);
-            anchor.GlobalPosition = hand.GlobalPosition + fingers * 0.15f;
-            anchor.GlobalRotation = handRotation;
-        }
+        // Anchor placement (orientation shared with the hand):
+        //   Tool      - forward along the fingers, where held tools sit
+        //   GrabArea  - at the base of the middle finger, nudged toward the palm
+        //   Toolshelf - at the wrist, offset toward the back of the hand
+        Slot middleProximal = rig.TryGetBone(isRight
+            ? BodyNode.RightMiddleFinger_Proximal
+            : BodyNode.LeftMiddleFinger_Proximal);
+        float3 fingerBase = middleProximal?.GlobalPosition ?? (hand.GlobalPosition + fingers * 0.07f);
+
+        CreateAnchorReference(reference, "Tooltip", hand.GlobalPosition + fingers * 0.15f, handRotation);
+        CreateAnchorReference(reference, "Grabber", fingerBase - back * 0.01f, handRotation);
+        CreateAnchorReference(reference, "Shelf", hand.GlobalPosition + back * 0.05f, handRotation);
+    }
+
+    private static void CreateAnchorReference(Slot reference, string name, float3 globalPosition, floatQ globalRotation)
+    {
+        Slot anchor = reference.AddSlot(name);
+        anchor.GlobalPosition = globalPosition;
+        anchor.GlobalRotation = globalRotation;
     }
 
     private static float3 ComputeFingerDirection(BipedRig rig, Slot hand, bool isRight, float3 modelForward)
