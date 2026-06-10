@@ -133,10 +133,11 @@ internal static class Converter
             SanitizeFileName(Path.GetFileNameWithoutExtension(vrmPath)) + ".resonitepackage");
 
         // Resonite's importer keys its behavior off the file extension; a VRM is a GLB container.
+        // The preprocessor also fixes morph target naming quirks of older exporters.
         string workDirectory = Path.Combine(Path.GetTempPath(), "VrmToResonitePackage", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workDirectory);
         string glbPath = Path.Combine(workDirectory, SanitizeFileName(Path.GetFileNameWithoutExtension(vrmPath)) + ".glb");
-        File.Copy(vrmPath, glbPath);
+        GlbPreprocessor.CreateImportableGlb(vrmPath, glbPath);
 
         try
         {
@@ -157,7 +158,19 @@ internal static class Converter
                 settings.GenerateSkeletonBones = true;
 
                 Console.WriteLine("モデルをインポート中...");
-                await ModelImporter.ImportModelAsync(glbPath, root, settings, assetsSlot);
+                // A crashed import coroutine never completes its task (engine logs the
+                // exception and goes silent), so guard with a timeout to keep batch
+                // conversion moving.
+                Task importTask = ModelImporter.ImportModelAsync(glbPath, root, settings, assetsSlot);
+                Task winner = await Task.WhenAny(importTask, Task.Delay(TimeSpan.FromSeconds(options.ImportTimeoutSeconds)));
+                await default(ToWorld);
+                if (winner != importTask)
+                {
+                    throw new TimeoutException(
+                        $"モデルのインポートが {options.ImportTimeoutSeconds} 秒以内に完了しませんでした。" +
+                        "インポート中の例外が原因の可能性があります（ログを確認してください）。");
+                }
+                await importTask;
 
                 Console.WriteLine("アセットの読み込みを待機中...");
                 await WaitForAssets(assetsSlot);

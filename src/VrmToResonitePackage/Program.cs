@@ -91,6 +91,14 @@ internal static class Program
             }
             return result;
         }
+        if (options.AssimpDump)
+        {
+            foreach (string file in options.InputFiles)
+            {
+                AssimpDump.Dump(file);
+            }
+            return 0;
+        }
         return Converter.Run(options, resonitePath).GetAwaiter().GetResult();
     }
 
@@ -134,8 +142,10 @@ internal sealed class CliOptions
     public float? ViewForward { get; set; }
     public float? ViewUp { get; set; }
     public float? NearClip { get; set; }
+    public int ImportTimeoutSeconds { get; set; } = 300;
     public bool InspectMode { get; set; }
     public bool InspectVerbose { get; set; }
+    public bool AssimpDump { get; set; }
 
     public static CliOptions Parse(string[] args)
     {
@@ -173,6 +183,9 @@ internal sealed class CliOptions
                     options.InspectMode = true;
                     options.InspectVerbose = true;
                     break;
+                case "--assimp-dump":
+                    options.AssimpDump = true;
+                    break;
                 case "--keep-working-files":
                     options.KeepWorkingFiles = true;
                     break;
@@ -187,6 +200,9 @@ internal sealed class CliOptions
                     break;
                 case "--near-clip":
                     options.NearClip = RequireFloat(args, ref i, arg, mustBePositive: false);
+                    break;
+                case "--import-timeout":
+                    options.ImportTimeoutSeconds = (int)RequireFloat(args, ref i, arg, mustBePositive: true);
                     break;
                 default:
                     if (arg.StartsWith('-'))
@@ -244,6 +260,7 @@ internal sealed class CliOptions
         Console.WriteLine("  --view-forward <m>       視点の前方オフセット（既定: 目間距離から自動）");
         Console.WriteLine("  --view-up <m>            視点の上方オフセット（既定: 目間距離から自動)");
         Console.WriteLine("  --near-clip <m>          AvatarRenderSettingsのNearClip（既定: 0.075、0で無効）");
+        Console.WriteLine("  --import-timeout <sec>   モデルインポートのタイムアウト秒数（既定: 300）");
         Console.WriteLine("  --keep-working-files     作業用一時ファイルを残す（デバッグ用）");
         Console.WriteLine("  -h, --help               このヘルプ");
         Console.WriteLine();
