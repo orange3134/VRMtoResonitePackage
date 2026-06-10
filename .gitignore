@@ -5,7 +5,9 @@ publish/
 
 # Test artifacts
 test-output/
+test-input/
 *.resonitepackage
+*.vrm
 
 # User-local settings
 *.user
