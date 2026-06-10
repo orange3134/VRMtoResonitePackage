@@ -12,8 +12,23 @@ namespace VrmToResonitePackage;
 /// </summary>
 internal static class LocalDbMaintenance
 {
+    /// <summary>The only data root this tool is allowed to manage (and delete from).</summary>
+    public static string ManagedDataRoot => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "VrmToResonitePackage");
+
     public static void ValidateOrReset(string dataDirectory)
     {
+        // Hard safety guard: never touch a database outside this tool's own data
+        // folder (e.g. the user's actual Resonite installation data).
+        string fullPath = Path.GetFullPath(dataDirectory);
+        if (!fullPath.StartsWith(ManagedDataRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(fullPath, ManagedDataRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            UniLog.Warning($"LocalDBの検証をスキップ: 管理外のデータフォルダです ({dataDirectory})");
+            return;
+        }
+
         string databaseFile = Path.Combine(dataDirectory, "Data.litedb");
         string logFile = Path.Combine(dataDirectory, "Data-log.litedb");
         string keyFile = Path.Combine(dataDirectory, "LocalKey.bin");
