@@ -52,7 +52,7 @@ internal static class Converter
             DisablePlatformInterfaces = true,
         };
 
-        LocalDbMaintenance.ValidateOrReset(launchOptions.DataDirectory);
+        LocalDbMaintenance.EnsureHealthy(launchOptions.DataDirectory);
         await runner.Initialize(launchOptions).ConfigureAwait(false);
         Console.WriteLine("エンジン起動完了。変換を開始します。");
 
@@ -212,7 +212,7 @@ internal static class Converter
 
                 if (options.NoAvatar)
                 {
-                    MaterialTuner.Apply(root, assetsSlot, vrm);
+                    await MaterialTuner.Apply(root, assetsSlot, vrm, vrmPath);
                     SpringBoneSetup.Apply(root, vrm);
                 }
                 else
@@ -231,7 +231,7 @@ internal static class Converter
                         setupOptions.NearClip = options.NearClip.Value;
                     }
                     AvatarSetup.Build(root, vrm, setupOptions);
-                    MaterialTuner.Apply(root, assetsSlot, vrm);
+                    await MaterialTuner.Apply(root, assetsSlot, vrm, vrmPath);
                     SpringBoneSetup.Apply(root, vrm);
                 }
 

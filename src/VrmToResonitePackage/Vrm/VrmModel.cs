@@ -24,6 +24,9 @@ public sealed class VrmModel
     /// <summary>glTF mesh index -> node indices that reference the mesh.</summary>
     public Dictionary<int, List<int>> MeshToNodes { get; } = new();
 
+    /// <summary>glTF texture index -> image index.</summary>
+    public List<int> TextureToImage { get; } = new();
+
     /// <summary>VRM humanoid bone name (normalized VRM1 style, camelCase) -> node index.</summary>
     public Dictionary<string, int> HumanBones { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -113,7 +116,16 @@ public sealed class VrmMaterialInfo
     public string AlphaMode { get; set; } = "opaque";
     public float AlphaCutoff { get; set; } = 0.5f;
     public bool DoubleSided { get; set; }
+
+    /// <summary>Outline width normalized to meters (MToon 0.x stores centimeters).</summary>
     public float OutlineWidth { get; set; }
+
+    /// <summary>none / world / screen.</summary>
+    public string OutlineWidthMode { get; set; } = "none";
+
+    /// <summary>glTF image index of the outline width multiply texture, if any.</summary>
+    public int? OutlineWidthImageIndex { get; set; }
+
     public System.Numerics.Vector4? OutlineColor { get; set; }
     public System.Numerics.Vector4? ShadeColor { get; set; }
     public System.Numerics.Vector4? EmissionColor { get; set; }

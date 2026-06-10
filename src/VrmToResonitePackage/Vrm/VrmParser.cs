@@ -92,6 +92,23 @@ public static class VrmParser
             }
         }
 
+        // glTF texture index -> image index (needed to locate MToon-only textures).
+        if (root.TryGetProperty("textures", out JsonElement textures))
+        {
+            foreach (JsonElement texture in textures.EnumerateArray())
+            {
+                model.TextureToImage.Add(texture.TryGetProperty("source", out JsonElement source)
+                    ? source.GetInt32()
+                    : -1);
+            }
+        }
+        int ResolveImage(int textureIndex)
+        {
+            return textureIndex >= 0 && textureIndex < model.TextureToImage.Count
+                ? model.TextureToImage[textureIndex]
+                : -1;
+        }
+
         // Base glTF material info (alpha mode etc.) — applies to both VRM versions.
         if (root.TryGetProperty("materials", out JsonElement materials))
         {
@@ -126,6 +143,7 @@ public static class VrmParser
                         Vec3 s = ReadVec3Array(shade);
                         info.ShadeColor = new Vec4(s.X, s.Y, s.Z, 1f);
                     }
+                    // VRM1 stores the outline width in meters already.
                     if (mtoon.TryGetProperty("outlineWidthFactor", out JsonElement ow))
                     {
                         info.OutlineWidth = ow.GetSingle();
@@ -135,10 +153,25 @@ public static class VrmParser
                         Vec3 o = ReadVec3Array(oc);
                         info.OutlineColor = new Vec4(o.X, o.Y, o.Z, 1f);
                     }
-                    if (mtoon.TryGetProperty("outlineWidthMode", out JsonElement owm) &&
-                        owm.GetString() == "none")
+                    info.OutlineWidthMode = (mtoon.TryGetProperty("outlineWidthMode", out JsonElement owm)
+                        ? owm.GetString() : null) switch
+                    {
+                        "worldCoordinates" => "world",
+                        "screenCoordinates" => "screen",
+                        _ => "none",
+                    };
+                    if (info.OutlineWidthMode == "none")
                     {
                         info.OutlineWidth = 0f;
+                    }
+                    if (mtoon.TryGetProperty("outlineWidthMultiplyTexture", out JsonElement owt) &&
+                        owt.TryGetProperty("index", out JsonElement owtIndex))
+                    {
+                        int image = ResolveImage(owtIndex.GetInt32());
+                        if (image >= 0)
+                        {
+                            info.OutlineWidthImageIndex = image;
+                        }
                     }
                 }
                 model.Materials[name] = info;
@@ -337,11 +370,19 @@ public static class VrmParser
                     }
                     if (floats.TryGetProperty("_OutlineWidth", out JsonElement ow))
                     {
-                        // MToon 0.x outline width is in centimeters-ish (0..0.1 typical), keep raw.
-                        info.OutlineWidth = ow.GetSingle();
+                        // MToon 0.x stores the width in centimeters; normalize to meters.
+                        info.OutlineWidth = ow.GetSingle() * 0.01f;
                     }
-                    if (floats.TryGetProperty("_OutlineWidthMode", out JsonElement owm) &&
-                        (int)owm.GetSingle() == 0)
+                    if (floats.TryGetProperty("_OutlineWidthMode", out JsonElement owm))
+                    {
+                        info.OutlineWidthMode = (int)owm.GetSingle() switch
+                        {
+                            1 => "world",
+                            2 => "screen",
+                            _ => "none",
+                        };
+                    }
+                    if (info.OutlineWidthMode == "none")
                     {
                         info.OutlineWidth = 0f;
                     }
@@ -349,6 +390,18 @@ public static class VrmParser
                     {
                         // 0 = off (double sided), 1 = front, 2 = back.
                         info.DoubleSided = (int)cull.GetSingle() == 0;
+                    }
+                }
+                if (mat.TryGetProperty("textureProperties", out JsonElement textureProps) &&
+                    textureProps.TryGetProperty("_OutlineWidthTexture", out JsonElement outlineTexture))
+                {
+                    int textureIndex = outlineTexture.GetInt32();
+                    int imageIndex = textureIndex >= 0 && textureIndex < model.TextureToImage.Count
+                        ? model.TextureToImage[textureIndex]
+                        : -1;
+                    if (imageIndex >= 0)
+                    {
+                        info.OutlineWidthImageIndex = imageIndex;
                     }
                 }
                 if (mat.TryGetProperty("vectorProperties", out JsonElement vectors))
@@ -596,6 +649,79 @@ public static class VrmParser
             }
             model.SpringChains.Add(chain);
         }
+    }
+
+    // ---------------------------------------------------------------- image extraction
+
+    /// <summary>
+    /// Extracts an embedded image from the GLB binary chunk (used for MToon-only
+    /// textures like the outline width mask, which Assimp never imports because no
+    /// standard glTF material slot references them).
+    /// </summary>
+    public static (byte[] data, string extension) ExtractImage(string vrmPath, int imageIndex)
+    {
+        using FileStream stream = File.OpenRead(vrmPath);
+        using var reader = new BinaryReader(stream);
+        if (reader.ReadUInt32() != 0x46546C67)
+        {
+            throw new InvalidDataException("GLBファイルではありません。");
+        }
+        reader.ReadUInt32(); // container version
+        reader.ReadUInt32(); // total length
+
+        byte[] jsonBytes = null;
+        long binOffset = -1;
+        long binLength = 0;
+        while (stream.Position + 8 <= stream.Length)
+        {
+            uint chunkLength = reader.ReadUInt32();
+            uint chunkType = reader.ReadUInt32();
+            if (chunkType == 0x4E4F534A) // "JSON"
+            {
+                jsonBytes = reader.ReadBytes(checked((int)chunkLength));
+            }
+            else if (chunkType == 0x004E4942) // "BIN\0"
+            {
+                binOffset = stream.Position;
+                binLength = chunkLength;
+                stream.Seek(chunkLength, SeekOrigin.Current);
+            }
+            else
+            {
+                stream.Seek(chunkLength, SeekOrigin.Current);
+            }
+        }
+        if (jsonBytes == null || binOffset < 0)
+        {
+            throw new InvalidDataException("GLBチャンクの解析に失敗しました。");
+        }
+
+        using JsonDocument doc = JsonDocument.Parse(jsonBytes);
+        JsonElement root = doc.RootElement;
+        JsonElement image = root.GetProperty("images")[imageIndex];
+        string mimeType = image.TryGetProperty("mimeType", out JsonElement mime) ? mime.GetString() : null;
+        if (!image.TryGetProperty("bufferView", out JsonElement bufferViewIndex))
+        {
+            throw new InvalidDataException($"画像 {imageIndex} はバイナリチャンクに格納されていません。");
+        }
+        JsonElement bufferView = root.GetProperty("bufferViews")[bufferViewIndex.GetInt32()];
+        long byteOffset = bufferView.TryGetProperty("byteOffset", out JsonElement off) ? off.GetInt64() : 0;
+        int byteLength = bufferView.GetProperty("byteLength").GetInt32();
+        if (byteOffset + byteLength > binLength)
+        {
+            throw new InvalidDataException($"画像 {imageIndex} のbufferViewがバイナリチャンク外を指しています。");
+        }
+
+        stream.Seek(binOffset + byteOffset, SeekOrigin.Begin);
+        byte[] data = reader.ReadBytes(byteLength);
+        string extension = mimeType switch
+        {
+            "image/png" => ".png",
+            "image/jpeg" => ".jpg",
+            "image/webp" => ".webp",
+            _ => ".png",
+        };
+        return (data, extension);
     }
 
     // ---------------------------------------------------------------- helpers

@@ -1,5 +1,6 @@
 using Elements.Core;
 using FrooxEngine;
+using FrooxEngine.Store;
 using VrmToResonitePackage.Vrm;
 
 namespace VrmToResonitePackage;
@@ -10,9 +11,10 @@ namespace VrmToResonitePackage;
 /// </summary>
 internal static class MaterialTuner
 {
-    public static void Apply(Slot root, Slot assetsSlot, VrmModel vrm)
+    public static async Task Apply(Slot root, Slot assetsSlot, VrmModel vrm, string vrmPath)
     {
         int tuned = 0;
+        var outlineMaskCache = new Dictionary<int, StaticTexture2D>();
         foreach (XiexeToonMaterial material in assetsSlot.GetComponentsInChildren<XiexeToonMaterial>())
         {
             // XiexeToon attaches a default shadow ramp texture on creation; MToon's look
@@ -23,7 +25,7 @@ internal static class MaterialTuner
             VrmMaterialInfo info = FindInfo(vrm, material.Slot.Name);
             if (info != null)
             {
-                ApplyInfo(material, info);
+                await ApplyInfo(material, info, vrm, vrmPath, assetsSlot, outlineMaskCache);
             }
             tuned++;
         }
@@ -54,7 +56,8 @@ internal static class MaterialTuner
         return null;
     }
 
-    private static void ApplyInfo(XiexeToonMaterial material, VrmMaterialInfo info)
+    private static async Task ApplyInfo(XiexeToonMaterial material, VrmMaterialInfo info, VrmModel vrm,
+        string vrmPath, Slot assetsSlot, Dictionary<int, StaticTexture2D> outlineMaskCache)
     {
         switch (info.AlphaMode)
         {
@@ -79,16 +82,27 @@ internal static class MaterialTuner
             material.Culling.Value = Culling.Off;
         }
 
-        if (info.OutlineWidth > 0.0001f)
+        if (info.OutlineWidth > 0.00001f && info.OutlineWidthMode != "none")
         {
             material.Outline.Value = XiexeToonMaterial.OutlineStyle.Emissive;
-            // MToon outline width is in centimeters; Xiexe's is in its own small unit.
-            // 0.05cm (typical MToon) maps to a subtle outline of ~0.1.
-            material.OutlineWidth.Value = MathX.Clamp(info.OutlineWidth * 2f, 0.01f, 1f);
+            // XiexeToon (XSToon2.0) extrudes outlines in object space by
+            // _OutlineWidth * 0.01, MToon's world mode extrudes by the width in
+            // meters — so at model scale 1 the conversion is width_m * 100.
+            // (Screen mode has no XSToon equivalent; the same mapping is used.)
+            material.OutlineWidth.Value = MathX.Clamp(info.OutlineWidth * 100f, 0f, 5f);
             if (info.OutlineColor.HasValue)
             {
                 System.Numerics.Vector4 c = info.OutlineColor.Value;
                 material.OutlineColor.Value = new colorX(c.X, c.Y, c.Z, c.W);
+            }
+            if (info.OutlineWidthImageIndex.HasValue)
+            {
+                StaticTexture2D mask = await GetOrImportTexture(
+                    assetsSlot, vrmPath, info.OutlineWidthImageIndex.Value, outlineMaskCache);
+                if (mask != null)
+                {
+                    material.OutlineMask.Target = mask;
+                }
             }
         }
 
@@ -107,5 +121,43 @@ internal static class MaterialTuner
             System.Numerics.Vector4 s = info.ShadeColor.Value;
             material.ShadowRim.Value = new colorX(s.X, s.Y, s.Z, 1f);
         }
+    }
+
+    /// <summary>
+    /// Imports an embedded GLB image as a texture asset. Used for MToon-only textures
+    /// (outline width mask) that the regular model import never touches.
+    /// </summary>
+    private static async Task<StaticTexture2D> GetOrImportTexture(Slot assetsSlot, string vrmPath,
+        int imageIndex, Dictionary<int, StaticTexture2D> cache)
+    {
+        if (cache.TryGetValue(imageIndex, out StaticTexture2D cached))
+        {
+            return cached;
+        }
+        cache[imageIndex] = null;
+        Engine engine = assetsSlot.Engine;
+        Uri uri = null;
+        try
+        {
+            await default(ToBackground);
+            (byte[] data, string extension) = VrmParser.ExtractImage(vrmPath, imageIndex);
+            string tempFile = engine.LocalDB.GetTempFilePath(extension);
+            await File.WriteAllBytesAsync(tempFile, data);
+            uri = await engine.LocalDB.ImportLocalAssetAsync(tempFile, LocalDB.ImportLocation.Move);
+        }
+        catch (Exception ex)
+        {
+            UniLog.Warning($"アウトラインマスク画像の取り込みに失敗しました (image {imageIndex}): {ex.Message}");
+        }
+        await default(ToWorld);
+        if (uri == null)
+        {
+            return null;
+        }
+        Slot textureSlot = assetsSlot.AddSlot($"OutlineMask {imageIndex}");
+        StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
+        texture.URL.Value = uri;
+        cache[imageIndex] = texture;
+        return texture;
     }
 }
