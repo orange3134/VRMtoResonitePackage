@@ -12,65 +12,26 @@ VRMアバターを **.resonitepackage** に変換するWindows用ツールです
   Resonite内で手動インポートしたときと同じ品質のモデルが得られる
 - さらにVRMの正確なメタデータを使って、ゲーム内の手動セットアップを超える自動化:
   - **ヒューマノイドリグ**: VRMのhumanoidボーンマップから正確にBipedRigを構築（名前推測に頼らない）
-  - **フルアバターセットアップ**: VRIK・アバターアンカー・ツールアンカー・ボイス出力・
-    アウェイインジケーター等（ゲーム内のAvatarCreator相当）
   - **視線・まばたき**: VRMのexpression（blink/blinkLeft/blinkRight）から目のセットアップ
-    （EyeRotationDriverのMaxSwingはVRM向けに4へ調整）
+    EyeRotationDriverのMaxSwingを自動調整
   - **視点位置**: 目ボーンの中点から眉間（顔表面）へ自動オフセット
-  - **アバター保護**: SimpleAvatarProtectionを既定で付与（インポートした人が所有者に）
-  - **AvatarRenderSettings**: NearClip=0.075で前髪が一人称視点を遮る問題を回避
+  - **アバター保護**: SimpleAvatarProtectionを既定で付与
+  - **AvatarRenderSettings**: 前髪が一人称視点を遮る問題を回避
   - **手の向き**: ボーン位置から決定論的に計算（+Z=中指方向、+Y=手の甲）
-  - **リップシンク**: VRMの母音表情（あいうえお）をResoniteのビセームに直結。
-    Resoniteの名前推測が目のシェイプキー等を誤登録した場合は自動解除
+  - **リップシンク**: VRMのExpressionを元に設定。
   - **揺れもの**: VRMスプリングボーン → DynamicBoneChain変換（コライダー込み）
-  - **マテリアル**: MToonのアルファモード・両面描画・アウトライン設定をXiexeToonに反映。
-    MToonの見た目に近づけるためShadowRampを除去しShadowSharpnessを0に設定
+  - **マテリアル**: MToonのマテリアル設定を極力忠実にXiexeToonに反映。
 
 ## 必要環境
 
 - Windows + .NET 10 ランタイム
-- **Resonite がインストールされていること**（Steam版の標準パスは自動検出）
-
-> ⚠ このツールはResoniteのDLLを**再配布しません**。実行時にインストール済みの
-> Resoniteフォルダから読み込みます。
+- **Resonite がインストールされていること**
 
 ## 使い方
 
 ### ドラッグ＆ドロップ
 
-`VrmToResonitePackage.exe` に `.vrm` ファイルをドロップしてください。
-同じフォルダに `<ファイル名>.resonitepackage` が出力されます。
-
-### コマンドライン
-
-```
-VrmToResonitePackage.exe <model.vrm> [model2.vrm ...] [オプション]
-
-オプション:
-  -o, --output <dir>       出力先フォルダ
-  --resonite-path <dir>    Resoniteのインストールフォルダ
-  --no-avatar              アバターセットアップを行わずモデルのみ変換
-  --face-tracking          フェイストラッキング用のAvatarExpressionDriverを生成
-                           （対応アバター以外では誤登録の元になるため既定では無効）
-  --no-protection          SimpleAvatarProtection（アバター保護）を付けない
-                           （既定で付与。インポートした人が所有者になる）
-  --height <m>             アバターの身長をメートル指定でリスケール
-  --view-forward <m>       視点（眉間）の前方オフセットをメートルで指定
-                           （既定: 目ボーン間距離から自動計算、約0.03〜0.09）
-  --view-up <m>            視点の上方オフセットをメートルで指定
-                           （既定: 目ボーン間距離から自動計算、約0.005〜0.025）
-  --near-clip <m>          AvatarRenderSettingsのNearClip値
-                           （既定: 0.075。0を指定するとコンポーネント自体を付けない）
-  --keep-working-files     作業用一時ファイルを残す（デバッグ用）
-  --inspect                変換せず、.resonitepackageの中身を表示（検証用）
-  -h, --help               ヘルプ
-```
-
-変換結果の検証（エンジン起動なしでパッケージ内のスロット/コンポーネント構造を表示）:
-
-```
-VrmToResonitePackage.exe --inspect MyAvatar.resonitepackage
-```
+`VrmToResonitePackage.exe` を起動して `.vrm` ファイルをドロップしてください。
 
 ### Resoniteのパス指定
 
