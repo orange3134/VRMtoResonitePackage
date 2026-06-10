@@ -1,4 +1,6 @@
 using System.Collections.Specialized;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using System.Windows;
@@ -182,9 +184,11 @@ internal sealed class MainWindow : Window
         _isConverting = false;
         _spinnerTimer.Stop();
         _spinner.Visibility = Visibility.Collapsed;
-        _packageIcon.Visibility = Visibility.Visible;
         _settingsButton.IsEnabled = true;
-        _outputFiles = result.OutputFiles;
+        _outputFiles = result.OutputFiles.Where(File.Exists).ToArray();
+        _packageIcon.Visibility = result.ExitCode == 0 && _outputFiles.Count > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         _lastLogPath = result.LogPath;
         _title.Text = result.ExitCode == 0 ? "変換完了！" : "変換に失敗しました";
         _message.Text = result.ExitCode == 0
@@ -215,10 +219,8 @@ internal sealed class MainWindow : Window
         try
         {
             string resonitePath = ResoniteLocator.Locate(_settings.ResonitePath);
-            ResoniteLocator.InstallAssemblyResolver(resonitePath);
-            Environment.CurrentDirectory = resonitePath;
             CliOptions options = _settings.ToCliOptions(vrmFiles);
-            ConversionRunResult result = await Task.Run(() => Converter.RunDetailed(options, resonitePath));
+            ConversionRunResult result = await RunConversionProcessAsync(options, resonitePath);
             ShowComplete(result);
         }
         catch (Exception ex)
@@ -232,6 +234,166 @@ internal sealed class MainWindow : Window
             _message.Text = ex.Message;
             _detail.Text = string.IsNullOrWhiteSpace(_lastLogPath) ? "" : $"ログ: {_lastLogPath}";
         }
+    }
+
+    private static async Task<ConversionRunResult> RunConversionProcessAsync(CliOptions options, string resonitePath)
+    {
+        string logsDirectory = Path.Combine(AppContext.BaseDirectory, "Logs");
+        DateTime startTime = DateTime.Now;
+
+        var startInfo = CreateConverterProcessStartInfo();
+        startInfo.Environment["VRM2RESPKG_NOPAUSE"] = "1";
+        AddCliArguments(startInfo.ArgumentList, options, resonitePath);
+
+        using var process = new Process { StartInfo = startInfo };
+        process.Start();
+        Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+        Task<string> errorTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        string output = await outputTask;
+        string error = await errorTask;
+
+        string logPath = FindLatestLogPath(logsDirectory, startTime);
+        string[] outputFiles = GetExpectedOutputFiles(options).Where(File.Exists).ToArray();
+        if (process.ExitCode != 0 && string.IsNullOrWhiteSpace(logPath))
+        {
+            logPath = WriteGuiProcessFailureLog(logsDirectory, output, error);
+        }
+        return new ConversionRunResult(process.ExitCode, outputFiles, logPath, process.ExitCode == 0 ? 0 : 1);
+    }
+
+    private static ProcessStartInfo CreateConverterProcessStartInfo()
+    {
+        string processPath = Environment.ProcessPath;
+        string commandPath = Environment.GetCommandLineArgs().FirstOrDefault();
+        ProcessStartInfo startInfo;
+        if (IsDotNetHost(processPath) && !string.IsNullOrWhiteSpace(commandPath) && File.Exists(commandPath))
+        {
+            startInfo = new ProcessStartInfo(processPath);
+            startInfo.ArgumentList.Add(Path.GetFullPath(commandPath));
+        }
+        else if (!string.IsNullOrWhiteSpace(processPath) && File.Exists(processPath))
+        {
+            startInfo = new ProcessStartInfo(processPath);
+        }
+        else if (!string.IsNullOrWhiteSpace(commandPath) && File.Exists(commandPath))
+        {
+            startInfo = new ProcessStartInfo(Path.GetFullPath(commandPath));
+        }
+        else
+        {
+            throw new InvalidOperationException("実行ファイルのパスを取得できませんでした。");
+        }
+
+        startInfo.UseShellExecute = false;
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.CreateNoWindow = true;
+        startInfo.WorkingDirectory = AppContext.BaseDirectory;
+        return startInfo;
+    }
+
+    private static bool IsDotNetHost(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        return string.Equals(Path.GetFileNameWithoutExtension(path), "dotnet", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AddCliArguments(Collection<string> arguments, CliOptions options, string resonitePath)
+    {
+        arguments.Add("--resonite-path");
+        arguments.Add(resonitePath);
+        if (!string.IsNullOrWhiteSpace(options.OutputDirectory))
+        {
+            arguments.Add("--output");
+            arguments.Add(options.OutputDirectory);
+        }
+        if (options.NoAvatar)
+        {
+            arguments.Add("--no-avatar");
+        }
+        if (options.FaceTracking)
+        {
+            arguments.Add("--face-tracking");
+        }
+        if (options.NoProtection)
+        {
+            arguments.Add("--no-protection");
+        }
+        if (options.KeepWorkingFiles)
+        {
+            arguments.Add("--keep-working-files");
+        }
+        AddNullableFloat(arguments, "--height", options.TargetHeight);
+        AddNullableFloat(arguments, "--view-forward", options.ViewForward);
+        AddNullableFloat(arguments, "--view-up", options.ViewUp);
+        AddNullableFloat(arguments, "--near-clip", options.NearClip);
+        arguments.Add("--import-timeout");
+        arguments.Add(options.ImportTimeoutSeconds.ToString(CultureInfo.InvariantCulture));
+        foreach (string file in options.InputFiles)
+        {
+            arguments.Add(file);
+        }
+    }
+
+    private static void AddNullableFloat(Collection<string> arguments, string name, float? value)
+    {
+        if (!value.HasValue)
+        {
+            return;
+        }
+
+        arguments.Add(name);
+        arguments.Add(value.Value.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static string[] GetExpectedOutputFiles(CliOptions options)
+    {
+        return options.InputFiles
+            .Select(file =>
+            {
+                string outputDirectory = options.OutputDirectory ?? Path.GetDirectoryName(file);
+                return Path.Combine(
+                    outputDirectory,
+                    SanitizeFileName(Path.GetFileNameWithoutExtension(file)) + ".resonitepackage");
+            })
+            .ToArray();
+    }
+
+    private static string FindLatestLogPath(string logsDirectory, DateTime startTime)
+    {
+        if (!Directory.Exists(logsDirectory))
+        {
+            return null;
+        }
+
+        return Directory.GetFiles(logsDirectory, "convert_*.log")
+            .Select(file => new FileInfo(file))
+            .Where(file => file.LastWriteTime >= startTime.AddSeconds(-2))
+            .OrderByDescending(file => file.LastWriteTime)
+            .Select(file => file.FullName)
+            .FirstOrDefault();
+    }
+
+    private static string WriteGuiProcessFailureLog(string logsDirectory, string output, string error)
+    {
+        Directory.CreateDirectory(logsDirectory);
+        string logPath = Path.Combine(logsDirectory, $"gui_process_{DateTime.Now:yyyyMMdd_HHmmss}.log");
+        File.WriteAllText(logPath, output + Environment.NewLine + error);
+        return logPath;
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        foreach (char c in Path.GetInvalidFileNameChars())
+        {
+            name = name.Replace(c, '_');
+        }
+        return name;
     }
 
     private void WindowOnDragEnter(object sender, DragEventArgs e)
