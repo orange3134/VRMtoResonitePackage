@@ -52,8 +52,8 @@
       <HintPath>$(ResonitePath)\Renderite.Shared.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="LiteDB">
-      <HintPath>$(ResonitePath)\LiteDB.dll</HintPath>
+    <Reference Include="Awwdio">
+      <HintPath>$(ResonitePath)\Awwdio.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

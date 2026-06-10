@@ -11,12 +11,6 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        // Internal mode: short-lived LocalDB health probe (see LocalDbMaintenance).
-        if (args.Length >= 2 && args[0] == LocalDbMaintenance.CheckArgument)
-        {
-            return RunLocalDbCheck(args[1]);
-        }
-
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (ShouldLaunchGui(args))
         {
@@ -98,28 +92,6 @@ internal static class Program
             return true;
         }
         return args.All(arg => File.Exists(arg) && string.Equals(Path.GetExtension(arg), ".vrm", StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static int RunLocalDbCheck(string dataDirectory)
-    {
-        try
-        {
-            string resonitePath = ResoniteLocator.Locate(null);
-            ResoniteLocator.InstallAssemblyResolver(resonitePath);
-            return RunLocalDbCheckCore(dataDirectory);
-        }
-        catch
-        {
-            // Cannot probe without Resonite assemblies; report healthy and let the
-            // parent's engine initialization surface any real problem.
-            return 0;
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static int RunLocalDbCheckCore(string dataDirectory)
-    {
-        return LocalDbMaintenance.CheckOnly(dataDirectory);
     }
 
     // NoInlining keeps FrooxEngine types from being JIT-resolved before the resolver is installed.

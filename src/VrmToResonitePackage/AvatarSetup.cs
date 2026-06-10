@@ -196,9 +196,11 @@ internal static class AvatarSetup
             renderSettings.FarClip.Value = null;
         }
 
-        AvatarCreator.EnsureVoiceOutput(root, rig, volumeMeter: true);
-        HashSet<IField<float>> vrmVisemeFields = SetupVisemesFromVrm(root, vrm);
-        CleanupMisassignedVisemes(root, vrmVisemeFields);
+        // Resonite's own EnsureVoiceOutput runs name-heuristic viseme auto-assignment
+        // that misassigns blendshapes on many models, so the voice output is set up
+        // here and visemes are wired exclusively from the VRM expression data.
+        SetupVoiceOutput(root);
+        SetupVisemesFromVrm(root, vrm);
         if (options.FaceTracking)
         {
             AvatarCreator.TrySetupFaceTracking(root);
@@ -500,7 +502,37 @@ internal static class AvatarSetup
         return null;
     }
 
-    // ---------------------------------------------------------------- visemes
+    // ---------------------------------------------------------------- voice & visemes
+
+    /// <summary>
+    /// Voice output portion of AvatarCreator.EnsureVoiceOutput, without the
+    /// TrySetupVisemes name-heuristics call at its end.
+    /// </summary>
+    private static void SetupVoiceOutput(Slot root)
+    {
+        IAvatarObject headObject = root.GetComponentInChildren((IAvatarObject o) => o.Node == BodyNode.Head);
+        if (headObject == null)
+        {
+            return;
+        }
+        AvatarVoiceSourceAssigner voiceAssigner = headObject.Slot.GetComponentOrAttach<AvatarVoiceSourceAssigner>();
+        AvatarAudioOutputManager audioManager = headObject.Slot.GetComponentOrAttach<AvatarAudioOutputManager>();
+
+        VolumeMeter volumeMeter = headObject.Slot.AttachComponent<VolumeMeter>();
+        headObject.Slot.AttachComponent<AvatarVoiceSourceAssigner>().TargetReference.Target = volumeMeter.Source;
+
+        AudioOutput audioOutput = root.GetComponentInChildren((AudioOutput o) => o.Source.Target == null);
+        if (audioOutput == null)
+        {
+            audioOutput = headObject.Slot.AttachComponent<AudioOutput>();
+            audioOutput.SpatialBlend.Value = 1f;
+            audioOutput.Spatialize.Value = true;
+            audioOutput.AudioTypeGroup.Value = AudioTypeGroup.Voice;
+        }
+        audioManager.AudioOutput.Target = audioOutput;
+        voiceAssigner.TargetReference.Target = audioOutput.Source;
+        headObject.Slot.GetComponentOrAttach<AvatarVoiceRangeVisualizer>();
+    }
 
     private static readonly (string preset, Viseme viseme)[] VisemePresets =
     {
@@ -512,15 +544,14 @@ internal static class AvatarSetup
     };
 
     /// <summary>
-    /// Wires the five VRM vowel expressions directly to Resonite's viseme system,
-    /// overriding whatever the name heuristics in TrySetupVisemes guessed.
-    /// Returns the blendshape fields that were wired from VRM data.
+    /// Wires the five VRM vowel expressions directly to Resonite's viseme system.
+    /// Resonite's own auto-assignment is bypassed entirely, so only blendshapes the
+    /// VRM explicitly declares get linked.
     /// </summary>
-    private static HashSet<IField<float>> SetupVisemesFromVrm(Slot root, VrmModel vrm)
+    private static void SetupVisemesFromVrm(Slot root, VrmModel vrm)
     {
         var resolver = new BlendshapeResolver(root, vrm);
         var drivers = new List<DirectVisemeDriver>();
-        var wiredFields = new HashSet<IField<float>>();
 
         foreach ((string preset, Viseme viseme) in VisemePresets)
         {
@@ -540,7 +571,6 @@ internal static class AvatarSetup
                 DirectVisemeDriver driver = skin.Slot.GetComponent<DirectVisemeDriver>()
                                             ?? skin.Slot.AttachComponent<DirectVisemeDriver>();
                 driver[viseme].ForceLink(field);
-                wiredFields.Add(field);
                 if (!drivers.Contains(driver))
                 {
                     drivers.Add(driver);
@@ -550,7 +580,7 @@ internal static class AvatarSetup
         }
         if (drivers.Count == 0)
         {
-            return wiredFields;
+            return;
         }
 
         VisemeAnalyzer analyzer = root.GetComponentInChildren<VisemeAnalyzer>();
@@ -568,78 +598,6 @@ internal static class AvatarSetup
             }
         }
         UniLog.Log($"VRMの母音表情からビセームを設定しました ({drivers.Count} ドライバー)。");
-        return wiredFields;
-    }
-
-    /// <summary>
-    /// Name parts that indicate a blendshape is not a mouth shape. Resonite's viseme
-    /// auto-assign heuristics can mis-link these (e.g. VRoid's Fcl_EYE_Joy_R landing
-    /// on the RR viseme), so such links get released again.
-    /// </summary>
-    private static readonly HashSet<string> NonMouthNameParts = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "eye", "eyes", "blink", "wink", "brow", "brw", "joy", "happy",
-        "angry", "sorrow", "sad", "fun", "surprised", "ha",
-    };
-
-    private static readonly string[] NonMouthNameFragments = { "まばたき", "ウィンク" };
-
-    private static void CleanupMisassignedVisemes(Slot root, HashSet<IField<float>> vrmWiredFields)
-    {
-        int released = 0;
-        foreach (DirectVisemeDriver driver in root.GetComponentsInChildren<DirectVisemeDriver>())
-        {
-            for (int i = 0; i < 16; i++)
-            {
-                FieldDrive<float> drive = driver[(Viseme)i];
-                IField<float> target = drive.Target;
-                if (target == null || vrmWiredFields.Contains(target))
-                {
-                    continue;
-                }
-                string blendshapeName = FindBlendshapeName(target);
-                if (blendshapeName != null && IsNonMouthShape(blendshapeName))
-                {
-                    UniLog.Log($"ビセーム {(Viseme)i} から口以外のシェイプ '{blendshapeName}' の誤登録を解除しました。");
-                    drive.ReleaseLink();
-                    released++;
-                }
-            }
-        }
-        if (released > 0)
-        {
-            UniLog.Log($"誤登録ビセームを {released} 件解除しました。");
-        }
-    }
-
-    private static string FindBlendshapeName(IField<float> field)
-    {
-        SkinnedMeshRenderer skin = field.FindNearestParent<SkinnedMeshRenderer>();
-        if (skin == null)
-        {
-            return null;
-        }
-        for (int i = 0; i < skin.MeshBlendshapeCount; i++)
-        {
-            if (ReferenceEquals(skin.BlendShapeWeights.GetElement(i), field))
-            {
-                return skin.BlendShapeName(i);
-            }
-        }
-        return null;
-    }
-
-    private static bool IsNonMouthShape(string blendshapeName)
-    {
-        foreach (string fragment in NonMouthNameFragments)
-        {
-            if (blendshapeName.Contains(fragment, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-        string[] parts = blendshapeName.Split('_', '.', ' ', '-', '(', ')');
-        return parts.Any(part => NonMouthNameParts.Contains(part));
     }
 
     // ---------------------------------------------------------------- misc avatar bits

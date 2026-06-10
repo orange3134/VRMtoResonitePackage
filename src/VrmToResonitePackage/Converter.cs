@@ -40,9 +40,12 @@ internal static class Converter
         Console.WriteLine("FrooxEngineをヘッドレスで起動しています（初回はしばらくかかります）...");
 
         var runner = new StandaloneFrooxEngineRunner();
+        // Per-run data directory: the engine's LocalDB is single-process, and parallel
+        // converter instances (GUI children, CLI) sharing one directory corrupt it.
+        string dataDirectory = LocalDbMaintenance.CreateRunDataDirectory();
         var launchOptions = new LaunchOptions
         {
-            DataDirectory = Path.Combine(appData, "Data"),
+            DataDirectory = dataDirectory,
             CacheDirectory = Path.Combine(appData, "Cache"),
             LogsDirectory = Path.Combine(AppContext.BaseDirectory, "Logs"),
             DoNotAutoLoadHome = true,
@@ -52,7 +55,6 @@ internal static class Converter
             DisablePlatformInterfaces = true,
         };
 
-        LocalDbMaintenance.EnsureHealthy(launchOptions.DataDirectory);
         await runner.Initialize(launchOptions).ConfigureAwait(false);
         Console.WriteLine("エンジン起動完了。変換を開始します。");
 
@@ -109,6 +111,7 @@ internal static class Converter
             {
                 UniLog.Warning("Engine shutdown failed: " + ex.Message);
             }
+            LocalDbMaintenance.ReleaseRunDataDirectory(dataDirectory);
         }
         return new ConversionRunResult(failures == 0 ? 0 : 1, outputs, logPath, failures);
         }
