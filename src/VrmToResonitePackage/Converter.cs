@@ -178,7 +178,9 @@ internal static class Converter
             {
                 await default(ToWorld);
                 Slot root = world.AddSlot(displayName);
-                Slot assetsSlot = world.AssetsSlot.AddSlot(displayName);
+                // Match Resonite's "Place Assets On Object" import option so meshes,
+                // textures, and materials are packaged under the imported object.
+                Slot assetsSlot = root.AddSlot("Assets");
 
                 ModelImportSettings settings = ModelImportSettings.XiexeToon(
                     generateColliders: false,
