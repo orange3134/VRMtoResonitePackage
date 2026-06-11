@@ -302,7 +302,7 @@ internal static class AvatarSetup
     {
         Slot hand = rig[isRight ? BodyNode.RightHand : BodyNode.LeftHand];
         float3 fingers = ComputeFingerDirection(rig, hand, isRight, modelForward);
-        float3 back = ComputeBackOfHand(rig, hand, fingers, isRight, modelUp);
+        float3 back = ComputeBackOfHand(fingers, modelUp);
 
         floatQ handRotation = floatQ.LookRotation(fingers, back);
         reference.GlobalPosition = hand.GlobalPosition;
@@ -406,32 +406,14 @@ internal static class AvatarSetup
         return modelForward;
     }
 
-    private static float3 ComputeBackOfHand(BipedRig rig, Slot hand, float3 fingers, bool isRight, float3 modelUp)
+    private static float3 ComputeBackOfHand(float3 fingers, float3 modelUp)
     {
-        float3 back = float3.Zero;
-        Slot thumb = rig.TryGetBone(isRight ? BodyNode.RightThumb_Metacarpal : BodyNode.LeftThumb_Metacarpal)
-                     ?? rig.TryGetBone(isRight ? BodyNode.RightThumb_Proximal : BodyNode.LeftThumb_Proximal);
-        if (thumb != null)
-        {
-            float3 thumbDirection = thumb.GlobalPosition - hand.GlobalPosition;
-            if (thumbDirection.Magnitude > 0.0001f)
-            {
-                thumbDirection = thumbDirection.Normalized;
-                back = isRight
-                    ? MathX.Cross(thumbDirection, fingers)
-                    : MathX.Cross(fingers, thumbDirection);
-            }
-        }
-        if (back.Magnitude < 0.0001f)
-        {
-            back = modelUp;
-        }
-        // VRM rest pose is a T-pose with palms down; the back of the hand points roughly up.
-        if (MathX.Dot(back, modelUp) < 0f)
-        {
-            back = -back;
-        }
-        back -= fingers * MathX.Dot(back, fingers);
+        // VRM mandates a T-pose rest pose with palms facing down, so the back of
+        // the hand always points straight up. Earlier this was derived from the
+        // thumb position, but on models where the thumb sits low that estimate
+        // drifted away from the true back-of-hand direction, so we fix it to
+        // modelUp and only project out the finger component to keep it orthogonal.
+        float3 back = modelUp - fingers * MathX.Dot(modelUp, fingers);
         return back.Magnitude > 0.0001f ? back.Normalized : modelUp;
     }
 
