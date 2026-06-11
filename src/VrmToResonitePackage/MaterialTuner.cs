@@ -91,6 +91,17 @@ internal static class MaterialTuner
             material.Culling.Value = Culling.Off;
         }
 
+        // --- Lit / base color ---
+        // The standard glTF import only reads pbrMetallicRoughness.baseColorFactor,
+        // which VRM0 MToon leaves white while storing the real lit color in the
+        // material's _Color vector property (parsed into info.BaseColor). Assign it
+        // explicitly so the XiexeToon main Color matches MToon's LitColor.
+        if (info.BaseColor.HasValue)
+        {
+            System.Numerics.Vector4 b = info.BaseColor.Value;
+            material.Color.Value = new colorX(b.X, b.Y, b.Z, b.W, ColorProfile.Linear);
+        }
+
         // --- Neutral PBR-ish features MToon doesn't have ---
         material.Saturation.Value = 1f;
         material.Metallic.Value = 0f;
