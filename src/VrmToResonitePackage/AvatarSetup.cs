@@ -150,6 +150,10 @@ internal static class AvatarSetup
             VRIKAvatar avatar = root.AttachComponent<VRIKAvatar>();
             avatar.Setup(ik, rig, headsetRef, leftRef, rightRef, null, null, null);
 
+            // VRIKAvatarの初期値はVRM向けに適していないため上書きする。
+            avatar.FeetHoverHeight.Value = 0f;
+            avatar.MaxFeetVelocityOffset.Value = 0.05f;
+
             IAvatarObject leftHandObject = root.GetComponentInChildren((IAvatarObject o) => o.Node == BodyNode.LeftHand);
             IAvatarObject rightHandObject = root.GetComponentInChildren((IAvatarObject o) => o.Node == BodyNode.RightHand);
             if (leftHandObject != null)
