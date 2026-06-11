@@ -309,15 +309,16 @@ internal static class AvatarSetup
         reference.GlobalRotation = handRotation;
 
         // Anchor placement (orientation shared with the hand):
-        //   Tool      - forward along the fingers, where held tools sit
+        //   Tool      - back 3cm from the tip of middle finger, so it adapts to hand size
         //   GrabArea  - at the base of the middle finger, nudged toward the palm
         //   Toolshelf - at the wrist, offset toward the back of the hand
         Slot middleProximal = rig.TryGetBone(isRight
             ? BodyNode.RightMiddleFinger_Proximal
             : BodyNode.LeftMiddleFinger_Proximal);
         float3 fingerBase = middleProximal?.GlobalPosition ?? (hand.GlobalPosition + fingers * 0.07f);
+        float3 fingerTip = ComputeMiddleFingerTip(rig, hand, isRight, fingers);
 
-        CreateAnchorReference(reference, "Tooltip", hand.GlobalPosition + fingers * 0.15f, handRotation);
+        CreateAnchorReference(reference, "Tooltip", fingerTip + fingers * - 0.03f, handRotation);
         CreateAnchorReference(reference, "Grabber", fingerBase - back * 0.01f, handRotation);
         CreateAnchorReference(reference, "Shelf", hand.GlobalPosition + back * 0.05f, handRotation);
     }
@@ -327,6 +328,53 @@ internal static class AvatarSetup
         Slot anchor = reference.AddSlot(name);
         anchor.GlobalPosition = globalPosition;
         anchor.GlobalRotation = globalRotation;
+    }
+
+    /// <summary>
+    /// Estimates the middle fingertip position. The VRM humanoid map only goes down to
+    /// the distal phalanx, so this prefers an unmapped end bone parented under the
+    /// deepest mapped phalanx (most VRM exports keep one); otherwise it extrapolates
+    /// past the deepest phalanx by the length of the preceding segment.
+    /// </summary>
+    private static float3 ComputeMiddleFingerTip(BipedRig rig, Slot hand, bool isRight, float3 fingers)
+    {
+        Slot proximal = rig.TryGetBone(isRight ? BodyNode.RightMiddleFinger_Proximal : BodyNode.LeftMiddleFinger_Proximal);
+        Slot intermediate = rig.TryGetBone(isRight ? BodyNode.RightMiddleFinger_Intermediate : BodyNode.LeftMiddleFinger_Intermediate);
+        Slot distal = rig.TryGetBone(isRight ? BodyNode.RightMiddleFinger_Distal : BodyNode.LeftMiddleFinger_Distal);
+
+        Slot deepest = distal ?? intermediate ?? proximal;
+        if (deepest == null)
+        {
+            // No finger bones - matches the previous fixed wrist offset once the
+            // caller adds the 3cm tool clearance.
+            return hand.GlobalPosition + fingers * 0.12f;
+        }
+
+        Slot endBone = null;
+        float endAlong = 0.001f;
+        foreach (Slot child in deepest.Children)
+        {
+            float along = MathX.Dot(child.GlobalPosition - deepest.GlobalPosition, fingers);
+            if (along > endAlong)
+            {
+                endAlong = along;
+                endBone = child;
+            }
+        }
+        if (endBone != null)
+        {
+            return endBone.GlobalPosition;
+        }
+
+        Slot previous = deepest == distal ? (intermediate ?? proximal) : (deepest == intermediate ? proximal : null);
+        float3 previousPosition = previous?.GlobalPosition ?? hand.GlobalPosition;
+        float remaining = MathX.Distance(previousPosition, deepest.GlobalPosition);
+        // The part past the deepest phalanx is roughly as long as the preceding
+        // segment, shorter when that segment spans more than one phalanx.
+        float factor = (deepest == distal && intermediate != null) || (deepest == intermediate && proximal != null)
+            ? 0.8f
+            : 0.4f;
+        return deepest.GlobalPosition + fingers * remaining * factor;
     }
 
     private static float3 ComputeFingerDirection(BipedRig rig, Slot hand, bool isRight, float3 modelForward)
