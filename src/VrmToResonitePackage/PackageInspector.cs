@@ -113,7 +113,168 @@ internal static class PackageInspector
         {
             Console.WriteLine($"  {count,5} x {Shorten(type)}");
         }
+
+        if (root.TryGetNode("Object") is DataTreeDictionary objectRoot2)
+        {
+            ReportDynamicBones(objectRoot2, typeNames);
+        }
         return 0;
+    }
+
+    /// <summary>
+    /// Focused report of the modular_avatar DynamicBone setup: lists each chain slot
+    /// (tagged with the controller tag), its Template Name value and binding field slots,
+    /// plus the shared template container. Always printed so it survives without --inspect-verbose.
+    /// </summary>
+    private static void ReportDynamicBones(DataTreeDictionary objectRoot, List<string> typeNames)
+    {
+        var chains = new List<(string slotName, string templateName, List<string> bindings, int colliders)>();
+        var templates = new List<string>();
+        bool sawSpace = false;
+        bool sawSettingsRoot = false;
+
+        void Walk(DataTreeDictionary slot)
+        {
+            string name = ExtractField<string>(slot.TryGetNode("Name")) ?? "(unnamed)";
+            string tag = ExtractField<string>(slot.TryGetNode("Tag"));
+            var componentTypes = ComponentTypeNames(slot, typeNames);
+
+            if (componentTypes.Any(t => t.Contains("DynamicVariableSpace")))
+            {
+                sawSpace = true;
+            }
+            if (componentTypes.Any(t => t.Contains("DynamicReferenceVariable")))
+            {
+                sawSettingsRoot = true;
+            }
+
+            // A chain slot is tagged and carries a DynamicBoneChain.
+            if (tag == "modular_avatar/dynamic_bone_controller")
+            {
+                string templateName = null;
+                var bindings = new List<string>();
+                int colliders = 0;
+                if (slot.TryGetNode("Children") is DataTreeList chainChildren)
+                {
+                    foreach (DataTreeNode child in chainChildren.Children)
+                    {
+                        if (child is not DataTreeDictionary cd)
+                        {
+                            continue;
+                        }
+                        string childName = ExtractField<string>(cd.TryGetNode("Name"));
+                        if (childName == "Template Name")
+                        {
+                            templateName = FindValueFieldString(cd, typeNames);
+                        }
+                        else if (childName == "Bindings" && cd.TryGetNode("Children") is DataTreeList bindList)
+                        {
+                            foreach (DataTreeNode b in bindList.Children)
+                            {
+                                if (b is DataTreeDictionary bd)
+                                {
+                                    bindings.Add(ExtractField<string>(bd.TryGetNode("Name")) ?? "?");
+                                }
+                            }
+                        }
+                    }
+                }
+                colliders = CountInSubtree(slot, typeNames, "DynamicBoneSphereCollider");
+                chains.Add((name, templateName, bindings, colliders));
+            }
+
+            // Template slots live directly under "Dynamic Bone Settings".
+            if (name == "Dynamic Bone Settings" && slot.TryGetNode("Children") is DataTreeList templateChildren)
+            {
+                foreach (DataTreeNode t in templateChildren.Children)
+                {
+                    if (t is DataTreeDictionary td)
+                    {
+                        templates.Add(ExtractField<string>(td.TryGetNode("Name")) ?? "?");
+                    }
+                }
+            }
+
+            if (slot.TryGetNode("Children") is DataTreeList children)
+            {
+                foreach (DataTreeNode child in children.Children)
+                {
+                    if (child is DataTreeDictionary cd)
+                    {
+                        Walk(cd);
+                    }
+                }
+            }
+        }
+
+        Walk(objectRoot);
+
+        if (!sawSpace && chains.Count == 0 && templates.Count == 0)
+        {
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("modular_avatar 揺れもの構成:");
+        Console.WriteLine($"  DynamicVariableSpace(modular_avatar): {(sawSpace ? "あり" : "なし")}");
+        Console.WriteLine($"  AvatarSettingsRoot 公開: {(sawSettingsRoot ? "あり" : "なし")}");
+        Console.WriteLine($"  テンプレート ({templates.Count}): {string.Join(", ", templates)}");
+        Console.WriteLine($"  チェーン ({chains.Count}):");
+        foreach ((string slotName, string templateName, List<string> bindings, int colliders) in chains)
+        {
+            Console.WriteLine($"    - {slotName}: template={templateName ?? "?"}, bindings={bindings.Count}, colliders={colliders}");
+        }
+    }
+
+    private static List<string> ComponentTypeNames(DataTreeDictionary slot, List<string> typeNames)
+    {
+        var result = new List<string>();
+        if (slot.TryGetNode("Components") is DataTreeDictionary componentsDict &&
+            componentsDict.TryGetNode("Data") is DataTreeList componentList)
+        {
+            foreach (DataTreeNode component in componentList.Children)
+            {
+                if (component is DataTreeDictionary cd)
+                {
+                    result.Add(ResolveType(cd.TryGetNode("Type"), typeNames));
+                }
+            }
+        }
+        return result;
+    }
+
+    private static string FindValueFieldString(DataTreeDictionary slot, List<string> typeNames)
+    {
+        if (slot.TryGetNode("Components") is DataTreeDictionary componentsDict &&
+            componentsDict.TryGetNode("Data") is DataTreeList componentList)
+        {
+            foreach (DataTreeNode component in componentList.Children)
+            {
+                if (component is DataTreeDictionary cd &&
+                    ResolveType(cd.TryGetNode("Type"), typeNames).Contains("ValueField") &&
+                    cd.TryGetNode("Data") is DataTreeDictionary data)
+                {
+                    return ExtractField<string>(data.TryGetNode("Value"));
+                }
+            }
+        }
+        return null;
+    }
+
+    private static int CountInSubtree(DataTreeDictionary slot, List<string> typeNames, string typeFragment)
+    {
+        int count = ComponentTypeNames(slot, typeNames).Count(t => t.Contains(typeFragment));
+        if (slot.TryGetNode("Children") is DataTreeList children)
+        {
+            foreach (DataTreeNode child in children.Children)
+            {
+                if (child is DataTreeDictionary cd)
+                {
+                    count += CountInSubtree(cd, typeNames, typeFragment);
+                }
+            }
+        }
+        return count;
     }
 
     private static string ResolveType(DataTreeNode typeNode, List<string> typeNames)
