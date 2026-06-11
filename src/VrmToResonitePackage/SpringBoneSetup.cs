@@ -231,43 +231,47 @@ internal static class SpringBoneSetup
             {
                 case "skirt":
                     // Skirts lack angle constraints and clip easily, so keep them stiff and slow.
-                    db.Inertia.Value = 0.8f;
-                    db.InertiaForce.Value = 2.0f;
-                    db.Damping.Value = 50f;
-                    db.Elasticity.Value = 600f;
+                    db.Inertia.Value = 0.7f;
+                    db.InertiaForce.Value = -7.0f;
+                    db.Damping.Value = 14f;
+                    db.Elasticity.Value = 100f;
                     db.Stiffness.Value = 0.75f;
                     break;
                 case "breast":
-                    db.Inertia.Value = 0.9f;
-                    db.InertiaForce.Value = 0.75f;
-                    db.Damping.Value = 10f;
+                    db.Inertia.Value = 0.4f;
+                    db.InertiaForce.Value = -4.0f;
+                    db.Damping.Value = 7.0f;
                     db.Elasticity.Value = 100f;
-                    db.Stiffness.Value = 0.67f;
+                    db.Stiffness.Value = 0.92f;
                     break;
                 case "hair":
                 case "long_hair":
-                    db.Inertia.Value = 0.34f;
-                    db.InertiaForce.Value = 2.0f;
-                    db.Damping.Value = 16.2f;
+                    db.Inertia.Value = 0.4f;
+                    db.InertiaForce.Value = -4.0f;
+                    db.Damping.Value = 7.0f;
                     db.Elasticity.Value = 100f;
-                    db.Stiffness.Value = 0.2f;
+                    db.Stiffness.Value = 0.92f;
                     break;
                 case "ear":
-                    db.Inertia.Value = 0.5f;
-                    db.InertiaForce.Value = 2.0f;
-                    db.Damping.Value = 12.43f;
+                    db.Inertia.Value = 0.4f;
+                    db.InertiaForce.Value = -4.0f;
+                    db.Damping.Value = 7.0f;
                     db.Elasticity.Value = 100f;
-                    db.Stiffness.Value = 0.2f;
+                    db.Stiffness.Value = 0.9f;
                     break;
                 case "tail":
-                    db.Inertia.Value = 0.2f;
-                    db.InertiaForce.Value = 2.0f;
-                    db.Damping.Value = 5f;
+                    db.Inertia.Value = 0.4f;
+                    db.InertiaForce.Value = -4.0f;
+                    db.Damping.Value = 7.0f;
                     db.Elasticity.Value = 100f;
-                    db.Stiffness.Value = 0.2f;
+                    db.Stiffness.Value = 0.55f;
                     break;
                 default:
-                    // generic: use Resonite built-in defaults.
+                    db.Inertia.Value = 0.7f;
+                    db.InertiaForce.Value = -7.0f;
+                    db.Damping.Value = 14f;
+                    db.Elasticity.Value = 100f;
+                    db.Stiffness.Value = 0.75f;
                     break;
             }
 
