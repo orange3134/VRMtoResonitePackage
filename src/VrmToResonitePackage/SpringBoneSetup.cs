@@ -141,6 +141,8 @@ internal static class SpringBoneSetup
 
             const string intron = ".";
 
+            SetTemplateDefaultConfig(db, templateName);
+
             Slot templateRoot = null;
             DynamicBoneChain templateChain = null;
             Slot templateBindings = null;
@@ -190,19 +192,24 @@ internal static class SpringBoneSetup
                 if (templateRoot != null)
                 {
                     DynamicField<T> templateBinding = templateRoot.AttachComponent<DynamicField<T>>();
-                    StringConcatNode(templateBindings, templateRoot.Name_Field, field.Name, templateBinding.VariableName, DynBoneTemplatePrefix, intron);
                     Sync<T> templateField = getField(templateChain);
                     templateBinding.OverrideOnLink.Value = true;
                     templateBinding.TargetField.Value = templateField.ReferenceID;
+                    templateBinding.VariableName.Value = BuildTemplateVariableName(templateName, field.Name, intron);
                 }
 
                 // Member side: read the variable back into this chain's field.
                 Slot fieldBindingNode = bindingsNode.AddSlot(field.Name);
-                DynamicField<T> driver = fieldBindingNode.AttachComponent<DynamicField<T>>();
-                driver.TargetField.Value = field.ReferenceID;
-                driver.OverrideOnLink.Value = false;
+                DynamicValueVariableDriver<T> driver = fieldBindingNode.AttachComponent<DynamicValueVariableDriver<T>>();
+                driver.Target.Target = field;
+                driver.DefaultValue.Value = field.Value;
                 StringConcatNode(fieldBindingNode, templateNameField, field.Name, driver.VariableName, DynBoneTemplatePrefix, intron);
             }
+        }
+
+        private static string BuildTemplateVariableName(string templateName, string fieldName, string intron)
+        {
+            return DynBoneTemplatePrefix + templateName + intron + fieldName;
         }
 
         /// <summary>
