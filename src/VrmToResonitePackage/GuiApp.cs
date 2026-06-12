@@ -324,6 +324,10 @@ internal sealed class MainWindow : Window
         {
             arguments.Add("--no-protection");
         }
+        if (options.NoExpressionMenu)
+        {
+            arguments.Add("--no-expression-menu");
+        }
         if (options.KeepWorkingFiles)
         {
             arguments.Add("--keep-working-files");
@@ -507,6 +511,7 @@ internal sealed class SettingsWindow : Window
     private readonly CheckBox _noAvatar = new() { Content = "アバターセットアップを行わない" };
     private readonly CheckBox _faceTracking = new() { Content = "フェイストラッキング用ドライバーを生成" };
     private readonly CheckBox _noProtection = new() { Content = "アバター保護を付けない" };
+    private readonly CheckBox _noExpressionMenu = new() { Content = "表情メニューを生成しない" };
     private readonly CheckBox _keepWorkingFiles = new() { Content = "作業用一時ファイルを残す" };
     private readonly TextBox _height = new();
     private readonly TextBox _viewForward = new();
@@ -535,6 +540,7 @@ internal sealed class SettingsWindow : Window
         panel.Children.Add(_noAvatar);
         panel.Children.Add(_faceTracking);
         panel.Children.Add(_noProtection);
+        panel.Children.Add(_noExpressionMenu);
         panel.Children.Add(_keepWorkingFiles);
         panel.Children.Add(Field("身長(m)", _height));
         panel.Children.Add(Field("視点の前方オフセット(m)", _viewForward));
@@ -577,6 +583,7 @@ internal sealed class SettingsWindow : Window
         _noAvatar.IsChecked = Settings.NoAvatar;
         _faceTracking.IsChecked = Settings.FaceTracking;
         _noProtection.IsChecked = Settings.NoProtection;
+        _noExpressionMenu.IsChecked = Settings.NoExpressionMenu;
         _keepWorkingFiles.IsChecked = Settings.KeepWorkingFiles;
         _height.Text = Settings.TargetHeight?.ToString(CultureInfo.InvariantCulture) ?? NoRescaleText;
         _viewForward.Text = Settings.ViewForward?.ToString(CultureInfo.InvariantCulture) ?? AutoValueText;
@@ -594,6 +601,7 @@ internal sealed class SettingsWindow : Window
             Settings.NoAvatar = _noAvatar.IsChecked == true;
             Settings.FaceTracking = _faceTracking.IsChecked == true;
             Settings.NoProtection = _noProtection.IsChecked == true;
+            Settings.NoExpressionMenu = _noExpressionMenu.IsChecked == true;
             Settings.KeepWorkingFiles = _keepWorkingFiles.IsChecked == true;
             Settings.TargetHeight = ParseNullableFloat(_height.Text, "身長", NoRescaleText);
             Settings.ViewForward = ParseNullableFloat(_viewForward.Text, "視点の前方オフセット", AutoValueText);
@@ -687,6 +695,7 @@ internal sealed class GuiSettings
     public bool NoAvatar { get; set; }
     public bool FaceTracking { get; set; }
     public bool NoProtection { get; set; }
+    public bool NoExpressionMenu { get; set; }
     public bool KeepWorkingFiles { get; set; }
     public float? TargetHeight { get; set; }
     public float? ViewForward { get; set; }
@@ -727,6 +736,7 @@ internal sealed class GuiSettings
         NoAvatar = NoAvatar,
         FaceTracking = FaceTracking,
         NoProtection = NoProtection,
+        NoExpressionMenu = NoExpressionMenu,
         KeepWorkingFiles = KeepWorkingFiles,
         TargetHeight = TargetHeight,
         ViewForward = ViewForward,
@@ -742,6 +752,7 @@ internal sealed class GuiSettings
         NoAvatar = other.NoAvatar;
         FaceTracking = other.FaceTracking;
         NoProtection = other.NoProtection;
+        NoExpressionMenu = other.NoExpressionMenu;
         KeepWorkingFiles = other.KeepWorkingFiles;
         TargetHeight = other.TargetHeight;
         ViewForward = other.ViewForward;
@@ -759,6 +770,7 @@ internal sealed class GuiSettings
             NoAvatar = NoAvatar,
             FaceTracking = FaceTracking,
             NoProtection = NoProtection,
+            NoExpressionMenu = NoExpressionMenu,
             KeepWorkingFiles = KeepWorkingFiles,
             TargetHeight = TargetHeight,
             ViewForward = ViewForward,

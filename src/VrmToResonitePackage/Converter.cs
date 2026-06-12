@@ -228,6 +228,7 @@ internal static class Converter
                         TargetHeight = options.TargetHeight,
                         FaceTracking = options.FaceTracking,
                         Protect = !options.NoProtection,
+                        ExpressionMenu = !options.NoExpressionMenu,
                         ViewForward = options.ViewForward,
                         ViewUp = options.ViewUp,
                     };

@@ -155,6 +155,7 @@ internal sealed class CliOptions
     public bool NoAvatar { get; set; }
     public bool FaceTracking { get; set; }
     public bool NoProtection { get; set; }
+    public bool NoExpressionMenu { get; set; }
     public bool KeepWorkingFiles { get; set; }
     public float? TargetHeight { get; set; }
     public float? ViewForward { get; set; }
@@ -193,6 +194,9 @@ internal sealed class CliOptions
                     break;
                 case "--no-protection":
                     options.NoProtection = true;
+                    break;
+                case "--no-expression-menu":
+                    options.NoExpressionMenu = true;
                     break;
                 case "--inspect":
                     options.InspectMode = true;
@@ -274,6 +278,7 @@ internal sealed class CliOptions
         Console.WriteLine("  --no-avatar              アバターセットアップを行わずモデルのみ変換");
         Console.WriteLine("  --face-tracking          フェイストラッキング用AvatarExpressionDriverを生成");
         Console.WriteLine("  --no-protection          SimpleAvatarProtection（アバター保護）を付けない");
+        Console.WriteLine("  --no-expression-menu     プリセット表情のコンテキストメニューを生成しない");
         Console.WriteLine("  --height <m>             アバターの身長をメートル指定でリスケール");
         Console.WriteLine("  --view-forward <m>       視点の前方オフセット（既定: 目間距離から自動）");
         Console.WriteLine("  --view-up <m>            視点の上方オフセット（既定: 目間距離から自動)");
