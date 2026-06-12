@@ -514,24 +514,18 @@ internal static class AvatarSetup
         linearDriver.EyeManager.Target = eyeManager;
 
         var resolver = new BlendshapeResolver(root, vrm);
-        IField<float> blinkLeft = ResolveSingleBind(resolver, vrm, "blinkLeft");
-        IField<float> blinkRight = ResolveSingleBind(resolver, vrm, "blinkRight");
-        IField<float> blinkBoth = ResolveSingleBind(resolver, vrm, "blink");
+        List<(IField<float> field, float weight)> blinkLeft = ResolveBinds(resolver, vrm, "blinkLeft");
+        List<(IField<float> field, float weight)> blinkRight = ResolveBinds(resolver, vrm, "blinkRight");
+        List<(IField<float> field, float weight)> blinkBoth = ResolveBinds(resolver, vrm, "blink");
 
-        if (blinkLeft != null && blinkRight != null)
+        if (blinkLeft.Count > 0 && blinkRight.Count > 0)
         {
-            EyeLinearDriver.Eye left = linearDriver.Eyes.Add();
-            EyeLinearDriver.Eye right = linearDriver.Eyes.Add();
-            left.Side.Value = EyeSide.Left;
-            right.Side.Value = EyeSide.Right;
-            left.OpenCloseTarget.Target = blinkLeft;
-            right.OpenCloseTarget.Target = blinkRight;
+            AddBlinkEyes(linearDriver, blinkLeft, EyeSide.Left);
+            AddBlinkEyes(linearDriver, blinkRight, EyeSide.Right);
         }
-        else if (blinkBoth != null)
+        else if (blinkBoth.Count > 0)
         {
-            EyeLinearDriver.Eye combined = linearDriver.Eyes.Add();
-            combined.Side.Value = EyeSide.Combined;
-            combined.OpenCloseTarget.Target = blinkBoth;
+            AddBlinkEyes(linearDriver, blinkBoth, EyeSide.Combined);
         }
 
         if (linearDriver.Eyes.Count == 0 && rotationDriverMissing(managerSlot))
@@ -546,23 +540,61 @@ internal static class AvatarSetup
         }
     }
 
-    private static IField<float> ResolveSingleBind(BlendshapeResolver resolver, VrmModel vrm, string preset)
+    /// <summary>
+    /// Resolves every morph bind of the given expression preset. A blink expression can bind
+    /// multiple shapes (e.g. eyelid + eyelash), and each needs its own driver entry. The same
+    /// field bound more than once keeps the strongest weight.
+    /// </summary>
+    private static List<(IField<float> field, float weight)> ResolveBinds(
+        BlendshapeResolver resolver, VrmModel vrm, string preset)
     {
+        var result = new List<(IField<float> field, float weight)>();
         VrmExpression expression = vrm.Expressions.FirstOrDefault(
             e => string.Equals(e.Preset, preset, StringComparison.OrdinalIgnoreCase));
         if (expression == null)
         {
-            return null;
+            return result;
         }
-        foreach (VrmExpressionBind bind in expression.Binds.OrderByDescending(b => b.Weight))
+        foreach (VrmExpressionBind bind in expression.Binds)
         {
             IField<float> field = resolver.Resolve(bind);
-            if (field != null)
+            if (field == null)
             {
-                return field;
+                continue;
+            }
+            int existing = result.FindIndex(r => r.field == field);
+            if (existing >= 0)
+            {
+                if (bind.Weight > result[existing].weight)
+                {
+                    result[existing] = (field, bind.Weight);
+                }
+            }
+            else
+            {
+                result.Add((field, bind.Weight));
             }
         }
-        return null;
+        return result;
+    }
+
+    /// <summary>Adds one Eye entry per bound morph; ClosedState carries the bind weight.</summary>
+    private static void AddBlinkEyes(EyeLinearDriver driver,
+        List<(IField<float> field, float weight)> binds, EyeSide side)
+    {
+        foreach ((IField<float> field, float weight) in binds)
+        {
+            if (field.IsDriven)
+            {
+                // 同じシェイプが既に別のEyeエントリ等で使われている（例: blinkLeft/blinkRightが共有）。
+                UniLog.Warning($"瞬き({side})のブレンドシェイプは既にドライブされているためスキップします。");
+                continue;
+            }
+            EyeLinearDriver.Eye eye = driver.Eyes.Add();
+            eye.Side.Value = side;
+            eye.OpenCloseTarget.Target = field;
+            eye.ClosedState.Value = weight;
+        }
     }
 
     // ---------------------------------------------------------------- voice & visemes
