@@ -16,9 +16,6 @@ jobs:
     env:
       PROJECT_NAME: VrmToResonitePackage
       RESONITE_APP_ID: "2519830"
-      RESONITE_PATH: ${{ runner.temp }}\Resonite
-      PUBLISH_DIR: ${{ runner.temp }}\publish
-      STEAMCMD_DIR: ${{ runner.temp }}\steamcmd
 
     steps:
       - name: Checkout
@@ -32,26 +29,32 @@ jobs:
       - name: Install SteamCMD
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force $env:STEAMCMD_DIR | Out-Null
+          $steamcmdDir = Join-Path $env:RUNNER_TEMP "steamcmd"
+          New-Item -ItemType Directory -Force $steamcmdDir | Out-Null
           $steamZip = Join-Path $env:RUNNER_TEMP "steamcmd.zip"
           Invoke-WebRequest `
             -Uri "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip" `
             -OutFile $steamZip
-          Expand-Archive -Path $steamZip -DestinationPath $env:STEAMCMD_DIR -Force
+          Expand-Archive -Path $steamZip -DestinationPath $steamcmdDir -Force
+          "STEAMCMD_DIR=$steamcmdDir" >> $env:GITHUB_ENV
 
       - name: Download Resonite references
         shell: pwsh
         run: |
+          $resonitePath = Join-Path $env:RUNNER_TEMP "Resonite"
           & "$env:STEAMCMD_DIR\steamcmd.exe" `
-            +force_install_dir "$env:RESONITE_PATH" `
+            +force_install_dir "$resonitePath" `
             +login anonymous `
             +app_update $env:RESONITE_APP_ID validate `
             +quit
+          "RESONITE_PATH=$resonitePath" >> $env:GITHUB_ENV
 
       - name: Publish
         shell: pwsh
         run: |
-          .\publish.ps1 -ResonitePath $env:RESONITE_PATH -Output $env:PUBLISH_DIR
+          $publishDir = Join-Path $env:RUNNER_TEMP "publish"
+          .\publish.ps1 -ResonitePath $env:RESONITE_PATH -Output $publishDir
+          "PUBLISH_DIR=$publishDir" >> $env:GITHUB_ENV
 
       - name: Package artifact
         shell: pwsh
