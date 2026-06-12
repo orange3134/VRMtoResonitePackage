@@ -241,7 +241,21 @@ internal static class AvatarSetup
             rig = rigSlot.AttachComponent<BipedRig>();
         }
 
+        // The importer's name-heuristic classification can leave bogus entries on BodyNodes
+        // the real skeleton never claims (e.g. an accessory chain Spine/SpineRibbon/... gets
+        // classified Chest/UpperChest/Neck/Head; the duplicates are rejected but UpperChest
+        // sticks because the real skeleton has none, and VRIK then resolves its chest as
+        // UpperChest ?? Chest -> the ribbon bone). The VRM humanoid map is the single source
+        // of truth, so wipe everything the heuristics produced before assigning.
+        var heuristicBones = new Dictionary<BodyNode, string>();
+        foreach (KeyValuePair<BodyNode, SyncRef<Slot>> entry in rig.Bones)
+        {
+            heuristicBones[entry.Key] = entry.Value.Target?.Name;
+        }
+        rig.Bones.Clear();
+
         int mapped = 0;
+        var assigned = new HashSet<BodyNode>();
         foreach ((string vrmBone, int nodeIndex) in vrm.HumanBones)
         {
             if (!VrmBoneToBodyNode.TryGetValue(vrmBone, out BodyNode bodyNode))
@@ -255,7 +269,15 @@ internal static class AvatarSetup
                 continue;
             }
             rig[bodyNode] = boneSlot;
+            assigned.Add(bodyNode);
             mapped++;
+        }
+        foreach ((BodyNode node, string boneName) in heuristicBones)
+        {
+            if (!assigned.Contains(node))
+            {
+                UniLog.Log($"名前推測で分類されたボーン {node} -> '{boneName}' はVRMヒューマノイドマップに無いため破棄しました。");
+            }
         }
         UniLog.Log($"VRMヒューマノイドマップからボーンを {mapped} 個割り当てました。");
         rig.GuessForwardFlipped();
