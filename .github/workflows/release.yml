@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: windows-latest
+
+    env:
+      PROJECT_NAME: VrmToResonitePackage
+      RESONITE_APP_ID: "2519830"
+      RESONITE_PATH: ${{ runner.temp }}\Resonite
+      PUBLISH_DIR: ${{ runner.temp }}\publish
+      STEAMCMD_DIR: ${{ runner.temp }}\steamcmd
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install SteamCMD
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:STEAMCMD_DIR | Out-Null
+          $steamZip = Join-Path $env:RUNNER_TEMP "steamcmd.zip"
+          Invoke-WebRequest `
+            -Uri "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip" `
+            -OutFile $steamZip
+          Expand-Archive -Path $steamZip -DestinationPath $env:STEAMCMD_DIR -Force
+
+      - name: Download Resonite references
+        shell: pwsh
+        run: |
+          & "$env:STEAMCMD_DIR\steamcmd.exe" `
+            +force_install_dir "$env:RESONITE_PATH" `
+            +login anonymous `
+            +app_update $env:RESONITE_APP_ID validate `
+            +quit
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          .\publish.ps1 -ResonitePath $env:RESONITE_PATH -Output $env:PUBLISH_DIR
+
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME
+          $zipPath = Join-Path $env:RUNNER_TEMP "$env:PROJECT_NAME-$version-win-x64.zip"
+          Compress-Archive -Path "$env:PUBLISH_DIR\*" -DestinationPath $zipPath -Force
+          "RELEASE_ZIP=$zipPath" >> $env:GITHUB_ENV
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $zipPath = $env:RELEASE_ZIP
+          $title = "$env:PROJECT_NAME $tag"
+
+          if (gh release view $tag *> $null) {
+            gh release upload $tag $zipPath --clobber
+          } else {
+            gh release create $tag $zipPath `
+              --title $title `
+              --notes "Automated release for $tag."
+          }
