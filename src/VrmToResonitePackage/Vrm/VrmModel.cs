@@ -34,6 +34,9 @@ public sealed class VrmModel
     /// <summary>glTF texture index -> image index.</summary>
     public List<int> TextureToImage { get; } = new();
 
+    /// <summary>glTF image index of the avatar thumbnail embedded in the VRM meta, if any.</summary>
+    public int? ThumbnailImageIndex { get; set; }
+
     /// <summary>VRM humanoid bone name (normalized VRM1 style, camelCase) -> node index.</summary>
     public Dictionary<string, int> HumanBones { get; } = new(StringComparer.OrdinalIgnoreCase);
 

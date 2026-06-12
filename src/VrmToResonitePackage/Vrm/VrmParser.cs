@@ -269,6 +269,20 @@ public static class VrmParser
         {
             model.Title = GetString(meta, "title");
             model.Author = GetString(meta, "author");
+
+            // VRM0 stores the thumbnail as a glTF *texture* index; resolve it to an image index.
+            if (meta.TryGetProperty("texture", out JsonElement thumbTex) &&
+                thumbTex.ValueKind == JsonValueKind.Number)
+            {
+                int textureIndex = thumbTex.GetInt32();
+                int imageIndex = textureIndex >= 0 && textureIndex < model.TextureToImage.Count
+                    ? model.TextureToImage[textureIndex]
+                    : -1;
+                if (imageIndex >= 0)
+                {
+                    model.ThumbnailImageIndex = imageIndex;
+                }
+            }
         }
 
         if (vrm.TryGetProperty("humanoid", out JsonElement humanoid) &&
@@ -588,6 +602,17 @@ public static class VrmParser
                 authors.ValueKind == JsonValueKind.Array)
             {
                 model.Author = string.Join(", ", authors.EnumerateArray().Select(a => a.GetString()));
+            }
+
+            // VRM1 stores the thumbnail directly as a glTF image index.
+            if (meta.TryGetProperty("thumbnailImage", out JsonElement thumbImage) &&
+                thumbImage.ValueKind == JsonValueKind.Number)
+            {
+                int imageIndex = thumbImage.GetInt32();
+                if (imageIndex >= 0)
+                {
+                    model.ThumbnailImageIndex = imageIndex;
+                }
             }
         }
 

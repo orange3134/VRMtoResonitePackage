@@ -1,5 +1,6 @@
 using Elements.Core;
 using FrooxEngine;
+using FrooxEngine.Store;
 using SkyFrost.Base;
 using VrmToResonitePackage.Vrm;
 
@@ -241,6 +242,8 @@ internal static class Converter
                     SpringBoneSetup.Apply(root, vrm);
                 }
 
+                await SetupThumbnail(root, assetsSlot, vrm, vrmPath);
+
                 // Let deferred import tasks (alpha detection, normal map detection, ...) settle.
                 for (int i = 0; i < 30; i++)
                 {
@@ -276,6 +279,52 @@ internal static class Converter
             throw new IOException($"パッケージが出力されませんでした: {outputPath}");
         }
         return outputPath;
+    }
+
+    /// <summary>
+    /// Extracts the VRM's embedded thumbnail image, imports it as a Resonite texture asset and
+    /// attaches an <see cref="ItemTextureThumbnailSource"/> to the package root so it shows up as
+    /// the inventory/item thumbnail. A missing or unextractable thumbnail is non-fatal.
+    /// </summary>
+    private static async Task SetupThumbnail(Slot root, Slot assetsSlot, VrmModel vrm, string vrmPath)
+    {
+        if (!vrm.ThumbnailImageIndex.HasValue)
+        {
+            UniLog.Log("サムネイル: VRMにサムネイル画像が含まれていません。スキップします。");
+            return;
+        }
+
+        int imageIndex = vrm.ThumbnailImageIndex.Value;
+        Engine engine = root.Engine;
+        Uri uri = null;
+        string extension = null;
+        try
+        {
+            await default(ToBackground);
+            (byte[] data, string ext) = VrmParser.ExtractImage(vrmPath, imageIndex);
+            extension = ext;
+            string tempFile = engine.LocalDB.GetTempFilePath(ext);
+            await File.WriteAllBytesAsync(tempFile, data);
+            uri = await engine.LocalDB.ImportLocalAssetAsync(tempFile, LocalDB.ImportLocation.Move);
+        }
+        catch (Exception ex)
+        {
+            UniLog.Warning($"サムネイル: 画像 {imageIndex} の抽出/取り込みに失敗しました: {ex.Message}");
+        }
+        await default(ToWorld);
+        if (uri == null)
+        {
+            return;
+        }
+
+        Slot thumbnailSlot = assetsSlot.AddSlot("Thumbnail");
+        StaticTexture2D texture = thumbnailSlot.AttachComponent<StaticTexture2D>();
+        texture.URL.Value = uri;
+
+        ItemTextureThumbnailSource source = root.AttachComponent<ItemTextureThumbnailSource>();
+        source.Texture.Target = texture;
+
+        UniLog.Log($"サムネイル: 画像 {imageIndex} ({extension}) をアイテムサムネイルに設定しました。");
     }
 
     /// <summary>
