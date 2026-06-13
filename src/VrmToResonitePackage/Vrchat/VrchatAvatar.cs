@@ -43,6 +43,9 @@ public sealed class VrchatAvatar
     public List<string> InactiveGameObjectNames { get; } = new();
 }
 
+/// <summary>One avatar a package offers for conversion (root GameObject name + source + hierarchy size).</summary>
+public sealed record VrchatAvatarChoice(string Name, string SourcePath, int Size);
+
 public sealed class VrchatViseme
 {
     public string ResonitePreset { get; set; } // aa / ih / ou / ee / oh

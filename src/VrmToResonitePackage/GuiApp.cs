@@ -9,6 +9,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
+using VrmToResonitePackage.Unity;
+using VrmToResonitePackage.Vrchat;
 
 namespace VrmToResonitePackage;
 
@@ -221,13 +223,38 @@ internal sealed class MainWindow : Window
             return;
         }
 
+        // A .unitypackage may hold several avatars; let the user pick which one (skipped for a
+        // single avatar or a VRM). Done before conversion, engine-independent.
+        List<CliOptions> jobs = await BuildConversionJobs(inputFiles);
+        if (jobs == null)
+        {
+            ShowIdle(); // user cancelled the avatar selection
+            return;
+        }
+
         ShowConverting(Path.GetFileName(inputFiles[0]));
         try
         {
             string resonitePath = ResoniteLocator.Locate(_settings.ResonitePath);
-            CliOptions options = _settings.ToCliOptions(inputFiles);
-            ConversionRunResult result = await RunConversionProcessAsync(options, resonitePath);
-            ShowComplete(result);
+            var outputs = new List<string>();
+            int exitCode = 0;
+            int failures = 0;
+            string logPath = null;
+            foreach (CliOptions options in jobs)
+            {
+                ConversionRunResult result = await RunConversionProcessAsync(options, resonitePath);
+                outputs.AddRange(result.OutputFiles);
+                failures += result.Failures;
+                if (!string.IsNullOrWhiteSpace(result.LogPath))
+                {
+                    logPath = result.LogPath;
+                }
+                if (result.ExitCode != 0)
+                {
+                    exitCode = result.ExitCode;
+                }
+            }
+            ShowComplete(new ConversionRunResult(exitCode, outputs, logPath, failures));
         }
         catch (Exception ex)
         {
@@ -240,6 +267,67 @@ internal sealed class MainWindow : Window
             _message.Text = ex.Message;
             _detail.Text = string.IsNullOrWhiteSpace(_lastLogPath) ? "" : $"ログ: {_lastLogPath}";
         }
+    }
+
+    /// <summary>
+    /// Builds the conversion jobs, prompting for avatar selection on any .unitypackage that holds
+    /// more than one avatar. VRMs and single-avatar packages are grouped into one batch job; each
+    /// multi-avatar package becomes its own job carrying the chosen avatar. Returns null if the user
+    /// cancels a selection.
+    /// </summary>
+    private async Task<List<CliOptions>> BuildConversionJobs(string[] inputFiles)
+    {
+        var batchFiles = new List<string>();
+        var avatarJobs = new List<CliOptions>();
+        foreach (string file in inputFiles)
+        {
+            if (string.Equals(Path.GetExtension(file), ".unitypackage", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowConverting(Path.GetFileName(file) + " を解析中...");
+                IReadOnlyList<VrchatAvatarChoice> avatars = await Task.Run(() => ListPackageAvatars(file));
+                if (avatars.Count > 1)
+                {
+                    string chosen = SelectAvatar(file, avatars);
+                    if (chosen == null)
+                    {
+                        return null; // cancelled
+                    }
+                    CliOptions option = _settings.ToCliOptions(new[] { file });
+                    option.AvatarName = chosen;
+                    avatarJobs.Add(option);
+                    continue;
+                }
+            }
+            batchFiles.Add(file);
+        }
+
+        var jobs = new List<CliOptions>();
+        if (batchFiles.Count > 0)
+        {
+            jobs.Add(_settings.ToCliOptions(batchFiles.ToArray()));
+        }
+        jobs.AddRange(avatarJobs);
+        return jobs;
+    }
+
+    private static IReadOnlyList<VrchatAvatarChoice> ListPackageAvatars(string path)
+    {
+        try
+        {
+            using Unity.UnityPackage package = Unity.UnityPackage.Extract(path);
+            return Vrchat.VrchatAvatarParser.ListAvatars(package);
+        }
+        catch
+        {
+            // If listing fails, fall through to a normal (auto-select) conversion.
+            return Array.Empty<VrchatAvatarChoice>();
+        }
+    }
+
+    private string SelectAvatar(string packageFile, IReadOnlyList<VrchatAvatarChoice> avatars)
+    {
+        var dialog = new AvatarSelectionWindow(Path.GetFileName(packageFile), avatars) { Owner = this };
+        return dialog.ShowDialog() == true ? dialog.SelectedAvatar : null;
     }
 
     private static async Task<ConversionRunResult> RunConversionProcessAsync(CliOptions options, string resonitePath)
@@ -317,6 +405,11 @@ internal sealed class MainWindow : Window
         {
             arguments.Add("--output");
             arguments.Add(options.OutputDirectory);
+        }
+        if (!string.IsNullOrWhiteSpace(options.AvatarName))
+        {
+            arguments.Add("--avatar");
+            arguments.Add(options.AvatarName);
         }
         if (options.NoAvatar)
         {
@@ -693,6 +786,107 @@ internal sealed class SettingsWindow : Window
             throw new FormatException($"{label} は数値で入力してください。");
         }
         return result;
+    }
+}
+
+/// <summary>Modal dialog that asks which avatar to convert when a package contains several.</summary>
+internal sealed class AvatarSelectionWindow : Window
+{
+    private static readonly Brush AccentBrush = new SolidColorBrush(Color.FromRgb(35, 174, 219));
+
+    private readonly ListBox _list = new();
+
+    public string SelectedAvatar { get; private set; }
+
+    public AvatarSelectionWindow(string packageName, IReadOnlyList<VrchatAvatarChoice> avatars)
+    {
+        Title = "アバターを選択";
+        Width = 480;
+        Height = 460;
+        MinWidth = 400;
+        MinHeight = 320;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        Background = Brushes.White;
+        FontFamily = new FontFamily("Segoe UI");
+
+        var root = new DockPanel { Margin = new Thickness(24) };
+        Content = root;
+
+        var header = new StackPanel();
+        DockPanel.SetDock(header, Dock.Top);
+        header.Children.Add(new TextBlock
+        {
+            Text = "変換するアバターを選択",
+            FontSize = 20,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(28, 45, 58))
+        });
+        header.Children.Add(new TextBlock
+        {
+            Text = packageName,
+            Margin = new Thickness(0, 4, 0, 14),
+            Foreground = new SolidColorBrush(Color.FromRgb(96, 111, 123)),
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        root.Children.Add(header);
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 16, 0, 0)
+        };
+        DockPanel.SetDock(buttons, Dock.Bottom);
+        var cancel = new Button { Content = "キャンセル", MinWidth = 96, Margin = new Thickness(0, 0, 8, 0) };
+        var ok = new Button
+        {
+            Content = "変換",
+            MinWidth = 96,
+            Background = AccentBrush,
+            Foreground = Brushes.White,
+            BorderBrush = AccentBrush
+        };
+        cancel.Click += (_, _) => DialogResult = false;
+        ok.Click += (_, _) => Confirm();
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(ok);
+        root.Children.Add(buttons);
+
+        for (int i = 0; i < avatars.Count; i++)
+        {
+            VrchatAvatarChoice avatar = avatars[i];
+            var content = new StackPanel { Margin = new Thickness(4) };
+            content.Children.Add(new TextBlock
+            {
+                Text = i == 0 ? $"{avatar.Name}（推奨）" : avatar.Name,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(28, 45, 58))
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = $"GameObject {avatar.Size} / {avatar.SourcePath}",
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.FromRgb(120, 132, 142)),
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            _list.Items.Add(new ListBoxItem { Content = content, Tag = avatar.Name });
+        }
+        _list.SelectedIndex = 0;
+        _list.MouseDoubleClick += (_, _) => Confirm();
+        root.Children.Add(new ScrollViewer
+        {
+            Content = _list,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        });
+    }
+
+    private void Confirm()
+    {
+        if (_list.SelectedItem is ListBoxItem item && item.Tag is string name)
+        {
+            SelectedAvatar = name;
+            DialogResult = true;
+        }
     }
 }
 

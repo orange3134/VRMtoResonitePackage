@@ -24,8 +24,28 @@ public static class VrchatAvatarParser
     }
 
     /// <summary>
+    /// Lists the distinct avatars (by root GameObject name) a package contains, ordered with the
+    /// recommended primary first. Engine-independent, so the GUI can prompt for a choice without
+    /// booting the engine. Empty when the package has no VRChat avatar.
+    /// </summary>
+    public static IReadOnlyList<VrchatAvatarChoice> ListAvatars(UnityPackage package)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<VrchatAvatarChoice>();
+        foreach (Candidate c in OrderByPrimary(FindCandidates(package)))
+        {
+            string name = c.Scene.GameObjectName(c.Root.FileId);
+            if (!string.IsNullOrEmpty(name) && seen.Add(name))
+            {
+                result.Add(new VrchatAvatarChoice(name, c.Source.LogicalPath, c.Size));
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Parses the primary avatar. <paramref name="avatarOverride"/> selects a specific avatar by
-    /// root/file name (case-insensitive, substring) when the package holds more than one.
+    /// root/file name (exact match preferred, otherwise substring) when the package holds more than one.
     /// </summary>
     public static VrchatAvatar Parse(UnityPackage package, string avatarOverride = null)
     {
@@ -157,7 +177,15 @@ public static class VrchatAvatarParser
     {
         if (!string.IsNullOrWhiteSpace(avatarOverride))
         {
-            Candidate match = candidates.FirstOrDefault(c =>
+            // Exact root-name match first (so "Tolass4.5" never resolves to "Tolass4.5_BodyModel"),
+            // then fall back to a substring match on the name or file.
+            Candidate exact = OrderByPrimary(candidates).FirstOrDefault(c =>
+                string.Equals(c.Scene.GameObjectName(c.Root.FileId), avatarOverride, StringComparison.OrdinalIgnoreCase));
+            if (exact != null)
+            {
+                return exact;
+            }
+            Candidate match = OrderByPrimary(candidates).FirstOrDefault(c =>
                 (c.Scene.GameObjectName(c.Root.FileId) ?? "").Contains(avatarOverride, StringComparison.OrdinalIgnoreCase) ||
                 Path.GetFileNameWithoutExtension(c.Source.LogicalPath).Contains(avatarOverride, StringComparison.OrdinalIgnoreCase));
             if (match != null)
@@ -166,14 +194,18 @@ public static class VrchatAvatarParser
             }
             UniLog.Warning($"--avatar '{avatarOverride}' に一致する候補がないため、最大のアバターを使用します。");
         }
-        // Primary = the most complete avatar (largest hierarchy); prefer non-"OLD" folders and
-        // shorter paths so duplicate/legacy copies don't win ties.
-        return candidates
+        return OrderByPrimary(candidates).First();
+    }
+
+    /// <summary>
+    /// Orders candidates with the recommended primary first: largest hierarchy, then non-"OLD"
+    /// folders, then shorter paths so duplicate/legacy copies don't win ties.
+    /// </summary>
+    private static IEnumerable<Candidate> OrderByPrimary(IEnumerable<Candidate> candidates)
+        => candidates
             .OrderByDescending(c => c.Size)
             .ThenBy(c => c.Source.LogicalPath.Contains("OLD", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
-            .ThenBy(c => c.Source.LogicalPath.Length)
-            .First();
-    }
+            .ThenBy(c => c.Source.LogicalPath.Length);
 
     /// <summary>True when a component's owning GameObject is part of the selected avatar subtree.</summary>
     private static bool InSubtree(UnityScene scene, HashSet<long> subtree, YamlDocument component)
