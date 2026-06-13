@@ -41,6 +41,12 @@ public sealed class VrchatAvatar
 
     /// <summary>GameObject names that start inactive in the prefab (m_IsActive = 0), e.g. costume swaps.</summary>
     public List<string> InactiveGameObjectNames { get; } = new();
+
+    /// <summary>
+    /// All GameObject names present in the selected prefab's hierarchy. Used to drop imported FBX
+    /// meshes that the prefab deleted (avatars built by removing mesh objects from a shared FBX).
+    /// </summary>
+    public HashSet<string> PrefabGameObjectNames { get; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>One avatar a package offers for conversion (root GameObject name + source + hierarchy size).</summary>

@@ -71,6 +71,16 @@ public static class VrchatAvatarParser
             PrefabPath = selected.Source.LogicalPath,
         };
 
+        // Record every GameObject the prefab keeps, so the importer's extra (deleted) meshes can be dropped.
+        foreach (long goId in selected.Subtree)
+        {
+            string name = selected.Scene.GameObjectName(goId);
+            if (!string.IsNullOrEmpty(name))
+            {
+                avatar.PrefabGameObjectNames.Add(name);
+            }
+        }
+
         ResolveFbx(package, selected.Scene, selected.Subtree, avatar);
         ParseHumanoid(package, avatar);
         ParseDescriptor(selected.Scene, selected.Descriptor, avatar);

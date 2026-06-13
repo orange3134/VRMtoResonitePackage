@@ -348,6 +348,9 @@ internal static class Converter
                 Console.WriteLine("アセットの読み込みを待機中...");
                 await WaitForAssets(assetsSlot);
 
+                // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
+                Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar);
+
                 if (options.NoAvatar)
                 {
                     await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package);

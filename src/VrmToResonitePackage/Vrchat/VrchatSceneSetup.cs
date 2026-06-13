@@ -16,6 +16,80 @@ internal static class VrchatSceneSetup
         ApplyInitialBlendShapes(root, avatar);
     }
 
+    /// <summary>
+    /// Removes imported meshes that the selected prefab deleted. Ukon-style avatars share one FBX
+    /// across several prefabs, each built by deleting mesh GameObjects in Unity; the FBX import
+    /// brings them all back, so any renderer whose GameObject is not in the prefab is dropped.
+    /// Must run before avatar/material setup so nothing downstream references the removed meshes.
+    /// </summary>
+    public static void RemoveDeletedMeshes(Slot root, VrchatAvatar avatar)
+    {
+        if (avatar.PrefabGameObjectNames.Count == 0)
+        {
+            return;
+        }
+        HashSet<string> keep = avatar.PrefabGameObjectNames;
+
+        // Renderer slots whose GameObject name the prefab does not contain.
+        var extras = new List<Slot>();
+        foreach (MeshRenderer renderer in root.GetComponentsInChildren<MeshRenderer>())
+        {
+            Slot slot = renderer.Slot;
+            if (slot.Name != null && !keep.Contains(slot.Name))
+            {
+                extras.Add(slot);
+            }
+        }
+
+        int removed = 0;
+        foreach (Slot slot in extras.Distinct())
+        {
+            if (slot.IsDestroyed)
+            {
+                continue; // already removed as a descendant of an earlier extra slot
+            }
+            // Don't destroy a slot that still hosts a kept mesh somewhere below it; just strip its
+            // own renderer/mesh in that (rare) case.
+            bool hasKeptDescendant = slot.GetComponentsInChildren<MeshRenderer>()
+                .Any(r => r.Slot != slot && r.Slot.Name != null && keep.Contains(r.Slot.Name));
+            if (hasKeptDescendant)
+            {
+                foreach (MeshRenderer r in slot.GetComponents<MeshRenderer>())
+                {
+                    r.Destroy();
+                }
+            }
+            else
+            {
+                slot.Destroy();
+            }
+            removed++;
+        }
+
+        // Drop the now-unreferenced mesh assets the removed renderers used, so they aren't packaged.
+        var referencedMeshes = new HashSet<RefID>();
+        foreach (MeshRenderer renderer in root.GetComponentsInChildren<MeshRenderer>())
+        {
+            var mesh = renderer.Mesh.Target;
+            if (mesh != null)
+            {
+                referencedMeshes.Add(mesh.ReferenceID);
+            }
+        }
+        foreach (StaticMesh mesh in root.GetComponentsInChildren<StaticMesh>())
+        {
+            if (!referencedMeshes.Contains(mesh.ReferenceID))
+            {
+                mesh.Slot.Destroy();
+            }
+        }
+
+        if (removed > 0)
+        {
+            UniLog.Log($"prefabに含まれないメッシュを {removed} 個削除しました。");
+        }
+    }
+
     private static void ApplyInactiveStates(Slot root, VrchatAvatar avatar)
     {
         if (avatar.InactiveGameObjectNames.Count == 0)
