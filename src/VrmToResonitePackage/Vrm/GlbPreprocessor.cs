@@ -63,6 +63,7 @@ internal static class GlbPreprocessor
         JsonNode root = JsonNode.Parse(new ReadOnlySpan<byte>(data, jsonOffset, jsonLength));
         bool changed = false;
         bool baked = false;
+        byte[] appendedBin = Array.Empty<byte>();
         if (root != null)
         {
             changed |= FixTargetNames(root);
@@ -73,6 +74,13 @@ internal static class GlbPreprocessor
             // ReverseZ export this collapses to identity, so engine space becomes Unity space.
             baked = BakeVrm0Y180(root, data, binOffset, binLength);
             changed |= baked;
+            // Stop JoinIdenticalVertices from collapsing morph-bearing vertices. Needs a BIN
+            // chunk (GLB-embedded geometry) to append the guard channel's data to.
+            if (binIndex >= 0)
+            {
+                appendedBin = AddMorphVertexGuardChannel(root, binLength, out bool guarded);
+                changed |= guarded;
+            }
         }
         if (!changed)
         {
@@ -92,6 +100,11 @@ internal static class GlbPreprocessor
             if (i != jsonIndex)
             {
                 totalLength += 8 + chunks[i].length;
+                // The guard channel's data is appended to the BIN chunk (already 4-aligned).
+                if (i == binIndex)
+                {
+                    totalLength += appendedBin.Length;
+                }
             }
         }
         writer.Write(GlbMagic);
@@ -106,17 +119,133 @@ internal static class GlbPreprocessor
             writer.Write((byte)0x20);
         }
 
-        foreach ((uint type, int offset, int length) in chunks)
+        for (int i = 0; i < chunks.Count; i++)
         {
+            (uint type, int offset, int length) = chunks[i];
             if (type == JsonChunkType)
             {
                 continue;
             }
-            writer.Write((uint)length);
-            writer.Write(type);
-            writer.Write(data, offset, length);
+            if (i == binIndex && appendedBin.Length > 0)
+            {
+                writer.Write((uint)(length + appendedBin.Length));
+                writer.Write(type);
+                writer.Write(data, offset, length);
+                writer.Write(appendedBin);
+            }
+            else
+            {
+                writer.Write((uint)length);
+                writer.Write(type);
+                writer.Write(data, offset, length);
+            }
         }
         return baked;
+    }
+
+    /// <summary>
+    /// Assimp's JoinIdenticalVertices post-process step (which Resonite's importer always runs)
+    /// merges any two vertices that are byte-identical across every attribute it compares —
+    /// position, normal, tangent, all UV channels, all colour channels and bone weights — but
+    /// it ignores morph target (blendshape) deltas entirely. VRM face meshes routinely contain
+    /// vertices that are coincident in the rest pose (e.g. teeth/tongue collapsed to a point,
+    /// "deployed" only by a blendshape) yet carry different morph deltas. The merge collapses
+    /// them and keeps only one delta, so those vertices no longer move when the blendshape is
+    /// driven — the exact symptom that does not occur in UniVRM, whose importer never joins.
+    ///
+    /// We defeat the merge from the data side: every primitive of a morph-bearing mesh gets an
+    /// extra TEXCOORD channel whose value is unique per vertex. Two vertices that differ in any
+    /// UV channel are never candidates to join, so morph-distinct vertices survive intact. The
+    /// channel is unused by the imported (toon) materials, so it has no visual effect, and the
+    /// data is shared per POSITION accessor to keep the appended buffer small.
+    /// Returns the bytes to append to the BIN chunk; sets <paramref name="changed"/> when any
+    /// channel was added.
+    /// </summary>
+    private static byte[] AddMorphVertexGuardChannel(JsonNode root, int binLength, out bool changed)
+    {
+        changed = false;
+        if (root["meshes"] is not JsonArray meshes ||
+            root["accessors"] is not JsonArray accessors ||
+            root["bufferViews"] is not JsonArray bufferViews)
+        {
+            return Array.Empty<byte>();
+        }
+
+        var appended = new List<byte>();
+        // One guard accessor per POSITION accessor, reused by every primitive that shares it.
+        var guardForPosition = new Dictionary<int, int>();
+        foreach (JsonNode meshNode in meshes)
+        {
+            if (meshNode is not JsonObject mesh ||
+                mesh["primitives"] is not JsonArray primitives ||
+                primitives.Count == 0)
+            {
+                continue;
+            }
+            bool hasMorphTargets = primitives[0] is JsonObject first &&
+                first["targets"] is JsonArray firstTargets && firstTargets.Count > 0;
+            if (!hasMorphTargets)
+            {
+                continue;
+            }
+            foreach (JsonNode primitiveNode in primitives)
+            {
+                if (primitiveNode is not JsonObject primitive ||
+                    primitive["attributes"] is not JsonObject attributes ||
+                    attributes["POSITION"] is not JsonValue positionRef)
+                {
+                    continue;
+                }
+                int positionAccessor = positionRef.GetValue<int>();
+                if (!guardForPosition.TryGetValue(positionAccessor, out int guardAccessor))
+                {
+                    int count = (accessors[positionAccessor] as JsonObject)?["count"]?.GetValue<int>() ?? 0;
+                    if (count <= 0)
+                    {
+                        continue;
+                    }
+                    // VEC2 float, u = vertex index (distinct, integer-spaced — beats any join
+                    // epsilon), v = 0. byteOffset is the BIN chunk's current 4-aligned length.
+                    int byteOffset = binLength + appended.Count;
+                    var bytes = new byte[count * 8];
+                    for (int v = 0; v < count; v++)
+                    {
+                        BitConverter.GetBytes((float)v).CopyTo(bytes, v * 8);
+                    }
+                    appended.AddRange(bytes);
+                    bufferViews.Add(new JsonObject
+                    {
+                        ["buffer"] = 0,
+                        ["byteOffset"] = byteOffset,
+                        ["byteLength"] = count * 8,
+                        ["target"] = 34962, // ARRAY_BUFFER
+                    });
+                    accessors.Add(new JsonObject
+                    {
+                        ["bufferView"] = bufferViews.Count - 1,
+                        ["componentType"] = 5126, // FLOAT
+                        ["count"] = count,
+                        ["type"] = "VEC2",
+                    });
+                    guardAccessor = accessors.Count - 1;
+                    guardForPosition[positionAccessor] = guardAccessor;
+                    changed = true;
+                }
+                int channel = 0;
+                while (attributes[$"TEXCOORD_{channel}"] != null)
+                {
+                    channel++;
+                }
+                attributes[$"TEXCOORD_{channel}"] = guardAccessor;
+            }
+        }
+        // The new bufferViews extend past the original buffer; grow buffer[0] to cover them.
+        if (changed && root["buffers"] is JsonArray buffers && buffers.Count > 0 &&
+            buffers[0] is JsonObject buffer)
+        {
+            buffer["byteLength"] = binLength + appended.Count;
+        }
+        return appended.ToArray();
     }
 
     /// <summary>Returns true when the JSON was modified.</summary>

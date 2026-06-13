@@ -61,6 +61,24 @@ internal static class AssimpDump
                     string marker = vertexCount == mesh.VertexCount ? "OK" : "** MISMATCH **";
                     Console.WriteLine($"     animMesh verts={vertexCount} x{count} {marker}");
                 }
+                // Per-blendshape count of vertices the morph actually moves. When this is far
+                // below the source glTF's affected-vertex count, JoinIdenticalVertices has
+                // collapsed morph-distinct vertices (the bug the guard channel prevents).
+                for (int j = 0; j < mesh.MeshAnimationAttachmentCount; j++)
+                {
+                    MeshAnimationAttachment attachment = mesh.MeshAnimationAttachments[j];
+                    int moved = 0;
+                    int n = Math.Min(attachment.VertexCount, mesh.VertexCount);
+                    for (int v = 0; v < n; v++)
+                    {
+                        Vector3D d = attachment.Vertices[v] - mesh.Vertices[v];
+                        if (Math.Abs(d.X) > 1e-7f || Math.Abs(d.Y) > 1e-7f || Math.Abs(d.Z) > 1e-7f)
+                        {
+                            moved++;
+                        }
+                    }
+                    Console.WriteLine($"     bs[{j:D2}] movedVerts={moved}");
+                }
             }
             context.Dispose();
         }
