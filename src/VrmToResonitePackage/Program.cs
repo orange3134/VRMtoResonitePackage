@@ -156,8 +156,8 @@ internal sealed class CliOptions
     public bool FaceTracking { get; set; }
     public bool NoProtection { get; set; }
     public bool NoExpressionMenu { get; set; }
+    public bool DefaultUserScale { get; set; }
     public bool KeepWorkingFiles { get; set; }
-    public float? TargetHeight { get; set; }
     public float? ViewForward { get; set; }
     public float? ViewUp { get; set; }
     public float? NearClip { get; set; }
@@ -198,6 +198,9 @@ internal sealed class CliOptions
                 case "--no-expression-menu":
                     options.NoExpressionMenu = true;
                     break;
+                case "--default-user-scale":
+                    options.DefaultUserScale = true;
+                    break;
                 case "--inspect":
                     options.InspectMode = true;
                     break;
@@ -210,9 +213,6 @@ internal sealed class CliOptions
                     break;
                 case "--keep-working-files":
                     options.KeepWorkingFiles = true;
-                    break;
-                case "--height":
-                    options.TargetHeight = RequireFloat(args, ref i, arg, mustBePositive: true);
                     break;
                 case "--view-forward":
                     options.ViewForward = RequireFloat(args, ref i, arg, mustBePositive: false);
@@ -279,7 +279,7 @@ internal sealed class CliOptions
         Console.WriteLine("  --face-tracking          フェイストラッキング用AvatarExpressionDriverを生成");
         Console.WriteLine("  --no-protection          SimpleAvatarProtection（アバター保護）を付けない");
         Console.WriteLine("  --no-expression-menu     プリセット表情のコンテキストメニューを生成しない");
-        Console.WriteLine("  --height <m>             アバターの身長をメートル指定でリスケール");
+        Console.WriteLine("  --default-user-scale     DefaultUserScaleを付与し着用者を原寸サイズに縮小（低等身アバターの巨大化を防ぐ）");
         Console.WriteLine("  --view-forward <m>       視点の前方オフセット（既定: 目間距離から自動）");
         Console.WriteLine("  --view-up <m>            視点の上方オフセット（既定: 目間距離から自動)");
         Console.WriteLine("  --near-clip <m>          AvatarRenderSettingsのNearClip（既定: 0.075、0で無効）");

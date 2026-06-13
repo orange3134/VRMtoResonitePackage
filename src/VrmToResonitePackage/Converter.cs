@@ -226,10 +226,10 @@ internal static class Converter
                     Console.WriteLine("アバターをセットアップ中...");
                     var setupOptions = new AvatarSetupOptions
                     {
-                        TargetHeight = options.TargetHeight,
                         FaceTracking = options.FaceTracking,
                         Protect = !options.NoProtection,
                         ExpressionMenu = !options.NoExpressionMenu,
+                        DefaultUserScale = options.DefaultUserScale,
                         ViewForward = options.ViewForward,
                         ViewUp = options.ViewUp,
                     };

@@ -328,11 +328,14 @@ internal sealed class MainWindow : Window
         {
             arguments.Add("--no-expression-menu");
         }
+        if (options.DefaultUserScale)
+        {
+            arguments.Add("--default-user-scale");
+        }
         if (options.KeepWorkingFiles)
         {
             arguments.Add("--keep-working-files");
         }
-        AddNullableFloat(arguments, "--height", options.TargetHeight);
         AddNullableFloat(arguments, "--view-forward", options.ViewForward);
         AddNullableFloat(arguments, "--view-up", options.ViewUp);
         AddNullableFloat(arguments, "--near-clip", options.NearClip);
@@ -503,7 +506,6 @@ internal sealed class SettingsWindow : Window
 {
     private const string DefaultOutputDirectoryText = "入力ファイルと同じフォルダ";
     private const string AutoDetectText = "自動検出";
-    private const string NoRescaleText = "変更しない";
     private const string AutoValueText = "自動";
 
     private readonly TextBox _outputDirectory = new();
@@ -512,8 +514,8 @@ internal sealed class SettingsWindow : Window
     private readonly CheckBox _faceTracking = new() { Content = "フェイストラッキング用ドライバーを生成" };
     private readonly CheckBox _noProtection = new() { Content = "アバター保護を付けない" };
     private readonly CheckBox _noExpressionMenu = new() { Content = "表情メニューを生成しない" };
+    private readonly CheckBox _defaultUserScale = new() { Content = "アバターの原寸サイズを維持" };
     private readonly CheckBox _keepWorkingFiles = new() { Content = "作業用一時ファイルを残す" };
-    private readonly TextBox _height = new();
     private readonly TextBox _viewForward = new();
     private readonly TextBox _viewUp = new();
     private readonly TextBox _nearClip = new();
@@ -541,8 +543,8 @@ internal sealed class SettingsWindow : Window
         panel.Children.Add(_faceTracking);
         panel.Children.Add(_noProtection);
         panel.Children.Add(_noExpressionMenu);
+        panel.Children.Add(_defaultUserScale);
         panel.Children.Add(_keepWorkingFiles);
-        panel.Children.Add(Field("身長(m)", _height));
         panel.Children.Add(Field("視点の前方オフセット(m)", _viewForward));
         panel.Children.Add(Field("視点の上方オフセット(m)", _viewUp));
         panel.Children.Add(Field("NearClip(m)", _nearClip));
@@ -584,8 +586,8 @@ internal sealed class SettingsWindow : Window
         _faceTracking.IsChecked = Settings.FaceTracking;
         _noProtection.IsChecked = Settings.NoProtection;
         _noExpressionMenu.IsChecked = Settings.NoExpressionMenu;
+        _defaultUserScale.IsChecked = Settings.DefaultUserScale;
         _keepWorkingFiles.IsChecked = Settings.KeepWorkingFiles;
-        _height.Text = Settings.TargetHeight?.ToString(CultureInfo.InvariantCulture) ?? NoRescaleText;
         _viewForward.Text = Settings.ViewForward?.ToString(CultureInfo.InvariantCulture) ?? AutoValueText;
         _viewUp.Text = Settings.ViewUp?.ToString(CultureInfo.InvariantCulture) ?? AutoValueText;
         _nearClip.Text = Settings.NearClip?.ToString(CultureInfo.InvariantCulture) ?? "0.075";
@@ -602,8 +604,8 @@ internal sealed class SettingsWindow : Window
             Settings.FaceTracking = _faceTracking.IsChecked == true;
             Settings.NoProtection = _noProtection.IsChecked == true;
             Settings.NoExpressionMenu = _noExpressionMenu.IsChecked == true;
+            Settings.DefaultUserScale = _defaultUserScale.IsChecked == true;
             Settings.KeepWorkingFiles = _keepWorkingFiles.IsChecked == true;
-            Settings.TargetHeight = ParseNullableFloat(_height.Text, "身長", NoRescaleText);
             Settings.ViewForward = ParseNullableFloat(_viewForward.Text, "視点の前方オフセット", AutoValueText);
             Settings.ViewUp = ParseNullableFloat(_viewUp.Text, "視点の上方オフセット", AutoValueText);
             Settings.NearClip = ParseNullableFloat(_nearClip.Text, "NearClip");
@@ -696,8 +698,8 @@ internal sealed class GuiSettings
     public bool FaceTracking { get; set; }
     public bool NoProtection { get; set; }
     public bool NoExpressionMenu { get; set; }
+    public bool DefaultUserScale { get; set; }
     public bool KeepWorkingFiles { get; set; }
-    public float? TargetHeight { get; set; }
     public float? ViewForward { get; set; }
     public float? ViewUp { get; set; }
     public float? NearClip { get; set; }
@@ -737,8 +739,8 @@ internal sealed class GuiSettings
         FaceTracking = FaceTracking,
         NoProtection = NoProtection,
         NoExpressionMenu = NoExpressionMenu,
+        DefaultUserScale = DefaultUserScale,
         KeepWorkingFiles = KeepWorkingFiles,
-        TargetHeight = TargetHeight,
         ViewForward = ViewForward,
         ViewUp = ViewUp,
         NearClip = NearClip,
@@ -753,8 +755,8 @@ internal sealed class GuiSettings
         FaceTracking = other.FaceTracking;
         NoProtection = other.NoProtection;
         NoExpressionMenu = other.NoExpressionMenu;
+        DefaultUserScale = other.DefaultUserScale;
         KeepWorkingFiles = other.KeepWorkingFiles;
-        TargetHeight = other.TargetHeight;
         ViewForward = other.ViewForward;
         ViewUp = other.ViewUp;
         NearClip = other.NearClip;
@@ -771,8 +773,8 @@ internal sealed class GuiSettings
             FaceTracking = FaceTracking,
             NoProtection = NoProtection,
             NoExpressionMenu = NoExpressionMenu,
+            DefaultUserScale = DefaultUserScale,
             KeepWorkingFiles = KeepWorkingFiles,
-            TargetHeight = TargetHeight,
             ViewForward = ViewForward,
             ViewUp = ViewUp,
             NearClip = NearClip,
