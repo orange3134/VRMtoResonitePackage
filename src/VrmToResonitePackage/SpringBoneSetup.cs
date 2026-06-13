@@ -393,6 +393,13 @@ internal static class SpringBoneSetup
         /// </summary>
         private static float3 ConvertVector(System.Numerics.Vector3 v, VrmModel vrm)
         {
+            // VRChat FBX: Resonite's Assimp import mirrors the scene by scale(-1,1,1) just like
+            // glTF, and Unity FBX bone-local offsets are already +Z-forward, so the engine
+            // slot-local value is the Unity value with X flipped (same as VRM1). Validated on hardware.
+            if (vrm.Source == ModelSource.VrchatFbx)
+            {
+                return new float3(-v.X, v.Y, v.Z);
+            }
             if (vrm.SpecVersionMajor != 0)
             {
                 return new float3(-v.X, v.Y, v.Z);

@@ -642,19 +642,32 @@ internal static class AvatarSetup
         headObject.Slot.GetComponentOrAttach<AvatarVoiceRangeVisualizer>();
     }
 
+    // VRM declares only the five vowels; VRChat declares the full 15-viseme set. Both map here.
+    // "ee" is the VRM spelling of Resonite's Viseme.E; the rest match the enum names directly.
     private static readonly (string preset, Viseme viseme)[] VisemePresets =
     {
+        ("sil", Viseme.Silence),
+        ("PP", Viseme.PP),
+        ("FF", Viseme.FF),
+        ("TH", Viseme.TH),
+        ("DD", Viseme.DD),
+        ("kk", Viseme.kk),
+        ("CH", Viseme.CH),
+        ("SS", Viseme.SS),
+        ("nn", Viseme.nn),
+        ("RR", Viseme.RR),
         ("aa", Viseme.aa),
-        ("ih", Viseme.ih),
-        ("ou", Viseme.ou),
+        ("E", Viseme.E),
         ("ee", Viseme.E),
+        ("ih", Viseme.ih),
         ("oh", Viseme.oh),
+        ("ou", Viseme.ou),
     };
 
     /// <summary>
-    /// Wires the five VRM vowel expressions directly to Resonite's viseme system.
-    /// Resonite's own auto-assignment is bypassed entirely, so only blendshapes the
-    /// VRM explicitly declares get linked.
+    /// Wires the vowel/viseme expressions directly to Resonite's viseme system. Resonite's own
+    /// auto-assignment is bypassed entirely, so only blendshapes the source explicitly declares get
+    /// linked. VRM provides the five vowels; VRChat provides up to all 15 visemes.
     /// </summary>
     private static void SetupVisemesFromVrm(Slot root, VrmModel vrm)
     {
@@ -705,7 +718,7 @@ internal static class AvatarSetup
                 driver.Source.Target = analyzer;
             }
         }
-        UniLog.Log($"VRMの母音表情からビセームを設定しました ({drivers.Count} ドライバー)。");
+        UniLog.Log($"表情からビセームを設定しました ({drivers.Count} ドライバー)。");
     }
 
     // ---------------------------------------------------------------- misc avatar bits

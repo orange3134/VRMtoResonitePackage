@@ -84,7 +84,11 @@ internal static class Converter
                 Console.WriteLine($"=== 変換中: {Path.GetFileName(inputFile)} ===");
                 try
                 {
-                    string output = await ConvertOne(world, inputFile, options).ConfigureAwait(false);
+                    bool isUnityPackage = string.Equals(Path.GetExtension(inputFile), ".unitypackage",
+                        StringComparison.OrdinalIgnoreCase);
+                    string output = isUnityPackage
+                        ? await ConvertVrchat(world, inputFile, options).ConfigureAwait(false)
+                        : await ConvertOne(world, inputFile, options).ConfigureAwait(false);
                     outputs.Add(output);
                     Console.WriteLine($"=== 完了: {output} ===");
                 }
@@ -245,6 +249,135 @@ internal static class Converter
                 await SetupThumbnail(root, assetsSlot, vrm, vrmPath);
 
                 // Let deferred import tasks (alpha detection, normal map detection, ...) settle.
+                for (int i = 0; i < 30; i++)
+                {
+                    await default(NextUpdate);
+                }
+
+                root.Name = displayName;
+                Console.WriteLine("パッケージを書き出し中...");
+                await ExportPackage(world, root, outputPath);
+            }).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (!options.KeepWorkingFiles)
+            {
+                try
+                {
+                    Directory.Delete(workDirectory, recursive: true);
+                }
+                catch
+                {
+                    // Temp cleanup is best-effort.
+                }
+            }
+            else
+            {
+                Console.WriteLine($"作業ファイル: {workDirectory}");
+            }
+        }
+
+        if (!File.Exists(outputPath))
+        {
+            throw new IOException($"パッケージが出力されませんでした: {outputPath}");
+        }
+        return outputPath;
+    }
+
+    /// <summary>
+    /// Converts a VRChat avatar packaged as a .unitypackage: extracts it, parses the primary
+    /// avatar (VRCAvatarDescriptor + PhysBones + liltoon material assignments), imports the FBX
+    /// through Resonite's importer, then reuses the same rig/viseme/blink/spring setup as VRM via
+    /// an adapter, and builds liltoon-derived XiexeToon materials.
+    /// </summary>
+    private static async Task<string> ConvertVrchat(World world, string packagePath, CliOptions options)
+    {
+        using Unity.UnityPackage package = Unity.UnityPackage.Extract(packagePath);
+        Vrchat.VrchatAvatar avatar = Vrchat.VrchatAvatarParser.Parse(package, options.AvatarName);
+        VrmModel model = Vrchat.VrchatModelAdapter.ToVrmModel(avatar);
+
+        string displayName = !string.IsNullOrWhiteSpace(avatar.Name)
+            ? avatar.Name
+            : Path.GetFileNameWithoutExtension(packagePath);
+        Console.WriteLine($"VRChatアバター: {displayName}");
+        Console.WriteLine($"ヒューマノイドボーン: {avatar.HumanBones.Count}, ビセーム: {avatar.Visemes.Count}, " +
+                          $"瞬き: {(avatar.Blink != null ? "あり" : "なし")}, PhysBone: {avatar.PhysBones.Count}");
+
+        string outputDirectory = options.OutputDirectory ?? Path.GetDirectoryName(packagePath);
+        Directory.CreateDirectory(outputDirectory);
+        string outputPath = Path.Combine(outputDirectory,
+            SanitizeFileName(Path.GetFileNameWithoutExtension(packagePath)) + ".resonitepackage");
+
+        // The extracted FBX content file is named "asset"; Resonite's importer keys off the
+        // extension, so copy it to a real .fbx path.
+        string workDirectory = Path.Combine(Path.GetTempPath(), "VrmToResonitePackage", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workDirectory);
+        string fbxPath = Path.Combine(workDirectory, SanitizeFileName(displayName) + ".fbx");
+        File.Copy(avatar.FbxPath, fbxPath, overwrite: true);
+
+        try
+        {
+            await world.Coroutines.StartTask(async () =>
+            {
+                await default(ToWorld);
+                Slot root = world.AddSlot(displayName);
+                Slot assetsSlot = root.AddSlot("Assets");
+
+                ModelImportSettings settings = ModelImportSettings.XiexeToon(
+                    generateColliders: false,
+                    importBones: true,
+                    importAnimations: false);
+                settings.SetupIK = false;
+                settings.ForceTpose = false;
+                settings.CalculateTextureAlpha = true;
+                settings.ImportVertexColors = false;
+                settings.GenerateSkeletonBones = true;
+
+                Console.WriteLine("FBXをインポート中...");
+                Task importTask = ModelImporter.ImportModelAsync(fbxPath, root, settings, assetsSlot);
+                Task winner = await Task.WhenAny(importTask, Task.Delay(TimeSpan.FromSeconds(options.ImportTimeoutSeconds)));
+                await default(ToWorld);
+                if (winner != importTask)
+                {
+                    throw new TimeoutException(
+                        $"FBXのインポートが {options.ImportTimeoutSeconds} 秒以内に完了しませんでした。");
+                }
+                await importTask;
+
+                Console.WriteLine("アセットの読み込みを待機中...");
+                await WaitForAssets(assetsSlot);
+
+                if (options.NoAvatar)
+                {
+                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package);
+                    SpringBoneSetup.Apply(root, model);
+                }
+                else
+                {
+                    Console.WriteLine("アバターをセットアップ中...");
+                    var setupOptions = new AvatarSetupOptions
+                    {
+                        FaceTracking = options.FaceTracking,
+                        Protect = !options.NoProtection,
+                        // VRChat expressions live in Animator/menu layers, out of scope: visemes + blink only.
+                        ExpressionMenu = false,
+                        DefaultUserScale = options.DefaultUserScale,
+                        ViewForward = options.ViewForward,
+                        ViewUp = options.ViewUp,
+                    };
+                    if (options.NearClip.HasValue)
+                    {
+                        setupOptions.NearClip = options.NearClip.Value;
+                    }
+                    AvatarSetup.Build(root, model, setupOptions);
+                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package);
+                    SpringBoneSetup.Apply(root, model);
+                }
+
+                // Reflect prefab-authored scene state (inactive GameObjects, initial blendshape weights).
+                Vrchat.VrchatSceneSetup.Apply(root, avatar);
+
                 for (int i = 0; i < 30; i++)
                 {
                     await default(NextUpdate);

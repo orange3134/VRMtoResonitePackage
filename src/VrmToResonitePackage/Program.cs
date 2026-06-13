@@ -91,7 +91,9 @@ internal static class Program
         {
             return true;
         }
-        return args.All(arg => File.Exists(arg) && string.Equals(Path.GetExtension(arg), ".vrm", StringComparison.OrdinalIgnoreCase));
+        // Drag & drop of supported files (VRM / VRChat .unitypackage) onto the exe opens the GUI;
+        // anything with a flag argument stays on the CLI.
+        return args.All(arg => File.Exists(arg) && GuiApp.IsSupportedInput(arg));
     }
 
     // NoInlining keeps FrooxEngine types from being JIT-resolved before the resolver is installed.
@@ -116,6 +118,16 @@ internal static class Program
                 AssimpDump.Dump(file);
             }
             return 0;
+        }
+        if (options.VrchatDump)
+        {
+            int result = 0;
+            foreach (string file in options.InputFiles)
+            {
+                Console.WriteLine();
+                result |= Vrchat.VrchatDump.Dump(file, options.AvatarName);
+            }
+            return result;
         }
         return Converter.Run(options, resonitePath).GetAwaiter().GetResult();
     }
@@ -165,6 +177,10 @@ internal sealed class CliOptions
     public bool InspectMode { get; set; }
     public bool InspectVerbose { get; set; }
     public bool AssimpDump { get; set; }
+    public bool VrchatDump { get; set; }
+
+    /// <summary>Selects a specific avatar by name when a .unitypackage contains several.</summary>
+    public string AvatarName { get; set; }
 
     public static CliOptions Parse(string[] args)
     {
@@ -210,6 +226,12 @@ internal sealed class CliOptions
                     break;
                 case "--assimp-dump":
                     options.AssimpDump = true;
+                    break;
+                case "--vrchat-dump":
+                    options.VrchatDump = true;
+                    break;
+                case "--avatar":
+                    options.AvatarName = RequireValue(args, ref i, arg);
                     break;
                 case "--keep-working-files":
                     options.KeepWorkingFiles = true;
@@ -267,14 +289,15 @@ internal sealed class CliOptions
     public static void PrintUsage()
     {
         Console.WriteLine("使い方:");
-        Console.WriteLine("  VrmToResonitePackage.exe <model.vrm> [model2.vrm ...] [オプション]");
+        Console.WriteLine("  VrmToResonitePackage.exe <model.vrm | avatar.unitypackage> [...] [オプション]");
         Console.WriteLine();
-        Console.WriteLine("  VRMファイルをこのexeにドラッグ&ドロップするだけでも変換できます。");
+        Console.WriteLine("  VRM または VRChatアバターの .unitypackage をこのexeにドラッグ&ドロップするだけでも変換できます。");
         Console.WriteLine("  出力は入力ファイルと同じ場所に <名前>.resonitepackage として保存されます。");
         Console.WriteLine();
         Console.WriteLine("オプション:");
         Console.WriteLine("  -o, --output <dir>       出力先フォルダ");
         Console.WriteLine("  --resonite-path <dir>    Resoniteのインストールフォルダ");
+        Console.WriteLine("  --avatar <名前>          .unitypackageに複数アバターがある場合に変換する1体を指定");
         Console.WriteLine("  --no-avatar              アバターセットアップを行わずモデルのみ変換");
         Console.WriteLine("  --face-tracking          フェイストラッキング用AvatarExpressionDriverを生成");
         Console.WriteLine("  --no-protection          SimpleAvatarProtection（アバター保護）を付けない");

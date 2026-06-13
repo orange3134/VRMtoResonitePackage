@@ -1,13 +1,25 @@
 namespace VrmToResonitePackage.Vrm;
 
+/// <summary>Where the avatar data originated; selects coordinate-system handling downstream.</summary>
+public enum ModelSource
+{
+    Vrm0,
+    Vrm1,
+    VrchatFbx,
+}
+
 /// <summary>
-/// Engine-independent representation of the VRM data we care about,
-/// normalized across VRM 0.x and VRM 1.0.
+/// Engine-independent representation of the avatar data we care about, normalized across
+/// VRM 0.x, VRM 1.0 and VRChat (.unitypackage) sources. VRChat data is adapted into this
+/// same shape so the rig / viseme / blink / spring-bone setup can be reused unchanged.
 /// </summary>
 public sealed class VrmModel
 {
-    /// <summary>"0" or "1" (major spec version).</summary>
+    /// <summary>"0" or "1" (major spec version). For VRChat sources this stays 0 and is unused.</summary>
     public int SpecVersionMajor { get; set; }
+
+    /// <summary>Origin of the data; selects coordinate handling for spring colliders etc.</summary>
+    public ModelSource Source { get; set; } = ModelSource.Vrm0;
 
     /// <summary>
     /// True when <see cref="GlbPreprocessor.CreateImportableGlb"/> baked a Y180 rotation

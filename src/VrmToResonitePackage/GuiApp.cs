@@ -24,6 +24,14 @@ internal static class GuiApp
         app.Run(window);
         return 0;
     }
+
+    /// <summary>True for the input file types the converter accepts (VRM or a VRChat .unitypackage).</summary>
+    internal static bool IsSupportedInput(string path)
+    {
+        string ext = Path.GetExtension(path);
+        return string.Equals(ext, ".vrm", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(ext, ".unitypackage", StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 internal sealed class MainWindow : Window
@@ -163,7 +171,7 @@ internal sealed class MainWindow : Window
         _packageIcon.Visibility = Visibility.Collapsed;
         _settingsButton.IsEnabled = true;
         _title.Text = "VRM to ResonitePackage";
-        _message.Text = "VRMファイルをドラッグアンドドロップしてください。";
+        _message.Text = "VRM または VRChatの .unitypackage をドラッグアンドドロップしてください。";
         _detail.Text = "";
     }
 
@@ -206,20 +214,18 @@ internal sealed class MainWindow : Window
             return;
         }
 
-        string[] vrmFiles = files
-            .Where(file => string.Equals(Path.GetExtension(file), ".vrm", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (vrmFiles.Length == 0)
+        string[] inputFiles = files.Where(GuiApp.IsSupportedInput).ToArray();
+        if (inputFiles.Length == 0)
         {
-            _detail.Text = "VRMファイルを指定してください。";
+            _detail.Text = "VRM または VRChatの .unitypackage を指定してください。";
             return;
         }
 
-        ShowConverting(Path.GetFileName(vrmFiles[0]));
+        ShowConverting(Path.GetFileName(inputFiles[0]));
         try
         {
             string resonitePath = ResoniteLocator.Locate(_settings.ResonitePath);
-            CliOptions options = _settings.ToCliOptions(vrmFiles);
+            CliOptions options = _settings.ToCliOptions(inputFiles);
             ConversionRunResult result = await RunConversionProcessAsync(options, resonitePath);
             ShowComplete(result);
         }

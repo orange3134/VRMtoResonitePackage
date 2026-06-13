@@ -24,12 +24,14 @@ public static class VrmParser
             if (extensions.TryGetProperty("VRMC_vrm", out JsonElement vrm1))
             {
                 model.SpecVersionMajor = 1;
+                model.Source = ModelSource.Vrm1;
                 ParseVrm1(extensions, vrm1, root, model);
                 return model;
             }
             if (extensions.TryGetProperty("VRM", out JsonElement vrm0))
             {
                 model.SpecVersionMajor = 0;
+                model.Source = ModelSource.Vrm0;
                 ParseVrm0(vrm0, model);
                 return model;
             }
