@@ -1,9 +1,7 @@
 # Local release script.
 # Builds with publish.ps1 and uploads only the EXE to a GitHub Release.
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$Tag,
-
+    [string]$Tag = "",
     [string]$ResonitePath = "",
     [string]$Output = "$PSScriptRoot\publish",
     [string]$AssetName = "VrmToResonitePackage.exe",
@@ -38,6 +36,35 @@ if ($LASTEXITCODE -ne 0) {
 $exePath = Join-Path $Output $AssetName
 if (-not (Test-Path $exePath)) {
     throw "Release asset was not found: $exePath"
+}
+
+function Get-ReleaseVersionFromAsset {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $versionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $Path))
+    $version = $versionInfo.ProductVersion
+    if ([string]::IsNullOrWhiteSpace($version)) {
+        $version = $versionInfo.FileVersion
+    }
+    if ([string]::IsNullOrWhiteSpace($version)) {
+        throw "Could not read a version from release asset: $Path"
+    }
+
+    $metadataIndex = $version.IndexOf("+")
+    if ($metadataIndex -ge 0) {
+        $version = $version.Substring(0, $metadataIndex)
+    }
+
+    return $version.Trim()
+}
+
+if ([string]::IsNullOrWhiteSpace($Tag)) {
+    $version = Get-ReleaseVersionFromAsset -Path $exePath
+    $Tag = "v$version"
+    Write-Host "Release tag: $Tag"
 }
 
 if ($CreateTag) {
