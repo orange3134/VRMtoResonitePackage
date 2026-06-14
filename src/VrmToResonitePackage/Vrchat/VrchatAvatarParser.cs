@@ -164,8 +164,73 @@ public static class VrchatAvatarParser
         {
             UniLog.Warning($"VRCAvatarDescriptorらしきデータは {scanned} 件のファイルに含まれていましたが、" +
                            "コンポーネントとして解決できませんでした（SDKバージョン差異やprefab構造の可能性）。");
+            DiagnoseNoCandidates(package);
         }
         return candidates;
+    }
+
+    /// <summary>
+    /// Logs why each descriptor-bearing file failed to yield a candidate, so prefab-variant /
+    /// stripped-object structures can be identified from a user's log without the package.
+    /// </summary>
+    private static void DiagnoseNoCandidates(UnityPackage package)
+    {
+        const int classPrefabInstance = 1001;
+        foreach (UnityAsset source in package.ByExtension(".prefab").Concat(package.ByExtension(".unity")))
+        {
+            string text = package.ReadText(source);
+            if (text == null ||
+                !(text.Contains(VrchatConstants.AvatarDescriptorScriptGuid, StringComparison.Ordinal) ||
+                  text.Contains("baseAnimationLayers", StringComparison.Ordinal)))
+            {
+                continue;
+            }
+            UnityScene scene;
+            try
+            {
+                scene = UnityScene.Parse(text);
+            }
+            catch
+            {
+                UniLog.Warning($"  診断 {Path.GetFileName(source.LogicalPath)}: 解析失敗");
+                continue;
+            }
+
+            int byGuid = 0, bySignature = 0, strippedOwner = 0;
+            foreach (YamlDocument mono in scene.MonoBehaviours)
+            {
+                if (mono.Root?["m_Script"]?.Guid == VrchatConstants.AvatarDescriptorScriptGuid)
+                {
+                    byGuid++;
+                }
+                else if (IsAvatarDescriptor(mono))
+                {
+                    bySignature++;
+                }
+                else
+                {
+                    continue;
+                }
+                YamlDocument owner = scene.OwnerGameObject(mono);
+                if (owner == null || string.IsNullOrEmpty(scene.GameObjectName(owner.FileId)))
+                {
+                    strippedOwner++;
+                }
+            }
+
+            var bases = new List<string>();
+            foreach (YamlDocument doc in scene.Documents.Values.Where(d => d.ClassId == classPrefabInstance))
+            {
+                string baseGuid = doc.Root?["m_SourcePrefab"]?.Guid;
+                UnityAsset baseAsset = package.ByGuid(baseGuid);
+                bases.Add(baseGuid == null ? "?"
+                    : $"{baseGuid}->{(baseAsset != null ? Path.GetFileName(baseAsset.LogicalPath) : "パッケージ外")}");
+            }
+
+            UniLog.Warning($"  診断 {Path.GetFileName(source.LogicalPath)}: descriptor(guid={byGuid}, signature={bySignature}, " +
+                           $"strippedOwner={strippedOwner}), variant={bases.Count > 0}" +
+                           (bases.Count > 0 ? $", source=[{string.Join(", ", bases)}]" : ""));
+        }
     }
 
     /// <summary>
