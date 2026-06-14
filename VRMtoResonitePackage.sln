@@ -4,17 +4,7 @@ VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".claude", ".claude", "{0AE7C77C-1A1D-D779-8C60-7AB6E4421D01}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VrmToResonitePackage", "src\VrmToResonitePackage\VrmToResonitePackage.csproj", "{401BB3DB-1C81-2B35-5E6D-42A75C66C4B3}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "worktrees", "worktrees", "{79802797-6956-8DCE-3D78-6FFCDB44B84D}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "romantic-blackburn-e02409", "romantic-blackburn-e02409", "{23B0047C-12B7-2293-EF4D-F271E8008369}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{73BBAC41-14FE-610C-6A29-EF717E5F2436}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VrmToResonitePackage", ".claude\worktrees\romantic-blackburn-e02409\src\VrmToResonitePackage\VrmToResonitePackage.csproj", "{EDC1E68F-9163-4E03-27CC-A097A2338614}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -26,20 +16,12 @@ Global
 		{401BB3DB-1C81-2B35-5E6D-42A75C66C4B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{401BB3DB-1C81-2B35-5E6D-42A75C66C4B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{401BB3DB-1C81-2B35-5E6D-42A75C66C4B3}.Release|Any CPU.Build.0 = Release|Any CPU
-		{EDC1E68F-9163-4E03-27CC-A097A2338614}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{EDC1E68F-9163-4E03-27CC-A097A2338614}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{EDC1E68F-9163-4E03-27CC-A097A2338614}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{EDC1E68F-9163-4E03-27CC-A097A2338614}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{401BB3DB-1C81-2B35-5E6D-42A75C66C4B3} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{79802797-6956-8DCE-3D78-6FFCDB44B84D} = {0AE7C77C-1A1D-D779-8C60-7AB6E4421D01}
-		{23B0047C-12B7-2293-EF4D-F271E8008369} = {79802797-6956-8DCE-3D78-6FFCDB44B84D}
-		{73BBAC41-14FE-610C-6A29-EF717E5F2436} = {23B0047C-12B7-2293-EF4D-F271E8008369}
-		{EDC1E68F-9163-4E03-27CC-A097A2338614} = {73BBAC41-14FE-610C-6A29-EF717E5F2436}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {59CD5FEC-0B1E-4C19-9EDF-B26271ECB3CB}
