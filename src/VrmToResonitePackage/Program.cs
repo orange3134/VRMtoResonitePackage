@@ -290,15 +290,14 @@ internal sealed class CliOptions
     public static void PrintUsage()
     {
         Console.WriteLine("使い方:");
-        Console.WriteLine("  VrmToResonitePackage.exe <model.vrm | avatar.unitypackage> [...] [オプション]");
+        Console.WriteLine("  VrmToResonitePackage.exe <model.vrm> [...] [オプション]");
         Console.WriteLine();
-        Console.WriteLine("  VRM または VRChatアバターの .unitypackage をこのexeにドラッグ&ドロップするだけでも変換できます。");
+        Console.WriteLine("  VRM をこのexeにドラッグ&ドロップするだけでも変換できます。");
         Console.WriteLine("  出力は入力ファイルと同じ場所に <名前>.resonitepackage として保存されます。");
         Console.WriteLine();
         Console.WriteLine("オプション:");
         Console.WriteLine("  -o, --output <dir>       出力先フォルダ");
         Console.WriteLine("  --resonite-path <dir>    Resoniteのインストールフォルダ");
-        Console.WriteLine("  --avatar <名前>          .unitypackageに複数アバターがある場合に変換する1体を指定");
         Console.WriteLine("  --no-avatar              アバターセットアップを行わずモデルのみ変換");
         Console.WriteLine("  --face-tracking          フェイストラッキング用AvatarExpressionDriverを生成");
         Console.WriteLine("  --no-protection          SimpleAvatarProtection（アバター保護）を付けない");

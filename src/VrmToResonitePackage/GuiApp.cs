@@ -173,7 +173,7 @@ internal sealed class MainWindow : Window
         _packageIcon.Visibility = Visibility.Collapsed;
         _settingsButton.IsEnabled = true;
         _title.Text = "VRM to ResonitePackage";
-        _message.Text = "VRM または VRChatの .unitypackage をドラッグアンドドロップしてください。";
+        _message.Text = "VRM ファイルをドラッグアンドドロップしてください。";
         _detail.Text = "";
     }
 
@@ -219,7 +219,7 @@ internal sealed class MainWindow : Window
         string[] inputFiles = files.Where(GuiApp.IsSupportedInput).ToArray();
         if (inputFiles.Length == 0)
         {
-            _detail.Text = "VRM または VRChatの .unitypackage を指定してください。";
+            _detail.Text = "VRM ファイルを指定してください。";
             return;
         }
 
