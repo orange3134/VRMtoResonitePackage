@@ -219,10 +219,24 @@ public static class VrchatAvatarParser
     /// </summary>
     private static string ResolveVariantFbxGuid(UnityPackage package, UnityScene scene, YamlDocument descriptor)
     {
-        long instanceId = descriptor.Root?["m_PrefabInstance"]?.FileID ?? 0;
-        YamlDocument prefabInstance = scene.Doc(instanceId);
+        YamlDocument prefabInstance = VariantPrefabInstance(scene, descriptor);
         string sourceGuid = prefabInstance?.Root?["m_SourcePrefab"]?.Guid;
         return ResolveFbxFromSource(package, sourceGuid, 0);
+    }
+
+    /// <summary>
+    /// Resolves the PrefabInstance behind a descriptor on a stripped variant root. Added components
+    /// can have m_PrefabInstance=0 while their stripped owner GameObject carries the reference.
+    /// </summary>
+    private static YamlDocument VariantPrefabInstance(UnityScene scene, YamlDocument descriptor)
+    {
+        long instanceId = descriptor.Root?["m_PrefabInstance"]?.FileID ?? 0;
+        if (instanceId == 0)
+        {
+            YamlDocument owner = scene.OwnerGameObject(descriptor);
+            instanceId = owner?.Root?["m_PrefabInstance"]?.FileID ?? 0;
+        }
+        return scene.Doc(instanceId);
     }
 
     private static string ResolveFbxFromSource(UnityPackage package, string guid, int depth)
@@ -273,8 +287,7 @@ public static class VrchatAvatarParser
     /// <summary>The display name of a variant-of-FBX avatar: the PrefabInstance's m_Name override, else the file name.</summary>
     private static string VariantAvatarName(UnityScene scene, YamlDocument descriptor, UnityAsset source)
     {
-        long instanceId = descriptor.Root?["m_PrefabInstance"]?.FileID ?? 0;
-        YamlDocument prefabInstance = scene.Doc(instanceId);
+        YamlDocument prefabInstance = VariantPrefabInstance(scene, descriptor);
         string name = prefabInstance != null ? FindModificationValue(prefabInstance, "m_Name") : null;
         return !string.IsNullOrEmpty(name) ? name : Path.GetFileNameWithoutExtension(source.LogicalPath);
     }
