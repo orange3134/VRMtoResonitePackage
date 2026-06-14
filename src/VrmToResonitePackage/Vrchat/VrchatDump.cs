@@ -36,6 +36,8 @@ internal static class VrchatDump
             Console.WriteLine($"アバター: {avatar.Name}");
             Console.WriteLine($"prefab : {avatar.PrefabPath}");
             Console.WriteLine($"FBX    : {Path.GetFileName(avatar.FbxPath)} (guid {avatar.FbxGuid})");
+            Console.WriteLine($"FBX scale: {avatar.FbxImportScale:G6}");
+            Console.WriteLine($"FBXマテリアル対応: {avatar.FbxMaterialGuids.Count}");
             Console.WriteLine($"視点    : {(avatar.ViewPosition.HasValue ? avatar.ViewPosition.Value.ToString() : "(なし)")}");
 
             Console.WriteLine();

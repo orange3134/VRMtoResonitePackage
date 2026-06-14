@@ -27,6 +27,7 @@ internal static class VrchatMaterialBuilder
         // Build one XiexeToon material per unique liltoon .mat referenced by the avatar.
         IEnumerable<string> uniqueGuids = avatar.RendererMaterials
             .SelectMany(r => r.MaterialGuids)
+            .Concat(avatar.FbxMaterialGuids.Values)
             .Where(g => !string.IsNullOrEmpty(g))
             .Distinct(StringComparer.OrdinalIgnoreCase);
         foreach (string guid in uniqueGuids)
@@ -35,6 +36,27 @@ internal static class VrchatMaterialBuilder
             if (material != null)
             {
                 materialCache[guid] = material;
+            }
+        }
+
+        // FBX prefab variants keep their renderer hierarchy as stripped objects, so the prefab
+        // doesn't contain normal SkinnedMeshRenderer documents to read. ModelImporter.externalObjects
+        // still maps every embedded FBX material name to its external .mat; replace the imported
+        // placeholder materials by that name before applying any per-renderer prefab overrides.
+        int assigned = 0;
+        foreach (MeshRenderer renderer in root.GetComponentsInChildren<MeshRenderer>())
+        {
+            for (int i = 0; i < renderer.Materials.Count; i++)
+            {
+                IAssetProvider<FrooxEngine.Material> placeholder = renderer.Materials[i];
+                string name = MaterialName(placeholder?.Slot?.Name);
+                if (name != null &&
+                    avatar.FbxMaterialGuids.TryGetValue(name, out string guid) &&
+                    materialCache.TryGetValue(guid, out XiexeToonMaterial material))
+                {
+                    renderer.Materials[i] = material;
+                    assigned++;
+                }
             }
         }
 
@@ -49,7 +71,6 @@ internal static class VrchatMaterialBuilder
             }
         }
 
-        int assigned = 0;
         foreach (VrchatRendererMaterials rm in avatar.RendererMaterials)
         {
             if (!renderersByName.TryGetValue(rm.RendererGameObjectName, out MeshRenderer renderer))
@@ -98,6 +119,14 @@ internal static class VrchatMaterialBuilder
         {
             UniLog.Log($"未使用の素マテリアルを {removed} 件削除しました。");
         }
+    }
+
+    private static string MaterialName(string slotName)
+    {
+        const string prefix = "Material: ";
+        return slotName?.StartsWith(prefix, StringComparison.Ordinal) == true
+            ? slotName[prefix.Length..]
+            : slotName;
     }
 
     private static async Task<XiexeToonMaterial> BuildMaterial(Slot assetsSlot, string guid,

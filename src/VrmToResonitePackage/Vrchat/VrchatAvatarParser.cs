@@ -80,7 +80,7 @@ public static class VrchatAvatarParser
             // Geometry/skeleton come from the FBX the variant sources; the prefab only adds the
             // descriptor. Materials / PhysBones / deletions can't be resolved from the stripped
             // references here, so the avatar imports with rig + visemes + view (bare materials).
-            UniLog.Log($"FBXモデルのPrefab Variantとして処理します（マテリアル/揺れものは未対応）: {selected.Name}");
+            UniLog.Log($"FBXモデルのPrefab Variantとして処理します（基礎マテリアル対応、揺れもの等は制限あり）: {selected.Name}");
             UnityAsset fbx = package.ByGuid(selected.FbxGuidOverride);
             if (fbx?.HasContent != true)
             {
@@ -219,10 +219,24 @@ public static class VrchatAvatarParser
     /// </summary>
     private static string ResolveVariantFbxGuid(UnityPackage package, UnityScene scene, YamlDocument descriptor)
     {
-        long instanceId = descriptor.Root?["m_PrefabInstance"]?.FileID ?? 0;
-        YamlDocument prefabInstance = scene.Doc(instanceId);
+        YamlDocument prefabInstance = VariantPrefabInstance(scene, descriptor);
         string sourceGuid = prefabInstance?.Root?["m_SourcePrefab"]?.Guid;
         return ResolveFbxFromSource(package, sourceGuid, 0);
+    }
+
+    /// <summary>
+    /// Resolves the PrefabInstance behind a descriptor on a stripped variant root. Added components
+    /// can have m_PrefabInstance=0 while their stripped owner GameObject carries the reference.
+    /// </summary>
+    private static YamlDocument VariantPrefabInstance(UnityScene scene, YamlDocument descriptor)
+    {
+        long instanceId = descriptor.Root?["m_PrefabInstance"]?.FileID ?? 0;
+        if (instanceId == 0)
+        {
+            YamlDocument owner = scene.OwnerGameObject(descriptor);
+            instanceId = owner?.Root?["m_PrefabInstance"]?.FileID ?? 0;
+        }
+        return scene.Doc(instanceId);
     }
 
     private static string ResolveFbxFromSource(UnityPackage package, string guid, int depth)
@@ -273,8 +287,7 @@ public static class VrchatAvatarParser
     /// <summary>The display name of a variant-of-FBX avatar: the PrefabInstance's m_Name override, else the file name.</summary>
     private static string VariantAvatarName(UnityScene scene, YamlDocument descriptor, UnityAsset source)
     {
-        long instanceId = descriptor.Root?["m_PrefabInstance"]?.FileID ?? 0;
-        YamlDocument prefabInstance = scene.Doc(instanceId);
+        YamlDocument prefabInstance = VariantPrefabInstance(scene, descriptor);
         string name = prefabInstance != null ? FindModificationValue(prefabInstance, "m_Name") : null;
         return !string.IsNullOrEmpty(name) ? name : Path.GetFileNameWithoutExtension(source.LogicalPath);
     }
@@ -462,6 +475,8 @@ public static class VrchatAvatarParser
             return;
         }
         YamlNode meta = UnityYaml.ParseFlatDocument(File.ReadAllText(fbx.MetaPath));
+        ParseFbxImportScale(fbx, meta, avatar);
+        ParseFbxMaterialMappings(meta, avatar);
         YamlNode human = meta["ModelImporter"]?["humanDescription"]?["human"];
         if (human?.Seq == null)
         {
@@ -479,6 +494,41 @@ public static class VrchatAvatarParser
             }
         }
         UniLog.Log($"ヒューマノイドボーンを {avatar.HumanBones.Count} 個取得しました。");
+    }
+
+    private static void ParseFbxImportScale(UnityAsset fbx, YamlNode meta, VrchatAvatar avatar)
+    {
+        YamlNode meshes = meta?["ModelImporter"]?["meshes"];
+        float globalScale = meshes?["globalScale"]?.AsFloat(1f) ?? 1f;
+        bool useFileUnits = meshes?["useFileUnits"]?.AsBool(
+            meshes?["useFileScale"]?.AsBool(true) ?? true) ?? true;
+        float fileScale = useFileUnits ? FbxUnits.MetersPerUnit(fbx.DiskPath) : 1f;
+        avatar.FbxImportScale = globalScale * fileScale;
+        UniLog.Log($"FBX import scale: {avatar.FbxImportScale:G6} " +
+                   $"(globalScale={globalScale:G6}, fileUnits={(useFileUnits ? fileScale.ToString("G6") : "off")})");
+    }
+
+    private static void ParseFbxMaterialMappings(YamlNode meta, VrchatAvatar avatar)
+    {
+        YamlNode externalObjects = meta?["ModelImporter"]?["externalObjects"];
+        if (externalObjects?.Seq == null)
+        {
+            return;
+        }
+        foreach (YamlNode entry in externalObjects.Seq)
+        {
+            string type = entry?["first"]?["type"]?.AsString();
+            string name = entry?["first"]?["name"]?.AsString();
+            string guid = entry?["second"]?.Guid;
+            if (type == "UnityEngine:Material" && !string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(guid))
+            {
+                avatar.FbxMaterialGuids[name] = guid;
+            }
+        }
+        if (avatar.FbxMaterialGuids.Count > 0)
+        {
+            UniLog.Log($"FBX external material mappings: {avatar.FbxMaterialGuids.Count}");
+        }
     }
 
     // ---------------------------------------------------------------- descriptor (viseme/blink/view)
