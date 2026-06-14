@@ -19,7 +19,7 @@ internal static class AssimpDump
         if (!file.EndsWith(".glb", StringComparison.OrdinalIgnoreCase))
         {
             tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".glb");
-            Vrm.GlbPreprocessor.CreateImportableGlb(file, tempPath);
+            Vrm.GlbPreprocessor.CreateImportableGlb(file, tempPath, out _);
             glbPath = tempPath;
         }
         try

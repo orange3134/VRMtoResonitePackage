@@ -385,6 +385,9 @@ internal static class SpringBoneSetup
         /// engine's slot-local value is always the glTF-node-local value with X flipped.
         /// - VRM1: VRMC_springBone offsets are glTF-node-local already, so apply only that X
         ///   flip: (-x, y, z).
+        /// - VRM1 X-mirrored (proper-handed Blender export): our pre-import X mirror composed with
+        ///   the importer's X mirror collapses to identity, so each engine bone-local frame equals
+        ///   the raw glTF-node-local frame and the offset passes through unchanged: (x, y, z).
         /// - VRM0 with the orientation baked to +Z: the bake (Y180) composed with the importer's
         ///   X mirror and UniVRM's ReverseZ export collapses to identity, so the engine sees raw
         ///   Unity coordinates. VRM0 offsets are Unity values, so pass them through: (x, y, z).
@@ -402,7 +405,9 @@ internal static class SpringBoneSetup
             }
             if (vrm.SpecVersionMajor != 0)
             {
-                return new float3(-v.X, v.Y, v.Z);
+                return vrm.OrientationMirroredX
+                    ? new float3(v.X, v.Y, v.Z)
+                    : new float3(-v.X, v.Y, v.Z);
             }
             return vrm.OrientationBaked
                 ? new float3(v.X, v.Y, v.Z)

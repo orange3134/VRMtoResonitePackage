@@ -181,9 +181,10 @@ internal static class Converter
         string workDirectory = Path.Combine(Path.GetTempPath(), "VrmToResonitePackage", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workDirectory);
         string glbPath = Path.Combine(workDirectory, SanitizeFileName(Path.GetFileNameWithoutExtension(vrmPath)) + ".glb");
-        // Records whether the VRM0 orientation was baked to +Z so collider offset conversion
-        // can pick the matching coordinate transform.
-        vrm.OrientationBaked = GlbPreprocessor.CreateImportableGlb(vrmPath, glbPath);
+        // Records whether the VRM0 orientation was baked to +Z (or a proper-handed VRM1 was
+        // X-mirrored) so collider offset conversion can pick the matching coordinate transform.
+        vrm.OrientationBaked = GlbPreprocessor.CreateImportableGlb(vrmPath, glbPath, out bool mirroredX);
+        vrm.OrientationMirroredX = mirroredX;
 
         try
         {

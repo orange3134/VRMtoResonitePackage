@@ -28,9 +28,12 @@ internal static class GlbPreprocessor
     /// Copies the VRM to <paramref name="targetPath"/> as an import-ready GLB.
     /// Returns true when a Y180 orientation bake was applied (VRM0 only), which the caller
     /// records on the <see cref="VrmModel"/> so collider offsets are converted correctly.
+    /// <paramref name="mirroredX"/> is set when a proper-handed VRM1 (Blender add-on style)
+    /// was X-mirrored to match the UniVRM/VRoid ReverseX convention.
     /// </summary>
-    public static bool CreateImportableGlb(string sourcePath, string targetPath)
+    public static bool CreateImportableGlb(string sourcePath, string targetPath, out bool mirroredX)
     {
+        mirroredX = false;
         byte[] data = File.ReadAllBytes(sourcePath);
         if (data.Length < 12 || BitConverter.ToUInt32(data, 0) != GlbMagic)
         {
@@ -74,6 +77,12 @@ internal static class GlbPreprocessor
             // ReverseZ export this collapses to identity, so engine space becomes Unity space.
             baked = BakeVrm0Y180(root, data, binOffset, binLength);
             changed |= baked;
+            // A proper-handed VRM1 (Blender add-on: anatomical left at -X, no UniVRM ReverseX)
+            // ends up mirror-flipped by the importer's X mirror; VRIK then spins it 180° so the
+            // body/head face backwards. Pre-mirror it across X so it matches the UniVRM/VRoid
+            // convention the importer expects, collapsing the round trip to identity.
+            mirroredX = MirrorXForProperHandedVrm1(root, data, binOffset);
+            changed |= mirroredX;
             // Stop JoinIdenticalVertices from collapsing morph-bearing vertices. Needs a BIN
             // chunk (GLB-embedded geometry) to append the guard channel's data to.
             if (binIndex >= 0)
@@ -583,6 +592,396 @@ internal static class GlbPreprocessor
 
         reason = null;
         return true;
+    }
+
+    /// <summary>
+    /// Mirrors a "proper-handed" VRM1 across the X axis (P = diag(-1, 1, 1)) so it matches the
+    /// ReverseX encoding UniVRM/VRoid produce and Resonite's importer assumes.
+    ///
+    /// Background: the importer always mirrors the imported scene by scale(-1, 1, 1) (glTF RH ->
+    /// engine LH). UniVRM exports VRM1 already X-mirrored (ReverseX, anatomical left at +X), so
+    /// the importer's mirror undoes it and the avatar comes out correct. The Blender VRM add-on
+    /// instead exports a "proper" glTF (anatomical left at -X), so the importer's mirror leaves it
+    /// mirror-flipped; VRIK's CreateCenteredRoot then measures the body forward from the feet,
+    /// finds it pointing backwards and injects a 180° Y rotation, which combined with the X mirror
+    /// reads as a Z mirror: body and head face backwards while left/right is preserved.
+    ///
+    /// Applying the mirror here makes (our mirror) ∘ (importer mirror) collapse to identity, so the
+    /// avatar imports faithfully and faces forward. The mirror is a full reflection done without any
+    /// negative scale: node locals are conjugated by P (translation.x negated, quaternion
+    /// (x,y,z,w) -> (x,-y,-z,w), scale unchanged), inverse bind matrices are conjugated (P·IBM·P),
+    /// and every POSITION/NORMAL/TANGENT value (base mesh and morph deltas) has its X negated. The
+    /// triangle winding is intentionally left untouched: the importer's own FlipWindingOrder treats
+    /// it exactly as it does a UniVRM file.
+    ///
+    /// Returns true when the mirror was applied.
+    /// </summary>
+    private static bool MirrorXForProperHandedVrm1(JsonNode root, byte[] data, int binOffset)
+    {
+        if (binOffset < 0)
+        {
+            return false; // Need embedded geometry to flip vertex/IBM data.
+        }
+        if (root["extensions"] is not JsonObject extensions ||
+            extensions["VRMC_vrm"] is not JsonObject vrm1)
+        {
+            return false; // VRM1-specific (VRM0 has its own Y180 bake path).
+        }
+        if (!IsProperHandedVrm1(root, vrm1))
+        {
+            return false; // VRoid/UniVRM ReverseX convention — the importer already handles it.
+        }
+
+        // 1) Conjugate every node's local transform by P = diag(-1, 1, 1).
+        if (root["nodes"] is JsonArray nodes)
+        {
+            foreach (JsonNode nodeNode in nodes)
+            {
+                if (nodeNode is not JsonObject node)
+                {
+                    continue;
+                }
+                if (node["translation"] is JsonArray t && t.Count == 3)
+                {
+                    t[0] = JsonValue.Create(-t[0].GetValue<float>());
+                }
+                if (node["rotation"] is JsonArray r && r.Count == 4)
+                {
+                    r[1] = JsonValue.Create(-r[1].GetValue<float>());
+                    r[2] = JsonValue.Create(-r[2].GetValue<float>());
+                }
+                // A baked node matrix (rare in VRM) gets the same P·M·P conjugation.
+                if (node["matrix"] is JsonArray m && m.Count == 16)
+                {
+                    NegateMatrixConjugationX(m);
+                }
+            }
+        }
+
+        // 2) Negate X of every POSITION / NORMAL / TANGENT value (base attributes + morph targets),
+        //    and reverse the winding of every triangle list. The X negation is a reflection, which
+        //    flips triangle winding; reversing the indices keeps the glTF a valid, normals-consistent
+        //    CCW mesh so Resonite imports it the same way it does a UniVRM file (not inside out).
+        //    (The VRM0 Y180 bake is a proper rotation and so deliberately leaves winding alone.)
+        var vecAccessors = new HashSet<int>();      // POSITION / NORMAL: negate X.
+        var tangentAccessors = new HashSet<int>();  // TANGENT (VEC4): negate X and the w handedness sign.
+        var indexAccessors = new HashSet<int>();
+        if (root["meshes"] is JsonArray meshes)
+        {
+            foreach (JsonNode meshNode in meshes)
+            {
+                if (meshNode is not JsonObject mesh || mesh["primitives"] is not JsonArray primitives)
+                {
+                    continue;
+                }
+                foreach (JsonNode primitiveNode in primitives)
+                {
+                    if (primitiveNode is not JsonObject primitive)
+                    {
+                        continue;
+                    }
+                    CollectXMirrorAccessors(primitive["attributes"], vecAccessors, tangentAccessors);
+                    if (primitive["targets"] is JsonArray targets)
+                    {
+                        foreach (JsonNode target in targets)
+                        {
+                            CollectXMirrorAccessors(target, vecAccessors, tangentAccessors);
+                        }
+                    }
+                    // Default primitive mode is TRIANGLES (4); only triangle lists are reversed.
+                    int mode = primitive["mode"]?.GetValue<int>() ?? 4;
+                    if (mode == 4 && primitive["indices"] is JsonValue indexRef)
+                    {
+                        indexAccessors.Add(indexRef.GetValue<int>());
+                    }
+                }
+            }
+        }
+        foreach (int accessorIndex in vecAccessors)
+        {
+            NegateAccessorComponents(root, data, binOffset, accessorIndex, negateW: false);
+        }
+        foreach (int accessorIndex in tangentAccessors)
+        {
+            NegateAccessorComponents(root, data, binOffset, accessorIndex, negateW: true);
+        }
+        foreach (int accessorIndex in indexAccessors)
+        {
+            ReverseTriangleWinding(root, data, binOffset, accessorIndex);
+        }
+
+        // 3) Conjugate every skin's inverse bind matrices: IBM' = P·IBM·P.
+        if (root["skins"] is JsonArray skins)
+        {
+            foreach (JsonNode skinNode in skins)
+            {
+                if (skinNode is JsonObject skin && skin["inverseBindMatrices"] is JsonValue ibmRef)
+                {
+                    ConjugateMat4AccessorX(root, data, binOffset, ibmRef.GetValue<int>());
+                }
+            }
+        }
+
+        UniLog.Log("VRM1の手系をX鏡映でUniVRM規約に正規化しました（前後反転を解消）。");
+        return true;
+    }
+
+    /// <summary>
+    /// A VRM1 is "proper-handed" when its skeleton's anatomical left side sits at -X (the natural,
+    /// non-mirrored orientation the Blender add-on exports). UniVRM/VRoid instead mirror-encode the
+    /// model (ReverseX), placing the left side at +X. The legs are the reliable signal — arm chains
+    /// are occasionally authored with unusual rest rotations.
+    /// </summary>
+    private static bool IsProperHandedVrm1(JsonNode root, JsonObject vrm1)
+    {
+        if (vrm1["humanoid"] is not JsonObject humanoid ||
+            humanoid["humanBones"] is not JsonObject humanBones ||
+            root["nodes"] is not JsonArray nodes)
+        {
+            return false;
+        }
+        (int left, int right) = (BoneNode(humanBones, "leftUpperLeg"), BoneNode(humanBones, "rightUpperLeg"));
+        if (left < 0 || right < 0)
+        {
+            (left, right) = (BoneNode(humanBones, "leftFoot"), BoneNode(humanBones, "rightFoot"));
+        }
+        if (left < 0 || right < 0)
+        {
+            return false;
+        }
+        int[] parents = BuildParentMap(nodes);
+        float leftX = GlobalNodeX(nodes, parents, left);
+        float rightX = GlobalNodeX(nodes, parents, right);
+        // Proper-handed: the right-side bone is on the +X side of the left-side bone.
+        return rightX > leftX;
+    }
+
+    private static int BoneNode(JsonObject humanBones, string name)
+    {
+        return humanBones[name] is JsonObject bone && bone["node"] is JsonValue node
+            ? node.GetValue<int>()
+            : -1;
+    }
+
+    private static int[] BuildParentMap(JsonArray nodes)
+    {
+        var parents = new int[nodes.Count];
+        Array.Fill(parents, -1);
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            if (nodes[i] is JsonObject node && node["children"] is JsonArray children)
+            {
+                foreach (JsonNode child in children)
+                {
+                    int c = child.GetValue<int>();
+                    if (c >= 0 && c < parents.Length)
+                    {
+                        parents[c] = i;
+                    }
+                }
+            }
+        }
+        return parents;
+    }
+
+    /// <summary>Global X of a node via forward kinematics (translation + rotation; scale ignored).</summary>
+    private static float GlobalNodeX(JsonArray nodes, int[] parents, int index)
+    {
+        var chain = new List<int>();
+        for (int i = index; i >= 0; i = parents[i])
+        {
+            chain.Add(i);
+        }
+        chain.Reverse();
+        float3 position = float3.Zero;
+        floatQ rotation = floatQ.Identity;
+        foreach (int ni in chain)
+        {
+            JsonObject node = nodes[ni] as JsonObject;
+            float3 t = ReadFloat3(node?["translation"]);
+            floatQ r = ReadQuaternion(node?["rotation"]);
+            position += rotation * t;
+            rotation *= r;
+        }
+        return position.x;
+    }
+
+    private static float3 ReadFloat3(JsonNode node)
+    {
+        return node is JsonArray a && a.Count == 3
+            ? new float3(a[0].GetValue<float>(), a[1].GetValue<float>(), a[2].GetValue<float>())
+            : float3.Zero;
+    }
+
+    private static floatQ ReadQuaternion(JsonNode node)
+    {
+        return node is JsonArray a && a.Count == 4
+            ? new floatQ(a[0].GetValue<float>(), a[1].GetValue<float>(), a[2].GetValue<float>(), a[3].GetValue<float>())
+            : floatQ.Identity;
+    }
+
+    private static void CollectXMirrorAccessors(JsonNode attributes, HashSet<int> vecSet, HashSet<int> tangentSet)
+    {
+        if (attributes is not JsonObject obj)
+        {
+            return;
+        }
+        if (obj["POSITION"] is JsonValue position)
+        {
+            vecSet.Add(position.GetValue<int>());
+        }
+        if (obj["NORMAL"] is JsonValue normal)
+        {
+            vecSet.Add(normal.GetValue<int>());
+        }
+        if (obj["TANGENT"] is JsonValue tangent)
+        {
+            tangentSet.Add(tangent.GetValue<int>());
+        }
+    }
+
+    /// <summary>
+    /// Negates component 0 (X) of every element of a float accessor, in place in the BIN chunk.
+    /// For TANGENT (VEC4) also negates component 3 (the w handedness sign), which a reflection flips.
+    /// </summary>
+    private static void NegateAccessorComponents(JsonNode root, byte[] data, int binOffset, int accessorIndex, bool negateW)
+    {
+        if (root["accessors"] is not JsonArray accessors ||
+            accessorIndex < 0 || accessorIndex >= accessors.Count ||
+            accessors[accessorIndex] is not JsonObject accessor)
+        {
+            return;
+        }
+        if ((accessor["componentType"]?.GetValue<int>() ?? 0) != 5126) // float only
+        {
+            return;
+        }
+        int numComponents = (accessor["type"]?.GetValue<string>()) switch
+        {
+            "SCALAR" => 1,
+            "VEC2" => 2,
+            "VEC3" => 3,
+            "VEC4" => 4,
+            _ => 0,
+        };
+        int count = accessor["count"]?.GetValue<int>() ?? 0;
+        int bufferViewIndex = accessor["bufferView"]?.GetValue<int>() ?? -1;
+        if (numComponents == 0 || count <= 0 || bufferViewIndex < 0 ||
+            root["bufferViews"] is not JsonArray bufferViews || bufferViewIndex >= bufferViews.Count ||
+            bufferViews[bufferViewIndex] is not JsonObject bufferView)
+        {
+            return;
+        }
+        int accessorByteOffset = accessor["byteOffset"]?.GetValue<int>() ?? 0;
+        int bufferViewByteOffset = bufferView["byteOffset"]?.GetValue<int>() ?? 0;
+        int stride = bufferView["byteStride"]?.GetValue<int>() ?? numComponents * 4;
+        int start = binOffset + bufferViewByteOffset + accessorByteOffset;
+        bool flipW = negateW && numComponents == 4;
+        for (int i = 0; i < count; i++)
+        {
+            int elementStart = start + i * stride;
+            NegateFloatAt(data, elementStart);              // component 0 (X)
+            if (flipW)
+            {
+                NegateFloatAt(data, elementStart + 3 * 4);  // component 3 (w handedness sign)
+            }
+        }
+    }
+
+    private static void NegateFloatAt(byte[] data, int byteIndex)
+    {
+        float value = BitConverter.ToSingle(data, byteIndex);
+        BitConverter.GetBytes(-value).CopyTo(data, byteIndex);
+    }
+
+    /// <summary>Reverses each triangle's winding (swaps the 2nd and 3rd index) of a scalar index accessor.</summary>
+    private static void ReverseTriangleWinding(JsonNode root, byte[] data, int binOffset, int accessorIndex)
+    {
+        if (root["accessors"] is not JsonArray accessors ||
+            accessorIndex < 0 || accessorIndex >= accessors.Count ||
+            accessors[accessorIndex] is not JsonObject accessor)
+        {
+            return;
+        }
+        int componentType = accessor["componentType"]?.GetValue<int>() ?? 0;
+        int componentSize = componentType switch
+        {
+            5121 => 1, // UNSIGNED_BYTE
+            5123 => 2, // UNSIGNED_SHORT
+            5125 => 4, // UNSIGNED_INT
+            _ => 0,
+        };
+        int count = accessor["count"]?.GetValue<int>() ?? 0;
+        int bufferViewIndex = accessor["bufferView"]?.GetValue<int>() ?? -1;
+        if (componentSize == 0 || count < 3 || bufferViewIndex < 0 ||
+            root["bufferViews"] is not JsonArray bufferViews || bufferViewIndex >= bufferViews.Count ||
+            bufferViews[bufferViewIndex] is not JsonObject bufferView)
+        {
+            return;
+        }
+        int accessorByteOffset = accessor["byteOffset"]?.GetValue<int>() ?? 0;
+        int bufferViewByteOffset = bufferView["byteOffset"]?.GetValue<int>() ?? 0;
+        int start = binOffset + bufferViewByteOffset + accessorByteOffset;
+        // Swap the 2nd and 3rd index of every triangle (tightly packed scalars).
+        for (int tri = 0; tri + 2 < count; tri += 3)
+        {
+            int b = start + (tri + 1) * componentSize;
+            int c = start + (tri + 2) * componentSize;
+            for (int k = 0; k < componentSize; k++)
+            {
+                (data[b + k], data[c + k]) = (data[c + k], data[b + k]);
+            }
+        }
+    }
+
+    // Column-major mat4 indices negated by the X reflection conjugation P·M·P (P = diag(-1,1,1)):
+    // the elements where exactly one of {row, col} is 0.
+    private static readonly int[] XConjugationIndices = { 1, 2, 3, 4, 8, 12 };
+
+    /// <summary>Conjugates a float MAT4 accessor by P (IBM' = P·IBM·P), in place in the BIN chunk.</summary>
+    private static void ConjugateMat4AccessorX(JsonNode root, byte[] data, int binOffset, int accessorIndex)
+    {
+        if (root["accessors"] is not JsonArray accessors ||
+            accessorIndex < 0 || accessorIndex >= accessors.Count ||
+            accessors[accessorIndex] is not JsonObject accessor)
+        {
+            return;
+        }
+        if ((accessor["componentType"]?.GetValue<int>() ?? 0) != 5126 ||
+            accessor["type"]?.GetValue<string>() != "MAT4" || accessor["sparse"] != null)
+        {
+            return;
+        }
+        int count = accessor["count"]?.GetValue<int>() ?? 0;
+        int bufferViewIndex = accessor["bufferView"]?.GetValue<int>() ?? -1;
+        if (count <= 0 || bufferViewIndex < 0 ||
+            root["bufferViews"] is not JsonArray bufferViews || bufferViewIndex >= bufferViews.Count ||
+            bufferViews[bufferViewIndex] is not JsonObject bufferView)
+        {
+            return;
+        }
+        int accessorByteOffset = accessor["byteOffset"]?.GetValue<int>() ?? 0;
+        int bufferViewByteOffset = bufferView["byteOffset"]?.GetValue<int>() ?? 0;
+        int start = binOffset + bufferViewByteOffset + accessorByteOffset;
+        for (int m = 0; m < count; m++)
+        {
+            int baseOffset = start + m * 64; // 16 floats * 4 bytes
+            foreach (int floatIndex in XConjugationIndices)
+            {
+                int byteIndex = baseOffset + floatIndex * 4;
+                float value = BitConverter.ToSingle(data, byteIndex);
+                BitConverter.GetBytes(-value).CopyTo(data, byteIndex);
+            }
+        }
+    }
+
+    /// <summary>Conjugates a column-major mat4 stored as a JSON number array by P (M' = P·M·P).</summary>
+    private static void NegateMatrixConjugationX(JsonArray matrix)
+    {
+        foreach (int floatIndex in XConjugationIndices)
+        {
+            matrix[floatIndex] = JsonValue.Create(-matrix[floatIndex].GetValue<float>());
+        }
     }
 
     private static List<string> ReadNames(JsonNode extras)

@@ -28,6 +28,15 @@ public sealed class VrmModel
     /// </summary>
     public bool OrientationBaked { get; set; }
 
+    /// <summary>
+    /// True when <see cref="GlbPreprocessor.CreateImportableGlb"/> applied an X-axis mirror to
+    /// a "proper-handed" VRM1 (e.g. exported by the Blender VRM add-on, anatomical left at -X)
+    /// so it matches the ReverseX convention UniVRM/VRoid use and Resonite's importer expects.
+    /// Without it the importer's X mirror leaves the avatar mirror-flipped and VRIK spins it
+    /// 180°, leaving the body/head facing backwards. Only ever set for VRM1.
+    /// </summary>
+    public bool OrientationMirroredX { get; set; }
+
     public string Title { get; set; }
     public string Author { get; set; }
 
