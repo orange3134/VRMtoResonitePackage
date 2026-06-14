@@ -17,9 +17,14 @@ public static class VrchatAvatarParser
     {
         public UnityAsset Source;        // the .prefab or .unity file the avatar was found in
         public UnityScene Scene;
-        public YamlDocument Root;        // avatar root GameObject (the descriptor's GameObject)
+        public YamlDocument Root;        // avatar root GameObject (null for a variant-of-FBX avatar)
         public YamlDocument Descriptor;  // VRCAvatarDescriptor MonoBehaviour
-        public HashSet<long> Subtree;    // GameObject fileIds belonging to this avatar
+        public HashSet<long> Subtree;    // GameObject fileIds belonging to this avatar (empty for variant-of-FBX)
+        public string Name;              // resolved avatar/display name
+        public string FbxGuidOverride;   // set when the avatar is a prefab variant of an FBX model
+
+        /// <summary>A prefab variant whose hierarchy lives in an FBX (descriptor added on a stripped root).</summary>
+        public bool IsVariantOfFbx => FbxGuidOverride != null;
         public int Size => Subtree?.Count ?? 0;
     }
 
@@ -34,10 +39,9 @@ public static class VrchatAvatarParser
         var result = new List<VrchatAvatarChoice>();
         foreach (Candidate c in OrderByPrimary(FindCandidates(package)))
         {
-            string name = c.Scene.GameObjectName(c.Root.FileId);
-            if (!string.IsNullOrEmpty(name) && seen.Add(name))
+            if (!string.IsNullOrEmpty(c.Name) && seen.Add(c.Name))
             {
-                result.Add(new VrchatAvatarChoice(name, c.Source.LogicalPath, c.Size));
+                result.Add(new VrchatAvatarChoice(c.Name, c.Source.LogicalPath, c.Size));
             }
         }
         return result;
@@ -58,18 +62,36 @@ public static class VrchatAvatarParser
         }
 
         Candidate selected = SelectPrimary(candidates, avatarOverride);
-        foreach (Candidate c in candidates.OrderByDescending(c => c.Size))
+        foreach (Candidate c in OrderByPrimary(candidates))
         {
             string mark = c == selected ? "=> 選択" : "   スキップ";
-            string name = c.Scene.GameObjectName(c.Root.FileId) ?? "?";
-            UniLog.Log($"VRChatアバター候補 {mark}: {name} ({Path.GetFileName(c.Source.LogicalPath)}, GameObject {c.Size})");
+            string kind = c.IsVariantOfFbx ? ", FBX variant" : $", GameObject {c.Size}";
+            UniLog.Log($"VRChatアバター候補 {mark}: {c.Name} ({Path.GetFileName(c.Source.LogicalPath)}{kind})");
         }
 
         var avatar = new VrchatAvatar
         {
-            Name = selected.Scene.GameObjectName(selected.Root.FileId) ?? Path.GetFileNameWithoutExtension(selected.Source.LogicalPath),
+            Name = selected.Name ?? Path.GetFileNameWithoutExtension(selected.Source.LogicalPath),
             PrefabPath = selected.Source.LogicalPath,
         };
+
+        if (selected.IsVariantOfFbx)
+        {
+            // Geometry/skeleton come from the FBX the variant sources; the prefab only adds the
+            // descriptor. Materials / PhysBones / deletions can't be resolved from the stripped
+            // references here, so the avatar imports with rig + visemes + view (bare materials).
+            UniLog.Log($"FBXモデルのPrefab Variantとして処理します（マテリアル/揺れものは未対応）: {selected.Name}");
+            UnityAsset fbx = package.ByGuid(selected.FbxGuidOverride);
+            if (fbx?.HasContent != true)
+            {
+                throw new InvalidDataException($"variantが参照するFBX (guid {selected.FbxGuidOverride}) がパッケージに含まれていません。");
+            }
+            avatar.FbxGuid = selected.FbxGuidOverride;
+            avatar.FbxPath = fbx.DiskPath;
+            ParseHumanoid(package, avatar);
+            ParseDescriptor(selected.Scene, selected.Descriptor, avatar);
+            return avatar;
+        }
 
         // Record every GameObject the prefab keeps, so the importer's extra (deleted) meshes can be dropped.
         foreach (long goId in selected.Subtree)
@@ -146,18 +168,37 @@ public static class VrchatAvatarParser
             foreach (YamlDocument descriptor in scene.MonoBehaviours.Where(IsAvatarDescriptor))
             {
                 YamlDocument root = scene.OwnerGameObject(descriptor);
-                if (root == null || string.IsNullOrEmpty(scene.GameObjectName(root.FileId)))
+                string rootName = root != null ? scene.GameObjectName(root.FileId) : null;
+                if (root != null && !string.IsNullOrEmpty(rootName))
                 {
+                    // Regular avatar: the descriptor's GameObject is a real, named root in this file.
+                    candidates.Add(new Candidate
+                    {
+                        Source = source,
+                        Scene = scene,
+                        Root = root,
+                        Descriptor = descriptor,
+                        Subtree = scene.SubtreeGameObjectIds(root.FileId),
+                        Name = rootName,
+                    });
                     continue;
                 }
-                candidates.Add(new Candidate
+
+                // Variant-of-FBX: the descriptor is an added component on a stripped root that
+                // sources an FBX model. The geometry/skeleton come from that FBX, not this file.
+                string fbxGuid = ResolveVariantFbxGuid(package, scene, descriptor);
+                if (fbxGuid != null)
                 {
-                    Source = source,
-                    Scene = scene,
-                    Root = root,
-                    Descriptor = descriptor,
-                    Subtree = scene.SubtreeGameObjectIds(root.FileId),
-                });
+                    candidates.Add(new Candidate
+                    {
+                        Source = source,
+                        Scene = scene,
+                        Descriptor = descriptor,
+                        Subtree = new HashSet<long>(),
+                        FbxGuidOverride = fbxGuid,
+                        Name = VariantAvatarName(scene, descriptor, source),
+                    });
+                }
             }
         }
         if (candidates.Count == 0 && scanned > 0)
@@ -167,6 +208,75 @@ public static class VrchatAvatarParser
             DiagnoseCandidates(package);
         }
         return candidates;
+    }
+
+    private const int ClassPrefabInstance = 1001;
+
+    /// <summary>
+    /// For a descriptor added in a prefab variant, follows its PrefabInstance to the source model and
+    /// returns the FBX guid the avatar's geometry/skeleton come from (recursing through nested
+    /// prefab variants), or null when no FBX source can be found.
+    /// </summary>
+    private static string ResolveVariantFbxGuid(UnityPackage package, UnityScene scene, YamlDocument descriptor)
+    {
+        long instanceId = descriptor.Root?["m_PrefabInstance"]?.FileID ?? 0;
+        YamlDocument prefabInstance = scene.Doc(instanceId);
+        string sourceGuid = prefabInstance?.Root?["m_SourcePrefab"]?.Guid;
+        return ResolveFbxFromSource(package, sourceGuid, 0);
+    }
+
+    private static string ResolveFbxFromSource(UnityPackage package, string guid, int depth)
+    {
+        if (string.IsNullOrEmpty(guid) || depth > 4)
+        {
+            return null;
+        }
+        UnityAsset asset = package.ByGuid(guid);
+        if (asset == null)
+        {
+            return null;
+        }
+        if (asset.Extension == ".fbx")
+        {
+            return guid;
+        }
+        if (asset.Extension != ".prefab")
+        {
+            return null;
+        }
+        // A prefab source may itself be a variant of an FBX (or another prefab); recurse.
+        string text = package.ReadText(asset);
+        if (text == null)
+        {
+            return null;
+        }
+        UnityScene scene;
+        try
+        {
+            scene = UnityScene.Parse(text);
+        }
+        catch
+        {
+            return null;
+        }
+        foreach (YamlDocument prefabInstance in scene.Documents.Values.Where(d => d.ClassId == ClassPrefabInstance))
+        {
+            string result = ResolveFbxFromSource(package, prefabInstance.Root?["m_SourcePrefab"]?.Guid, depth + 1);
+            if (result != null)
+            {
+                return result;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>The display name of a variant-of-FBX avatar: the PrefabInstance's m_Name override, else the file name.</summary>
+    private static string VariantAvatarName(UnityScene scene, YamlDocument descriptor, UnityAsset source)
+    {
+        long instanceId = descriptor.Root?["m_PrefabInstance"]?.FileID ?? 0;
+        YamlDocument prefabInstance = scene.Doc(instanceId);
+        string name = prefabInstance != null ? FindModificationValue(prefabInstance, "m_Name") : null;
+        return !string.IsNullOrEmpty(name) ? name : Path.GetFileNameWithoutExtension(source.LogicalPath);
     }
 
     /// <summary>
@@ -280,13 +390,13 @@ public static class VrchatAvatarParser
             // Exact root-name match first (so "Tolass4.5" never resolves to "Tolass4.5_BodyModel"),
             // then fall back to a substring match on the name or file.
             Candidate exact = OrderByPrimary(candidates).FirstOrDefault(c =>
-                string.Equals(c.Scene.GameObjectName(c.Root.FileId), avatarOverride, StringComparison.OrdinalIgnoreCase));
+                string.Equals(c.Name, avatarOverride, StringComparison.OrdinalIgnoreCase));
             if (exact != null)
             {
                 return exact;
             }
             Candidate match = OrderByPrimary(candidates).FirstOrDefault(c =>
-                (c.Scene.GameObjectName(c.Root.FileId) ?? "").Contains(avatarOverride, StringComparison.OrdinalIgnoreCase) ||
+                (c.Name ?? "").Contains(avatarOverride, StringComparison.OrdinalIgnoreCase) ||
                 Path.GetFileNameWithoutExtension(c.Source.LogicalPath).Contains(avatarOverride, StringComparison.OrdinalIgnoreCase));
             if (match != null)
             {
@@ -387,8 +497,10 @@ public static class VrchatAvatarParser
         int lipSync = d?["lipSync"]?.AsInt(-1) ?? -1;
         YamlNode visemeShapes = d?["VisemeBlendShapes"];
         long visemeMeshId = d?["VisemeSkinnedMesh"]?.FileID ?? 0;
+        // May be null for a variant-of-FBX avatar (stripped mesh reference); visemes still resolve by
+        // blendshape name across the imported renderers, so a null mesh name is allowed here.
         string visemeMesh = scene.ResolveGameObjectName(visemeMeshId);
-        if (lipSync == 3 && visemeShapes?.Seq != null && visemeMesh != null)
+        if (lipSync == 3 && visemeShapes?.Seq != null)
         {
             foreach ((string preset, int idx) in VrchatConstants.VisemeToVrcSlot())
             {
