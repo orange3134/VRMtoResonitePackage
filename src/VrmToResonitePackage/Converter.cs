@@ -37,6 +37,9 @@ internal static class Converter
         try
         {
 
+        // Written straight to the log file (not the console) so every log starts with the build
+        // version for bug reports, without duplicating the console header printed by Program.Main.
+        logWriter.WriteLine($"バージョン: {AppVersion.Display}");
         Console.WriteLine($"ログ: {logPath}");
         Console.WriteLine("FrooxEngineをヘッドレスで起動しています（初回はしばらくかかります）...");
 

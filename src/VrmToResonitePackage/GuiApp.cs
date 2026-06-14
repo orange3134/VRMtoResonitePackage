@@ -57,7 +57,7 @@ internal sealed class MainWindow : Window
     {
         _settings = GuiSettings.Load();
 
-        Title = "VRM to ResonitePackage";
+        Title = $"VRM to ResonitePackage  v{AppVersion.Display}";
         Width = 760;
         Height = 500;
         MinWidth = 560;

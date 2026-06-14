@@ -9,6 +9,10 @@
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>VrmToResonitePackage</AssemblyName>
     <RootNamespace>VrmToResonitePackage</RootNamespace>
+    <!-- Version is derived from the build date/time (yyyy.MM.dd.HHmm) so every build/release is
+         uniquely identifiable in logs and bug reports. Can be overridden with -p:Version=... -->
+    <Version Condition="'$(Version)' == ''">$([System.DateTime]::Now.ToString(yyyy.MM.dd.HHmm))</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <SelfContained>false</SelfContained>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

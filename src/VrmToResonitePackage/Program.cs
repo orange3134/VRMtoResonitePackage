@@ -18,6 +18,7 @@ internal static class Program
         }
 
         Console.WriteLine("VRM -> ResonitePackage converter");
+        Console.WriteLine($"バージョン: {AppVersion.Display}");
         Console.WriteLine();
 
         CliOptions options;
