@@ -166,6 +166,12 @@ public sealed class VrmMaterialInfo
     /// <summary>glTF image index of the outline width multiply texture, if any.</summary>
     public int? OutlineWidthImageIndex { get; set; }
 
+    /// <summary>VRM1 stores outline width in the G channel of the shared MToon parameter texture.</summary>
+    public bool OutlineWidthImageUsesGreenChannel { get; set; }
+
+    /// <summary>VRM0 screen-coordinate outlines are damped when approximated as object-space outlines.</summary>
+    public bool OutlineWidthUsesLegacyScreenDamping { get; set; }
+
     /// <summary>MToon10 outlineLightingMixFactor (VRM0: 0 when color mode is Fixed).</summary>
     public float OutlineLightingMix { get; set; }
 

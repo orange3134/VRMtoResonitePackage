@@ -178,6 +178,7 @@ public static class VrmParser
                         if (image >= 0)
                         {
                             info.OutlineWidthImageIndex = image;
+                            info.OutlineWidthImageUsesGreenChannel = true;
                         }
                     }
                     info.OutlineLightingMix = mtoon.TryGetProperty("outlineLightingMixFactor", out JsonElement olm)
@@ -466,6 +467,7 @@ public static class VrmParser
                             2 => "screen",
                             _ => "none",
                         };
+                        info.OutlineWidthUsesLegacyScreenDamping = info.OutlineWidthMode == "screen";
                     }
                     if (info.OutlineWidthMode == "none")
                     {

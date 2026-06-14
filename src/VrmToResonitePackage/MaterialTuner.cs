@@ -3,6 +3,8 @@ using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.Store;
 using VrmToResonitePackage.Vrm;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using ColorProfile = Renderite.Shared.ColorProfile;
 using TextureFormat = Renderite.Shared.TextureFormat;
 using TextureWrapMode = Renderite.Shared.TextureWrapMode;
@@ -16,10 +18,16 @@ namespace VrmToResonitePackage;
 /// </summary>
 internal static class MaterialTuner
 {
+    private enum TextureTransform
+    {
+        None,
+        GreenToRgb,
+    }
+
     public static async Task Apply(Slot root, Slot assetsSlot, VrmModel vrm, string vrmPath)
     {
         int tuned = 0;
-        var textureCache = new Dictionary<int, StaticTexture2D>();
+        var textureCache = new Dictionary<(int ImageIndex, TextureTransform Transform), StaticTexture2D>();
         var rampCache = new Dictionary<string, StaticTexture2D>();
         foreach (XiexeToonMaterial material in assetsSlot.GetComponentsInChildren<XiexeToonMaterial>())
         {
@@ -65,7 +73,8 @@ internal static class MaterialTuner
 
     private static async Task ApplyInfo(XiexeToonMaterial material, VrmMaterialInfo info,
         string vrmPath, Slot assetsSlot,
-        Dictionary<int, StaticTexture2D> textureCache, Dictionary<string, StaticTexture2D> rampCache)
+        Dictionary<(int ImageIndex, TextureTransform Transform), StaticTexture2D> textureCache,
+        Dictionary<string, StaticTexture2D> rampCache)
     {
         // --- Alpha handling (MToon spec: explicit ZWrite + render queue) ---
         switch (info.AlphaMode)
@@ -150,17 +159,25 @@ internal static class MaterialTuner
             // XiexeToon (XSToon2.0) extrudes outlines in object space by
             // _OutlineWidth * 0.01, MToon's world mode extrudes by the width in
             // meters — so at model scale 1 the conversion is width_m * 100.
-            // (Screen mode has no XSToon equivalent; the same mapping is used.)
-            material.OutlineWidth.Value = MathX.Clamp(info.OutlineWidth * 100f, 0f, 5f);
+            // Legacy MToon screen mode is damped to match UniVRM's MToon 1.0 migration.
+            float outlineWidth = info.OutlineWidth * 100f;
+            if (info.OutlineWidthUsesLegacyScreenDamping)
+            {
+                outlineWidth *= 0.5f;
+            }
+            material.OutlineWidth.Value = MathX.Clamp(outlineWidth, 0f, 5f);
             if (info.OutlineColor.HasValue)
             {
                 System.Numerics.Vector4 c = info.OutlineColor.Value;
-                material.OutlineColor.Value = new colorX(c.X, c.Y, c.Z, c.W);
+                material.OutlineColor.Value = new colorX(c.X, c.Y, c.Z, c.W, ColorProfile.sRGB);
             }
             if (info.OutlineWidthImageIndex.HasValue)
             {
+                TextureTransform transform = info.OutlineWidthImageUsesGreenChannel
+                    ? TextureTransform.GreenToRgb
+                    : TextureTransform.None;
                 StaticTexture2D mask = await GetOrImportTexture(assetsSlot, vrmPath,
-                    info.OutlineWidthImageIndex.Value, textureCache, "OutlineMask");
+                    info.OutlineWidthImageIndex.Value, textureCache, "OutlineMask", transform);
                 if (mask != null)
                 {
                     material.OutlineMask.Target = mask;
@@ -180,7 +197,7 @@ internal static class MaterialTuner
             if (info.ShadingShiftImageIndex.HasValue)
             {
                 StaticTexture2D shiftMask = await GetOrImportTexture(assetsSlot, vrmPath,
-                    info.ShadingShiftImageIndex.Value, textureCache, "ShadingShiftMask");
+                    info.ShadingShiftImageIndex.Value, textureCache, "ShadingShiftMask", TextureTransform.None);
                 if (shiftMask != null)
                 {
                     material.ShadowRampMask.Target = shiftMask;
@@ -203,7 +220,7 @@ internal static class MaterialTuner
         if (info.MatcapImageIndex.HasValue)
         {
             StaticTexture2D matcap = await GetOrImportTexture(assetsSlot, vrmPath,
-                info.MatcapImageIndex.Value, textureCache, "Matcap");
+                info.MatcapImageIndex.Value, textureCache, "Matcap", TextureTransform.None);
             if (matcap != null)
             {
                 material.Matcap.Target = matcap;
@@ -307,19 +324,33 @@ internal static class MaterialTuner
     /// never touches.
     /// </summary>
     private static async Task<StaticTexture2D> GetOrImportTexture(Slot assetsSlot, string vrmPath,
-        int imageIndex, Dictionary<int, StaticTexture2D> cache, string label)
+        int imageIndex, Dictionary<(int ImageIndex, TextureTransform Transform), StaticTexture2D> cache,
+        string label, TextureTransform transform)
     {
-        if (cache.TryGetValue(imageIndex, out StaticTexture2D cached))
+        var key = (imageIndex, transform);
+        if (cache.TryGetValue(key, out StaticTexture2D cached))
         {
             return cached;
         }
-        cache[imageIndex] = null;
+        cache[key] = null;
         Engine engine = assetsSlot.Engine;
         Uri uri = null;
         try
         {
             await default(ToBackground);
             (byte[] data, string extension) = VrmParser.ExtractImage(vrmPath, imageIndex);
+            if (transform == TextureTransform.GreenToRgb)
+            {
+                try
+                {
+                    data = CopyGreenChannelToRgb(data);
+                    extension = ".png";
+                }
+                catch (Exception ex)
+                {
+                    UniLog.Warning($"アウトラインマスクのチャンネル変換に失敗しました ({label}, image {imageIndex}): {ex.Message}");
+                }
+            }
             string tempFile = engine.LocalDB.GetTempFilePath(extension);
             await File.WriteAllBytesAsync(tempFile, data);
             uri = await engine.LocalDB.ImportLocalAssetAsync(tempFile, LocalDB.ImportLocation.Move);
@@ -336,7 +367,37 @@ internal static class MaterialTuner
         Slot textureSlot = assetsSlot.AddSlot($"{label} {imageIndex}");
         StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
         texture.URL.Value = uri;
-        cache[imageIndex] = texture;
+        cache[key] = texture;
         return texture;
+    }
+
+    private static byte[] CopyGreenChannelToRgb(byte[] imageData)
+    {
+        using var input = new MemoryStream(imageData);
+        BitmapDecoder decoder = BitmapDecoder.Create(input, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        BitmapSource source = decoder.Frames[0];
+        var bitmap = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        int width = bitmap.PixelWidth;
+        int height = bitmap.PixelHeight;
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        bitmap.CopyPixels(pixels, stride, 0);
+
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            byte green = pixels[i + 1];
+            pixels[i] = green;
+            pixels[i + 1] = green;
+            pixels[i + 2] = green;
+        }
+
+        BitmapSource output = BitmapSource.Create(
+            width, height, source.DpiX, source.DpiY, PixelFormats.Bgra32, null, pixels, stride);
+        output.Freeze();
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(output));
+        using var outputStream = new MemoryStream();
+        encoder.Save(outputStream);
+        return outputStream.ToArray();
     }
 }
