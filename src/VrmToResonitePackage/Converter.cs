@@ -337,6 +337,7 @@ internal static class Converter
                 settings.CalculateTextureAlpha = true;
                 settings.ImportVertexColors = false;
                 settings.GenerateSkeletonBones = true;
+                settings.Scale = avatar.FbxImportScale;
 
                 Console.WriteLine("FBXをインポート中...");
                 Task importTask = ModelImporter.ImportModelAsync(fbxPath, root, settings, assetsSlot);

@@ -475,6 +475,7 @@ public static class VrchatAvatarParser
             return;
         }
         YamlNode meta = UnityYaml.ParseFlatDocument(File.ReadAllText(fbx.MetaPath));
+        ParseFbxImportScale(fbx, meta, avatar);
         YamlNode human = meta["ModelImporter"]?["humanDescription"]?["human"];
         if (human?.Seq == null)
         {
@@ -492,6 +493,18 @@ public static class VrchatAvatarParser
             }
         }
         UniLog.Log($"ヒューマノイドボーンを {avatar.HumanBones.Count} 個取得しました。");
+    }
+
+    private static void ParseFbxImportScale(UnityAsset fbx, YamlNode meta, VrchatAvatar avatar)
+    {
+        YamlNode meshes = meta?["ModelImporter"]?["meshes"];
+        float globalScale = meshes?["globalScale"]?.AsFloat(1f) ?? 1f;
+        bool useFileUnits = meshes?["useFileUnits"]?.AsBool(
+            meshes?["useFileScale"]?.AsBool(true) ?? true) ?? true;
+        float fileScale = useFileUnits ? FbxUnits.MetersPerUnit(fbx.DiskPath) : 1f;
+        avatar.FbxImportScale = globalScale * fileScale;
+        UniLog.Log($"FBX import scale: {avatar.FbxImportScale:G6} " +
+                   $"(globalScale={globalScale:G6}, fileUnits={(useFileUnits ? fileScale.ToString("G6") : "off")})");
     }
 
     // ---------------------------------------------------------------- descriptor (viseme/blink/view)

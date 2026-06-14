@@ -20,6 +20,9 @@ public sealed class VrchatAvatar
 
     public string FbxGuid { get; set; }
 
+    /// <summary>Scale baked during Assimp import to reproduce Unity ModelImporter file-unit conversion.</summary>
+    public float FbxImportScale { get; set; } = 1f;
+
     /// <summary>VRM-style humanoid bone name (camelCase) -> bone GameObject/transform name.</summary>
     public Dictionary<string, string> HumanBones { get; } = new(StringComparer.OrdinalIgnoreCase);
 
