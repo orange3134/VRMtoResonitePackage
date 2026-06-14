@@ -164,16 +164,17 @@ public static class VrchatAvatarParser
         {
             UniLog.Warning($"VRCAvatarDescriptorらしきデータは {scanned} 件のファイルに含まれていましたが、" +
                            "コンポーネントとして解決できませんでした（SDKバージョン差異やprefab構造の可能性）。");
-            DiagnoseNoCandidates(package);
+            DiagnoseCandidates(package);
         }
         return candidates;
     }
 
     /// <summary>
-    /// Logs why each descriptor-bearing file failed to yield a candidate, so prefab-variant /
-    /// stripped-object structures can be identified from a user's log without the package.
+    /// Logs, per descriptor-bearing file, why a candidate was or wasn't resolved, so prefab-variant
+    /// / stripped-object structures can be identified from a user's log without the package. Called
+    /// automatically on failure and exposed for the --vrchat-dump diagnostic.
     /// </summary>
-    private static void DiagnoseNoCandidates(UnityPackage package)
+    public static void DiagnoseCandidates(UnityPackage package)
     {
         const int classPrefabInstance = 1001;
         foreach (UnityAsset source in package.ByExtension(".prefab").Concat(package.ByExtension(".unity")))
@@ -223,14 +224,38 @@ public static class VrchatAvatarParser
             {
                 string baseGuid = doc.Root?["m_SourcePrefab"]?.Guid;
                 UnityAsset baseAsset = package.ByGuid(baseGuid);
+                string baseExt = baseAsset?.Extension ?? "";
+                string nameOverride = FindModificationValue(doc, "m_Name");
+                YamlNode modification = doc.Root?["m_Modification"];
+                int added = modification?["m_AddedComponents"]?.Seq?.Count ?? 0;
+                int removedGo = modification?["m_RemovedGameObjects"]?.Seq?.Count ?? 0;
                 bases.Add(baseGuid == null ? "?"
-                    : $"{baseGuid}->{(baseAsset != null ? Path.GetFileName(baseAsset.LogicalPath) : "パッケージ外")}");
+                    : $"{(baseAsset != null ? Path.GetFileName(baseAsset.LogicalPath) : baseGuid + "(パッケージ外)")}{baseExt}" +
+                      $" name='{nameOverride ?? "-"}' addedComp={added} removedGO={removedGo}");
             }
 
             UniLog.Warning($"  診断 {Path.GetFileName(source.LogicalPath)}: descriptor(guid={byGuid}, signature={bySignature}, " +
                            $"strippedOwner={strippedOwner}), variant={bases.Count > 0}" +
-                           (bases.Count > 0 ? $", source=[{string.Join(", ", bases)}]" : ""));
+                           (bases.Count > 0 ? $", source=[{string.Join(" | ", bases)}]" : ""));
         }
+    }
+
+    /// <summary>Returns the value a prefab-variant override sets for the given property path, or null.</summary>
+    private static string FindModificationValue(YamlDocument prefabInstance, string propertyPath)
+    {
+        YamlNode modifications = prefabInstance.Root?["m_Modification"]?["m_Modifications"];
+        if (modifications?.Seq == null)
+        {
+            return null;
+        }
+        foreach (YamlNode entry in modifications.Seq)
+        {
+            if (entry?["propertyPath"]?.AsString() == propertyPath)
+            {
+                return entry["value"]?.AsString();
+            }
+        }
+        return null;
     }
 
     /// <summary>

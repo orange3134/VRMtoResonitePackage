@@ -26,6 +26,10 @@ internal static class VrchatDump
                               $"mat {package.ByExtension(".mat").Count()}, " +
                               $"png {package.ByExtension(".png").Count()})");
 
+            Console.WriteLine();
+            Console.WriteLine("候補診断:");
+            VrchatAvatarParser.DiagnoseCandidates(package);
+
             VrchatAvatar avatar = VrchatAvatarParser.Parse(package, avatarOverride);
 
             Console.WriteLine();
