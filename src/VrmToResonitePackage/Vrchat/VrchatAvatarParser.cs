@@ -504,8 +504,10 @@ public static class VrchatAvatarParser
             meshes?["useFileScale"]?.AsBool(true) ?? true) ?? true;
         float fileScale = useFileUnits ? FbxUnits.MetersPerUnit(fbx.DiskPath) : 1f;
         avatar.FbxImportScale = globalScale * fileScale;
+        avatar.FbxUpAxis = FbxUnits.UpAxisDescription(fbx.DiskPath);
         UniLog.Log($"FBX import scale: {avatar.FbxImportScale:G6} " +
                    $"(globalScale={globalScale:G6}, fileUnits={(useFileUnits ? fileScale.ToString("G6") : "off")})");
+        UniLog.Log($"FBX up axis: {avatar.FbxUpAxis}");
     }
 
     private static void ParseFbxMaterialMappings(YamlNode meta, VrchatAvatar avatar)

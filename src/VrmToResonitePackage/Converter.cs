@@ -340,8 +340,10 @@ internal static class Converter
                 settings.GenerateSkeletonBones = true;
                 settings.Scale = avatar.FbxImportScale;
 
+                Slot importRoot = root.AddSlot("FBX Import Alignment");
+
                 Console.WriteLine("FBXをインポート中...");
-                Task importTask = ModelImporter.ImportModelAsync(fbxPath, root, settings, assetsSlot);
+                Task importTask = ModelImporter.ImportModelAsync(fbxPath, importRoot, settings, assetsSlot);
                 Task winner = await Task.WhenAny(importTask, Task.Delay(TimeSpan.FromSeconds(options.ImportTimeoutSeconds)));
                 await default(ToWorld);
                 if (winner != importTask)
@@ -350,6 +352,8 @@ internal static class Converter
                         $"FBXのインポートが {options.ImportTimeoutSeconds} 秒以内に完了しませんでした。");
                 }
                 await importTask;
+
+                AlignVrchatImportUp(importRoot, model);
 
                 Console.WriteLine("アセットの読み込みを待機中...");
                 await WaitForAssets(assetsSlot);
@@ -421,6 +425,47 @@ internal static class Converter
             throw new IOException($"パッケージが出力されませんでした: {outputPath}");
         }
         return outputPath;
+    }
+
+    private static void AlignVrchatImportUp(Slot importRoot, VrmModel model)
+    {
+        if (!model.HumanBones.TryGetValue("hips", out int hipsIndex) ||
+            !model.HumanBones.TryGetValue("head", out int headIndex))
+        {
+            return;
+        }
+
+        Dictionary<string, Slot> slots = SlotIndex.Build(importRoot);
+        if (!slots.TryGetValue(model.GetNodeName(hipsIndex), out Slot hips) ||
+            !slots.TryGetValue(model.GetNodeName(headIndex), out Slot head))
+        {
+            return;
+        }
+
+        float3 importedUp = (head.GlobalPosition - hips.GlobalPosition).Normalized;
+        var from = new System.Numerics.Vector3(importedUp.x, importedUp.y, importedUp.z);
+        var to = System.Numerics.Vector3.UnitY;
+        float dot = Math.Clamp(System.Numerics.Vector3.Dot(from, to), -1f, 1f);
+        if (dot > 0.9999f)
+        {
+            return;
+        }
+
+        System.Numerics.Vector3 axis = System.Numerics.Vector3.Cross(from, to);
+        if (axis.LengthSquared() < 1e-8f)
+        {
+            axis = System.Numerics.Vector3.UnitX;
+        }
+        else
+        {
+            axis = System.Numerics.Vector3.Normalize(axis);
+        }
+
+        float angle = MathF.Acos(dot);
+        System.Numerics.Quaternion q = System.Numerics.Quaternion.CreateFromAxisAngle(axis, angle);
+        importRoot.GlobalRotation = new floatQ(q.X, q.Y, q.Z, q.W) * importRoot.GlobalRotation;
+        UniLog.Log($"FBX import up alignment: rotated {angle * 180f / MathF.PI:F1} degrees " +
+                   $"from ({from.X:F3}, {from.Y:F3}, {from.Z:F3}) to Y+");
     }
 
     /// <summary>

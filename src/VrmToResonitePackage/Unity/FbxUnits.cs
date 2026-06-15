@@ -9,20 +9,49 @@ internal static class FbxUnits
 {
     private static readonly byte[] BinaryHeader = Encoding.ASCII.GetBytes("Kaydara FBX Binary");
     private static readonly byte[] UnitScaleFactor = Encoding.ASCII.GetBytes("UnitScaleFactor");
+    private static readonly byte[] UpAxis = Encoding.ASCII.GetBytes("UpAxis");
+    private static readonly byte[] UpAxisSign = Encoding.ASCII.GetBytes("UpAxisSign");
 
     /// <summary>Returns meters per FBX file unit, or 1 when the unit metadata cannot be read.</summary>
     public static float MetersPerUnit(string path)
     {
-        const int maxHeaderBytes = 1024 * 1024;
-        using FileStream file = File.OpenRead(path);
-        byte[] data = new byte[Math.Min(file.Length, maxHeaderBytes)];
-        file.ReadExactly(data);
+        byte[] data = ReadHeader(path);
         double centimeters = StartsWith(data, BinaryHeader)
             ? ReadBinaryUnitScale(data)
             : ReadAsciiUnitScale(data);
         return double.IsFinite(centimeters) && centimeters > 0
             ? (float)(centimeters / 100.0)
             : 1f;
+    }
+
+    /// <summary>Returns the FBX file's native up axis for diagnostics.</summary>
+    public static string UpAxisDescription(string path)
+    {
+        byte[] data = ReadHeader(path);
+        bool binary = StartsWith(data, BinaryHeader);
+        int axis = binary ? ReadBinaryInt(data, UpAxis) : ReadAsciiInt(data, "UpAxis");
+        int sign = binary ? ReadBinaryInt(data, UpAxisSign) : ReadAsciiInt(data, "UpAxisSign");
+        if (sign is not (-1 or 1))
+        {
+            sign = 1;
+        }
+
+        return axis switch
+        {
+            0 => sign > 0 ? "X+" : "X-",
+            1 => sign > 0 ? "Y+" : "Y-",
+            2 => sign > 0 ? "Z+" : "Z-",
+            _ => "unknown",
+        };
+    }
+
+    private static byte[] ReadHeader(string path)
+    {
+        const int maxHeaderBytes = 1024 * 1024;
+        using FileStream file = File.OpenRead(path);
+        byte[] data = new byte[Math.Min(file.Length, maxHeaderBytes)];
+        file.ReadExactly(data);
+        return data;
     }
 
     private static double ReadBinaryUnitScale(byte[] data)
@@ -53,6 +82,38 @@ internal static class FbxUnits
                double.TryParse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value)
             ? value
             : double.NaN;
+    }
+
+    private static int ReadBinaryInt(byte[] data, byte[] propertyName)
+    {
+        int name = IndexOf(data, propertyName);
+        if (name < 0)
+        {
+            return int.MinValue;
+        }
+        int end = Math.Min(data.Length - sizeof(int) - 1, name + propertyName.Length + 128);
+        for (int i = name + propertyName.Length; i <= end; i++)
+        {
+            if (data[i] == (byte)'I')
+            {
+                int value = BitConverter.ToInt32(data, i + 1);
+                if (value is >= -1 and <= 2)
+                {
+                    return value;
+                }
+            }
+        }
+        return int.MinValue;
+    }
+
+    private static int ReadAsciiInt(byte[] data, string propertyName)
+    {
+        string text = Encoding.UTF8.GetString(data);
+        Match match = Regex.Match(text, $@"{propertyName}[^-\d+]*([-+]?\d+)", RegexOptions.CultureInvariant);
+        return match.Success &&
+               int.TryParse(match.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
+            ? value
+            : int.MinValue;
     }
 
     private static bool StartsWith(byte[] data, byte[] prefix)
