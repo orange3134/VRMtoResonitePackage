@@ -247,6 +247,7 @@ internal static class Converter
                     }
                     AvatarSetup.Build(root, vrm, setupOptions);
                     await MaterialTuner.Apply(root, assetsSlot, vrm, vrmPath);
+                    await AvatarSetup.ApplyFirstPersonAutoAsync(root, vrm);
                     SpringBoneSetup.Apply(root, vrm);
                 }
 

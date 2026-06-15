@@ -827,6 +827,258 @@ internal static class AvatarSetup
         }
     }
 
+    public static async Task ApplyFirstPersonAutoAsync(Slot root, VrmModel vrm)
+    {
+        List<VrmFirstPersonMeshAnnotation> autoAnnotations = vrm.FirstPersonMeshAnnotations
+            .Where(a => a.Flag == VrmFirstPersonFlag.Auto)
+            .ToList();
+        if (autoAnnotations.Count == 0)
+        {
+            return;
+        }
+
+        DynamicVariableSpace space = root.GetComponent<DynamicVariableSpace>()
+                                     ?? root.AttachComponent<DynamicVariableSpace>();
+        space.SpaceName.Value = ModularAvatarNamespace;
+        space.OnlyDirectBinding.Value = true;
+
+        ImportAvatarRootIdentification(root);
+
+        Dictionary<string, Slot> slotsByName = SlotIndex.Build(root);
+        Slot firstPersonBone = ResolveFirstPersonBone(root, vrm, slotsByName);
+        if (firstPersonBone == null)
+        {
+            UniLog.Warning("VRM FirstPerson Auto skipped: head bone was not found.");
+            return;
+        }
+
+        IAssetProvider<FrooxEngine.Material> invisibleMaterial = GetOrCreateInvisibleMaterial(root);
+        Slot assets = root.FindChild("Assets") ?? root.AddSlot("Assets");
+        Slot firstPersonMeshAssets = assets.FindChild("FirstPerson Auto Meshes")
+                                     ?? assets.AddSlot("FirstPerson Auto Meshes");
+        int configured = 0;
+
+        foreach (VrmFirstPersonMeshAnnotation annotation in autoAnnotations)
+        {
+            foreach (MeshRenderer renderer in ResolveAnnotatedRenderers(vrm, slotsByName, annotation))
+            {
+                switch (renderer)
+                {
+                    case SkinnedMeshRenderer skinned:
+                        if (await TrySetupAutoSkinnedRenderer(skinned, firstPersonBone, firstPersonMeshAssets,
+                                invisibleMaterial))
+                        {
+                            configured++;
+                        }
+                        break;
+
+                    default:
+                        if (TrySetupAutoStaticRenderer(renderer, firstPersonBone, invisibleMaterial))
+                        {
+                            configured++;
+                        }
+                        break;
+                }
+            }
+        }
+
+        if (configured > 0)
+        {
+            UniLog.Log($"VRM FirstPerson Auto mesh split applied to {configured} renderer(s).");
+        }
+    }
+
+    private static async Task<bool> TrySetupAutoSkinnedRenderer(SkinnedMeshRenderer renderer, Slot firstPersonBone,
+        Slot meshAssetSlot, IAssetProvider<FrooxEngine.Material> invisibleMaterial)
+    {
+        if (renderer.Mesh.Target == null || renderer.Mesh.Asset?.Data == null || renderer.Materials.Count == 0)
+        {
+            return false;
+        }
+
+        int[] eraseBones = GetFirstPersonEraseBoneIndices(renderer, firstPersonBone);
+        if (eraseBones.Length == 0)
+        {
+            return false;
+        }
+
+        MeshX source;
+        await default(ToBackground);
+        object readLock = new();
+        await renderer.Mesh.Asset.RequestReadLock(readLock).ConfigureAwait(false);
+        try
+        {
+            source = new MeshX(renderer.Mesh.Asset.Data);
+        }
+        finally
+        {
+            renderer.Mesh.Asset.ReleaseReadLock(readLock);
+        }
+
+        int remainingTriangles = EraseTrianglesByBoneWeight(source, eraseBones);
+        if (remainingTriangles == 0)
+        {
+            await default(ToWorld);
+            AddVisibility(renderer, VrmFirstPersonFlag.ThirdPersonOnly, invisibleMaterial);
+            return true;
+        }
+
+        Uri uri = await renderer.Engine.LocalDB.SaveAssetAsync(source).ConfigureAwait(false);
+        await default(ToWorld);
+        if (uri == null)
+        {
+            return false;
+        }
+
+        Slot headlessSlot = renderer.Slot.AddSlot("_headless_" + renderer.Slot.Name);
+        SkinnedMeshRenderer headless = headlessSlot.AttachComponent<SkinnedMeshRenderer>();
+        headless.Mesh.Target = meshAssetSlot.AttachStaticMesh(uri, getExisting: false);
+        headless.BoundsComputeMethod.Value = renderer.BoundsComputeMethod.Value;
+        headless.ExplicitLocalBounds.Value = renderer.ExplicitLocalBounds.Value;
+        headless.ProxyBoundsSource.Target = renderer.ProxyBoundsSource.Target;
+        foreach (Slot bone in renderer.Bones)
+        {
+            headless.Bones.Add().Target = bone;
+        }
+        foreach (float weight in renderer.BlendShapeWeights)
+        {
+            headless.BlendShapeWeights.Add(weight);
+        }
+
+        AddVisibility(renderer, VrmFirstPersonFlag.ThirdPersonOnly, invisibleMaterial);
+        AddFirstPersonAutoHeadlessVisibility(headless, renderer, invisibleMaterial);
+        return true;
+    }
+
+    private static bool TrySetupAutoStaticRenderer(MeshRenderer renderer, Slot firstPersonBone,
+        IAssetProvider<FrooxEngine.Material> invisibleMaterial)
+    {
+        if (!IsDescendantOrSelf(renderer.Slot, firstPersonBone))
+        {
+            return false;
+        }
+        AddVisibility(renderer, VrmFirstPersonFlag.ThirdPersonOnly, invisibleMaterial);
+        return true;
+    }
+
+    private static int[] GetFirstPersonEraseBoneIndices(SkinnedMeshRenderer renderer, Slot firstPersonBone)
+    {
+        List<int> eraseBones = new();
+        for (int i = 0; i < renderer.Bones.Count; i++)
+        {
+            Slot bone = renderer.Bones[i];
+            if (bone != null && IsDescendantOrSelf(bone, firstPersonBone))
+            {
+                eraseBones.Add(i);
+            }
+        }
+        return eraseBones.ToArray();
+    }
+
+    private static Slot ResolveFirstPersonBone(Slot root, VrmModel vrm, Dictionary<string, Slot> slotsByName)
+    {
+        if (vrm.HumanBones.TryGetValue("head", out int headIndex))
+        {
+            string headName = vrm.GetNodeName(headIndex);
+            if (headName != null && slotsByName.TryGetValue(headName, out Slot headSlot))
+            {
+                return headSlot;
+            }
+        }
+
+        return root.GetComponentInChildren<BipedRig>()?.TryGetBone(BodyNode.Head);
+    }
+
+    private static bool IsDescendantOrSelf(Slot slot, Slot ancestor)
+    {
+        for (Slot current = slot; current != null; current = current.Parent)
+        {
+            if (current == ancestor)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int EraseTrianglesByBoneWeight(MeshX mesh, int[] eraseBoneIndices)
+    {
+        var eraseSet = new HashSet<int>(eraseBoneIndices);
+        int remaining = 0;
+        for (int submeshIndex = 0; submeshIndex < mesh.SubmeshCount; submeshIndex++)
+        {
+            if (mesh.GetSubmesh(submeshIndex) is not TriangleSubmesh triangles)
+            {
+                continue;
+            }
+
+            for (int i = triangles.Count - 1; i >= 0; i--)
+            {
+                Triangle triangle = triangles.GetTriangleUnsafe(i);
+                if (UsesAnyBone(mesh.RawBoneBindings[triangle.Vertex0IndexUnsafe], eraseSet) ||
+                    UsesAnyBone(mesh.RawBoneBindings[triangle.Vertex1IndexUnsafe], eraseSet) ||
+                    UsesAnyBone(mesh.RawBoneBindings[triangle.Vertex2IndexUnsafe], eraseSet))
+                {
+                    triangles.Remove(i);
+                }
+            }
+            remaining += triangles.Count;
+        }
+        return remaining;
+    }
+
+    private static bool UsesAnyBone(BoneBinding binding, HashSet<int> eraseBoneIndices)
+    {
+        return (binding.weight0 > 0f && eraseBoneIndices.Contains(binding.boneIndex0)) ||
+               (binding.weight1 > 0f && eraseBoneIndices.Contains(binding.boneIndex1)) ||
+               (binding.weight2 > 0f && eraseBoneIndices.Contains(binding.boneIndex2)) ||
+               (binding.weight3 > 0f && eraseBoneIndices.Contains(binding.boneIndex3));
+    }
+
+    private static void AddFirstPersonAutoHeadlessVisibility(SkinnedMeshRenderer headless, MeshRenderer source,
+        IAssetProvider<FrooxEngine.Material> invisibleMaterial)
+    {
+        headless.Materials.Clear();
+        RenderMaterialOverride materialOverride = headless.Slot.AttachComponent<RenderMaterialOverride>();
+        materialOverride.Renderer.Target = headless;
+        materialOverride.Context.Value = RenderingContext.UserView;
+
+        for (int i = 0; i < source.Materials.Count; i++)
+        {
+            headless.Materials.Add(invisibleMaterial);
+            RenderMaterialOverride.MaterialOverride entry = materialOverride.Overrides.Add();
+            entry.Index.Value = i;
+            entry.Material.Target = source.Materials[i];
+        }
+
+        DynamicValueVariableDriver<bool> avatarWorn = headless.Slot.AttachComponent<DynamicValueVariableDriver<bool>>();
+        avatarWorn.VariableName.Value = AvatarWornLocalVariable;
+        avatarWorn.DefaultValue.Value = false;
+        avatarWorn.Target.Target = materialOverride.EnabledField;
+    }
+
+    private static void AddVisibility(MeshRenderer renderer, VrmFirstPersonFlag flag,
+        IAssetProvider<FrooxEngine.Material> invisibleMaterial)
+    {
+        if (renderer.Materials.Count == 0)
+        {
+            return;
+        }
+        switch (flag)
+        {
+            case VrmFirstPersonFlag.ThirdPersonOnly:
+                AddMaterialOverride(renderer, RenderingContext.UserView, invisibleMaterial);
+                break;
+
+            case VrmFirstPersonFlag.FirstPersonOnly:
+                foreach (RenderingContext context in ThirdPersonRenderContexts)
+                {
+                    AddMaterialOverride(renderer, context, invisibleMaterial);
+                }
+                break;
+        }
+    }
+
     private static IEnumerable<MeshRenderer> ResolveAnnotatedRenderers(VrmModel vrm,
         Dictionary<string, Slot> slotsByName, VrmFirstPersonMeshAnnotation annotation)
     {
