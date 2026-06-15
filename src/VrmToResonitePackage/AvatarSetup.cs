@@ -922,6 +922,7 @@ internal static class AvatarSetup
             AddVisibility(renderer, VrmFirstPersonFlag.ThirdPersonOnly, invisibleMaterial);
             return true;
         }
+        source.ClearBlendShapes();
 
         Uri uri = await renderer.Engine.LocalDB.SaveAssetAsync(source).ConfigureAwait(false);
         await default(ToWorld);
@@ -939,10 +940,6 @@ internal static class AvatarSetup
         foreach (Slot bone in renderer.Bones)
         {
             headless.Bones.Add().Target = bone;
-        }
-        foreach (float weight in renderer.BlendShapeWeights)
-        {
-            headless.BlendShapeWeights.Add(weight);
         }
 
         AddVisibility(renderer, VrmFirstPersonFlag.ThirdPersonOnly, invisibleMaterial);
