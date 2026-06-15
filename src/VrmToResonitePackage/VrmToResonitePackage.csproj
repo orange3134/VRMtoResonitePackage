@@ -24,6 +24,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\AvatarRootIdentification.resonitepackage" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="FrooxEngine">
       <HintPath>$(ResonitePath)\FrooxEngine.dll</HintPath>
       <Private>false</Private>
@@ -54,6 +58,22 @@
     </Reference>
     <Reference Include="Renderite.Shared">
       <HintPath>$(ResonitePath)\Renderite.Shared.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ProtoFlux.Core">
+      <HintPath>$(ResonitePath)\ProtoFlux.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ProtoFlux.Nodes.Core">
+      <HintPath>$(ResonitePath)\ProtoFlux.Nodes.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ProtoFlux.Nodes.FrooxEngine">
+      <HintPath>$(ResonitePath)\ProtoFlux.Nodes.FrooxEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ProtoFluxBindings">
+      <HintPath>$(ResonitePath)\ProtoFluxBindings.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Awwdio">

@@ -301,10 +301,33 @@ public static class VrmParser
             }
         }
 
-        if (vrm.TryGetProperty("firstPerson", out JsonElement firstPerson) &&
-            firstPerson.TryGetProperty("firstPersonBoneOffset", out JsonElement fpOffset))
+        if (vrm.TryGetProperty("firstPerson", out JsonElement firstPerson))
         {
-            model.FirstPersonOffset = ReadVec3Object(fpOffset);
+            if (firstPerson.TryGetProperty("firstPersonBoneOffset", out JsonElement fpOffset))
+            {
+                model.FirstPersonOffset = ReadVec3Object(fpOffset);
+            }
+            if (firstPerson.TryGetProperty("meshAnnotations", out JsonElement meshAnnotations))
+            {
+                foreach (JsonElement annotation in meshAnnotations.EnumerateArray())
+                {
+                    if (!annotation.TryGetProperty("mesh", out JsonElement meshEl) ||
+                        !annotation.TryGetProperty("firstPersonFlag", out JsonElement flagEl))
+                    {
+                        continue;
+                    }
+                    VrmFirstPersonFlag? flag = ParseFirstPersonFlag(flagEl.GetString());
+                    if (!flag.HasValue)
+                    {
+                        continue;
+                    }
+                    model.FirstPersonMeshAnnotations.Add(new VrmFirstPersonMeshAnnotation
+                    {
+                        MeshIndex = meshEl.GetInt32(),
+                        Flag = flag.Value,
+                    });
+                }
+            }
         }
 
         if (vrm.TryGetProperty("blendShapeMaster", out JsonElement master) &&
@@ -638,6 +661,34 @@ public static class VrmParser
             model.FirstPersonOffset = ReadVec3Array(offset);
         }
 
+        if (vrm.TryGetProperty("firstPerson", out JsonElement firstPerson) &&
+            firstPerson.TryGetProperty("meshAnnotations", out JsonElement meshAnnotations))
+        {
+            foreach (JsonElement annotation in meshAnnotations.EnumerateArray())
+            {
+                if (!annotation.TryGetProperty("node", out JsonElement nodeEl) ||
+                    !annotation.TryGetProperty("type", out JsonElement typeEl))
+                {
+                    continue;
+                }
+                VrmFirstPersonFlag? flag = ParseFirstPersonFlag(typeEl.GetString());
+                if (!flag.HasValue)
+                {
+                    continue;
+                }
+                int nodeIndex = nodeEl.GetInt32();
+                int meshIndex = nodeIndex >= 0 && nodeIndex < model.NodeMeshIndices.Count
+                    ? model.NodeMeshIndices[nodeIndex]
+                    : -1;
+                model.FirstPersonMeshAnnotations.Add(new VrmFirstPersonMeshAnnotation
+                {
+                    NodeIndex = nodeIndex,
+                    MeshIndex = meshIndex,
+                    Flag = flag.Value,
+                });
+            }
+        }
+
         if (vrm.TryGetProperty("expressions", out JsonElement expressions))
         {
             if (expressions.TryGetProperty("preset", out JsonElement preset))
@@ -904,5 +955,21 @@ public static class VrmParser
             values.Length > 1 ? values[1] : 0f,
             values.Length > 2 ? values[2] : 0f,
             values.Length > 3 ? values[3] : 1f);
+    }
+
+    private static VrmFirstPersonFlag? ParseFirstPersonFlag(string value)
+    {
+        string normalized = new string((value ?? "")
+            .Where(c => c != ' ' && c != '_' && c != '-')
+            .Select(char.ToLowerInvariant)
+            .ToArray());
+        return normalized switch
+        {
+            "auto" => VrmFirstPersonFlag.Auto,
+            "both" => VrmFirstPersonFlag.Both,
+            "thirdpersononly" => VrmFirstPersonFlag.ThirdPersonOnly,
+            "firstpersononly" => VrmFirstPersonFlag.FirstPersonOnly,
+            _ => null,
+        };
     }
 }

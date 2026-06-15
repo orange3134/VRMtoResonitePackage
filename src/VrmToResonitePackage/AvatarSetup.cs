@@ -1,3 +1,4 @@
+using Elements.Assets;
 using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.CommonAvatar;
@@ -230,6 +231,7 @@ internal static class AvatarSetup
             ExpressionMenuSetup.Setup(root, vrm);
         }
         SetupAwayIndicator(root);
+        SetupFirstPersonVisibility(root, vrm);
 
         root.GetComponentInChildren((AvatarPoseNode n) => n.Node.Value == BodyNode.Head)?.InstrumentWithViewHeadOverride();
         UniLog.Log("アバターセットアップ完了。");
@@ -740,6 +742,243 @@ internal static class AvatarSetup
             indicator.Renderer.Target = renderer;
             assigner.References.Add(indicator.User);
         }
+    }
+
+    // ---------------------------------------------------------------- first-person visibility
+
+    private const string ModularAvatarNamespace = "modular_avatar";
+    private const string AvatarWornLocalVariable = ModularAvatarNamespace + "/AvatarWornLocal";
+
+    private static readonly RenderingContext[] ThirdPersonRenderContexts =
+    {
+        RenderingContext.ExternalView,
+        RenderingContext.Camera,
+        RenderingContext.Mirror,
+        RenderingContext.Portal,
+        RenderingContext.RenderToAsset,
+    };
+
+    private static void SetupFirstPersonVisibility(Slot root, VrmModel vrm)
+    {
+        List<VrmFirstPersonMeshAnnotation> effectiveAnnotations = vrm.FirstPersonMeshAnnotations
+            .Where(a => a.Flag is VrmFirstPersonFlag.ThirdPersonOnly or VrmFirstPersonFlag.FirstPersonOnly)
+            .ToList();
+        if (effectiveAnnotations.Count == 0)
+        {
+            return;
+        }
+
+        Dictionary<string, Slot> slotsByName = SlotIndex.Build(root);
+        Dictionary<MeshRenderer, VrmFirstPersonFlag> rendererFlags = new();
+        foreach (VrmFirstPersonMeshAnnotation annotation in effectiveAnnotations)
+        {
+            foreach (MeshRenderer renderer in ResolveAnnotatedRenderers(vrm, slotsByName, annotation))
+            {
+                if (rendererFlags.TryGetValue(renderer, out VrmFirstPersonFlag existing) && existing != annotation.Flag)
+                {
+                    UniLog.Warning($"FirstPerson設定が競合しています: renderer={renderer.Slot.Name}, {existing} -> {annotation.Flag}");
+                }
+                rendererFlags[renderer] = annotation.Flag;
+            }
+        }
+
+        if (rendererFlags.Count == 0)
+        {
+            UniLog.Warning("VRM FirstPerson設定は見つかりましたが、対応するRendererが見つかりませんでした。");
+            return;
+        }
+
+        DynamicVariableSpace space = root.GetComponent<DynamicVariableSpace>()
+                                     ?? root.AttachComponent<DynamicVariableSpace>();
+        space.SpaceName.Value = ModularAvatarNamespace;
+        space.OnlyDirectBinding.Value = true;
+
+        ImportAvatarRootIdentification(root);
+
+        IAssetProvider<FrooxEngine.Material> invisibleMaterial = GetOrCreateInvisibleMaterial(root);
+        int configured = 0;
+        foreach ((MeshRenderer renderer, VrmFirstPersonFlag flag) in rendererFlags)
+        {
+            if (renderer.Materials.Count == 0)
+            {
+                continue;
+            }
+
+            switch (flag)
+            {
+                case VrmFirstPersonFlag.ThirdPersonOnly:
+                    AddMaterialOverride(renderer, RenderingContext.UserView, invisibleMaterial);
+                    configured++;
+                    break;
+
+                case VrmFirstPersonFlag.FirstPersonOnly:
+                    foreach (RenderingContext context in ThirdPersonRenderContexts)
+                    {
+                        AddMaterialOverride(renderer, context, invisibleMaterial);
+                    }
+                    configured++;
+                    break;
+            }
+        }
+
+        if (configured > 0)
+        {
+            UniLog.Log($"VRM FirstPerson表示設定を {configured} renderer に適用しました。");
+        }
+    }
+
+    private static IEnumerable<MeshRenderer> ResolveAnnotatedRenderers(VrmModel vrm,
+        Dictionary<string, Slot> slotsByName, VrmFirstPersonMeshAnnotation annotation)
+    {
+        var seen = new HashSet<MeshRenderer>();
+        foreach (Slot slot in ResolveAnnotatedSlots(vrm, slotsByName, annotation))
+        {
+            foreach (MeshRenderer renderer in slot.GetComponentsInChildren<MeshRenderer>())
+            {
+                if (seen.Add(renderer))
+                {
+                    yield return renderer;
+                }
+            }
+        }
+
+        if (seen.Count == 0)
+        {
+            string nodeName = annotation.NodeIndex >= 0 ? vrm.GetNodeName(annotation.NodeIndex) : null;
+            UniLog.Warning($"VRM FirstPerson対象Rendererが見つかりません: mesh={annotation.MeshIndex}, node={annotation.NodeIndex}, name={nodeName ?? "(none)"}");
+        }
+    }
+
+    private static IEnumerable<Slot> ResolveAnnotatedSlots(VrmModel vrm,
+        Dictionary<string, Slot> slotsByName, VrmFirstPersonMeshAnnotation annotation)
+    {
+        if (annotation.NodeIndex >= 0)
+        {
+            string nodeName = vrm.GetNodeName(annotation.NodeIndex);
+            if (nodeName != null && slotsByName.TryGetValue(nodeName, out Slot slot))
+            {
+                yield return slot;
+                yield break;
+            }
+        }
+
+        if (annotation.MeshIndex >= 0 && vrm.MeshToNodes.TryGetValue(annotation.MeshIndex, out List<int> nodes))
+        {
+            foreach (int nodeIndex in nodes)
+            {
+                string nodeName = vrm.GetNodeName(nodeIndex);
+                if (nodeName != null && slotsByName.TryGetValue(nodeName, out Slot slot))
+                {
+                    yield return slot;
+                }
+            }
+        }
+    }
+
+    private static void ImportAvatarRootIdentification(Slot root)
+    {
+        if (root.FindChild("Avatar Root Identification") != null)
+        {
+            return;
+        }
+
+        string tempPath = Path.Combine(Path.GetTempPath(),
+            "VrmToResonitePackage_AvatarRootIdentification_" + Guid.NewGuid().ToString("N") + ".resonitepackage");
+        try
+        {
+            using (System.IO.Stream resource = typeof(AvatarSetup).Assembly.GetManifestResourceStream(
+                       "VrmToResonitePackage.Resources.AvatarRootIdentification.resonitepackage"))
+            {
+                if (resource == null)
+                {
+                    UniLog.Warning("Avatar Root Identification resource が見つかりませんでした。VRM FirstPerson の装着判定をスキップします。");
+                    return;
+                }
+
+                using FileStream file = File.Create(tempPath);
+                resource.CopyTo(file);
+            }
+
+            using RecordPackage package = RecordPackage.Decode(tempPath);
+            SkyFrost.Base.Record record = package.MainRecord;
+            if (record == null)
+            {
+                UniLog.Warning("Avatar Root Identification package に main record がありません。VRM FirstPerson の装着判定をスキップします。");
+                return;
+            }
+
+            string signature = RecordPackage.GetAssetSignature(new Uri(record.AssetURI));
+            using System.IO.Stream asset = package.ReadAsset(signature);
+            DataTreeDictionary graph = DataTreeConverter.LoadAuto(asset);
+            if (graph == null)
+            {
+                UniLog.Warning("Avatar Root Identification package の DataTree を読み込めませんでした。VRM FirstPerson の装着判定をスキップします。");
+                return;
+            }
+
+            Slot packageRoot = root.AddSlot("Avatar Root Identification");
+            packageRoot.LoadObject(graph, record);
+            packageRoot.ForeachComponentInChildren(delegate(IPackageImportEventReceiver receiver)
+            {
+                receiver.OnPackageImported();
+            }, includeLocal: false, cacheItems: true);
+        }
+        catch (Exception ex)
+        {
+            UniLog.Warning($"Avatar Root Identification package の読み込みに失敗しました。VRM FirstPerson の装着判定をスキップします: {ex.Message}");
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+            }
+            catch
+            {
+                // Temp cleanup is best-effort.
+            }
+        }
+    }
+
+    private static IAssetProvider<FrooxEngine.Material> GetOrCreateInvisibleMaterial(Slot root)
+    {
+        Slot assetsSlot = root.FindChild("Assets") ?? root.AddSlot("Assets");
+        PBS_RimSpecular existing = assetsSlot.GetComponentInChildren((PBS_RimSpecular m) =>
+            m.Slot.Name == "Invisible Material");
+        if (existing != null)
+        {
+            return existing;
+        }
+
+        Slot materialSlot = assetsSlot.AddSlot("Invisible Material");
+        PBS_RimSpecular material = materialSlot.AttachComponent<PBS_RimSpecular>();
+        material.AlbedoColor.Value = new colorX(0f, 0f, 0f, 0f);
+        material.RimColor.Value = new colorX(0f, 0f, 0f, 0f);
+        material.Transparent.Value = true;
+        return material;
+    }
+
+    private static void AddMaterialOverride(MeshRenderer renderer, RenderingContext context,
+        IAssetProvider<FrooxEngine.Material> invisibleMaterial)
+    {
+        RenderMaterialOverride materialOverride = renderer.Slot.AttachComponent<RenderMaterialOverride>();
+        materialOverride.Renderer.Target = renderer;
+        materialOverride.Context.Value = context;
+
+        for (int i = 0; i < renderer.Materials.Count; i++)
+        {
+            RenderMaterialOverride.MaterialOverride entry = materialOverride.Overrides.Add();
+            entry.Index.Value = i;
+            entry.Material.Target = invisibleMaterial;
+        }
+
+        DynamicValueVariableDriver<bool> avatarWorn = renderer.Slot.AttachComponent<DynamicValueVariableDriver<bool>>();
+        avatarWorn.VariableName.Value = AvatarWornLocalVariable;
+        avatarWorn.DefaultValue.Value = false;
+        avatarWorn.Target.Target = materialOverride.EnabledField;
     }
 }
 

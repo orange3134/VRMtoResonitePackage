@@ -64,6 +64,8 @@ public sealed class VrmModel
     /// <summary>Offset of the first-person viewpoint from the head bone, in model space (meters).</summary>
     public System.Numerics.Vector3? FirstPersonOffset { get; set; }
 
+    public List<VrmFirstPersonMeshAnnotation> FirstPersonMeshAnnotations { get; } = new();
+
     public List<VrmExpression> Expressions { get; } = new();
 
     public List<VrmSpringChain> SpringChains { get; } = new();
@@ -81,6 +83,25 @@ public sealed class VrmModel
         }
         return NodeNames[index];
     }
+}
+
+public enum VrmFirstPersonFlag
+{
+    Auto,
+    Both,
+    ThirdPersonOnly,
+    FirstPersonOnly,
+}
+
+public sealed class VrmFirstPersonMeshAnnotation
+{
+    /// <summary>glTF mesh index for VRM 0.x annotations, or resolved from the node for VRM 1.0.</summary>
+    public int MeshIndex { get; set; } = -1;
+
+    /// <summary>glTF node index for VRM 1.0 annotations, or -1 for mesh-wide VRM 0.x annotations.</summary>
+    public int NodeIndex { get; set; } = -1;
+
+    public VrmFirstPersonFlag Flag { get; set; }
 }
 
 public sealed class VrmExpression
