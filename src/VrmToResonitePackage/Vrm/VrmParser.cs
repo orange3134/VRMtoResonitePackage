@@ -329,6 +329,7 @@ public static class VrmParser
                 }
             }
         }
+        AddDefaultFirstPersonAutoAnnotations(model, nodeBased: false);
 
         if (vrm.TryGetProperty("blendShapeMaster", out JsonElement master) &&
             master.TryGetProperty("blendShapeGroups", out JsonElement groups))
@@ -688,6 +689,7 @@ public static class VrmParser
                 });
             }
         }
+        AddDefaultFirstPersonAutoAnnotations(model, nodeBased: true);
 
         if (vrm.TryGetProperty("expressions", out JsonElement expressions))
         {
@@ -971,5 +973,48 @@ public static class VrmParser
             "firstpersononly" => VrmFirstPersonFlag.FirstPersonOnly,
             _ => null,
         };
+    }
+
+    private static void AddDefaultFirstPersonAutoAnnotations(VrmModel model, bool nodeBased)
+    {
+        if (nodeBased)
+        {
+            var explicitNodes = model.FirstPersonMeshAnnotations
+                .Where(a => a.NodeIndex >= 0)
+                .Select(a => a.NodeIndex)
+                .ToHashSet();
+            for (int nodeIndex = 0; nodeIndex < model.NodeMeshIndices.Count; nodeIndex++)
+            {
+                int meshIndex = model.NodeMeshIndices[nodeIndex];
+                if (meshIndex < 0 || explicitNodes.Contains(nodeIndex))
+                {
+                    continue;
+                }
+                model.FirstPersonMeshAnnotations.Add(new VrmFirstPersonMeshAnnotation
+                {
+                    NodeIndex = nodeIndex,
+                    MeshIndex = meshIndex,
+                    Flag = VrmFirstPersonFlag.Auto,
+                });
+            }
+            return;
+        }
+
+        var explicitMeshes = model.FirstPersonMeshAnnotations
+            .Where(a => a.MeshIndex >= 0)
+            .Select(a => a.MeshIndex)
+            .ToHashSet();
+        foreach (int meshIndex in model.MeshToNodes.Keys.OrderBy(i => i))
+        {
+            if (explicitMeshes.Contains(meshIndex))
+            {
+                continue;
+            }
+            model.FirstPersonMeshAnnotations.Add(new VrmFirstPersonMeshAnnotation
+            {
+                MeshIndex = meshIndex,
+                Flag = VrmFirstPersonFlag.Auto,
+            });
+        }
     }
 }
