@@ -241,20 +241,10 @@ internal static class AvatarSetup
 
     private static BipedRig SetupRig(Slot root, VrmModel vrm, Dictionary<string, Slot> slotsByName)
     {
-        // The model importer may have already classified the rig heuristically;
-        // reuse the component but override every bone with the VRM's exact mapping.
-        // Multiple bone hierarchies can each get classified, so drop the extras.
+        // The model importer may have already classified the rig heuristically.
+        // Keep avatar setup components on the avatar root; only the bone targets live
+        // under the imported model hierarchy.
         List<BipedRig> existingRigs = root.GetComponentsInChildren<BipedRig>();
-        BipedRig rig = existingRigs.FirstOrDefault();
-        for (int i = 1; i < existingRigs.Count; i++)
-        {
-            existingRigs[i].Destroy();
-        }
-        if (rig == null)
-        {
-            Slot rigSlot = root.GetComponentInChildren<Rig>()?.Slot ?? root;
-            rig = rigSlot.AttachComponent<BipedRig>();
-        }
 
         // The importer's name-heuristic classification can leave bogus entries on BodyNodes
         // the real skeleton never claims (e.g. an accessory chain Spine/SpineRibbon/... gets
@@ -263,9 +253,22 @@ internal static class AvatarSetup
         // UpperChest ?? Chest -> the ribbon bone). The VRM humanoid map is the single source
         // of truth, so wipe everything the heuristics produced before assigning.
         var heuristicBones = new Dictionary<BodyNode, string>();
-        foreach (KeyValuePair<BodyNode, SyncRef<Slot>> entry in rig.Bones)
+        BipedRig heuristicRig = existingRigs.FirstOrDefault();
+        if (heuristicRig != null)
         {
-            heuristicBones[entry.Key] = entry.Value.Target?.Name;
+            foreach (KeyValuePair<BodyNode, SyncRef<Slot>> entry in heuristicRig.Bones)
+            {
+                heuristicBones[entry.Key] = entry.Value.Target?.Name;
+            }
+        }
+
+        BipedRig rig = root.GetComponent<BipedRig>() ?? root.AttachComponent<BipedRig>();
+        foreach (BipedRig existingRig in existingRigs)
+        {
+            if (existingRig != rig)
+            {
+                existingRig.Destroy();
+            }
         }
         rig.Bones.Clear();
 

@@ -21,11 +21,23 @@ public static class VrchatAvatarParser
         public YamlDocument Descriptor;  // VRCAvatarDescriptor MonoBehaviour
         public HashSet<long> Subtree;    // GameObject fileIds belonging to this avatar (empty for variant-of-FBX)
         public string Name;              // resolved avatar/display name
-        public string FbxGuidOverride;   // set when the avatar is a prefab variant of an FBX model
+        public List<string> FbxGuidOverrides; // FBX models composed by a prefab variant
+        public Dictionary<string, FbxPlacement> FbxPlacements;
 
         /// <summary>A prefab variant whose hierarchy lives in an FBX (descriptor added on a stripped root).</summary>
-        public bool IsVariantOfFbx => FbxGuidOverride != null;
-        public int Size => Subtree?.Count ?? 0;
+        public bool IsVariantOfFbx => FbxGuidOverrides?.Count > 0;
+        public int Size => IsVariantOfFbx ? FbxGuidOverrides.Count : Subtree?.Count ?? 0;
+    }
+
+    private sealed class FbxPlacement
+    {
+        public string InstanceName;
+        public string ParentFbxGuid;
+        public string ParentNodeName;
+        public string TransformNodeName;
+        public Vec3 LocalPosition;
+        public Quat LocalRotation = Quat.Identity;
+        public Vec3 LocalScale = Vec3.One;
     }
 
     /// <summary>
@@ -81,14 +93,25 @@ public static class VrchatAvatarParser
             // descriptor. Materials / PhysBones / deletions can't be resolved from the stripped
             // references here, so the avatar imports with rig + visemes + view (bare materials).
             UniLog.Log($"FBXモデルのPrefab Variantとして処理します（基礎マテリアル対応、揺れもの等は制限あり）: {selected.Name}");
-            UnityAsset fbx = package.ByGuid(selected.FbxGuidOverride);
+            string primaryFbxGuid = SelectHumanoidFbxGuid(package, selected.FbxGuidOverrides);
+            UnityAsset fbx = package.ByGuid(primaryFbxGuid);
             if (fbx?.HasContent != true)
             {
-                throw new InvalidDataException($"variantが参照するFBX (guid {selected.FbxGuidOverride}) がパッケージに含まれていません。");
+                throw new InvalidDataException($"variantが参照するFBX (guid {primaryFbxGuid}) がパッケージに含まれていません。");
             }
-            avatar.FbxGuid = selected.FbxGuidOverride;
+            avatar.FbxGuid = primaryFbxGuid;
             avatar.FbxPath = fbx.DiskPath;
+            FbxPlacement primaryPlacement = null;
+            selected.FbxPlacements?.TryGetValue(primaryFbxGuid, out primaryPlacement);
+            ApplyPrimaryFbxPlacement(avatar, fbx, primaryPlacement);
             ParseHumanoid(package, avatar);
+            foreach (string guid in selected.FbxGuidOverrides.Where(g =>
+                         !string.Equals(g, primaryFbxGuid, StringComparison.OrdinalIgnoreCase)))
+            {
+                FbxPlacement placement = null;
+                selected.FbxPlacements?.TryGetValue(guid, out placement);
+                AddAdditionalFbx(package, avatar, guid, placement);
+            }
             ParseDescriptor(selected.Scene, selected.Descriptor, avatar);
             return avatar;
         }
@@ -186,8 +209,8 @@ public static class VrchatAvatarParser
 
                 // Variant-of-FBX: the descriptor is an added component on a stripped root that
                 // sources an FBX model. The geometry/skeleton come from that FBX, not this file.
-                string fbxGuid = ResolveVariantFbxGuid(package, scene, descriptor);
-                if (fbxGuid != null)
+                List<string> fbxGuids = ResolveVariantFbxGuids(package, scene, descriptor);
+                if (fbxGuids.Count > 0)
                 {
                     candidates.Add(new Candidate
                     {
@@ -195,7 +218,8 @@ public static class VrchatAvatarParser
                         Scene = scene,
                         Descriptor = descriptor,
                         Subtree = new HashSet<long>(),
-                        FbxGuidOverride = fbxGuid,
+                        FbxGuidOverrides = fbxGuids,
+                        FbxPlacements = CollectFbxPlacements(package, source.Guid),
                         Name = VariantAvatarName(scene, descriptor, source),
                     });
                 }
@@ -207,21 +231,112 @@ public static class VrchatAvatarParser
                            "コンポーネントとして解決できませんでした（SDKバージョン差異やprefab構造の可能性）。");
             DiagnoseCandidates(package);
         }
+        AddComposedPrefabCandidates(package, candidates);
         return candidates;
+    }
+
+    /// <summary>
+    /// Adds outer prefab compositions that contain a descriptor-bearing avatar prefab plus separate
+    /// hair/accessory prefabs. These files do not serialize their own descriptor, but are the actual
+    /// complete avatars users expect to choose.
+    /// </summary>
+    private static void AddComposedPrefabCandidates(UnityPackage package, List<Candidate> candidates)
+    {
+        var existingSources = new HashSet<string>(
+            candidates.Select(c => c.Source.Guid), StringComparer.OrdinalIgnoreCase);
+        foreach (UnityAsset source in package.ByExtension(".prefab"))
+        {
+            if (existingSources.Contains(source.Guid))
+            {
+                continue;
+            }
+            Candidate descriptorSource = FindNestedDescriptorCandidate(package, source.Guid,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            if (descriptorSource == null)
+            {
+                continue;
+            }
+            var fbxGuids = new List<string>();
+            CollectFbxGuidsFromSource(package, source.Guid, 0, fbxGuids,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            if (fbxGuids.Count <= (descriptorSource.FbxGuidOverrides?.Count ?? 0))
+            {
+                continue;
+            }
+            candidates.Add(new Candidate
+            {
+                Source = source,
+                Scene = descriptorSource.Scene,
+                Descriptor = descriptorSource.Descriptor,
+                Subtree = new HashSet<long>(),
+                FbxGuidOverrides = fbxGuids,
+                FbxPlacements = CollectFbxPlacements(package, source.Guid),
+                Name = Path.GetFileNameWithoutExtension(source.LogicalPath),
+            });
+        }
+    }
+
+    private static Candidate FindNestedDescriptorCandidate(UnityPackage package, string guid, HashSet<string> visited)
+    {
+        if (string.IsNullOrEmpty(guid) || !visited.Add(guid))
+        {
+            return null;
+        }
+        UnityAsset asset = package.ByGuid(guid);
+        if (asset?.Extension != ".prefab")
+        {
+            return null;
+        }
+        string text = package.ReadText(asset);
+        if (text == null)
+        {
+            return null;
+        }
+        UnityScene scene;
+        try
+        {
+            scene = UnityScene.Parse(text);
+        }
+        catch
+        {
+            return null;
+        }
+        YamlDocument descriptor = scene.MonoBehaviours.FirstOrDefault(IsAvatarDescriptor);
+        if (descriptor != null)
+        {
+            List<string> fbxGuids = ResolveVariantFbxGuids(package, scene, descriptor);
+            return fbxGuids.Count > 0
+                ? new Candidate { Source = asset, Scene = scene, Descriptor = descriptor, FbxGuidOverrides = fbxGuids }
+                : null;
+        }
+        foreach (YamlDocument instance in scene.Documents.Values.Where(d => d.ClassId == ClassPrefabInstance))
+        {
+            Candidate nested = FindNestedDescriptorCandidate(package, instance.Root?["m_SourcePrefab"]?.Guid, visited);
+            if (nested != null)
+            {
+                return nested;
+            }
+        }
+        return null;
     }
 
     private const int ClassPrefabInstance = 1001;
 
     /// <summary>
-    /// For a descriptor added in a prefab variant, follows its PrefabInstance to the source model and
-    /// returns the FBX guid the avatar's geometry/skeleton come from (recursing through nested
-    /// prefab variants), or null when no FBX source can be found.
+    /// For a descriptor added in a prefab variant, collects every FBX composed by the source prefab,
+    /// recursing through nested prefab variants.
     /// </summary>
-    private static string ResolveVariantFbxGuid(UnityPackage package, UnityScene scene, YamlDocument descriptor)
+    private static List<string> ResolveVariantFbxGuids(UnityPackage package, UnityScene scene, YamlDocument descriptor)
     {
         YamlDocument prefabInstance = VariantPrefabInstance(scene, descriptor);
-        string sourceGuid = prefabInstance?.Root?["m_SourcePrefab"]?.Guid;
-        return ResolveFbxFromSource(package, sourceGuid, 0);
+        var result = new List<string>();
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        CollectFbxGuidsFromSource(package, prefabInstance?.Root?["m_SourcePrefab"]?.Guid, 0, result, visited);
+        foreach (YamlDocument instance in scene.Documents.Values.Where(d => d.ClassId == ClassPrefabInstance))
+        {
+            CollectFbxGuidsFromSource(package, instance.Root?["m_SourcePrefab"]?.Guid, 0, result, visited);
+        }
+        return result;
     }
 
     /// <summary>
@@ -239,30 +354,32 @@ public static class VrchatAvatarParser
         return scene.Doc(instanceId);
     }
 
-    private static string ResolveFbxFromSource(UnityPackage package, string guid, int depth)
+    private static void CollectFbxGuidsFromSource(UnityPackage package, string guid, int depth,
+        List<string> result, HashSet<string> visited)
     {
-        if (string.IsNullOrEmpty(guid) || depth > 4)
+        if (string.IsNullOrEmpty(guid) || depth > 8 || !visited.Add(guid))
         {
-            return null;
+            return;
         }
         UnityAsset asset = package.ByGuid(guid);
         if (asset == null)
         {
-            return null;
+            return;
         }
         if (asset.Extension == ".fbx")
         {
-            return guid;
+            result.Add(guid);
+            return;
         }
         if (asset.Extension != ".prefab")
         {
-            return null;
+            return;
         }
-        // A prefab source may itself be a variant of an FBX (or another prefab); recurse.
+        // A composed avatar prefab can reference several nested prefab/FBX instances.
         string text = package.ReadText(asset);
         if (text == null)
         {
-            return null;
+            return;
         }
         UnityScene scene;
         try
@@ -271,15 +388,211 @@ public static class VrchatAvatarParser
         }
         catch
         {
-            return null;
+            return;
         }
         foreach (YamlDocument prefabInstance in scene.Documents.Values.Where(d => d.ClassId == ClassPrefabInstance))
         {
-            string result = ResolveFbxFromSource(package, prefabInstance.Root?["m_SourcePrefab"]?.Guid, depth + 1);
-            if (result != null)
+            CollectFbxGuidsFromSource(package, prefabInstance.Root?["m_SourcePrefab"]?.Guid, depth + 1,
+                result, visited);
+        }
+    }
+
+    private static Dictionary<string, FbxPlacement> CollectFbxPlacements(UnityPackage package, string sourceGuid)
+    {
+        var result = new Dictionary<string, FbxPlacement>(StringComparer.OrdinalIgnoreCase);
+        CollectFbxPlacements(package, sourceGuid, null, result,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase), 0);
+        return result;
+    }
+
+    private static void CollectFbxPlacements(UnityPackage package, string guid, FbxPlacement inherited,
+        Dictionary<string, FbxPlacement> result, HashSet<string> visited, int depth)
+    {
+        if (string.IsNullOrEmpty(guid) || depth > 8 || !visited.Add(guid))
+        {
+            return;
+        }
+        UnityAsset asset = package.ByGuid(guid);
+        if (asset?.Extension == ".fbx")
+        {
+            result.TryAdd(guid, inherited ?? new FbxPlacement
             {
-                return result;
+                InstanceName = Path.GetFileNameWithoutExtension(asset.LogicalPath),
+            });
+            return;
+        }
+        if (asset?.Extension != ".prefab")
+        {
+            return;
+        }
+        string text = package.ReadText(asset);
+        if (text == null)
+        {
+            return;
+        }
+        UnityScene scene;
+        try
+        {
+            scene = UnityScene.Parse(text);
+        }
+        catch
+        {
+            return;
+        }
+        foreach (YamlDocument instance in scene.Documents.Values.Where(d => d.ClassId == ClassPrefabInstance))
+        {
+            string childGuid = instance.Root?["m_SourcePrefab"]?.Guid;
+            long parentId = instance.Root?["m_Modification"]?["m_TransformParent"]?.FileID ?? 0;
+            FbxPlacement placement = parentId == 0 && inherited != null
+                ? inherited
+                : PlacementFromInstance(package, scene, instance);
+            CollectFbxPlacements(package, childGuid, placement, result, visited, depth + 1);
+        }
+    }
+
+    private static FbxPlacement PlacementFromInstance(UnityPackage package, UnityScene scene, YamlDocument instance)
+    {
+        long parentId = instance.Root?["m_Modification"]?["m_TransformParent"]?.FileID ?? 0;
+        (string parentGuid, string parentName) = ResolveReferenceNode(package, scene, parentId, 0);
+        string instanceName = FindLastModificationValue(instance, "m_Name");
+        string transformNodeName = FindModificationTransformNodeName(package, instance, "m_LocalPosition.x")
+                                   ?? FindModificationTransformNodeName(package, instance, "m_LocalRotation.w");
+        if (transformNodeName == null && instanceName?.StartsWith("Siro_", StringComparison.Ordinal) == true)
+        {
+            transformNodeName = instanceName["Siro_".Length..];
+        }
+        return new FbxPlacement
+        {
+            InstanceName = instanceName,
+            ParentFbxGuid = parentGuid,
+            ParentNodeName = parentName,
+            TransformNodeName = transformNodeName,
+            LocalPosition = new Vec3(
+                FindLastModificationFloat(instance, "m_LocalPosition.x"),
+                FindLastModificationFloat(instance, "m_LocalPosition.y"),
+                FindLastModificationFloat(instance, "m_LocalPosition.z")),
+            LocalRotation = new Quat(
+                FindLastModificationFloat(instance, "m_LocalRotation.x"),
+                FindLastModificationFloat(instance, "m_LocalRotation.y"),
+                FindLastModificationFloat(instance, "m_LocalRotation.z"),
+                FindLastModificationFloat(instance, "m_LocalRotation.w", 1f)),
+            LocalScale = new Vec3(
+                FindLastModificationFloat(instance, "m_LocalScale.x", 1f),
+                FindLastModificationFloat(instance, "m_LocalScale.y", 1f),
+                FindLastModificationFloat(instance, "m_LocalScale.z", 1f)),
+        };
+    }
+
+    private static string FindModificationTransformNodeName(UnityPackage package, YamlDocument instance,
+        string propertyPath)
+    {
+        string result = null;
+        YamlNode modifications = instance.Root?["m_Modification"]?["m_Modifications"];
+        if (modifications?.Seq == null)
+        {
+            return null;
+        }
+        foreach (YamlNode entry in modifications.Seq)
+        {
+            if (entry?["propertyPath"]?.AsString() != propertyPath)
+            {
+                continue;
             }
+            YamlNode target = entry["target"];
+            (_, string name) = ResolveAssetReferenceNode(package, target?.Guid, target?.FileID ?? 0, 0);
+            if (!string.IsNullOrEmpty(name))
+            {
+                result = name == "//RootNode" ? "RootNode" : name;
+            }
+        }
+        return result;
+    }
+
+    private static (string Guid, string Name) ResolveAssetReferenceNode(UnityPackage package,
+        string guid, long fileId, int depth)
+    {
+        if (string.IsNullOrEmpty(guid) || fileId == 0 || depth > 8)
+        {
+            return default;
+        }
+        UnityAsset asset = package.ByGuid(guid);
+        if (asset?.Extension == ".fbx")
+        {
+            return (guid, ResolveFbxNodeName(asset, fileId));
+        }
+        if (asset?.Extension == ".prefab")
+        {
+            string text = package.ReadText(asset);
+            if (text != null)
+            {
+                return ResolveReferenceNode(package, UnityScene.Parse(text), fileId, depth + 1);
+            }
+        }
+        return default;
+    }
+
+    private static (string Guid, string Name) ResolveReferenceNode(UnityPackage package, UnityScene scene,
+        long fileId, int depth)
+    {
+        if (fileId == 0 || depth > 8)
+        {
+            return default;
+        }
+        YamlDocument doc = scene.Doc(fileId);
+        if (doc == null)
+        {
+            return default;
+        }
+        YamlNode source = doc.Root?["m_CorrespondingSourceObject"];
+        string sourceGuid = source?.Guid;
+        long sourceId = source?.FileID ?? 0;
+        if (!string.IsNullOrEmpty(sourceGuid))
+        {
+            UnityAsset asset = package.ByGuid(sourceGuid);
+            if (asset?.Extension == ".fbx")
+            {
+                return (sourceGuid, ResolveFbxNodeName(asset, sourceId));
+            }
+            if (asset?.Extension == ".prefab")
+            {
+                string text = package.ReadText(asset);
+                if (text != null)
+                {
+                    return ResolveReferenceNode(package, UnityScene.Parse(text), sourceId, depth + 1);
+                }
+            }
+        }
+        return (null, scene.ResolveGameObjectName(fileId));
+    }
+
+    private static string ResolveFbxNodeName(UnityAsset fbx, long fileId)
+    {
+        if (fbx?.MetaPath == null || !File.Exists(fbx.MetaPath))
+        {
+            return null;
+        }
+        YamlNode importer = UnityYaml.ParseFlatDocument(File.ReadAllText(fbx.MetaPath))?["ModelImporter"];
+        YamlNode table = importer?["internalIDToNameTable"];
+        if (table?.Seq != null)
+        {
+            foreach (YamlNode entry in table.Seq)
+            {
+                if (entry?["first"]?.Map?.Values.Any(v => v.AsLong() == fileId) == true)
+                {
+                    return entry["second"]?.AsString();
+                }
+            }
+        }
+
+        YamlNode recycleNames = importer?["fileIDToRecycleName"];
+        if (recycleNames?.Map == null)
+        {
+            return null;
+        }
+        string key = fileId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (recycleNames.Map.TryGetValue(key, out YamlNode name))
+        {
+            return name.AsString();
         }
         return null;
     }
@@ -379,6 +692,34 @@ public static class VrchatAvatarParser
             }
         }
         return null;
+    }
+
+    private static string FindLastModificationValue(YamlDocument prefabInstance, string propertyPath)
+    {
+        string result = null;
+        YamlNode modifications = prefabInstance.Root?["m_Modification"]?["m_Modifications"];
+        if (modifications?.Seq == null)
+        {
+            return null;
+        }
+        foreach (YamlNode entry in modifications.Seq)
+        {
+            if (entry?["propertyPath"]?.AsString() == propertyPath)
+            {
+                result = entry["value"]?.AsString();
+            }
+        }
+        return result;
+    }
+
+    private static float FindLastModificationFloat(YamlDocument prefabInstance, string propertyPath, float fallback = 0f)
+    {
+        string value = FindLastModificationValue(prefabInstance, propertyPath);
+        return value != null &&
+               float.TryParse(value, System.Globalization.NumberStyles.Float,
+                   System.Globalization.CultureInfo.InvariantCulture, out float result)
+            ? result
+            : fallback;
     }
 
     /// <summary>
@@ -496,18 +837,85 @@ public static class VrchatAvatarParser
         UniLog.Log($"ヒューマノイドボーンを {avatar.HumanBones.Count} 個取得しました。");
     }
 
+    private static string SelectHumanoidFbxGuid(UnityPackage package, IEnumerable<string> guids)
+    {
+        foreach (string guid in guids)
+        {
+            UnityAsset fbx = package.ByGuid(guid);
+            if (fbx?.MetaPath == null || !File.Exists(fbx.MetaPath))
+            {
+                continue;
+            }
+            YamlNode meta = UnityYaml.ParseFlatDocument(File.ReadAllText(fbx.MetaPath));
+            if ((meta["ModelImporter"]?["humanDescription"]?["human"]?.Seq?.Count ?? 0) > 0)
+            {
+                return guid;
+            }
+        }
+        return guids.First();
+    }
+
+    private static void AddAdditionalFbx(UnityPackage package, VrchatAvatar avatar, string guid, FbxPlacement placement)
+    {
+        UnityAsset fbx = package.ByGuid(guid);
+        if (fbx?.HasContent != true)
+        {
+            UniLog.Warning($"追加FBX (guid {guid}) がパッケージに含まれていないためスキップします。");
+            return;
+        }
+        YamlNode meta = fbx.MetaPath != null && File.Exists(fbx.MetaPath)
+            ? UnityYaml.ParseFlatDocument(File.ReadAllText(fbx.MetaPath))
+            : null;
+        avatar.AdditionalFbxs.Add(new VrchatFbxAsset
+        {
+            Guid = guid,
+            Path = fbx.DiskPath,
+            ImportScale = GetFbxImportScale(fbx, meta),
+            InstanceName = placement?.InstanceName ?? Path.GetFileNameWithoutExtension(fbx.LogicalPath),
+            ParentFbxGuid = placement?.ParentFbxGuid,
+            ParentNodeName = placement?.ParentNodeName,
+            TransformNodeName = placement?.TransformNodeName,
+            LocalPosition = placement?.LocalPosition ?? default,
+            LocalRotation = placement?.LocalRotation ?? Quat.Identity,
+            LocalScale = placement?.LocalScale ?? Vec3.One,
+        });
+        ParseFbxMaterialMappings(meta, avatar);
+        UniLog.Log($"追加FBXを検出しました: {Path.GetFileNameWithoutExtension(fbx.LogicalPath)}");
+    }
+
+    private static void ApplyPrimaryFbxPlacement(VrchatAvatar avatar, UnityAsset fbx, FbxPlacement placement)
+    {
+        avatar.FbxInstanceName = placement?.InstanceName ?? Path.GetFileNameWithoutExtension(fbx.LogicalPath);
+        avatar.FbxParentFbxGuid = placement?.ParentFbxGuid;
+        avatar.FbxParentNodeName = placement?.ParentNodeName;
+        avatar.FbxTransformNodeName = placement?.TransformNodeName;
+        avatar.FbxLocalPosition = placement?.LocalPosition ?? default;
+        avatar.FbxLocalRotation = placement?.LocalRotation ?? Quat.Identity;
+        avatar.FbxLocalScale = placement?.LocalScale ?? Vec3.One;
+    }
+
     private static void ParseFbxImportScale(UnityAsset fbx, YamlNode meta, VrchatAvatar avatar)
+    {
+        avatar.FbxImportScale = GetFbxImportScale(fbx, meta);
+        YamlNode meshes = meta?["ModelImporter"]?["meshes"];
+        float globalScale = meshes?["globalScale"]?.AsFloat(1f) ?? 1f;
+        bool useFileUnits = meshes?["useFileUnits"]?.AsBool(
+            meshes?["useFileScale"]?.AsBool(true) ?? true) ?? true;
+        float fileScale = useFileUnits ? FbxUnits.MetersPerUnit(fbx.DiskPath) : 1f;
+        avatar.FbxUpAxis = FbxUnits.UpAxisDescription(fbx.DiskPath);
+        UniLog.Log($"FBX import scale: {avatar.FbxImportScale:G6} " +
+                   $"(globalScale={globalScale:G6}, fileUnits={(useFileUnits ? fileScale.ToString("G6") : "off")})");
+        UniLog.Log($"FBX up axis: {avatar.FbxUpAxis}");
+    }
+
+    private static float GetFbxImportScale(UnityAsset fbx, YamlNode meta)
     {
         YamlNode meshes = meta?["ModelImporter"]?["meshes"];
         float globalScale = meshes?["globalScale"]?.AsFloat(1f) ?? 1f;
         bool useFileUnits = meshes?["useFileUnits"]?.AsBool(
             meshes?["useFileScale"]?.AsBool(true) ?? true) ?? true;
         float fileScale = useFileUnits ? FbxUnits.MetersPerUnit(fbx.DiskPath) : 1f;
-        avatar.FbxImportScale = globalScale * fileScale;
-        avatar.FbxUpAxis = FbxUnits.UpAxisDescription(fbx.DiskPath);
-        UniLog.Log($"FBX import scale: {avatar.FbxImportScale:G6} " +
-                   $"(globalScale={globalScale:G6}, fileUnits={(useFileUnits ? fileScale.ToString("G6") : "off")})");
-        UniLog.Log($"FBX up axis: {avatar.FbxUpAxis}");
+        return globalScale * fileScale;
     }
 
     private static void ParseFbxMaterialMappings(YamlNode meta, VrchatAvatar avatar)

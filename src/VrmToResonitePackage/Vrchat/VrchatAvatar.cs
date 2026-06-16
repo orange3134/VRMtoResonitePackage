@@ -25,6 +25,18 @@ public sealed class VrchatAvatar
 
     public string FbxUpAxis { get; set; } = "unknown";
 
+    /// <summary>Prefab-authored placement for the primary humanoid FBX instance.</summary>
+    public string FbxInstanceName { get; set; }
+    public string FbxParentFbxGuid { get; set; }
+    public string FbxParentNodeName { get; set; }
+    public string FbxTransformNodeName { get; set; }
+    public Vec3 FbxLocalPosition { get; set; }
+    public System.Numerics.Quaternion FbxLocalRotation { get; set; } = System.Numerics.Quaternion.Identity;
+    public Vec3 FbxLocalScale { get; set; } = Vec3.One;
+
+    /// <summary>Additional FBXs composed into the selected prefab, such as separate hair/accessory models.</summary>
+    public List<VrchatFbxAsset> AdditionalFbxs { get; } = new();
+
     /// <summary>VRM-style humanoid bone name (camelCase) -> bone GameObject/transform name.</summary>
     public Dictionary<string, string> HumanBones { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -58,6 +70,20 @@ public sealed class VrchatAvatar
     /// meshes that the prefab deleted (avatars built by removing mesh objects from a shared FBX).
     /// </summary>
     public HashSet<string> PrefabGameObjectNames { get; } = new(StringComparer.Ordinal);
+}
+
+public sealed class VrchatFbxAsset
+{
+    public string Path { get; set; }
+    public string Guid { get; set; }
+    public float ImportScale { get; set; } = 1f;
+    public string InstanceName { get; set; }
+    public string ParentFbxGuid { get; set; }
+    public string ParentNodeName { get; set; }
+    public string TransformNodeName { get; set; }
+    public Vec3 LocalPosition { get; set; }
+    public System.Numerics.Quaternion LocalRotation { get; set; } = System.Numerics.Quaternion.Identity;
+    public Vec3 LocalScale { get; set; } = Vec3.One;
 }
 
 /// <summary>One avatar a package offers for conversion (root GameObject name + source + hierarchy size).</summary>

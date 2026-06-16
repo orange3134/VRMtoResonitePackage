@@ -320,6 +320,15 @@ internal static class Converter
         Directory.CreateDirectory(workDirectory);
         string fbxPath = Path.Combine(workDirectory, SanitizeFileName(displayName) + ".fbx");
         File.Copy(avatar.FbxPath, fbxPath, overwrite: true);
+        var additionalFbxPaths = new List<(string Path, Vrchat.VrchatFbxAsset Asset)>();
+        for (int i = 0; i < avatar.AdditionalFbxs.Count; i++)
+        {
+            Vrchat.VrchatFbxAsset additional = avatar.AdditionalFbxs[i];
+            string path = Path.Combine(workDirectory,
+                $"{SanitizeFileName(displayName)}_additional_{i + 1}.fbx");
+            File.Copy(additional.Path, path, overwrite: true);
+            additionalFbxPaths.Add((path, additional));
+        }
 
         try
         {
@@ -341,9 +350,13 @@ internal static class Converter
                 settings.Scale = avatar.FbxImportScale;
 
                 Slot importRoot = root.AddSlot("FBX Import Alignment");
+                var importedFbxRoots = new Dictionary<string, Slot>(StringComparer.OrdinalIgnoreCase);
+                Slot primaryFbxRoot = importRoot.AddSlot(avatar.FbxInstanceName
+                    ?? Path.GetFileNameWithoutExtension(avatar.PrefabPath));
+                importedFbxRoots[avatar.FbxGuid] = primaryFbxRoot;
 
                 Console.WriteLine("FBXをインポート中...");
-                Task importTask = ModelImporter.ImportModelAsync(fbxPath, importRoot, settings, assetsSlot);
+                Task importTask = ModelImporter.ImportModelAsync(fbxPath, primaryFbxRoot, settings, assetsSlot);
                 Task winner = await Task.WhenAny(importTask, Task.Delay(TimeSpan.FromSeconds(options.ImportTimeoutSeconds)));
                 await default(ToWorld);
                 if (winner != importTask)
@@ -353,7 +366,39 @@ internal static class Converter
                 }
                 await importTask;
 
+                for (int i = 0; i < additionalFbxPaths.Count; i++)
+                {
+                    (string path, Vrchat.VrchatFbxAsset additional) = additionalFbxPaths[i];
+                    ModelImportSettings additionalSettings = ModelImportSettings.XiexeToon(
+                        generateColliders: false,
+                        importBones: true,
+                        importAnimations: false);
+                    additionalSettings.SetupIK = false;
+                    additionalSettings.ForceTpose = false;
+                    additionalSettings.CalculateTextureAlpha = true;
+                    additionalSettings.ImportVertexColors = false;
+                    additionalSettings.GenerateSkeletonBones = true;
+                    additionalSettings.Scale = additional.ImportScale;
+                    Slot additionalRoot = importRoot.AddSlot(additional.InstanceName ?? $"Additional FBX {i + 1}");
+                    importedFbxRoots[additional.Guid] = additionalRoot;
+
+                    Console.WriteLine($"追加FBXをインポート中... ({i + 1}/{additionalFbxPaths.Count})");
+                    Task additionalImport = ModelImporter.ImportModelAsync(path, additionalRoot, additionalSettings, assetsSlot);
+                    winner = await Task.WhenAny(additionalImport,
+                        Task.Delay(TimeSpan.FromSeconds(options.ImportTimeoutSeconds)));
+                    await default(ToWorld);
+                    if (winner != additionalImport)
+                    {
+                        throw new TimeoutException(
+                            $"追加FBXのインポートが {options.ImportTimeoutSeconds} 秒以内に完了しませんでした。");
+                    }
+                    await additionalImport;
+                }
+
+                ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots);
                 AlignVrchatImportUp(importRoot, model);
+                CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots);
+                RemoveImportAlignment(importRoot, root);
 
                 Console.WriteLine("アセットの読み込みを待機中...");
                 await WaitForAssets(assetsSlot);
@@ -427,6 +472,184 @@ internal static class Converter
         return outputPath;
     }
 
+    private static void ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
+        Dictionary<string, Slot> importedFbxRoots)
+    {
+        ApplyPrimaryFbxPlacement(importRoot, avatar, importedFbxRoots);
+
+        foreach (Vrchat.VrchatFbxAsset additional in avatar.AdditionalFbxs)
+        {
+            if (!importedFbxRoots.TryGetValue(additional.Guid, out Slot instanceRoot))
+            {
+                continue;
+            }
+            Slot parent = importRoot;
+            if (!string.IsNullOrEmpty(additional.ParentFbxGuid) &&
+                !string.IsNullOrEmpty(additional.ParentNodeName) &&
+                importedFbxRoots.TryGetValue(additional.ParentFbxGuid, out Slot parentFbxRoot))
+            {
+                parent = SlotIndex.Build(parentFbxRoot).GetValueOrDefault(additional.ParentNodeName) ?? parentFbxRoot;
+            }
+            instanceRoot.Parent = parent;
+            float3 position = new(
+                -additional.LocalPosition.X, additional.LocalPosition.Y, additional.LocalPosition.Z);
+            floatQ rotation = new(
+                additional.LocalRotation.X, -additional.LocalRotation.Y,
+                -additional.LocalRotation.Z, additional.LocalRotation.W);
+            float3 scale = new(
+                additional.LocalScale.X, additional.LocalScale.Y, additional.LocalScale.Z);
+            instanceRoot.LocalPosition = position;
+            instanceRoot.LocalRotation = rotation;
+            instanceRoot.LocalScale = scale;
+
+            Slot sourceRootNode = !string.IsNullOrEmpty(additional.TransformNodeName)
+                ? SlotIndex.Build(instanceRoot).GetValueOrDefault(additional.TransformNodeName)
+                : null;
+            if (sourceRootNode != null)
+            {
+                UniLog.Log($"prefab source root candidate: {sourceRootNode.Name} local={sourceRootNode.LocalPosition}, " +
+                           $"instanceGlobal={instanceRoot.GlobalPosition}, distance=" +
+                           $"{MathX.Distance(sourceRootNode.LocalPosition, instanceRoot.GlobalPosition):G6}");
+            }
+            if (sourceRootNode != null && IsUnityRootNode(additional.TransformNodeName))
+            {
+                instanceRoot.LocalPosition = float3.Zero;
+                instanceRoot.LocalRotation = floatQ.Identity;
+                instanceRoot.LocalScale = float3.One;
+                sourceRootNode.LocalPosition = position;
+                sourceRootNode.LocalRotation = rotation;
+                sourceRootNode.LocalScale = scale;
+                CollapseAdditionalFbxWrapper(instanceRoot, sourceRootNode, parent, additional.InstanceName,
+                    resetSinglePayloadTransform: true);
+                continue;
+            }
+            if (sourceRootNode != null &&
+                MathX.Distance(sourceRootNode.LocalPosition, instanceRoot.GlobalPosition) < 0.001f)
+            {
+                instanceRoot.LocalPosition = float3.Zero;
+                instanceRoot.LocalRotation = floatQ.Identity;
+                instanceRoot.LocalScale = float3.One;
+                sourceRootNode.LocalPosition = position;
+                sourceRootNode.LocalRotation = rotation;
+                sourceRootNode.LocalScale = scale;
+                UniLog.Log($"prefab root transform overrideを内部ノードへ適用: {sourceRootNode.Name}");
+            }
+            UniLog.Log($"prefab階層を適用: {instanceRoot.Name} -> {parent.Name}");
+        }
+    }
+
+    private static bool IsUnityRootNode(string nodeName)
+        => string.Equals(nodeName, "RootNode", StringComparison.Ordinal) ||
+           string.Equals(nodeName, "//RootNode", StringComparison.Ordinal);
+
+    private static void CollapseAdditionalFbxWrapper(Slot wrapper, Slot rootNode, Slot parent, string instanceName,
+        bool resetSinglePayloadTransform)
+    {
+        float3 position = rootNode.GlobalPosition;
+        floatQ rotation = rootNode.GlobalRotation;
+        float3 scale = rootNode.GlobalScale;
+        rootNode.Parent = parent;
+        rootNode.GlobalPosition = position;
+        rootNode.GlobalRotation = rotation;
+        rootNode.GlobalScale = scale;
+        if (!string.IsNullOrEmpty(instanceName))
+        {
+            rootNode.Name = instanceName;
+        }
+        if (resetSinglePayloadTransform)
+        {
+            ResetSinglePayloadTransform(rootNode);
+        }
+        wrapper.Destroy();
+        UniLog.Log($"additional FBX wrapper collapsed: {rootNode.Name}");
+    }
+
+    private static void ResetSinglePayloadTransform(Slot rootNode)
+    {
+        List<Slot> children = rootNode.Children.ToList();
+        if (children.Count != 1)
+        {
+            return;
+        }
+        Slot payload = children[0];
+        payload.LocalPosition = float3.Zero;
+        payload.LocalRotation = floatQ.Identity;
+        payload.LocalScale = float3.One;
+        UniLog.Log($"additional FBX single payload transform reset: {rootNode.Name}/{payload.Name}");
+    }
+
+    private static void ApplyPrimaryFbxPlacement(Slot importRoot, Vrchat.VrchatAvatar avatar,
+        Dictionary<string, Slot> importedFbxRoots)
+    {
+        if (!importedFbxRoots.TryGetValue(avatar.FbxGuid, out Slot instanceRoot))
+        {
+            return;
+        }
+        if (!string.IsNullOrEmpty(avatar.FbxInstanceName))
+        {
+            instanceRoot.Name = avatar.FbxInstanceName;
+        }
+
+        Slot parent = importRoot;
+        if (!string.IsNullOrEmpty(avatar.FbxParentFbxGuid) &&
+            !string.IsNullOrEmpty(avatar.FbxParentNodeName) &&
+            importedFbxRoots.TryGetValue(avatar.FbxParentFbxGuid, out Slot parentFbxRoot))
+        {
+            parent = SlotIndex.Build(parentFbxRoot).GetValueOrDefault(avatar.FbxParentNodeName) ?? parentFbxRoot;
+        }
+        instanceRoot.Parent = parent;
+
+        float3 position = new(-avatar.FbxLocalPosition.X, avatar.FbxLocalPosition.Y, avatar.FbxLocalPosition.Z);
+        floatQ rotation = new(
+            avatar.FbxLocalRotation.X, -avatar.FbxLocalRotation.Y,
+            -avatar.FbxLocalRotation.Z, avatar.FbxLocalRotation.W);
+        float3 scale = new(avatar.FbxLocalScale.X, avatar.FbxLocalScale.Y, avatar.FbxLocalScale.Z);
+        instanceRoot.LocalPosition = position;
+        instanceRoot.LocalRotation = rotation;
+        instanceRoot.LocalScale = scale;
+
+        Slot sourceRootNode = !string.IsNullOrEmpty(avatar.FbxTransformNodeName)
+            ? SlotIndex.Build(instanceRoot).GetValueOrDefault(avatar.FbxTransformNodeName)
+            : null;
+        if (sourceRootNode != null &&
+            MathX.Distance(sourceRootNode.LocalPosition, instanceRoot.GlobalPosition) < 0.001f)
+        {
+            instanceRoot.LocalPosition = float3.Zero;
+            instanceRoot.LocalRotation = floatQ.Identity;
+            instanceRoot.LocalScale = float3.One;
+            sourceRootNode.LocalPosition = position;
+            sourceRootNode.LocalRotation = rotation;
+            sourceRootNode.LocalScale = scale;
+            UniLog.Log($"primary FBX root transform override applied to source node: {sourceRootNode.Name}");
+        }
+        UniLog.Log($"primary FBX prefab hierarchy applied: {instanceRoot.Name} -> {parent.Name}");
+    }
+
+    private static void CollapsePrimaryFbxWrapper(Slot importRoot, Vrchat.VrchatAvatar avatar,
+        Dictionary<string, Slot> importedFbxRoots)
+    {
+        if (!importedFbxRoots.TryGetValue(avatar.FbxGuid, out Slot primaryRoot) ||
+            primaryRoot == importRoot ||
+            primaryRoot.Parent != importRoot)
+        {
+            return;
+        }
+
+        foreach (Slot child in primaryRoot.Children.ToList())
+        {
+            float3 position = child.GlobalPosition;
+            floatQ rotation = child.GlobalRotation;
+            float3 scale = child.GlobalScale;
+            child.Parent = importRoot;
+            child.GlobalPosition = position;
+            child.GlobalRotation = rotation;
+            child.GlobalScale = scale;
+        }
+        UniLog.Log($"primary FBX wrapper collapsed: {primaryRoot.Name}");
+        primaryRoot.Destroy();
+        importedFbxRoots[avatar.FbxGuid] = importRoot;
+    }
+
     private static void AlignVrchatImportUp(Slot importRoot, VrmModel model)
     {
         if (!model.HumanBones.TryGetValue("hips", out int hipsIndex) ||
@@ -466,6 +689,21 @@ internal static class Converter
         importRoot.GlobalRotation = new floatQ(q.X, q.Y, q.Z, q.W) * importRoot.GlobalRotation;
         UniLog.Log($"FBX import up alignment: rotated {angle * 180f / MathF.PI:F1} degrees " +
                    $"from ({from.X:F3}, {from.Y:F3}, {from.Z:F3}) to Y+");
+    }
+
+    private static void RemoveImportAlignment(Slot importRoot, Slot root)
+    {
+        foreach (Slot child in importRoot.Children.ToList())
+        {
+            float3 position = child.GlobalPosition;
+            floatQ rotation = child.GlobalRotation;
+            float3 scale = child.GlobalScale;
+            child.Parent = root;
+            child.GlobalPosition = position;
+            child.GlobalRotation = rotation;
+            child.GlobalScale = scale;
+        }
+        importRoot.Destroy();
     }
 
     /// <summary>
