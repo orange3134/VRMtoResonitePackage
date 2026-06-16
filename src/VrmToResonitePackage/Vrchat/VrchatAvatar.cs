@@ -84,6 +84,7 @@ public sealed class VrchatFbxAsset
     public Vec3 LocalPosition { get; set; }
     public System.Numerics.Quaternion LocalRotation { get; set; } = System.Numerics.Quaternion.Identity;
     public Vec3 LocalScale { get; set; } = Vec3.One;
+    public Dictionary<string, string> MaterialGuids { get; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>One avatar a package offers for conversion (root GameObject name + source + hierarchy size).</summary>

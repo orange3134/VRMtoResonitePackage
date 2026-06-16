@@ -817,7 +817,7 @@ public static class VrchatAvatarParser
         }
         YamlNode meta = UnityYaml.ParseFlatDocument(File.ReadAllText(fbx.MetaPath));
         ParseFbxImportScale(fbx, meta, avatar);
-        ParseFbxMaterialMappings(meta, avatar);
+        ParseFbxMaterialMappings(meta, avatar.FbxMaterialGuids);
         YamlNode human = meta["ModelImporter"]?["humanDescription"]?["human"];
         if (human?.Seq == null)
         {
@@ -866,7 +866,7 @@ public static class VrchatAvatarParser
         YamlNode meta = fbx.MetaPath != null && File.Exists(fbx.MetaPath)
             ? UnityYaml.ParseFlatDocument(File.ReadAllText(fbx.MetaPath))
             : null;
-        avatar.AdditionalFbxs.Add(new VrchatFbxAsset
+        var additional = new VrchatFbxAsset
         {
             Guid = guid,
             Path = fbx.DiskPath,
@@ -878,8 +878,9 @@ public static class VrchatAvatarParser
             LocalPosition = placement?.LocalPosition ?? default,
             LocalRotation = placement?.LocalRotation ?? Quat.Identity,
             LocalScale = placement?.LocalScale ?? Vec3.One,
-        });
-        ParseFbxMaterialMappings(meta, avatar);
+        };
+        ParseFbxMaterialMappings(meta, additional.MaterialGuids);
+        avatar.AdditionalFbxs.Add(additional);
         UniLog.Log($"追加FBXを検出しました: {Path.GetFileNameWithoutExtension(fbx.LogicalPath)}");
     }
 
@@ -918,7 +919,7 @@ public static class VrchatAvatarParser
         return globalScale * fileScale;
     }
 
-    private static void ParseFbxMaterialMappings(YamlNode meta, VrchatAvatar avatar)
+    private static void ParseFbxMaterialMappings(YamlNode meta, Dictionary<string, string> materialGuids)
     {
         YamlNode externalObjects = meta?["ModelImporter"]?["externalObjects"];
         if (externalObjects?.Seq == null)
@@ -932,12 +933,12 @@ public static class VrchatAvatarParser
             string guid = entry?["second"]?.Guid;
             if (type == "UnityEngine:Material" && !string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(guid))
             {
-                avatar.FbxMaterialGuids[name] = guid;
+                materialGuids[name] = guid;
             }
         }
-        if (avatar.FbxMaterialGuids.Count > 0)
+        if (materialGuids.Count > 0)
         {
-            UniLog.Log($"FBX external material mappings: {avatar.FbxMaterialGuids.Count}");
+            UniLog.Log($"FBX external material mappings: {materialGuids.Count}");
         }
     }
 

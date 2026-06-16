@@ -7,7 +7,7 @@ publish.zip
 # Test artifacts
 test-output/
 test-input/
-.tmp_verify/*.resonitepackage
+.tmp_verify/
 *.vrm
 
 # User-local settings

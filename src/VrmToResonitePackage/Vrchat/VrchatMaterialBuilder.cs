@@ -28,6 +28,7 @@ internal static class VrchatMaterialBuilder
         IEnumerable<string> uniqueGuids = avatar.RendererMaterials
             .SelectMany(r => r.MaterialGuids)
             .Concat(avatar.FbxMaterialGuids.Values)
+            .Concat(avatar.AdditionalFbxs.SelectMany(f => f.MaterialGuids.Values))
             .Where(g => !string.IsNullOrEmpty(g))
             .Distinct(StringComparer.OrdinalIgnoreCase);
         foreach (string guid in uniqueGuids)
@@ -46,12 +47,13 @@ internal static class VrchatMaterialBuilder
         int assigned = 0;
         foreach (MeshRenderer renderer in root.GetComponentsInChildren<MeshRenderer>())
         {
+            Dictionary<string, string> fbxMaterialGuids = FbxMaterialGuidsForRenderer(root, renderer, avatar);
             for (int i = 0; i < renderer.Materials.Count; i++)
             {
                 IAssetProvider<FrooxEngine.Material> placeholder = renderer.Materials[i];
                 string name = MaterialName(placeholder?.Slot?.Name);
                 if (name != null &&
-                    avatar.FbxMaterialGuids.TryGetValue(name, out string guid) &&
+                    fbxMaterialGuids.TryGetValue(name, out string guid) &&
                     materialCache.TryGetValue(guid, out XiexeToonMaterial material))
                 {
                     renderer.Materials[i] = material;
@@ -129,21 +131,36 @@ internal static class VrchatMaterialBuilder
             : slotName;
     }
 
+    private static Dictionary<string, string> FbxMaterialGuidsForRenderer(Slot root, MeshRenderer renderer,
+        VrchatAvatar avatar)
+    {
+        VrchatFbxAsset additional = AdditionalFbxForSlot(root, renderer.Slot, avatar);
+        return additional?.MaterialGuids ?? avatar.FbxMaterialGuids;
+    }
+
+    private static VrchatFbxAsset AdditionalFbxForSlot(Slot root, Slot slot, VrchatAvatar avatar)
+    {
+        for (Slot current = slot; current != null && current != root; current = current.Parent)
+        {
+            foreach (VrchatFbxAsset additional in avatar.AdditionalFbxs)
+            {
+                if (string.Equals(current.Name, additional.InstanceName, StringComparison.Ordinal))
+                {
+                    return additional;
+                }
+            }
+        }
+        return null;
+    }
+
     private static async Task<XiexeToonMaterial> BuildMaterial(Slot assetsSlot, string guid,
         UnityPackage package, Dictionary<string, StaticTexture2D> textureCache)
     {
-        UnityAsset matAsset = package.ByGuid(guid);
-        string text = package.ReadText(matAsset);
-        if (text == null)
+        LilToonInfo info = ResolveMaterialInfo(guid, package, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        if (info == null)
         {
             return null;
         }
-        YamlDocument matDoc = UnityYaml.ParseDocuments(text).FirstOrDefault(d => d.TypeName == "Material");
-        if (matDoc == null || !LilToonConverter.IsLilToon(matDoc))
-        {
-            return null;
-        }
-        LilToonInfo info = LilToonConverter.Parse(matDoc);
 
         Slot slot = assetsSlot.AddSlot($"Material: {info.Name}");
         XiexeToonMaterial material = slot.AttachComponent<XiexeToonMaterial>();
@@ -270,6 +287,39 @@ internal static class VrchatMaterialBuilder
         }
 
         return material;
+    }
+
+    private static LilToonInfo ResolveMaterialInfo(string guid, UnityPackage package, HashSet<string> resolving)
+    {
+        if (string.IsNullOrEmpty(guid) || !resolving.Add(guid))
+        {
+            return null;
+        }
+
+        UnityAsset matAsset = package.ByGuid(guid);
+        string text = package.ReadText(matAsset);
+        if (text == null)
+        {
+            return null;
+        }
+        YamlDocument matDoc = UnityYaml.ParseDocuments(text).FirstOrDefault(d => d.TypeName == "Material");
+        if (matDoc == null)
+        {
+            return null;
+        }
+
+        LilToonInfo parent = null;
+        string parentGuid = matDoc.Root?["m_Parent"]?.Guid;
+        if (!string.IsNullOrEmpty(parentGuid) && parentGuid != "0000000000000000f000000000000000")
+        {
+            parent = ResolveMaterialInfo(parentGuid, package, resolving);
+        }
+
+        if (!LilToonConverter.IsLilToon(matDoc) && parent == null)
+        {
+            return null;
+        }
+        return LilToonConverter.Parse(matDoc, parent);
     }
 
     private static colorX ToColor(Vec4 c, ColorProfile profile) => new(c.X, c.Y, c.Z, c.W, profile);
