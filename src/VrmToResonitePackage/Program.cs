@@ -17,7 +17,7 @@ internal static class Program
             return GuiApp.Run(args.Where(File.Exists).Select(Path.GetFullPath).ToArray());
         }
 
-        Console.WriteLine("VRM -> ResonitePackage converter");
+        Console.WriteLine("ResoPon");
         Console.WriteLine($"バージョン: {AppVersion.Display}");
         Console.WriteLine();
 
@@ -139,7 +139,7 @@ internal static class Program
     /// </summary>
     private static void PauseIfInteractive()
     {
-        if (Environment.GetEnvironmentVariable("VRM2RESPKG_NOPAUSE") == "1")
+        if (Environment.GetEnvironmentVariable("RESOPON_NOPAUSE") == "1")
         {
             return;
         }
@@ -290,7 +290,7 @@ internal sealed class CliOptions
     public static void PrintUsage()
     {
         Console.WriteLine("使い方:");
-        Console.WriteLine("  VrmToResonitePackage.exe <model.vrm> [...] [オプション]");
+        Console.WriteLine("  ResoPon.exe <model.vrm> [...] [オプション]");
         Console.WriteLine();
         Console.WriteLine("  VRM をこのexeにドラッグ&ドロップするだけでも変換できます。");
         Console.WriteLine("  出力は入力ファイルと同じ場所に <名前>.resonitepackage として保存されます。");

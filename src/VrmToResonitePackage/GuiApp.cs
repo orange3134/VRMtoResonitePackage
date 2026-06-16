@@ -57,7 +57,7 @@ internal sealed class MainWindow : Window
     {
         _settings = GuiSettings.Load();
 
-        Title = $"VRM to ResonitePackage  v{AppVersion.Display}";
+        Title = $"ResoPon  v{AppVersion.Display}";
         Width = 760;
         Height = 500;
         MinWidth = 560;
@@ -172,7 +172,7 @@ internal sealed class MainWindow : Window
         _spinner.Visibility = Visibility.Collapsed;
         _packageIcon.Visibility = Visibility.Collapsed;
         _settingsButton.IsEnabled = true;
-        _title.Text = "VRM to ResonitePackage";
+        _title.Text = "ResoPon";
         _message.Text = "VRM ファイルをドラッグアンドドロップしてください。";
         _detail.Text = "";
     }
@@ -361,7 +361,7 @@ internal sealed class MainWindow : Window
         DateTime startTime = DateTime.Now;
 
         var startInfo = CreateConverterProcessStartInfo();
-        startInfo.Environment["VRM2RESPKG_NOPAUSE"] = "1";
+        startInfo.Environment["RESOPON_NOPAUSE"] = "1";
         AddCliArguments(startInfo.ArgumentList, options, resonitePath);
 
         using var process = new Process { StartInfo = startInfo };
@@ -932,7 +932,7 @@ internal sealed class GuiSettings
 
     private static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "VrmToResonitePackage",
+        "ResoPon",
         "settings.json");
 
     public static GuiSettings Load()

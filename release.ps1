@@ -4,7 +4,7 @@ param(
     [string]$Tag = "",
     [string]$ResonitePath = "",
     [string]$Output = "$PSScriptRoot\publish",
-    [string]$AssetName = "VrmToResonitePackage.exe",
+    [string]$AssetName = "ResoPon.exe",
     [switch]$CreateTag,
     [switch]$PushTag
 )
@@ -81,7 +81,7 @@ if ($PushTag) {
     }
 }
 
-$releaseTitle = "VrmToResonitePackage $Tag"
+$releaseTitle = "ResoPon $Tag"
 
 $releaseExists = $false
 try {

@@ -1,5 +1,5 @@
 # Distribution build script.
-# Output: publish\VrmToResonitePackage.exe (single file, self-contained .NET runtime).
+# Output: publish\ResoPon.exe (single file, self-contained .NET runtime).
 # Resonite DLLs are NOT bundled; they are loaded from the installed Resonite at runtime.
 param(
     [string]$ResonitePath = "",
@@ -23,7 +23,9 @@ if ($ResonitePath -ne "") {
 
 & dotnet $publishArgs
 
-if ($LASTEXITCODE -eq 0) {
-    Write-Host ""
-    Write-Host "Output: $Output\VrmToResonitePackage.exe"
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet publish failed with exit code $LASTEXITCODE."
 }
+
+Write-Host ""
+Write-Host "Output: $Output\ResoPon.exe"

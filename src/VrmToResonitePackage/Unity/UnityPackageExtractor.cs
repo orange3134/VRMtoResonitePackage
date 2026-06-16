@@ -51,7 +51,7 @@ public sealed class UnityPackage : IDisposable
 
     public static UnityPackage Extract(string packagePath)
     {
-        string root = Path.Combine(Path.GetTempPath(), "VrmToResonitePackage", "upkg_" + Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "ResoPon", "upkg_" + Guid.NewGuid().ToString("N"));
         string staging = Path.Combine(root, "staging");
         Directory.CreateDirectory(staging);
 

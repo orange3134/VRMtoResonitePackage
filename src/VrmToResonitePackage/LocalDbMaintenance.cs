@@ -15,7 +15,7 @@ internal static class LocalDbMaintenance
     /// <summary>The only data root this tool is allowed to manage (and delete from).</summary>
     public static string ManagedDataRoot => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "VrmToResonitePackage");
+        "ResoPon");
 
     private static string SharedLocalKeyFile => Path.Combine(ManagedDataRoot, "LocalKey.bin");
 

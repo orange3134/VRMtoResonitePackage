@@ -23,7 +23,7 @@ internal static class Converter
     {
         string appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "VrmToResonitePackage");
+            "ResoPon");
         string logPath = Path.Combine(AppContext.BaseDirectory, "Logs", $"convert_{DateTime.Now:yyyyMMdd_HHmmss}.log");
         Directory.CreateDirectory(Path.GetDirectoryName(logPath));
         using var logWriter = new StreamWriter(logPath) { AutoFlush = true };
@@ -178,7 +178,7 @@ internal static class Converter
 
         // Resonite's importer keys its behavior off the file extension; a VRM is a GLB container.
         // The preprocessor also fixes morph target naming quirks of older exporters.
-        string workDirectory = Path.Combine(Path.GetTempPath(), "VrmToResonitePackage", Guid.NewGuid().ToString("N"));
+        string workDirectory = Path.Combine(Path.GetTempPath(), "ResoPon", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workDirectory);
         string glbPath = Path.Combine(workDirectory, SanitizeFileName(Path.GetFileNameWithoutExtension(vrmPath)) + ".glb");
         // Records whether the VRM0 orientation was baked to +Z (or a proper-handed VRM1 was
@@ -316,7 +316,7 @@ internal static class Converter
 
         // The extracted FBX content file is named "asset"; Resonite's importer keys off the
         // extension, so copy it to a real .fbx path.
-        string workDirectory = Path.Combine(Path.GetTempPath(), "VrmToResonitePackage", Guid.NewGuid().ToString("N"));
+        string workDirectory = Path.Combine(Path.GetTempPath(), "ResoPon", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workDirectory);
         string fbxPath = Path.Combine(workDirectory, SanitizeFileName(displayName) + ".fbx");
         File.Copy(avatar.FbxPath, fbxPath, overwrite: true);

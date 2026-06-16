@@ -38,7 +38,7 @@ dotnet publish src/VrmToResonitePackage -c Release -o publish   # 配布用
 
 ## 実行とテスト
 
-- **テスト実行**: 環境変数 `VRM2RESPKG_NOPAUSE=1` を立てるとキー入力待ちをスキップする
+- **テスト実行**: 環境変数 `RESOPON_NOPAUSE=1` を立てるとキー入力待ちをスキップする
   （CI/自動実行向け）。
 - **検証（エンジン起動なし）**: `--inspect <package>` で生成済みパッケージの
   コンポーネント構造を表示（FrooxEngine を起動せずに確認できる）。`--inspect-verbose` で詳細。
@@ -47,7 +47,7 @@ dotnet publish src/VrmToResonitePackage -c Release -o publish   # 配布用
   （リポジトリにはコミットしない）。
 - **変換ログの場所**: **exe と同じフォルダの `Logs\`**（例:
   `src/VrmToResonitePackage/bin/Debug/Logs/convert_*.log`）。
-  ※エンジンのデータ/キャッシュ（`Data\` `Cache\`）は `%LOCALAPPDATA%\VrmToResonitePackage\`
+  ※エンジンのデータ/キャッシュ（`Data\` `Cache\`）は `%LOCALAPPDATA%\ResoPon\`
   配下だが、**ログだけは exe 横**。README に `%LOCALAPPDATA%\...\Logs` と書いてある箇所は古い。
 
 ### 主な診断・オプションフラグ（`Program.cs`）

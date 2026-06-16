@@ -1135,7 +1135,7 @@ internal static class AvatarSetup
         }
 
         string tempPath = Path.Combine(Path.GetTempPath(),
-            "VrmToResonitePackage_AvatarRootIdentification_" + Guid.NewGuid().ToString("N") + ".resonitepackage");
+            "ResoPon_AvatarRootIdentification_" + Guid.NewGuid().ToString("N") + ".resonitepackage");
         try
         {
             using (System.IO.Stream resource = typeof(AvatarSetup).Assembly.GetManifestResourceStream(
