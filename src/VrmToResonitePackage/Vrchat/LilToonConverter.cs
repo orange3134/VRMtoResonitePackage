@@ -62,7 +62,7 @@ public static class LilToonConverter
         return floats != null && (floats["_ShadowBorder"] != null || floats["_LightMinLimit"] != null);
     }
 
-    public static LilToonInfo Parse(YamlDocument material)
+    public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null)
     {
         YamlNode root = material.Root;
         YamlNode props = root?["m_SavedProperties"];
@@ -71,55 +71,63 @@ public static class LilToonConverter
         YamlNode texEnvs = FlattenProps(props?["m_TexEnvs"]);
 
         float F(string name, float fallback = 0f) => floats?[name]?.AsFloat(fallback) ?? fallback;
-        bool B(string name) => F(name) >= 0.5f;
-        Vec4 C(string name, Vec4 fallback) => ReadColor(colors?[name], fallback);
+        bool B(string name, bool fallback = false) => floats?[name] != null ? F(name) >= 0.5f : fallback;
+        Vec4 C(string name, Vec4 fallback) => colors?[name] != null ? ReadColor(colors[name], fallback) : fallback;
         string Tex(string name) => texEnvs?[name]?["m_Texture"]?.Guid is string g && g != "0000000000000000f000000000000000" ? g : null;
+        string TexAny(params string[] names) => names.Select(Tex).FirstOrDefault(g => !string.IsNullOrEmpty(g));
+
+        int customRenderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
 
         var info = new LilToonInfo
         {
             Name = root?["m_Name"]?.AsString(),
-            Color = C("_Color", new Vec4(1f, 1f, 1f, 1f)),
-            MainTexGuid = Tex("_MainTex"),
-            NormalMapGuid = B("_UseBumpMap") ? Tex("_BumpMap") : null,
-            Cull = (int)F("_Cull", 2f),
-            Cutoff = F("_Cutoff", 0.5f),
-            ZWrite = F("_ZWrite", 1f) >= 0.5f,
-            RenderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1,
+            Color = C("_Color", parent?.Color ?? new Vec4(1f, 1f, 1f, 1f)),
+            MainTexGuid = TexAny("_MainTex", "_BaseMap", "_BaseColorMap") ?? parent?.MainTexGuid,
+            NormalMapGuid = B("_UseBumpMap", parent?.NormalMapGuid != null)
+                ? Tex("_BumpMap") ?? parent?.NormalMapGuid
+                : null,
+            Cull = (int)F("_Cull", parent?.Cull ?? 2f),
+            Cutoff = F("_Cutoff", parent?.Cutoff ?? 0.5f),
+            ZWrite = F("_ZWrite", parent?.ZWrite == false ? 0f : 1f) >= 0.5f,
+            RenderQueue = customRenderQueue >= 0 ? customRenderQueue : parent?.RenderQueue ?? -1,
 
-            UseShadow = B("_UseShadow"),
-            ShadowColor = C("_ShadowColor", new Vec4(1f, 1f, 1f, 1f)),
-            ShadowBorder = F("_ShadowBorder", 0.5f),
-            ShadowBlur = F("_ShadowBlur", 0.1f),
-            ShadowStrength = F("_ShadowStrength", 1f),
-            ShadowColorTexGuid = Tex("_ShadowColorTex"),
+            UseShadow = B("_UseShadow", parent?.UseShadow ?? false),
+            ShadowColor = C("_ShadowColor", parent?.ShadowColor ?? new Vec4(1f, 1f, 1f, 1f)),
+            ShadowBorder = F("_ShadowBorder", parent?.ShadowBorder ?? 0.5f),
+            ShadowBlur = F("_ShadowBlur", parent?.ShadowBlur ?? 0.1f),
+            ShadowStrength = F("_ShadowStrength", parent?.ShadowStrength ?? 1f),
+            ShadowColorTexGuid = Tex("_ShadowColorTex") ?? parent?.ShadowColorTexGuid,
 
-            UseRim = B("_UseRim"),
-            RimColor = C("_RimColor", new Vec4(1f, 1f, 1f, 1f)),
-            RimBorder = F("_RimBorder", 0.5f),
-            RimBlur = F("_RimBlur", 0.1f),
-            RimFresnelPower = F("_RimFresnelPower", 3f),
+            UseRim = B("_UseRim", parent?.UseRim ?? false),
+            RimColor = C("_RimColor", parent?.RimColor ?? new Vec4(1f, 1f, 1f, 1f)),
+            RimBorder = F("_RimBorder", parent?.RimBorder ?? 0.5f),
+            RimBlur = F("_RimBlur", parent?.RimBlur ?? 0.1f),
+            RimFresnelPower = F("_RimFresnelPower", parent?.RimFresnelPower ?? 3f),
 
-            UseOutline = B("_UseOutline"),
-            OutlineWidth = F("_OutlineWidth", 0.08f),
-            OutlineColor = C("_OutlineColor", new Vec4(0f, 0f, 0f, 1f)),
-            OutlineLit = B("_OutlineEnableLighting"),
-            OutlineMaskGuid = Tex("_OutlineWidthMask"),
+            UseOutline = B("_UseOutline", parent?.UseOutline ?? false),
+            OutlineWidth = F("_OutlineWidth", parent?.OutlineWidth ?? 0.08f),
+            OutlineColor = C("_OutlineColor", parent?.OutlineColor ?? new Vec4(0f, 0f, 0f, 1f)),
+            OutlineLit = B("_OutlineEnableLighting", parent?.OutlineLit ?? true),
+            OutlineMaskGuid = Tex("_OutlineWidthMask") ?? parent?.OutlineMaskGuid,
 
-            UseMatcap = B("_UseMatCap"),
-            MatcapColor = C("_MatCapColor", new Vec4(1f, 1f, 1f, 1f)),
-            MatcapBlendMode = (int)F("_MatCapBlendMode", 1f),
-            MatcapGuid = B("_UseMatCap") ? Tex("_MatCap") : null,
+            UseMatcap = B("_UseMatCap", parent?.UseMatcap ?? false),
+            MatcapColor = C("_MatCapColor", parent?.MatcapColor ?? new Vec4(1f, 1f, 1f, 1f)),
+            MatcapBlendMode = (int)F("_MatCapBlendMode", parent?.MatcapBlendMode ?? 1f),
+            MatcapGuid = B("_UseMatCap", parent?.MatcapGuid != null) ? Tex("_MatCap") ?? parent?.MatcapGuid : null,
 
-            UseEmission = B("_UseEmission"),
-            EmissionColor = C("_EmissionColor", new Vec4(0f, 0f, 0f, 1f)),
-            EmissionMapGuid = B("_UseEmission") ? Tex("_EmissionMap") : null,
+            UseEmission = B("_UseEmission", parent?.UseEmission ?? false),
+            EmissionColor = C("_EmissionColor", parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f)),
+            EmissionMapGuid = B("_UseEmission", parent?.EmissionMapGuid != null)
+                ? Tex("_EmissionMap") ?? parent?.EmissionMapGuid
+                : null,
         };
 
-        info.AlphaMode = DetermineAlphaMode(info, F("_AlphaToMask"));
+        info.AlphaMode = DetermineAlphaMode(info, F("_AlphaToMask"), customRenderQueue >= 0, parent?.AlphaMode);
         return info;
     }
 
-    private static string DetermineAlphaMode(LilToonInfo info, float alphaToMask)
+    private static string DetermineAlphaMode(LilToonInfo info, float alphaToMask, bool renderQueueSpecified,
+        string parentAlphaMode)
     {
         // liltoon picks the mode from the chosen shader variant / render queue.
         if (alphaToMask >= 0.5f || info.RenderQueue == 2450)
@@ -129,6 +137,10 @@ public static class LilToonConverter
         if (info.RenderQueue >= 2451)
         {
             return "transparent";
+        }
+        if (!renderQueueSpecified && parentAlphaMode != null)
+        {
+            return parentAlphaMode;
         }
         return "opaque";
     }

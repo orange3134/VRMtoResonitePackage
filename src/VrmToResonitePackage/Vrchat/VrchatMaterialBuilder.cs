@@ -156,18 +156,11 @@ internal static class VrchatMaterialBuilder
     private static async Task<XiexeToonMaterial> BuildMaterial(Slot assetsSlot, string guid,
         UnityPackage package, Dictionary<string, StaticTexture2D> textureCache)
     {
-        UnityAsset matAsset = package.ByGuid(guid);
-        string text = package.ReadText(matAsset);
-        if (text == null)
+        LilToonInfo info = ResolveMaterialInfo(guid, package, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        if (info == null)
         {
             return null;
         }
-        YamlDocument matDoc = UnityYaml.ParseDocuments(text).FirstOrDefault(d => d.TypeName == "Material");
-        if (matDoc == null || !LilToonConverter.IsLilToon(matDoc))
-        {
-            return null;
-        }
-        LilToonInfo info = LilToonConverter.Parse(matDoc);
 
         Slot slot = assetsSlot.AddSlot($"Material: {info.Name}");
         XiexeToonMaterial material = slot.AttachComponent<XiexeToonMaterial>();
@@ -294,6 +287,39 @@ internal static class VrchatMaterialBuilder
         }
 
         return material;
+    }
+
+    private static LilToonInfo ResolveMaterialInfo(string guid, UnityPackage package, HashSet<string> resolving)
+    {
+        if (string.IsNullOrEmpty(guid) || !resolving.Add(guid))
+        {
+            return null;
+        }
+
+        UnityAsset matAsset = package.ByGuid(guid);
+        string text = package.ReadText(matAsset);
+        if (text == null)
+        {
+            return null;
+        }
+        YamlDocument matDoc = UnityYaml.ParseDocuments(text).FirstOrDefault(d => d.TypeName == "Material");
+        if (matDoc == null)
+        {
+            return null;
+        }
+
+        LilToonInfo parent = null;
+        string parentGuid = matDoc.Root?["m_Parent"]?.Guid;
+        if (!string.IsNullOrEmpty(parentGuid) && parentGuid != "0000000000000000f000000000000000")
+        {
+            parent = ResolveMaterialInfo(parentGuid, package, resolving);
+        }
+
+        if (!LilToonConverter.IsLilToon(matDoc) && parent == null)
+        {
+            return null;
+        }
+        return LilToonConverter.Parse(matDoc, parent);
     }
 
     private static colorX ToColor(Vec4 c, ColorProfile profile) => new(c.X, c.Y, c.Z, c.W, profile);
