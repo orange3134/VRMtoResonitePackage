@@ -792,7 +792,7 @@ internal sealed class SettingsWindow : Window
         MinWidth = 480;
         MinHeight = 520;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = Brushes.White;
+        Background = new SolidColorBrush(Color.FromRgb(248, 244, 252));
         FontFamily = new FontFamily("Segoe UI");
 
         TitleBarTheme.Apply(this);
