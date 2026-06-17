@@ -70,6 +70,7 @@ internal sealed class MainWindow : Window
         FontFamily = new FontFamily("Segoe UI");
         AllowDrop = true;
         Icon = LoadWindowIcon();
+        TitleBarTheme.Apply(this);
 
         _root = new Grid
         {
@@ -794,6 +795,8 @@ internal sealed class SettingsWindow : Window
         Background = Brushes.White;
         FontFamily = new FontFamily("Segoe UI");
 
+        TitleBarTheme.Apply(this);
+
         var panel = new StackPanel { Margin = new Thickness(28) };
         Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
@@ -968,6 +971,8 @@ internal sealed class AvatarSelectionWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = Brushes.White;
         FontFamily = new FontFamily("Segoe UI");
+
+        TitleBarTheme.Apply(this);
 
         var root = new DockPanel { Margin = new Thickness(24) };
         Content = root;
