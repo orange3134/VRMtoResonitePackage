@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using VrmToResonitePackage.Unity;
@@ -39,12 +40,14 @@ internal static class GuiApp
 internal sealed class MainWindow : Window
 {
     private readonly Grid _root;
+    private readonly Image _logo;
+    private readonly Grid _dropZone;
     private readonly TextBlock _title;
     private readonly TextBlock _message;
     private readonly TextBlock _detail;
     private readonly Button _settingsButton;
     private readonly DispatcherTimer _spinnerTimer;
-    private readonly Border _spinner;
+    private readonly Grid _loadingArea;
     private readonly RotateTransform _spinnerRotation = new();
     private readonly Border _packageIcon;
     private readonly GuiSettings _settings;
@@ -66,10 +69,11 @@ internal sealed class MainWindow : Window
         Background = Brushes.White;
         FontFamily = new FontFamily("Segoe UI");
         AllowDrop = true;
+        Icon = LoadWindowIcon();
 
         _root = new Grid
         {
-            Background = new SolidColorBrush(Color.FromRgb(246, 251, 255))
+            Background = new SolidColorBrush(Color.FromRgb(248, 244, 252))
         };
         Content = _root;
 
@@ -85,7 +89,7 @@ internal sealed class MainWindow : Window
             Margin = new Thickness(0, 18, 18, 0),
             Background = Brushes.White,
             Foreground = AccentBrush,
-            BorderBrush = new SolidColorBrush(Color.FromRgb(187, 229, 247)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(225, 210, 242)),
             BorderThickness = new Thickness(1),
             Cursor = Cursors.Hand
         };
@@ -98,12 +102,24 @@ internal sealed class MainWindow : Window
             Margin = new Thickness(32),
             MaxWidth = 640
         };
+
+        _logo = new Image
+        {
+            Source = SvgImage.Load("logo.svg", TextColor),
+            Width = 380,
+            Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            SnapsToDevicePixels = true
+        };
+
+        _loadingArea = BuildLoadingArea();
+
         _title = new TextBlock
         {
             TextAlignment = TextAlignment.Center,
             FontSize = 36,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(28, 45, 58)),
+            Foreground = TextBrush,
             TextWrapping = TextWrapping.Wrap
         };
         _message = new TextBlock
@@ -111,7 +127,7 @@ internal sealed class MainWindow : Window
             Margin = new Thickness(0, 18, 0, 0),
             TextAlignment = TextAlignment.Center,
             FontSize = 20,
-            Foreground = new SolidColorBrush(Color.FromRgb(66, 83, 96)),
+            Foreground = TextBrush,
             TextWrapping = TextWrapping.Wrap
         };
         _detail = new TextBlock
@@ -119,31 +135,22 @@ internal sealed class MainWindow : Window
             Margin = new Thickness(0, 12, 0, 0),
             TextAlignment = TextAlignment.Center,
             FontSize = 13,
-            Foreground = new SolidColorBrush(Color.FromRgb(96, 111, 123)),
+            Foreground = new SolidColorBrush(Color.FromRgb(110, 110, 110)),
             TextWrapping = TextWrapping.Wrap
         };
 
-        _spinner = new Border
-        {
-            Width = 68,
-            Height = 68,
-            Margin = new Thickness(0, 0, 0, 22),
-            BorderBrush = AccentBrush,
-            BorderThickness = new Thickness(6, 6, 6, 1),
-            CornerRadius = new CornerRadius(34),
-            RenderTransform = _spinnerRotation,
-            RenderTransformOrigin = new Point(0.5, 0.5),
-            Visibility = Visibility.Collapsed
-        };
+        _dropZone = BuildDropZone();
 
         _packageIcon = BuildPackageIcon();
         _packageIcon.Visibility = Visibility.Collapsed;
         _packageIcon.MouseLeftButtonDown += (_, e) => _dragStart = e.GetPosition(this);
         _packageIcon.MouseMove += PackageIconOnMouseMove;
 
-        center.Children.Add(_spinner);
+        center.Children.Add(_logo);
+        center.Children.Add(_loadingArea);
         center.Children.Add(_packageIcon);
         center.Children.Add(_title);
+        center.Children.Add(_dropZone);
         center.Children.Add(_message);
         center.Children.Add(_detail);
         _root.Children.Add(center);
@@ -163,28 +170,48 @@ internal sealed class MainWindow : Window
         }
     }
 
-    private static Brush AccentBrush { get; } = new SolidColorBrush(Color.FromRgb(35, 174, 219));
+    // Theme: base color #caa4ec, white text on the base color, #3e3e3e text on light backgrounds.
+    private static Color AccentColor { get; } = Color.FromRgb(0xca, 0xa4, 0xec);
+    private static Color TextColor { get; } = Color.FromRgb(0x3e, 0x3e, 0x3e);
+    private static Brush AccentBrush { get; } = Frozen(AccentColor);
+    private static Brush TextBrush { get; } = Frozen(TextColor);
+
+    private static SolidColorBrush Frozen(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
 
     private void ShowIdle()
     {
         _isConverting = false;
         _spinnerTimer.Stop();
-        _spinner.Visibility = Visibility.Collapsed;
+        _logo.Visibility = Visibility.Visible;
+        _dropZone.Visibility = Visibility.Visible;
+        _loadingArea.Visibility = Visibility.Collapsed;
         _packageIcon.Visibility = Visibility.Collapsed;
+        _title.Visibility = Visibility.Collapsed;
+        _message.Visibility = Visibility.Collapsed;
+        _detail.Visibility = Visibility.Collapsed;
         _settingsButton.IsEnabled = true;
-        _title.Text = "ResoPon";
-        _message.Text = "VRM ファイルをドラッグアンドドロップしてください。";
+        _title.Text = "";
+        _message.Text = "";
         _detail.Text = "";
     }
 
     private void ShowConverting(string fileName)
     {
         _isConverting = true;
-        _spinner.Visibility = Visibility.Visible;
+        _logo.Visibility = Visibility.Collapsed;
+        _dropZone.Visibility = Visibility.Collapsed;
+        _loadingArea.Visibility = Visibility.Visible;
         _packageIcon.Visibility = Visibility.Collapsed;
+        _title.Visibility = Visibility.Collapsed;
+        _message.Visibility = Visibility.Visible;
+        _detail.Visibility = Visibility.Visible;
         _settingsButton.IsEnabled = false;
         _spinnerTimer.Start();
-        _title.Text = "変換中...";
         _message.Text = fileName;
         _detail.Text = "ログは実行ファイル横の Logs フォルダに出力されます。";
     }
@@ -193,7 +220,12 @@ internal sealed class MainWindow : Window
     {
         _isConverting = false;
         _spinnerTimer.Stop();
-        _spinner.Visibility = Visibility.Collapsed;
+        _logo.Visibility = Visibility.Collapsed;
+        _dropZone.Visibility = Visibility.Collapsed;
+        _loadingArea.Visibility = Visibility.Collapsed;
+        _title.Visibility = Visibility.Visible;
+        _message.Visibility = Visibility.Visible;
+        _detail.Visibility = Visibility.Visible;
         _settingsButton.IsEnabled = true;
         _outputFiles = result.OutputFiles.Where(File.Exists).ToArray();
         _packageIcon.Visibility = result.ExitCode == 0 && _outputFiles.Count > 0
@@ -260,8 +292,13 @@ internal sealed class MainWindow : Window
         {
             _isConverting = false;
             _spinnerTimer.Stop();
-            _spinner.Visibility = Visibility.Collapsed;
+            _logo.Visibility = Visibility.Collapsed;
+            _dropZone.Visibility = Visibility.Collapsed;
+            _loadingArea.Visibility = Visibility.Collapsed;
             _packageIcon.Visibility = Visibility.Collapsed;
+            _title.Visibility = Visibility.Visible;
+            _message.Visibility = Visibility.Visible;
+            _detail.Visibility = Visibility.Visible;
             _settingsButton.IsEnabled = true;
             _title.Text = "変換に失敗しました";
             _message.Text = ex.Message;
@@ -585,6 +622,106 @@ internal sealed class MainWindow : Window
         }
     }
 
+    private static ImageSource LoadWindowIcon()
+    {
+        try
+        {
+            using Stream stream = typeof(MainWindow).Assembly
+                .GetManifestResourceStream("VrmToResonitePackage.Resources.ResoPon.png");
+            if (stream == null)
+            {
+                return null;
+            }
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.StreamSource = stream;
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The rotating loading mark with the "変換中..." caption layered on top of it.</summary>
+    private Grid BuildLoadingArea()
+    {
+        var area = new Grid
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 8),
+            Visibility = Visibility.Collapsed
+        };
+        area.Children.Add(new Image
+        {
+            Source = SvgImage.Load("loading.svg", AccentColor),
+            Width = 150,
+            Height = 150,
+            Stretch = Stretch.Uniform,
+            RenderTransform = _spinnerRotation,
+            RenderTransformOrigin = new Point(0.5, 0.5)
+        });
+        area.Children.Add(new TextBlock
+        {
+            Text = "変換中...",
+            FontSize = 22,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = TextBrush,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        return area;
+    }
+
+    /// <summary>Large rounded dashed drop target that signals where to drag VRM files.</summary>
+    private static Grid BuildDropZone()
+    {
+        var zone = new Grid
+        {
+            Margin = new Thickness(0, 30, 0, 0),
+            MaxWidth = 540,
+            Visibility = Visibility.Collapsed
+        };
+        zone.Children.Add(new System.Windows.Shapes.Rectangle
+        {
+            RadiusX = 20,
+            RadiusY = 20,
+            Stroke = AccentBrush,
+            StrokeThickness = 2.5,
+            StrokeDashArray = new DoubleCollection { 4, 3 },
+            StrokeDashCap = PenLineCap.Round,
+            Fill = Frozen(Color.FromArgb(38, AccentColor.R, AccentColor.G, AccentColor.B))
+        });
+        var content = new StackPanel
+        {
+            Margin = new Thickness(44, 34, 44, 34),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        content.Children.Add(new Image
+        {
+            Source = SvgImage.Load("arrow.svg", AccentColor),
+            Width = 46,
+            Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 12)
+        });
+        content.Children.Add(new TextBlock
+        {
+            Text = "VRM ファイルをここにドラッグ＆ドロップ",
+            TextAlignment = TextAlignment.Center,
+            FontSize = 20,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = TextBrush,
+            TextWrapping = TextWrapping.Wrap
+        });
+        zone.Children.Add(content);
+        return zone;
+    }
+
     private static Border BuildPackageIcon()
     {
         var icon = new Border
@@ -614,7 +751,7 @@ internal sealed class MainWindow : Window
         {
             Text = ".resonitepackage",
             FontSize = 10,
-            Foreground = new SolidColorBrush(Color.FromRgb(66, 83, 96)),
+            Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e)),
             Margin = new Thickness(6, 0, 6, 10),
             TextAlignment = TextAlignment.Center,
             TextWrapping = TextWrapping.Wrap
@@ -663,7 +800,6 @@ internal sealed class SettingsWindow : Window
         panel.Children.Add(Header("変換オプション"));
         panel.Children.Add(PathRow("出力先フォルダ", _outputDirectory));
         panel.Children.Add(PathRow("Resoniteフォルダ", _resonitePath));
-        panel.Children.Add(_noAvatar);
         panel.Children.Add(_faceTracking);
         panel.Children.Add(_noProtection);
         panel.Children.Add(_noExpressionMenu);
@@ -672,7 +808,6 @@ internal sealed class SettingsWindow : Window
         panel.Children.Add(Field("視点の前方オフセット(m)", _viewForward));
         panel.Children.Add(Field("視点の上方オフセット(m)", _viewUp));
         panel.Children.Add(Field("NearClip(m)", _nearClip));
-        panel.Children.Add(Field("インポートタイムアウト(秒)", _importTimeout));
 
         var buttons = new StackPanel
         {
@@ -700,7 +835,7 @@ internal sealed class SettingsWindow : Window
 
     public GuiSettings Settings { get; private set; }
 
-    private static Brush MainWindowAccentBrush { get; } = new SolidColorBrush(Color.FromRgb(35, 174, 219));
+    private static Brush MainWindowAccentBrush { get; } = new SolidColorBrush(Color.FromRgb(0xca, 0xa4, 0xec));
 
     private void LoadValues()
     {
@@ -747,14 +882,14 @@ internal sealed class SettingsWindow : Window
         Text = text,
         FontSize = 22,
         FontWeight = FontWeights.SemiBold,
-        Foreground = new SolidColorBrush(Color.FromRgb(28, 45, 58)),
+        Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e)),
         Margin = new Thickness(0, 0, 0, 18)
     };
 
     private static FrameworkElement Field(string label, TextBox box)
     {
         var panel = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
-        panel.Children.Add(new TextBlock { Text = label, Foreground = new SolidColorBrush(Color.FromRgb(66, 83, 96)) });
+        panel.Children.Add(new TextBlock { Text = label, Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e)) });
         box.Margin = new Thickness(0, 6, 0, 0);
         box.Height = 32;
         panel.Children.Add(box);
@@ -764,7 +899,7 @@ internal sealed class SettingsWindow : Window
     private FrameworkElement PathRow(string label, TextBox box)
     {
         var panel = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
-        panel.Children.Add(new TextBlock { Text = label, Foreground = new SolidColorBrush(Color.FromRgb(66, 83, 96)) });
+        panel.Children.Add(new TextBlock { Text = label, Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e)) });
         var row = new Grid { Margin = new Thickness(0, 6, 0, 0) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -817,7 +952,7 @@ internal sealed class SettingsWindow : Window
 /// <summary>Modal dialog that asks which avatar to convert when a package contains several.</summary>
 internal sealed class AvatarSelectionWindow : Window
 {
-    private static readonly Brush AccentBrush = new SolidColorBrush(Color.FromRgb(35, 174, 219));
+    private static readonly Brush AccentBrush = new SolidColorBrush(Color.FromRgb(0xca, 0xa4, 0xec));
 
     private readonly ListBox _list = new();
 
@@ -844,13 +979,13 @@ internal sealed class AvatarSelectionWindow : Window
             Text = "変換するアバターを選択",
             FontSize = 20,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(28, 45, 58))
+            Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e))
         });
         header.Children.Add(new TextBlock
         {
             Text = packageName,
             Margin = new Thickness(0, 4, 0, 14),
-            Foreground = new SolidColorBrush(Color.FromRgb(96, 111, 123)),
+            Foreground = new SolidColorBrush(Color.FromRgb(110, 110, 110)),
             TextTrimming = TextTrimming.CharacterEllipsis
         });
         root.Children.Add(header);
@@ -885,13 +1020,13 @@ internal sealed class AvatarSelectionWindow : Window
             {
                 Text = i == 0 ? $"{avatar.Name}（推奨）" : avatar.Name,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(28, 45, 58))
+                Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e))
             });
             content.Children.Add(new TextBlock
             {
                 Text = $"GameObject {avatar.Size} / {avatar.SourcePath}",
                 FontSize = 11,
-                Foreground = new SolidColorBrush(Color.FromRgb(120, 132, 142)),
+                Foreground = new SolidColorBrush(Color.FromRgb(140, 140, 140)),
                 TextTrimming = TextTrimming.CharacterEllipsis
             });
             _list.Items.Add(new ListBoxItem { Content = content, Tag = avatar.Name });

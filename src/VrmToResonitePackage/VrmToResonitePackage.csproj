@@ -11,6 +11,7 @@
     <RootNamespace>VrmToResonitePackage</RootNamespace>
     <Product>ResoPon</Product>
     <Description>VRM and VRChat avatar package converter for Resonite.</Description>
+    <ApplicationIcon>Resources\ResoPon.ico</ApplicationIcon>
     <!-- Version is derived from the build date/time (yyyy.MM.dd.HHmm) so every build/release is
          uniquely identifiable in logs and bug reports. Can be overridden with -p:Version=... -->
     <Version Condition="'$(Version)' == ''">$([System.DateTime]::Now.ToString(yyyy.MM.dd.HHmm))</Version>
@@ -27,6 +28,10 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\AvatarRootIdentification.resonitepackage" />
+    <EmbeddedResource Include="Resources\logo.svg" />
+    <EmbeddedResource Include="Resources\loading.svg" />
+    <EmbeddedResource Include="Resources\arrow.svg" />
+    <EmbeddedResource Include="Resources\ResoPon.png" />
   </ItemGroup>
 
   <ItemGroup>
