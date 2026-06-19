@@ -93,8 +93,13 @@ public sealed class VrchatFbxAsset
     public Dictionary<string, string> MaterialGuids { get; } = new(StringComparer.Ordinal);
 }
 
-/// <summary>One avatar a package offers for conversion (root GameObject name + source + hierarchy size).</summary>
-public sealed record VrchatAvatarChoice(string Name, string SourcePath, int Size);
+/// <summary>One avatar prefab a package offers for conversion.</summary>
+public sealed record VrchatAvatarChoice(
+    string Name,
+    string SourcePath,
+    int Size,
+    bool HasOwnDescriptor,
+    bool IsPrefabVariant);
 
 public sealed class VrchatViseme
 {

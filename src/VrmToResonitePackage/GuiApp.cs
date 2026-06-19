@@ -1080,7 +1080,9 @@ internal sealed class AvatarSelectionWindow : Window
             });
             content.Children.Add(new TextBlock
             {
-                Text = $"GameObject {avatar.Size} / {avatar.SourcePath}",
+                Text = $"{(avatar.IsPrefabVariant ? "Prefab Variant" : $"GameObject {avatar.Size}")} / " +
+                       $"Descriptor: {(avatar.HasOwnDescriptor ? "直接あり" : "親Prefabから継承")} / " +
+                       avatar.SourcePath,
                 FontSize = 11,
                 Foreground = new SolidColorBrush(Color.FromRgb(140, 140, 140)),
                 TextTrimming = TextTrimming.CharacterEllipsis

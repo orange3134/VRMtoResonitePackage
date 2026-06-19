@@ -31,6 +31,8 @@ public sealed class UnityPackage : IDisposable
 {
     private readonly string _root;
     private readonly Dictionary<string, UnityAsset> _byGuid;
+    private readonly Dictionary<string, string> _textByGuid = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, UnityScene> _sceneByGuid = new(StringComparer.OrdinalIgnoreCase);
 
     private UnityPackage(string root, Dictionary<string, UnityAsset> byGuid)
     {
@@ -47,7 +49,37 @@ public sealed class UnityPackage : IDisposable
         => _byGuid.Values.Where(a => a.Extension == extensionWithDot.ToLowerInvariant());
 
     public string ReadText(UnityAsset asset)
-        => asset?.HasContent == true ? File.ReadAllText(asset.DiskPath) : null;
+    {
+        if (asset?.HasContent != true)
+        {
+            return null;
+        }
+        if (!_textByGuid.TryGetValue(asset.Guid, out string text))
+        {
+            text = File.ReadAllText(asset.DiskPath);
+            _textByGuid.Add(asset.Guid, text);
+        }
+        return text;
+    }
+
+    /// <summary>
+    /// Parses and caches a prefab/scene for the lifetime of this extracted package. Prefab variants
+    /// repeatedly reference the same bases, so reparsing by traversal path can otherwise become
+    /// prohibitively expensive for packages with many color/costume variants.
+    /// </summary>
+    public UnityScene ReadScene(UnityAsset asset)
+    {
+        if (asset?.HasContent != true)
+        {
+            return null;
+        }
+        if (!_sceneByGuid.TryGetValue(asset.Guid, out UnityScene scene))
+        {
+            scene = UnityScene.Parse(ReadText(asset));
+            _sceneByGuid.Add(asset.Guid, scene);
+        }
+        return scene;
+    }
 
     public static UnityPackage Extract(string packagePath)
     {

@@ -34,6 +34,7 @@ public static class VrchatAvatarParser
         public string Name;              // resolved avatar/display name
         public List<string> FbxGuidOverrides; // FBX models composed by a prefab variant
         public Dictionary<string, FbxPlacement> FbxPlacements;
+        public bool HasOwnDescriptor;
 
         /// <summary>A prefab variant whose hierarchy lives in an FBX (descriptor added on a stripped root).</summary>
         public bool IsVariantOfFbx => FbxGuidOverrides?.Count > 0;
@@ -64,7 +65,8 @@ public static class VrchatAvatarParser
         {
             if (!string.IsNullOrEmpty(c.Name) && seen.Add(c.Name))
             {
-                result.Add(new VrchatAvatarChoice(c.Name, c.Source.LogicalPath, c.Size));
+                result.Add(new VrchatAvatarChoice(
+                    c.Name, c.Source.LogicalPath, c.Size, c.HasOwnDescriptor, c.IsVariantOfFbx));
             }
         }
         return result;
@@ -112,6 +114,7 @@ public static class VrchatAvatarParser
             }
             avatar.FbxGuid = primaryFbxGuid;
             avatar.FbxPath = fbx.DiskPath;
+            selected.FbxPlacements ??= CollectFbxPlacements(package, selected.Source.Guid);
             FbxPlacement primaryPlacement = null;
             selected.FbxPlacements?.TryGetValue(primaryFbxGuid, out primaryPlacement);
             ApplyPrimaryFbxPlacement(avatar, fbx, primaryPlacement);
@@ -218,7 +221,7 @@ public static class VrchatAvatarParser
             UnityScene scene;
             try
             {
-                scene = UnityScene.Parse(text);
+                scene = package.ReadScene(source);
             }
             catch (Exception ex)
             {
@@ -240,6 +243,7 @@ public static class VrchatAvatarParser
                         Descriptor = descriptor,
                         Subtree = scene.SubtreeGameObjectIds(root.FileId),
                         Name = rootName,
+                        HasOwnDescriptor = true,
                     });
                     continue;
                 }
@@ -256,8 +260,8 @@ public static class VrchatAvatarParser
                         Descriptor = descriptor,
                         Subtree = new HashSet<long>(),
                         FbxGuidOverrides = fbxGuids,
-                        FbxPlacements = CollectFbxPlacements(package, source.Guid),
                         Name = VariantAvatarName(scene, descriptor, source),
+                        HasOwnDescriptor = true,
                     });
                 }
             }
@@ -268,22 +272,38 @@ public static class VrchatAvatarParser
                            "コンポーネントとして解決できませんでした（SDKバージョン差異やprefab構造の可能性）。");
             DiagnoseCandidates(package);
         }
-        AddComposedPrefabCandidates(package, candidates);
+        AddInheritedVariantCandidates(package, candidates);
         return candidates;
     }
 
     /// <summary>
-    /// Adds outer prefab compositions that contain a descriptor-bearing avatar prefab plus separate
-    /// hair/accessory prefabs. These files do not serialize their own descriptor, but are the actual
-    /// complete avatars users expect to choose.
+    /// Adds pure prefab variants that inherit a descriptor from one source prefab. Prefabs that
+    /// compose multiple independent prefab instances are intentionally excluded: recursively
+    /// promoting every composition is expensive and can produce many ambiguous avatar candidates.
     /// </summary>
-    private static void AddComposedPrefabCandidates(UnityPackage package, List<Candidate> candidates)
+    private static void AddInheritedVariantCandidates(UnityPackage package, List<Candidate> candidates)
     {
         var existingSources = new HashSet<string>(
             candidates.Select(c => c.Source.Guid), StringComparer.OrdinalIgnoreCase);
         foreach (UnityAsset source in package.ByExtension(".prefab"))
         {
             if (existingSources.Contains(source.Guid))
+            {
+                continue;
+            }
+            UnityScene sourceScene;
+            try
+            {
+                sourceScene = package.ReadScene(source);
+            }
+            catch
+            {
+                continue;
+            }
+            List<YamlDocument> sourceInstances = sourceScene.Documents.Values
+                .Where(d => d.ClassId == ClassPrefabInstance)
+                .ToList();
+            if (sourceInstances.Count != 1)
             {
                 continue;
             }
@@ -297,8 +317,8 @@ public static class VrchatAvatarParser
             CollectFbxGuidsFromSource(package, source.Guid, 0, fbxGuids,
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             int inheritedFbxCount = descriptorSource.FbxGuidOverrides?.Count ?? 0;
-            if (fbxGuids.Count == 0 ||
-                (fbxGuids.Count <= inheritedFbxCount && HasRemovedGameObjects(package, source)))
+            if (fbxGuids.Count == 0 || fbxGuids.Count != inheritedFbxCount ||
+                HasRemovedGameObjects(package, source))
             {
                 continue;
             }
@@ -309,8 +329,8 @@ public static class VrchatAvatarParser
                 Descriptor = descriptorSource.Descriptor,
                 Subtree = new HashSet<long>(),
                 FbxGuidOverrides = fbxGuids,
-                FbxPlacements = CollectFbxPlacements(package, source.Guid),
                 Name = Path.GetFileNameWithoutExtension(source.LogicalPath),
+                HasOwnDescriptor = false,
             });
         }
     }
@@ -324,7 +344,7 @@ public static class VrchatAvatarParser
         }
         try
         {
-            UnityScene scene = UnityScene.Parse(text);
+            UnityScene scene = package.ReadScene(source);
             return scene.Documents.Values
                 .Where(d => d.ClassId == ClassPrefabInstance)
                 .Any(instance => instance.Root?["m_Modification"]?["m_RemovedGameObjects"]?.Seq?.Count > 0);
@@ -354,7 +374,7 @@ public static class VrchatAvatarParser
         UnityScene scene;
         try
         {
-            scene = UnityScene.Parse(text);
+            scene = package.ReadScene(asset);
         }
         catch
         {
@@ -443,7 +463,7 @@ public static class VrchatAvatarParser
         UnityScene scene;
         try
         {
-            scene = UnityScene.Parse(text);
+            scene = package.ReadScene(asset);
         }
         catch
         {
@@ -492,7 +512,7 @@ public static class VrchatAvatarParser
         UnityScene scene;
         try
         {
-            scene = UnityScene.Parse(text);
+            scene = package.ReadScene(asset);
         }
         catch
         {
@@ -680,7 +700,7 @@ public static class VrchatAvatarParser
             string text = package.ReadText(asset);
             if (text != null)
             {
-                return ResolveReferenceNode(package, UnityScene.Parse(text), fileId, depth + 1);
+                return ResolveReferenceNode(package, package.ReadScene(asset), fileId, depth + 1);
             }
         }
         return default;
@@ -713,7 +733,7 @@ public static class VrchatAvatarParser
                 string text = package.ReadText(asset);
                 if (text != null)
                 {
-                    return ResolveReferenceNode(package, UnityScene.Parse(text), sourceId, depth + 1);
+                    return ResolveReferenceNode(package, package.ReadScene(asset), sourceId, depth + 1);
                 }
             }
         }
@@ -785,7 +805,7 @@ public static class VrchatAvatarParser
             UnityScene scene;
             try
             {
-                scene = UnityScene.Parse(text);
+                scene = package.ReadScene(source);
             }
             catch
             {
@@ -1235,7 +1255,7 @@ public static class VrchatAvatarParser
             string text = package.ReadText(asset);
             if (text != null)
             {
-                return UnityScene.Parse(text).ResolveGameObjectName(fileId);
+                return package.ReadScene(asset).ResolveGameObjectName(fileId);
             }
         }
         return null;
@@ -1475,7 +1495,7 @@ public static class VrchatAvatarParser
                 }
                 try
                 {
-                    scene = UnityScene.Parse(text);
+                    scene = package.ReadScene(asset);
                 }
                 catch
                 {
@@ -1516,7 +1536,7 @@ public static class VrchatAvatarParser
         UnityScene scene;
         try
         {
-            scene = UnityScene.Parse(text);
+            scene = package.ReadScene(asset);
         }
         catch
         {

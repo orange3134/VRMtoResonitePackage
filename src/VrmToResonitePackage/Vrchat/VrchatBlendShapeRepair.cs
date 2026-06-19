@@ -25,12 +25,19 @@ internal static class VrchatBlendShapeRepair
             {
                 continue;
             }
-            if (expected.Count == renderer.MeshBlendshapeCount)
+            int maxReferencedIndex = MaxReferencedBlendShapeIndex(avatar, renderer.Slot.Name);
+            if (maxReferencedIndex < 0)
             {
                 continue;
             }
-            UniLog.Log($"Checking stripped blendshapes on {renderer.Slot.Name}: " +
-                       $"FBX={expected.Count}, imported={renderer.MeshBlendshapeCount}.");
+            int requiredCount = Math.Min(expected.Count, maxReferencedIndex + 1);
+            if (requiredCount == 0)
+            {
+                continue;
+            }
+            UniLog.Log($"Checking indexed blendshapes on {renderer.Slot.Name}: " +
+                       $"required through {requiredCount - 1}, FBX={expected.Count}, " +
+                       $"imported={renderer.MeshBlendshapeCount}.");
 
             MeshX mesh;
             var oldWeights = new Dictionary<string, Queue<float>>(StringComparer.Ordinal);
@@ -57,16 +64,19 @@ internal static class VrchatBlendShapeRepair
                 renderer.Mesh.Asset.ReleaseReadLock(readLock);
             }
 
-            int inserted = InsertMissingBlendShapes(mesh, expected);
-            if (inserted == 0)
+            int inserted = InsertMissingBlendShapes(mesh, expected, requiredCount);
+            if (inserted < 0)
             {
-                if (expected.Count != mesh.BlendShapeCount)
-                {
-                    LogSequenceMismatch(renderer.Slot.Name, mesh, expected);
-                }
+                LogSequenceMismatch(renderer.Slot.Name, mesh, expected.Take(requiredCount).ToList());
                 await default(ToWorld);
                 continue;
             }
+            if (inserted == 0)
+            {
+                await default(ToWorld);
+                continue;
+            }
+            List<string> repairedNames = mesh.BlendShapes.Select(shape => shape.Name).ToList();
 
             Uri uri = await renderer.Engine.LocalDB.SaveAssetAsync(mesh).ConfigureAwait(false);
             await default(ToWorld);
@@ -80,7 +90,7 @@ internal static class VrchatBlendShapeRepair
             {
                 renderer.BlendShapeWeights.RemoveAt(renderer.BlendShapeWeights.Count - 1);
             }
-            foreach (string name in expected)
+            foreach (string name in repairedNames)
             {
                 float value = oldWeights.TryGetValue(name, out Queue<float> values) && values.Count > 0
                     ? values.Dequeue()
@@ -93,6 +103,25 @@ internal static class VrchatBlendShapeRepair
             UniLog.Log($"Restored {inserted} stripped blendshape(s) on {renderer.Slot.Name}.");
         }
         return repaired;
+    }
+
+    private static int MaxReferencedBlendShapeIndex(VrchatAvatar avatar, string rendererName)
+    {
+        int max = avatar.Blink?.MeshGameObjectName == rendererName
+            ? avatar.Blink.BlendShapeIndex
+            : -1;
+        foreach (VrchatRendererMaterials renderer in avatar.RendererMaterials)
+        {
+            if (!string.Equals(renderer.RendererGameObjectName, rendererName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            foreach ((int index, _) in renderer.InitialBlendShapes)
+            {
+                max = Math.Max(max, index);
+            }
+        }
+        return max;
     }
 
     private static void LogSequenceMismatch(string rendererName, MeshX mesh, IReadOnlyList<string> expected)
@@ -119,11 +148,12 @@ internal static class VrchatBlendShapeRepair
                        $"FBX={expected.Count}, imported={current.Count}, matched={importedIndex}.");
     }
 
-    private static int InsertMissingBlendShapes(MeshX mesh, IReadOnlyList<string> expected)
+    private static int InsertMissingBlendShapes(
+        MeshX mesh, IReadOnlyList<string> expected, int requiredCount)
     {
         int inserted = 0;
         int current = 0;
-        for (int expectedIndex = 0; expectedIndex < expected.Count; expectedIndex++)
+        for (int expectedIndex = 0; expectedIndex < requiredCount; expectedIndex++)
         {
             string expectedName = expected[expectedIndex];
             if (current < mesh.BlendShapeCount &&
@@ -146,17 +176,17 @@ internal static class VrchatBlendShapeRepair
             {
                 // Current imported entries are not a subsequence of the FBX order. Avoid corrupting
                 // an unfamiliar mesh layout.
-                return 0;
+                return -1;
             }
 
             if (mesh.HasBlendShape(expectedName))
             {
-                return 0;
+                return -1;
             }
             mesh.InsertBlendshapeAt(expectedName, expectedIndex).AddFrame(1f);
             inserted++;
             current++;
         }
-        return current == mesh.BlendShapeCount ? inserted : 0;
+        return inserted;
     }
 }
