@@ -349,7 +349,10 @@ internal static class Converter
                 settings.CalculateTextureAlpha = true;
                 settings.ImportVertexColors = false;
                 settings.GenerateSkeletonBones = true;
-                settings.Scale = avatar.FbxImportScale;
+                // Apply Unity's ModelImporter unit scale to the imported hierarchy instead.
+                // FrooxEngine's Scale setting scales mesh data but leaves FBX node translations
+                // (including the skeleton) in source units, which produces mismatched giant rigs.
+                settings.Scale = 1f;
 
                 Slot importRoot = root.AddSlot("FBX Import Alignment");
                 var importedFbxRoots = new Dictionary<string, Slot>(StringComparer.OrdinalIgnoreCase);
@@ -380,7 +383,7 @@ internal static class Converter
                     additionalSettings.CalculateTextureAlpha = true;
                     additionalSettings.ImportVertexColors = false;
                     additionalSettings.GenerateSkeletonBones = true;
-                    additionalSettings.Scale = additional.ImportScale;
+                    additionalSettings.Scale = 1f;
                     Slot additionalRoot = importRoot.AddSlot(additional.InstanceName ?? $"Additional FBX {i + 1}");
                     importedFbxRoots[additional.Guid] = additionalRoot;
 
@@ -506,6 +509,7 @@ internal static class Converter
                 -additional.LocalRotation.Z, additional.LocalRotation.W);
             float3 scale = new(
                 additional.LocalScale.X, additional.LocalScale.Y, additional.LocalScale.Z);
+            scale *= additional.ImportScale;
             instanceRoot.LocalPosition = position;
             instanceRoot.LocalRotation = rotation;
             instanceRoot.LocalScale = scale;
@@ -612,6 +616,7 @@ internal static class Converter
             avatar.FbxLocalRotation.X, -avatar.FbxLocalRotation.Y,
             -avatar.FbxLocalRotation.Z, avatar.FbxLocalRotation.W);
         float3 scale = new(avatar.FbxLocalScale.X, avatar.FbxLocalScale.Y, avatar.FbxLocalScale.Z);
+        scale *= avatar.FbxImportScale;
         instanceRoot.LocalPosition = position;
         instanceRoot.LocalRotation = rotation;
         instanceRoot.LocalScale = scale;
