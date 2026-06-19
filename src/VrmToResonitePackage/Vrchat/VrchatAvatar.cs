@@ -57,6 +57,12 @@ public sealed class VrchatAvatar
     public List<VrchatRendererMaterials> RendererMaterials { get; } = new();
 
     /// <summary>
+    /// Original FBX blendshape order by renderer name, before Resonite strips sub-threshold shapes.
+    /// </summary>
+    public Dictionary<string, IReadOnlyList<string>> FbxBlendShapeNames { get; } =
+        new(StringComparer.Ordinal);
+
+    /// <summary>
     /// FBX embedded material name -> external Unity .mat guid, from ModelImporter.externalObjects.
     /// Used when a prefab variant keeps the FBX renderer hierarchy as stripped objects.
     /// </summary>

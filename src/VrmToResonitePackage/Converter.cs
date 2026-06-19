@@ -403,6 +403,12 @@ internal static class Converter
                 Console.WriteLine("アセットの読み込みを待機中...");
                 await WaitForAssets(assetsSlot);
 
+                int repairedBlendshapeMeshes = await Vrchat.VrchatBlendShapeRepair.Apply(root, avatar);
+                if (repairedBlendshapeMeshes > 0)
+                {
+                    await WaitForAssets(assetsSlot);
+                }
+
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar);
 

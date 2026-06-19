@@ -116,6 +116,7 @@ public static class VrchatAvatarParser
                 selected.FbxPlacements?.TryGetValue(guid, out placement);
                 AddAdditionalFbx(package, avatar, guid, placement);
             }
+            ParseFbxBlendShapeNames(package, avatar);
             ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
             ParseVariantBlendShapeWeights(package, selected.Scene, selected.Descriptor, avatar);
             return avatar;
@@ -132,12 +133,36 @@ public static class VrchatAvatarParser
         }
 
         ResolveFbx(package, selected.Scene, selected.Subtree, avatar);
+        ParseFbxBlendShapeNames(package, avatar);
         ParseHumanoid(package, avatar);
         ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
         ParsePhysBones(selected.Scene, selected.Subtree, avatar);
         ParseRendererMaterials(selected.Scene, selected.Subtree, avatar);
         ParseInactiveGameObjects(selected.Scene, selected.Subtree, avatar);
         return avatar;
+    }
+
+    private static void ParseFbxBlendShapeNames(UnityPackage package, VrchatAvatar avatar)
+    {
+        IEnumerable<string> guids = new[] { avatar.FbxGuid }
+            .Concat(avatar.AdditionalFbxs.Select(fbx => fbx.Guid));
+        foreach (string guid in guids.Where(g => !string.IsNullOrEmpty(g)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            UnityAsset asset = package.ByGuid(guid);
+            if (asset?.Extension != ".fbx")
+            {
+                continue;
+            }
+            var resolver = new UnityModelFileIdResolver(asset);
+            foreach ((string rendererName, IReadOnlyList<string> names) in resolver.BlendShapeNames)
+            {
+                avatar.FbxBlendShapeNames.TryAdd(rendererName, names);
+            }
+        }
+        if (avatar.FbxBlendShapeNames.Count > 0)
+        {
+            UniLog.Log($"FBX blendshape order captured for {avatar.FbxBlendShapeNames.Count} renderer(s).");
+        }
     }
 
     private static void ParseInactiveGameObjects(UnityScene scene, HashSet<long> subtree, VrchatAvatar avatar)

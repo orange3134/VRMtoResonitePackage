@@ -10,6 +10,8 @@ namespace VrmToResonitePackage.Unity;
 public sealed class UnityModelFileIdResolver
 {
     private readonly Dictionary<long, string> _names = new();
+    private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNames =
+        new(StringComparer.Ordinal);
 
     public UnityModelFileIdResolver(UnityAsset model)
     {
@@ -27,6 +29,8 @@ public sealed class UnityModelFileIdResolver
 
     public string ResolveName(long fileId)
         => fileId != 0 && _names.TryGetValue(fileId, out string name) ? name : null;
+
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNames => _blendShapeNames;
 
     private void AddMetaMappings(UnityAsset model)
     {
@@ -94,6 +98,7 @@ public sealed class UnityModelFileIdResolver
                 if (skinned)
                 {
                     AddPathVariants("SkinnedMeshRenderer", nodePath, node.Name);
+                    AddBlendShapeNames(scene, node);
                 }
                 else if (node.MeshCount > 0)
                 {
@@ -114,6 +119,31 @@ public sealed class UnityModelFileIdResolver
                 try { File.Delete(temporaryPath); } catch { }
             }
         }
+    }
+
+    private void AddBlendShapeNames(Scene scene, Node node)
+    {
+        Mesh mesh = node.MeshIndices
+            .Where(index => index >= 0 && index < scene.MeshCount)
+            .Select(index => scene.Meshes[index])
+            .FirstOrDefault(candidate => candidate.MeshAnimationAttachmentCount > 0);
+        if (mesh == null)
+        {
+            return;
+        }
+
+        var names = new List<string>(mesh.MeshAnimationAttachmentCount);
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        foreach (MeshAnimationAttachment attachment in mesh.MeshAnimationAttachments)
+        {
+            string name = attachment.Name ?? "";
+            while (!used.Add(name))
+            {
+                name += "_";
+            }
+            names.Add(name);
+        }
+        _blendShapeNames.TryAdd(node.Name, names);
     }
 
     private static void CollectNodes(Node node, List<string> parentPath,
