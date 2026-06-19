@@ -125,7 +125,7 @@ public static class VrchatAvatarParser
             }
             ParseFbxBlendShapeNames(package, avatar);
             ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
-            ParseVariantRendererOverrides(package, selected.Scene, selected.Descriptor, avatar);
+            ParseVariantRendererOverrides(package, selected.Source.Guid, avatar);
             return avatar;
         }
 
@@ -296,7 +296,9 @@ public static class VrchatAvatarParser
             var fbxGuids = new List<string>();
             CollectFbxGuidsFromSource(package, source.Guid, 0, fbxGuids,
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-            if (fbxGuids.Count <= (descriptorSource.FbxGuidOverrides?.Count ?? 0))
+            int inheritedFbxCount = descriptorSource.FbxGuidOverrides?.Count ?? 0;
+            if (fbxGuids.Count == 0 ||
+                (fbxGuids.Count <= inheritedFbxCount && HasRemovedGameObjects(package, source)))
             {
                 continue;
             }
@@ -310,6 +312,26 @@ public static class VrchatAvatarParser
                 FbxPlacements = CollectFbxPlacements(package, source.Guid),
                 Name = Path.GetFileNameWithoutExtension(source.LogicalPath),
             });
+        }
+    }
+
+    private static bool HasRemovedGameObjects(UnityPackage package, UnityAsset source)
+    {
+        string text = package.ReadText(source);
+        if (text == null)
+        {
+            return false;
+        }
+        try
+        {
+            UnityScene scene = UnityScene.Parse(text);
+            return scene.Documents.Values
+                .Where(d => d.ClassId == ClassPrefabInstance)
+                .Any(instance => instance.Root?["m_Modification"]?["m_RemovedGameObjects"]?.Seq?.Count > 0);
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -1219,83 +1241,78 @@ public static class VrchatAvatarParser
         return null;
     }
 
-    private static void ParseVariantRendererOverrides(UnityPackage package, UnityScene scene,
-        YamlDocument descriptor, VrchatAvatar avatar)
+    private static void ParseVariantRendererOverrides(UnityPackage package, string sourceGuid,
+        VrchatAvatar avatar)
     {
-        YamlDocument instance = VariantPrefabInstance(scene, descriptor);
-        YamlNode modifications = instance?.Root?["m_Modification"]?["m_Modifications"];
-        if (modifications?.Seq == null)
+        var modificationBlocks = new List<YamlNode>();
+        CollectVariantModificationBlocks(package, sourceGuid, modificationBlocks,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        if (modificationBlocks.Count == 0)
         {
             return;
         }
 
-        var resolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);
         var renderers = new Dictionary<string, VrchatRendererMaterials>(StringComparer.Ordinal);
+        var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(
+            StringComparer.OrdinalIgnoreCase);
+        var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
         int materialAssignments = 0;
-        foreach (YamlNode modification in modifications.Seq)
+        foreach (YamlNode modifications in modificationBlocks)
         {
-            string propertyPath = modification?["propertyPath"]?.AsString();
-            var blendShapeMatch = propertyPath != null ? BlendShapeWeightPath.Match(propertyPath) : null;
-            var materialMatch = propertyPath != null ? MaterialSlotPath.Match(propertyPath) : null;
-            bool isBlendShape = blendShapeMatch?.Success == true;
-            bool isMaterial = materialMatch?.Success == true;
-            if (!isBlendShape && !isMaterial)
+            foreach (YamlNode modification in modifications.Seq)
             {
-                continue;
-            }
-            System.Text.RegularExpressions.Match match = isBlendShape ? blendShapeMatch : materialMatch;
-            if (!int.TryParse(match.Groups[1].Value, out int index))
-            {
-                continue;
-            }
+                string propertyPath = modification?["propertyPath"]?.AsString();
+                var blendShapeMatch = propertyPath != null ? BlendShapeWeightPath.Match(propertyPath) : null;
+                var materialMatch = propertyPath != null ? MaterialSlotPath.Match(propertyPath) : null;
+                bool isBlendShape = blendShapeMatch?.Success == true;
+                bool isMaterial = materialMatch?.Success == true;
+                if (!isBlendShape && !isMaterial)
+                {
+                    continue;
+                }
+                System.Text.RegularExpressions.Match match = isBlendShape ? blendShapeMatch : materialMatch;
+                if (!int.TryParse(match.Groups[1].Value, out int index))
+                {
+                    continue;
+                }
 
-            YamlNode target = modification["target"];
-            string guid = target?.Guid;
-            long fileId = target?.FileID ?? 0;
-            UnityAsset asset = package.ByGuid(guid);
-            if (asset == null || fileId == 0)
-            {
-                continue;
-            }
-            if (!resolvers.TryGetValue(guid, out UnityModelFileIdResolver resolver))
-            {
-                resolver = new UnityModelFileIdResolver(asset);
-                resolvers[guid] = resolver;
-            }
-            string rendererName = resolver.ResolveName(fileId);
-            if (string.IsNullOrEmpty(rendererName))
-            {
-                continue;
-            }
+                YamlNode target = modification["target"];
+                string rendererName = ResolveVariantRendererName(
+                    package, target?.Guid, target?.FileID ?? 0, modelResolvers, prefabScenes);
+                if (string.IsNullOrEmpty(rendererName))
+                {
+                    continue;
+                }
 
-            if (!renderers.TryGetValue(rendererName, out VrchatRendererMaterials renderer))
-            {
-                renderer = new VrchatRendererMaterials { RendererGameObjectName = rendererName };
-                renderers.Add(rendererName, renderer);
-            }
-            if (isMaterial)
-            {
-                while (renderer.MaterialGuids.Count <= index)
+                if (!renderers.TryGetValue(rendererName, out VrchatRendererMaterials renderer))
                 {
-                    renderer.MaterialGuids.Add(null);
+                    renderer = new VrchatRendererMaterials { RendererGameObjectName = rendererName };
+                    renderers.Add(rendererName, renderer);
                 }
-                renderer.MaterialGuids[index] = modification["objectReference"]?.Guid;
-                if (!string.IsNullOrEmpty(renderer.MaterialGuids[index]))
+                if (isMaterial)
                 {
-                    materialAssignments++;
+                    while (renderer.MaterialGuids.Count <= index)
+                    {
+                        renderer.MaterialGuids.Add(null);
+                    }
+                    renderer.MaterialGuids[index] = modification["objectReference"]?.Guid;
+                    if (!string.IsNullOrEmpty(renderer.MaterialGuids[index]))
+                    {
+                        materialAssignments++;
+                    }
                 }
-            }
-            else
-            {
-                float weight = modification["value"]?.AsFloat(0f) ?? 0f;
-                int existing = renderer.InitialBlendShapes.FindIndex(x => x.Index == index);
-                if (existing >= 0)
+                else
                 {
-                    renderer.InitialBlendShapes[existing] = (index, weight);
-                }
-                else if (MathF.Abs(weight) > 0.001f)
-                {
-                    renderer.InitialBlendShapes.Add((index, weight));
+                    float weight = modification["value"]?.AsFloat(0f) ?? 0f;
+                    int existing = renderer.InitialBlendShapes.FindIndex(x => x.Index == index);
+                    if (existing >= 0)
+                    {
+                        renderer.InitialBlendShapes[existing] = (index, weight);
+                    }
+                    else if (MathF.Abs(weight) > 0.001f)
+                    {
+                        renderer.InitialBlendShapes.Add((index, weight));
+                    }
                 }
             }
         }
@@ -1306,6 +1323,93 @@ public static class VrchatAvatarParser
             int blendShapeRenderers = renderers.Values.Count(r => r.InitialBlendShapes.Count > 0);
             UniLog.Log($"Prefab Variant renderer overrides: {materialAssignments} material assignment(s), " +
                        $"{blendShapeRenderers} renderer(s) with initial blendshape weights.");
+        }
+    }
+
+    private static string ResolveVariantRendererName(UnityPackage package, string guid, long fileId,
+        Dictionary<string, UnityModelFileIdResolver> modelResolvers,
+        Dictionary<string, UnityScene> prefabScenes)
+    {
+        if (string.IsNullOrEmpty(guid) || fileId == 0)
+        {
+            return null;
+        }
+        UnityAsset asset = package.ByGuid(guid);
+        if (asset?.Extension == ".fbx")
+        {
+            if (!modelResolvers.TryGetValue(guid, out UnityModelFileIdResolver resolver))
+            {
+                resolver = new UnityModelFileIdResolver(asset);
+                modelResolvers.Add(guid, resolver);
+            }
+            return resolver.ResolveName(fileId);
+        }
+        if (asset?.Extension == ".prefab")
+        {
+            if (!prefabScenes.TryGetValue(guid, out UnityScene scene))
+            {
+                string text = package.ReadText(asset);
+                if (text == null)
+                {
+                    return null;
+                }
+                try
+                {
+                    scene = UnityScene.Parse(text);
+                }
+                catch
+                {
+                    return null;
+                }
+                prefabScenes.Add(guid, scene);
+            }
+            YamlDocument document = scene.Doc(fileId);
+            YamlNode source = document?.Root?["m_CorrespondingSourceObject"];
+            long sourceFileId = source?.FileID ?? 0;
+            if (!string.IsNullOrEmpty(source?.Guid) && sourceFileId != 0)
+            {
+                return ResolveVariantRendererName(
+                    package, source.Guid, sourceFileId, modelResolvers, prefabScenes);
+            }
+            return scene.ResolveGameObjectName(fileId);
+        }
+        return null;
+    }
+
+    private static void CollectVariantModificationBlocks(UnityPackage package, string guid,
+        List<YamlNode> result, HashSet<string> visited)
+    {
+        if (string.IsNullOrEmpty(guid) || !visited.Add(guid))
+        {
+            return;
+        }
+        UnityAsset asset = package.ByGuid(guid);
+        if (asset?.Extension != ".prefab")
+        {
+            return;
+        }
+        string text = package.ReadText(asset);
+        if (text == null)
+        {
+            return;
+        }
+        UnityScene scene;
+        try
+        {
+            scene = UnityScene.Parse(text);
+        }
+        catch
+        {
+            return;
+        }
+        foreach (YamlDocument instance in scene.Documents.Values.Where(d => d.ClassId == ClassPrefabInstance))
+        {
+            CollectVariantModificationBlocks(package, instance.Root?["m_SourcePrefab"]?.Guid, result, visited);
+            YamlNode modifications = instance.Root?["m_Modification"]?["m_Modifications"];
+            if (modifications?.Seq != null)
+            {
+                result.Add(modifications);
+            }
         }
     }
 
