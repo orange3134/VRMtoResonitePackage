@@ -39,6 +39,8 @@ internal static class VrchatDump
             Console.WriteLine($"FBX root: {avatar.FbxInstanceName ?? "(default)"} " +
                               $"parent {avatar.FbxParentNodeName ?? "(root)"}, " +
                               $"transform {avatar.FbxTransformNodeName ?? "(wrapper)"}");
+            Console.WriteLine($"FBX placement: pos={avatar.FbxLocalPosition}, rot={avatar.FbxLocalRotation}, " +
+                              $"scale={avatar.FbxLocalScale}");
             foreach (VrchatFbxAsset additional in avatar.AdditionalFbxs)
             {
                 Console.WriteLine($"FBX +  : {additional.InstanceName} (guid {additional.Guid}, scale {additional.ImportScale:G6}, " +
@@ -79,6 +81,9 @@ internal static class VrchatDump
             }
 
             Console.WriteLine();
+            Console.WriteLine($"非アクティブ ({avatar.InactiveGameObjectNames.Count}): " +
+                              string.Join(", ", avatar.InactiveGameObjectNames.OrderBy(name => name)));
+            Console.WriteLine();
             Console.WriteLine($"マテリアル割当 ({avatar.RendererMaterials.Count} renderer):");
             foreach (VrchatRendererMaterials rm in avatar.RendererMaterials)
             {
@@ -87,7 +92,9 @@ internal static class VrchatDump
                     UnityAsset a = package.ByGuid(g);
                     return a != null ? Path.GetFileNameWithoutExtension(a.LogicalPath) : (g ?? "(none)");
                 }));
-                Console.WriteLine($"  {rm.RendererGameObjectName}: [{mats}]");
+                string weights = string.Join(", ", rm.InitialBlendShapes.Select(x => $"{x.Index}={x.Weight:G6}"));
+                Console.WriteLine($"  {rm.RendererGameObjectName}: [{mats}]" +
+                                  (weights.Length > 0 ? $" blendshapes [{weights}]" : ""));
             }
             return 0;
         }

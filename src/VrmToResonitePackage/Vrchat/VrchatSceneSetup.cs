@@ -130,6 +130,7 @@ internal static class VrchatSceneSetup
                 continue;
             }
             int count = renderer.MeshBlendshapeCount;
+            var appliedNames = new List<string>();
             foreach ((int index, float weight) in rm.InitialBlendShapes)
             {
                 if (index < 0 || index >= count)
@@ -142,7 +143,12 @@ internal static class VrchatSceneSetup
                 }
                 // Unity blendshape weights are 0-100; Resonite's are 0-1 (1 = full shape).
                 renderer.BlendShapeWeights[index] = weight / 100f;
+                appliedNames.Add($"{index}:{renderer.BlendShapeName(index)}={weight:G6}");
                 applied++;
+            }
+            if (appliedNames.Count > 0)
+            {
+                UniLog.Log($"Initial blendshapes on {rm.RendererGameObjectName}: {string.Join(", ", appliedNames)}");
             }
         }
         if (applied > 0)

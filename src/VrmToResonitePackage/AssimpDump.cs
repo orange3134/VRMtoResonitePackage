@@ -16,7 +16,8 @@ internal static class AssimpDump
         Console.WriteLine($"### Assimp dump: {file}");
         string glbPath = file;
         string tempPath = null;
-        if (!file.EndsWith(".glb", StringComparison.OrdinalIgnoreCase))
+        if (!file.EndsWith(".glb", StringComparison.OrdinalIgnoreCase) &&
+            !file.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase))
         {
             tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".glb");
             Vrm.GlbPreprocessor.CreateImportableGlb(file, tempPath, out _);
@@ -77,7 +78,7 @@ internal static class AssimpDump
                             moved++;
                         }
                     }
-                    Console.WriteLine($"     bs[{j:D2}] movedVerts={moved}");
+                    Console.WriteLine($"     bs[{j:D2}] '{attachment.Name}' movedVerts={moved}");
                 }
             }
             context.Dispose();

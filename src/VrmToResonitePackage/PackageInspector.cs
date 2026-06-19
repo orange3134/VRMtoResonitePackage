@@ -52,7 +52,13 @@ internal static class PackageInspector
             string name = ExtractField<string>(slot.TryGetNode("Name")) ?? "(unnamed)";
             if (verbose || depth <= 2)
             {
-                Console.WriteLine($"{new string(' ', depth * 2)}- {name}");
+                string transform = verbose
+                    ? $" active={ExtractField<bool>(slot.TryGetNode("Active"))}" +
+                      $" pos={FormatVec(ExtractFloats(slot.TryGetNode("Position")))}" +
+                      $" rot={FormatVec(ExtractFloats(slot.TryGetNode("Rotation")))}" +
+                      $" scale={FormatVec(ExtractFloats(slot.TryGetNode("Scale")))}"
+                    : "";
+                Console.WriteLine($"{new string(' ', depth * 2)}- {name}{transform}");
             }
             if (slot.TryGetNode("Components") is DataTreeDictionary componentsDict &&
                 componentsDict.TryGetNode("Data") is DataTreeList componentList)

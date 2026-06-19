@@ -403,6 +403,12 @@ internal static class Converter
                 Console.WriteLine("アセットの読み込みを待機中...");
                 await WaitForAssets(assetsSlot);
 
+                int repairedBlendshapeMeshes = await Vrchat.VrchatBlendShapeRepair.Apply(root, avatar);
+                if (repairedBlendshapeMeshes > 0)
+                {
+                    await WaitForAssets(assetsSlot);
+                }
+
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar);
 
@@ -611,7 +617,17 @@ internal static class Converter
         Slot sourceRootNode = !string.IsNullOrEmpty(avatar.FbxTransformNodeName)
             ? SlotIndex.Build(instanceRoot).GetValueOrDefault(avatar.FbxTransformNodeName)
             : null;
-        if (sourceRootNode != null &&
+        if (sourceRootNode != null && IsUnityRootNode(avatar.FbxTransformNodeName))
+        {
+            instanceRoot.LocalPosition = float3.Zero;
+            instanceRoot.LocalRotation = floatQ.Identity;
+            instanceRoot.LocalScale = float3.One;
+            sourceRootNode.LocalPosition = position;
+            sourceRootNode.LocalRotation = rotation;
+            sourceRootNode.LocalScale = scale;
+            UniLog.Log($"primary FBX root transform override applied to Unity RootNode: {sourceRootNode.Name}");
+        }
+        else if (sourceRootNode != null &&
             MathX.Distance(sourceRootNode.LocalPosition, instanceRoot.GlobalPosition) < 0.001f)
         {
             instanceRoot.LocalPosition = float3.Zero;
