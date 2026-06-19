@@ -617,7 +617,17 @@ internal static class Converter
         Slot sourceRootNode = !string.IsNullOrEmpty(avatar.FbxTransformNodeName)
             ? SlotIndex.Build(instanceRoot).GetValueOrDefault(avatar.FbxTransformNodeName)
             : null;
-        if (sourceRootNode != null &&
+        if (sourceRootNode != null && IsUnityRootNode(avatar.FbxTransformNodeName))
+        {
+            instanceRoot.LocalPosition = float3.Zero;
+            instanceRoot.LocalRotation = floatQ.Identity;
+            instanceRoot.LocalScale = float3.One;
+            sourceRootNode.LocalPosition = position;
+            sourceRootNode.LocalRotation = rotation;
+            sourceRootNode.LocalScale = scale;
+            UniLog.Log($"primary FBX root transform override applied to Unity RootNode: {sourceRootNode.Name}");
+        }
+        else if (sourceRootNode != null &&
             MathX.Distance(sourceRootNode.LocalPosition, instanceRoot.GlobalPosition) < 0.001f)
         {
             instanceRoot.LocalPosition = float3.Zero;

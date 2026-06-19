@@ -13,6 +13,10 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 public static class VrchatAvatarParser
 {
+    // Unity's synthetic Transform for an imported model's //RootNode. This stable local ID is
+    // shared by model assets and is the target of the prefab instance's placement overrides.
+    private const long UnityModelRootTransformFileId = -8679921383154817045L;
+
     private static readonly System.Text.RegularExpressions.Regex BlendShapeWeightPath =
         new(@"^m_BlendShapeWeights\.Array\.data\[(\d+)\]$",
             System.Text.RegularExpressions.RegexOptions.CultureInvariant);
@@ -485,8 +489,14 @@ public static class VrchatAvatarParser
         long parentId = instance.Root?["m_Modification"]?["m_TransformParent"]?.FileID ?? 0;
         (string parentGuid, string parentName) = ResolveReferenceNode(package, scene, parentId, 0);
         string instanceName = FindLastModificationValue(instance, "m_Name");
-        string transformNodeName = FindModificationTransformNodeName(package, instance, "m_LocalPosition.x")
-                                   ?? FindModificationTransformNodeName(package, instance, "m_LocalRotation.w");
+        YamlNode transformTarget = FindPlacementTransformTarget(package, instance);
+        (_, string transformNodeName) = ResolveAssetReferenceNode(
+            package, transformTarget?.Guid, transformTarget?.FileID ?? 0, 0);
+        if (transformTarget?.FileID == UnityModelRootTransformFileId ||
+            transformNodeName == "//RootNode")
+        {
+            transformNodeName = "RootNode";
+        }
         if (transformNodeName == null && instanceName?.StartsWith("Siro_", StringComparison.Ordinal) == true)
         {
             transformNodeName = instanceName["Siro_".Length..];
@@ -498,44 +508,134 @@ public static class VrchatAvatarParser
             ParentNodeName = parentName,
             TransformNodeName = transformNodeName,
             LocalPosition = new Vec3(
-                FindLastModificationFloat(instance, "m_LocalPosition.x"),
-                FindLastModificationFloat(instance, "m_LocalPosition.y"),
-                FindLastModificationFloat(instance, "m_LocalPosition.z")),
+                FindModificationFloat(instance, transformTarget, "m_LocalPosition.x"),
+                FindModificationFloat(instance, transformTarget, "m_LocalPosition.y"),
+                FindModificationFloat(instance, transformTarget, "m_LocalPosition.z")),
             LocalRotation = new Quat(
-                FindLastModificationFloat(instance, "m_LocalRotation.x"),
-                FindLastModificationFloat(instance, "m_LocalRotation.y"),
-                FindLastModificationFloat(instance, "m_LocalRotation.z"),
-                FindLastModificationFloat(instance, "m_LocalRotation.w", 1f)),
+                FindModificationFloat(instance, transformTarget, "m_LocalRotation.x"),
+                FindModificationFloat(instance, transformTarget, "m_LocalRotation.y"),
+                FindModificationFloat(instance, transformTarget, "m_LocalRotation.z"),
+                FindModificationFloat(instance, transformTarget, "m_LocalRotation.w", 1f)),
             LocalScale = new Vec3(
-                FindLastModificationFloat(instance, "m_LocalScale.x", 1f),
-                FindLastModificationFloat(instance, "m_LocalScale.y", 1f),
-                FindLastModificationFloat(instance, "m_LocalScale.z", 1f)),
+                FindModificationFloat(instance, transformTarget, "m_LocalScale.x", 1f),
+                FindModificationFloat(instance, transformTarget, "m_LocalScale.y", 1f),
+                FindModificationFloat(instance, transformTarget, "m_LocalScale.z", 1f)),
         };
     }
 
-    private static string FindModificationTransformNodeName(UnityPackage package, YamlDocument instance,
-        string propertyPath)
+    private static YamlNode FindPlacementTransformTarget(UnityPackage package, YamlDocument instance)
     {
-        string result = null;
         YamlNode modifications = instance.Root?["m_Modification"]?["m_Modifications"];
         if (modifications?.Seq == null)
         {
             return null;
         }
+
+        var groups = new Dictionary<(string Guid, long FileId), List<YamlNode>>();
+        var order = new List<(string Guid, long FileId)>();
+        var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(
+            StringComparer.OrdinalIgnoreCase);
         foreach (YamlNode entry in modifications.Seq)
         {
-            if (entry?["propertyPath"]?.AsString() != propertyPath)
+            string propertyPath = entry?["propertyPath"]?.AsString();
+            if (propertyPath?.StartsWith("m_LocalPosition.", StringComparison.Ordinal) != true &&
+                propertyPath?.StartsWith("m_LocalRotation.", StringComparison.Ordinal) != true &&
+                propertyPath?.StartsWith("m_LocalScale.", StringComparison.Ordinal) != true)
             {
                 continue;
             }
             YamlNode target = entry["target"];
-            (_, string name) = ResolveAssetReferenceNode(package, target?.Guid, target?.FileID ?? 0, 0);
-            if (!string.IsNullOrEmpty(name))
+            (string Guid, long FileId) key = (target?.Guid, target?.FileID ?? 0);
+            if (string.IsNullOrEmpty(key.Guid) || key.FileId == 0)
             {
-                result = name == "//RootNode" ? "RootNode" : name;
+                continue;
+            }
+            if (!groups.TryGetValue(key, out List<YamlNode> entries))
+            {
+                entries = new List<YamlNode>();
+                groups.Add(key, entries);
+                order.Add(key);
+            }
+            entries.Add(entry);
+        }
+
+        (string Guid, long FileId) best = default;
+        int bestScore = int.MinValue;
+        foreach ((string Guid, long FileId) key in order)
+        {
+            List<YamlNode> entries = groups[key];
+            var paths = new HashSet<string>(
+                entries.Select(entry => entry?["propertyPath"]?.AsString()),
+                StringComparer.Ordinal);
+            string name = null;
+            UnityAsset asset = package.ByGuid(key.Guid);
+            if (asset?.Extension == ".fbx")
+            {
+                if (!modelResolvers.TryGetValue(key.Guid, out UnityModelFileIdResolver resolver))
+                {
+                    resolver = new UnityModelFileIdResolver(asset);
+                    modelResolvers.Add(key.Guid, resolver);
+                }
+                name = resolver.ResolveName(key.FileId);
+            }
+            else
+            {
+                (_, name) = ResolveAssetReferenceNode(package, key.Guid, key.FileId, 0);
+            }
+            int score = key.FileId == UnityModelRootTransformFileId
+                ? 200
+                : IsUnityRootNodeName(name) ? 100 : 0;
+            score += CountPresent(paths, "m_LocalPosition.x", "m_LocalPosition.y", "m_LocalPosition.z") * 10;
+            score += CountPresent(paths, "m_LocalRotation.x", "m_LocalRotation.y",
+                "m_LocalRotation.z", "m_LocalRotation.w") * 10;
+            score += CountPresent(paths, "m_LocalScale.x", "m_LocalScale.y", "m_LocalScale.z");
+            if (score > bestScore)
+            {
+                best = key;
+                bestScore = score;
             }
         }
-        return result;
+
+        return bestScore == int.MinValue
+            ? null
+            : groups[best][0]?["target"];
+    }
+
+    private static int CountPresent(HashSet<string> paths, params string[] propertyPaths)
+        => propertyPaths.Count(paths.Contains);
+
+    private static bool IsUnityRootNodeName(string name)
+        => string.Equals(name, "RootNode", StringComparison.Ordinal) ||
+           string.Equals(name, "//RootNode", StringComparison.Ordinal);
+
+    private static float FindModificationFloat(YamlDocument instance, YamlNode target,
+        string propertyPath, float fallback = 0f)
+    {
+        if (target == null)
+        {
+            return fallback;
+        }
+        string result = null;
+        YamlNode modifications = instance.Root?["m_Modification"]?["m_Modifications"];
+        if (modifications?.Seq == null)
+        {
+            return fallback;
+        }
+        foreach (YamlNode entry in modifications.Seq)
+        {
+            YamlNode candidate = entry?["target"];
+            if (entry?["propertyPath"]?.AsString() == propertyPath &&
+                candidate?.FileID == target.FileID &&
+                string.Equals(candidate.Guid, target.Guid, StringComparison.OrdinalIgnoreCase))
+            {
+                result = entry["value"]?.AsString();
+            }
+        }
+        return result != null &&
+               float.TryParse(result, System.Globalization.NumberStyles.Float,
+                   System.Globalization.CultureInfo.InvariantCulture, out float value)
+            ? value
+            : fallback;
     }
 
     private static (string Guid, string Name) ResolveAssetReferenceNode(UnityPackage package,
@@ -597,6 +697,11 @@ public static class VrchatAvatarParser
 
     private static string ResolveFbxNodeName(UnityAsset fbx, long fileId)
     {
+        string resolved = new UnityModelFileIdResolver(fbx).ResolveName(fileId);
+        if (!string.IsNullOrEmpty(resolved))
+        {
+            return resolved;
+        }
         if (fbx?.MetaPath == null || !File.Exists(fbx.MetaPath))
         {
             return null;
@@ -740,16 +845,6 @@ public static class VrchatAvatarParser
             }
         }
         return result;
-    }
-
-    private static float FindLastModificationFloat(YamlDocument prefabInstance, string propertyPath, float fallback = 0f)
-    {
-        string value = FindLastModificationValue(prefabInstance, propertyPath);
-        return value != null &&
-               float.TryParse(value, System.Globalization.NumberStyles.Float,
-                   System.Globalization.CultureInfo.InvariantCulture, out float result)
-            ? result
-            : fallback;
     }
 
     /// <summary>
