@@ -72,7 +72,10 @@ public static class VrchatAvatarParser
             }
         }
         AddComposedPrefabChoices(package, result, seen);
-        return result;
+        return result
+            .OrderBy(choice => choice.SourcePath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(choice => choice.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     /// <summary>

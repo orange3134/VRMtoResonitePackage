@@ -1074,16 +1074,13 @@ internal sealed class AvatarSelectionWindow : Window
             var content = new StackPanel { Margin = new Thickness(4) };
             content.Children.Add(new TextBlock
             {
-                Text = i == 0 ? $"{avatar.Name}（推奨）" : avatar.Name,
+                Text = avatar.Name,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e))
             });
             content.Children.Add(new TextBlock
             {
-                Text = $"{(avatar.IsComposedPrefab ? "Prefab Composition" :
-                           avatar.IsPrefabVariant ? "Prefab Variant" : $"GameObject {avatar.Size}")} / " +
-                       $"Descriptor: {(avatar.HasOwnDescriptor ? "直接あり" : "親Prefabから継承")} / " +
-                       avatar.SourcePath,
+                Text = avatar.SourcePath,
                 FontSize = 11,
                 Foreground = new SolidColorBrush(Color.FromRgb(140, 140, 140)),
                 TextTrimming = TextTrimming.CharacterEllipsis
