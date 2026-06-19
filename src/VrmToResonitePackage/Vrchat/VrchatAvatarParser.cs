@@ -20,6 +20,9 @@ public static class VrchatAvatarParser
     private static readonly System.Text.RegularExpressions.Regex BlendShapeWeightPath =
         new(@"^m_BlendShapeWeights\.Array\.data\[(\d+)\]$",
             System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    private static readonly System.Text.RegularExpressions.Regex MaterialSlotPath =
+        new(@"^m_Materials\.Array\.data\[(\d+)\]$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     private sealed class Candidate
     {
@@ -122,7 +125,7 @@ public static class VrchatAvatarParser
             }
             ParseFbxBlendShapeNames(package, avatar);
             ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
-            ParseVariantBlendShapeWeights(package, selected.Scene, selected.Descriptor, avatar);
+            ParseVariantRendererOverrides(package, selected.Scene, selected.Descriptor, avatar);
             return avatar;
         }
 
@@ -1216,7 +1219,7 @@ public static class VrchatAvatarParser
         return null;
     }
 
-    private static void ParseVariantBlendShapeWeights(UnityPackage package, UnityScene scene,
+    private static void ParseVariantRendererOverrides(UnityPackage package, UnityScene scene,
         YamlDocument descriptor, VrchatAvatar avatar)
     {
         YamlDocument instance = VariantPrefabInstance(scene, descriptor);
@@ -1228,12 +1231,20 @@ public static class VrchatAvatarParser
 
         var resolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);
         var renderers = new Dictionary<string, VrchatRendererMaterials>(StringComparer.Ordinal);
+        int materialAssignments = 0;
         foreach (YamlNode modification in modifications.Seq)
         {
             string propertyPath = modification?["propertyPath"]?.AsString();
-            var match = propertyPath != null ? BlendShapeWeightPath.Match(propertyPath) : null;
-            if (match?.Success != true ||
-                !int.TryParse(match.Groups[1].Value, out int index))
+            var blendShapeMatch = propertyPath != null ? BlendShapeWeightPath.Match(propertyPath) : null;
+            var materialMatch = propertyPath != null ? MaterialSlotPath.Match(propertyPath) : null;
+            bool isBlendShape = blendShapeMatch?.Success == true;
+            bool isMaterial = materialMatch?.Success == true;
+            if (!isBlendShape && !isMaterial)
+            {
+                continue;
+            }
+            System.Text.RegularExpressions.Match match = isBlendShape ? blendShapeMatch : materialMatch;
+            if (!int.TryParse(match.Groups[1].Value, out int index))
             {
                 continue;
             }
@@ -1257,27 +1268,44 @@ public static class VrchatAvatarParser
                 continue;
             }
 
-            float weight = modification["value"]?.AsFloat(0f) ?? 0f;
             if (!renderers.TryGetValue(rendererName, out VrchatRendererMaterials renderer))
             {
                 renderer = new VrchatRendererMaterials { RendererGameObjectName = rendererName };
                 renderers.Add(rendererName, renderer);
             }
-            int existing = renderer.InitialBlendShapes.FindIndex(x => x.Index == index);
-            if (existing >= 0)
+            if (isMaterial)
             {
-                renderer.InitialBlendShapes[existing] = (index, weight);
+                while (renderer.MaterialGuids.Count <= index)
+                {
+                    renderer.MaterialGuids.Add(null);
+                }
+                renderer.MaterialGuids[index] = modification["objectReference"]?.Guid;
+                if (!string.IsNullOrEmpty(renderer.MaterialGuids[index]))
+                {
+                    materialAssignments++;
+                }
             }
-            else if (MathF.Abs(weight) > 0.001f)
+            else
             {
-                renderer.InitialBlendShapes.Add((index, weight));
+                float weight = modification["value"]?.AsFloat(0f) ?? 0f;
+                int existing = renderer.InitialBlendShapes.FindIndex(x => x.Index == index);
+                if (existing >= 0)
+                {
+                    renderer.InitialBlendShapes[existing] = (index, weight);
+                }
+                else if (MathF.Abs(weight) > 0.001f)
+                {
+                    renderer.InitialBlendShapes.Add((index, weight));
+                }
             }
         }
 
         avatar.RendererMaterials.AddRange(renderers.Values);
         if (renderers.Count > 0)
         {
-            UniLog.Log($"Prefab Variant の初期ブレンドシェイプ値を {renderers.Count} renderer から取得しました。");
+            int blendShapeRenderers = renderers.Values.Count(r => r.InitialBlendShapes.Count > 0);
+            UniLog.Log($"Prefab Variant renderer overrides: {materialAssignments} material assignment(s), " +
+                       $"{blendShapeRenderers} renderer(s) with initial blendshape weights.");
         }
     }
 
