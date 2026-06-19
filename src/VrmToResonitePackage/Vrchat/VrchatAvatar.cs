@@ -99,7 +99,8 @@ public sealed record VrchatAvatarChoice(
     string SourcePath,
     int Size,
     bool HasOwnDescriptor,
-    bool IsPrefabVariant);
+    bool IsPrefabVariant,
+    bool IsComposedPrefab);
 
 public sealed class VrchatViseme
 {

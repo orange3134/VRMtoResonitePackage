@@ -28,6 +28,14 @@ internal static class VrchatDump
 
             Console.WriteLine();
             Console.WriteLine("候補診断:");
+            foreach (VrchatAvatarChoice choice in VrchatAvatarParser.ListAvatars(package))
+            {
+                string kind = choice.IsComposedPrefab ? "composition" :
+                    choice.IsPrefabVariant ? "variant" : "scene";
+                string descriptor = choice.HasOwnDescriptor ? "direct" : "inherited";
+                Console.WriteLine($"  {choice.Name} [{kind}, descriptor={descriptor}] {choice.SourcePath}");
+            }
+            Console.WriteLine();
             VrchatAvatarParser.DiagnoseCandidates(package);
 
             VrchatAvatar avatar = VrchatAvatarParser.Parse(package, avatarOverride);

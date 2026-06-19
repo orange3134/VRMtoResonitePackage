@@ -1080,7 +1080,8 @@ internal sealed class AvatarSelectionWindow : Window
             });
             content.Children.Add(new TextBlock
             {
-                Text = $"{(avatar.IsPrefabVariant ? "Prefab Variant" : $"GameObject {avatar.Size}")} / " +
+                Text = $"{(avatar.IsComposedPrefab ? "Prefab Composition" :
+                           avatar.IsPrefabVariant ? "Prefab Variant" : $"GameObject {avatar.Size}")} / " +
                        $"Descriptor: {(avatar.HasOwnDescriptor ? "直接あり" : "親Prefabから継承")} / " +
                        avatar.SourcePath,
                 FontSize = 11,

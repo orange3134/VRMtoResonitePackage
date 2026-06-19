@@ -35,6 +35,7 @@ public static class VrchatAvatarParser
         public List<string> FbxGuidOverrides; // FBX models composed by a prefab variant
         public Dictionary<string, FbxPlacement> FbxPlacements;
         public bool HasOwnDescriptor;
+        public bool IsComposedPrefab;
 
         /// <summary>A prefab variant whose hierarchy lives in an FBX (descriptor added on a stripped root).</summary>
         public bool IsVariantOfFbx => FbxGuidOverrides?.Count > 0;
@@ -66,9 +67,11 @@ public static class VrchatAvatarParser
             if (!string.IsNullOrEmpty(c.Name) && seen.Add(c.Name))
             {
                 result.Add(new VrchatAvatarChoice(
-                    c.Name, c.Source.LogicalPath, c.Size, c.HasOwnDescriptor, c.IsVariantOfFbx));
+                    c.Name, c.Source.LogicalPath, c.Size, c.HasOwnDescriptor,
+                    c.IsVariantOfFbx, c.IsComposedPrefab));
             }
         }
+        AddComposedPrefabChoices(package, result, seen);
         return result;
     }
 
@@ -79,6 +82,7 @@ public static class VrchatAvatarParser
     public static VrchatAvatar Parse(UnityPackage package, string avatarOverride = null)
     {
         List<Candidate> candidates = FindCandidates(package);
+        AddRequestedComposedCandidate(package, candidates, avatarOverride);
         if (candidates.Count == 0)
         {
             throw new InvalidDataException(
@@ -333,6 +337,114 @@ public static class VrchatAvatarParser
                 HasOwnDescriptor = false,
             });
         }
+    }
+
+    /// <summary>
+    /// Adds descriptor-bearing outer prefab compositions to the GUI list without resolving FBX
+    /// placements, renderer overrides or model metadata. Those details are deferred until selection.
+    /// </summary>
+    private static void AddComposedPrefabChoices(
+        UnityPackage package, List<VrchatAvatarChoice> result, HashSet<string> seenNames)
+    {
+        var existingSources = new HashSet<string>(
+            result.Select(choice => choice.SourcePath), StringComparer.OrdinalIgnoreCase);
+        foreach (UnityAsset source in package.ByExtension(".prefab"))
+        {
+            string name = Path.GetFileNameWithoutExtension(source.LogicalPath);
+            if (existingSources.Contains(source.LogicalPath) || seenNames.Contains(name))
+            {
+                continue;
+            }
+            Candidate candidate = TryCreateComposedCandidate(package, source);
+            if (candidate == null || !seenNames.Add(name))
+            {
+                continue;
+            }
+            result.Add(new VrchatAvatarChoice(
+                name, source.LogicalPath, candidate.Size, HasOwnDescriptor: false,
+                IsPrefabVariant: true, IsComposedPrefab: true));
+        }
+    }
+
+    /// <summary>
+    /// Promotes only the requested outer composition to a full conversion candidate. This keeps
+    /// normal conversion from resolving every color/FaceEmo composition in the package.
+    /// </summary>
+    private static void AddRequestedComposedCandidate(
+        UnityPackage package, List<Candidate> candidates, string avatarOverride)
+    {
+        if (string.IsNullOrWhiteSpace(avatarOverride) ||
+            candidates.Any(candidate =>
+                string.Equals(candidate.Name, avatarOverride, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+        IEnumerable<UnityAsset> sources = package.ByExtension(".prefab")
+            .Where(source => candidates.All(candidate =>
+                !string.Equals(candidate.Source.Guid, source.Guid, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(source => string.Equals(
+                Path.GetFileNameWithoutExtension(source.LogicalPath), avatarOverride,
+                StringComparison.OrdinalIgnoreCase))
+            .ThenBy(source => source.LogicalPath.Length);
+        foreach (UnityAsset source in sources)
+        {
+            string name = Path.GetFileNameWithoutExtension(source.LogicalPath);
+            if (!string.Equals(name, avatarOverride, StringComparison.OrdinalIgnoreCase) &&
+                !name.Contains(avatarOverride, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            Candidate candidate = TryCreateComposedCandidate(package, source);
+            if (candidate != null)
+            {
+                candidates.Add(candidate);
+                return;
+            }
+        }
+    }
+
+    private static Candidate TryCreateComposedCandidate(UnityPackage package, UnityAsset source)
+    {
+        UnityScene sourceScene;
+        try
+        {
+            sourceScene = package.ReadScene(source);
+        }
+        catch
+        {
+            return null;
+        }
+        List<YamlDocument> sourceInstances = sourceScene.Documents.Values
+            .Where(document => document.ClassId == ClassPrefabInstance)
+            .ToList();
+        if (sourceInstances.Count < 2)
+        {
+            return null;
+        }
+        Candidate descriptorSource = FindNestedDescriptorCandidate(
+            package, source.Guid, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        if (descriptorSource == null)
+        {
+            return null;
+        }
+        var fbxGuids = new List<string>();
+        CollectFbxGuidsFromSource(package, source.Guid, 0, fbxGuids,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        if (fbxGuids.Count == 0)
+        {
+            return null;
+        }
+        return new Candidate
+        {
+            Source = source,
+            Scene = descriptorSource.Scene,
+            Descriptor = descriptorSource.Descriptor,
+            Subtree = new HashSet<long>(),
+            FbxGuidOverrides = fbxGuids,
+            Name = Path.GetFileNameWithoutExtension(source.LogicalPath),
+            HasOwnDescriptor = false,
+            IsComposedPrefab = true,
+        };
     }
 
     private static bool HasRemovedGameObjects(UnityPackage package, UnityAsset source)
