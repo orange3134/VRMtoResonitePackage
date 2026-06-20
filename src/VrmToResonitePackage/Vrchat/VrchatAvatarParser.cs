@@ -195,13 +195,14 @@ public static class VrchatAvatarParser
                 string name = go.Root?["m_Name"]?.AsString();
                 if (!string.IsNullOrEmpty(name))
                 {
-                    avatar.InactiveGameObjectNames.Add(name);
+                    avatar.InactiveGameObjects.Add(new VrchatGameObjectReference(
+                        avatar.FbxGuid, name));
                 }
             }
         }
-        if (avatar.InactiveGameObjectNames.Count > 0)
+        if (avatar.InactiveGameObjects.Count > 0)
         {
-            UniLog.Log($"非アクティブGameObjectを {avatar.InactiveGameObjectNames.Count} 個検出しました。");
+            UniLog.Log($"非アクティブGameObjectを {avatar.InactiveGameObjects.Count} 個検出しました。");
         }
     }
 
@@ -1391,33 +1392,33 @@ public static class VrchatAvatarParser
         var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(
             StringComparer.OrdinalIgnoreCase);
         var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
-        var materialNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         int materialAssignments = 0;
         int activeAssignments = 0;
         foreach (YamlNode modifications in modificationBlocks)
         {
-            var unresolvedMaterials = new List<(int Index, string Guid)>();
             foreach (YamlNode modification in modifications.Seq)
             {
                 string propertyPath = modification?["propertyPath"]?.AsString();
                 if (string.Equals(propertyPath, "m_IsActive", StringComparison.Ordinal))
                 {
                     YamlNode activeTarget = modification["target"];
-                    string gameObjectName = ResolveVariantRendererName(
+                    VariantObjectReference gameObject = ResolveVariantObjectReference(
                         package, activeTarget?.Guid, activeTarget?.FileID ?? 0,
                         modelResolvers, prefabScenes);
-                    if (!string.IsNullOrEmpty(gameObjectName))
+                    if (!string.IsNullOrEmpty(gameObject.Name))
                     {
+                        var reference = new VrchatGameObjectReference(
+                            gameObject.FbxGuid, gameObject.Name);
                         if (modification["value"]?.AsBool(true) == false)
                         {
-                            if (!avatar.InactiveGameObjectNames.Contains(gameObjectName))
+                            if (!avatar.InactiveGameObjects.Contains(reference))
                             {
-                                avatar.InactiveGameObjectNames.Add(gameObjectName);
+                                avatar.InactiveGameObjects.Add(reference);
                             }
                         }
                         else
                         {
-                            avatar.InactiveGameObjectNames.Remove(gameObjectName);
+                            avatar.InactiveGameObjects.Remove(reference);
                         }
                         activeAssignments++;
                     }
@@ -1442,14 +1443,6 @@ public static class VrchatAvatarParser
                     package, target?.Guid, target?.FileID ?? 0, modelResolvers, prefabScenes);
                 if (string.IsNullOrEmpty(rendererName))
                 {
-                    if (isMaterial)
-                    {
-                        string materialGuid = modification["objectReference"]?.Guid;
-                        if (!string.IsNullOrEmpty(materialGuid))
-                        {
-                            unresolvedMaterials.Add((index, materialGuid));
-                        }
-                    }
                     continue;
                 }
 
@@ -1484,8 +1477,6 @@ public static class VrchatAvatarParser
                     }
                 }
             }
-            materialAssignments += ApplyVariantMaterialFamilyFallback(
-                package, renderers, unresolvedMaterials, materialNames);
         }
 
         avatar.RendererMaterials.AddRange(renderers.Values);
@@ -1498,96 +1489,22 @@ public static class VrchatAvatarParser
         }
     }
 
-    private static int ApplyVariantMaterialFamilyFallback(UnityPackage package,
-        Dictionary<string, VrchatRendererMaterials> renderers,
-        List<(int Index, string Guid)> unresolved,
-        Dictionary<string, string> materialNames)
-    {
-        int assigned = 0;
-        foreach (IGrouping<(int Index, string Guid), (int Index, string Guid)> group in
-                 unresolved.GroupBy(item => item))
-        {
-            string replacementName = GetMaterialName(package, group.Key.Guid, materialNames);
-            string baseName = BaseVariantMaterialName(replacementName);
-            if (baseName == null)
-            {
-                continue;
-            }
-
-            List<VrchatRendererMaterials> candidates = renderers.Values
-                .Where(renderer => renderer.MaterialGuids.Count > group.Key.Index)
-                .Where(renderer => string.Equals(
-                    GetMaterialName(package, renderer.MaterialGuids[group.Key.Index], materialNames),
-                    baseName, StringComparison.Ordinal))
-                .ToList();
-            if (candidates.Count != group.Count())
-            {
-                continue;
-            }
-            foreach (VrchatRendererMaterials renderer in candidates)
-            {
-                renderer.MaterialGuids[group.Key.Index] = group.Key.Guid;
-                assigned++;
-            }
-            UniLog.Log($"Nested prefab material family fallback: {baseName} -> {replacementName} " +
-                       $"for {candidates.Count} renderer(s).");
-        }
-        return assigned;
-    }
-
-    private static string GetMaterialName(UnityPackage package, string guid,
-        Dictionary<string, string> cache)
-    {
-        if (string.IsNullOrEmpty(guid))
-        {
-            return null;
-        }
-        if (cache.TryGetValue(guid, out string cached))
-        {
-            return cached;
-        }
-        UnityAsset asset = package.ByGuid(guid);
-        string text = package.ReadText(asset);
-        string name = null;
-        if (text != null)
-        {
-            try
-            {
-                name = UnityYaml.ParseDocuments(text)
-                    .FirstOrDefault(document => document.TypeName == "Material")
-                    ?.Root?["m_Name"]?.AsString();
-            }
-            catch
-            {
-                // Malformed/non-YAML references cannot participate in the family fallback.
-            }
-        }
-        cache[guid] = name;
-        return name;
-    }
-
-    private static string BaseVariantMaterialName(string name)
-    {
-        if (string.IsNullOrEmpty(name))
-        {
-            return null;
-        }
-        string[] parts = name.Split('_');
-        if (parts.Length < 3 || parts[1].Length != 1 ||
-            !char.IsLetterOrDigit(parts[1][0]))
-        {
-            return null;
-        }
-        return string.Join("_", parts.Take(1).Concat(parts.Skip(2)));
-    }
-
     private static string ResolveVariantRendererName(UnityPackage package, string guid, long fileId,
+        Dictionary<string, UnityModelFileIdResolver> modelResolvers,
+        Dictionary<string, UnityScene> prefabScenes)
+        => ResolveVariantObjectReference(
+            package, guid, fileId, modelResolvers, prefabScenes).Name;
+
+    private readonly record struct VariantObjectReference(string FbxGuid, string Name);
+
+    private static VariantObjectReference ResolveVariantObjectReference(
+        UnityPackage package, string guid, long fileId,
         Dictionary<string, UnityModelFileIdResolver> modelResolvers,
         Dictionary<string, UnityScene> prefabScenes)
     {
         if (string.IsNullOrEmpty(guid) || fileId == 0)
         {
-            return null;
+            return default;
         }
         UnityAsset asset = package.ByGuid(guid);
         if (asset?.Extension == ".fbx")
@@ -1597,7 +1514,7 @@ public static class VrchatAvatarParser
                 resolver = new UnityModelFileIdResolver(asset);
                 modelResolvers.Add(guid, resolver);
             }
-            return resolver.ResolveName(fileId);
+            return new VariantObjectReference(guid, resolver.ResolveName(fileId));
         }
         if (asset?.Extension == ".prefab")
         {
@@ -1606,7 +1523,7 @@ public static class VrchatAvatarParser
                 string text = package.ReadText(asset);
                 if (text == null)
                 {
-                    return null;
+                    return default;
                 }
                 try
                 {
@@ -1614,7 +1531,7 @@ public static class VrchatAvatarParser
                 }
                 catch
                 {
-                    return null;
+                    return default;
                 }
                 prefabScenes.Add(guid, scene);
             }
@@ -1623,12 +1540,56 @@ public static class VrchatAvatarParser
             long sourceFileId = source?.FileID ?? 0;
             if (!string.IsNullOrEmpty(source?.Guid) && sourceFileId != 0)
             {
-                return ResolveVariantRendererName(
+                return ResolveVariantObjectReference(
                     package, source.Guid, sourceFileId, modelResolvers, prefabScenes);
             }
-            return scene.ResolveGameObjectName(fileId);
+            string directName = scene.ResolveGameObjectName(fileId);
+            if (!string.IsNullOrEmpty(directName))
+            {
+                return new VariantObjectReference(null, directName);
+            }
+
+            // Unity omits most stripped documents from prefab assets. Their local fileID can still
+            // be reversed to the source object's fileID because Unity derives it by XORing the
+            // source ID with the owning PrefabInstance ID and clearing the sign bit.
+            VariantObjectReference resolved = default;
+            foreach (YamlDocument instance in scene.Documents.Values.Where(
+                         candidate => candidate.ClassId == ClassPrefabInstance))
+            {
+                string childGuid = instance.Root?["m_SourcePrefab"]?.Guid;
+                if (string.IsNullOrEmpty(childGuid))
+                {
+                    continue;
+                }
+                foreach (long childFileId in ReversePrefabInstanceFileId(fileId, instance.FileId))
+                {
+                    VariantObjectReference candidate = ResolveVariantObjectReference(
+                        package, childGuid, childFileId, modelResolvers, prefabScenes);
+                    if (string.IsNullOrEmpty(candidate.Name))
+                    {
+                        continue;
+                    }
+                    if (!string.IsNullOrEmpty(resolved.Name) && resolved != candidate)
+                    {
+                        return default;
+                    }
+                    resolved = candidate;
+                }
+            }
+            return resolved;
         }
-        return null;
+        return default;
+    }
+
+    private static IEnumerable<long> ReversePrefabInstanceFileId(long localFileId,
+        long prefabInstanceFileId)
+    {
+        const ulong signBit = 1UL << 63;
+        ulong sourceWithoutSign =
+            (unchecked((ulong)localFileId) ^ unchecked((ulong)prefabInstanceFileId)) &
+            long.MaxValue;
+        yield return unchecked((long)sourceWithoutSign);
+        yield return unchecked((long)(sourceWithoutSign | signBit));
     }
 
     private static void CollectVariantModificationBlocks(UnityPackage package, string guid,

@@ -68,8 +68,11 @@ public sealed class VrchatAvatar
     /// </summary>
     public Dictionary<string, string> FbxMaterialGuids { get; } = new(StringComparer.Ordinal);
 
-    /// <summary>GameObject names that start inactive in the prefab (m_IsActive = 0), e.g. costume swaps.</summary>
-    public List<string> InactiveGameObjectNames { get; } = new();
+    /// <summary>
+    /// GameObjects that start inactive in the prefab. FBX GUID scopes duplicate names across
+    /// composed models, such as a base and replacement hair both containing "HairFront".
+    /// </summary>
+    public List<VrchatGameObjectReference> InactiveGameObjects { get; } = new();
 
     /// <summary>
     /// All GameObject names present in the selected prefab's hierarchy. Used to drop imported FBX
@@ -92,6 +95,8 @@ public sealed class VrchatFbxAsset
     public Vec3 LocalScale { get; set; } = Vec3.One;
     public Dictionary<string, string> MaterialGuids { get; } = new(StringComparer.Ordinal);
 }
+
+public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
 
 /// <summary>One avatar prefab a package offers for conversion.</summary>
 public sealed record VrchatAvatarChoice(

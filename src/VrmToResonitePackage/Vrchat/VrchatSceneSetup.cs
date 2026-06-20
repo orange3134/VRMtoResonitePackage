@@ -92,21 +92,41 @@ internal static class VrchatSceneSetup
 
     private static void ApplyInactiveStates(Slot root, VrchatAvatar avatar)
     {
-        if (avatar.InactiveGameObjectNames.Count == 0)
+        if (avatar.InactiveGameObjects.Count == 0)
         {
             return;
         }
-        var inactive = new HashSet<string>(avatar.InactiveGameObjectNames, StringComparer.Ordinal);
+        var inactive = new HashSet<VrchatGameObjectReference>(avatar.InactiveGameObjects);
         int applied = 0;
         foreach (Slot slot in EnumerateSlots(root))
         {
-            if (slot.Name != null && inactive.Contains(slot.Name) && slot.ActiveSelf)
+            if (slot.Name == null || !slot.ActiveSelf)
+            {
+                continue;
+            }
+            string fbxGuid = FbxGuidForSlot(root, slot, avatar);
+            if (inactive.Contains(new VrchatGameObjectReference(fbxGuid, slot.Name)) ||
+                inactive.Contains(new VrchatGameObjectReference(null, slot.Name)))
             {
                 slot.ActiveSelf = false;
                 applied++;
             }
         }
         UniLog.Log($"非アクティブ状態を {applied} スロットに反映しました。");
+    }
+
+    private static string FbxGuidForSlot(Slot root, Slot slot, VrchatAvatar avatar)
+    {
+        for (Slot current = slot; current != null && current != root; current = current.Parent)
+        {
+            VrchatFbxAsset additional = avatar.AdditionalFbxs.FirstOrDefault(candidate =>
+                string.Equals(current.Name, candidate.InstanceName, StringComparison.Ordinal));
+            if (additional != null)
+            {
+                return additional.Guid;
+            }
+        }
+        return avatar.FbxGuid;
     }
 
     private static void ApplyInitialBlendShapes(Slot root, VrchatAvatar avatar)

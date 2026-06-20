@@ -95,15 +95,21 @@ public sealed class UnityModelFileIdResolver
 
                 bool skinned = node.MeshIndices.Any(index =>
                     index >= 0 && index < scene.MeshCount && scene.Meshes[index].HasBones);
-                if (skinned)
+                if (node.MeshCount > 0)
                 {
+                    // Unity's FBX importer can classify a mesh differently from Assimp when skin
+                    // data is optimized or stripped. Stable fileID resolution is exact, so include
+                    // both possible renderer component types as candidates.
                     AddPathVariants("SkinnedMeshRenderer", nodePath, node.Name);
-                    AddBlendShapeNames(scene, node);
-                }
-                else if (node.MeshCount > 0)
-                {
-                    AddPathVariants("MeshFilter", nodePath, node.Name);
                     AddPathVariants("MeshRenderer", nodePath, node.Name);
+                    if (skinned)
+                    {
+                        AddBlendShapeNames(scene, node);
+                    }
+                    else
+                    {
+                        AddPathVariants("MeshFilter", nodePath, node.Name);
+                    }
                 }
             }
         }
@@ -171,20 +177,29 @@ public sealed class UnityModelFileIdResolver
             var parts = new List<string> { "//RootNode" };
             parts.AddRange(rawPath.Skip(skip));
             string nodePath = string.Join("/", parts);
-            string[] objectPaths = type == "GameObject"
-                ? new[]
-                {
-                    nodePath,
-                    nodePath.Replace("//RootNode/", "//RootNode/root/"),
-                }
-                : new[]
-                     {
-                         $"{nodePath}/{type}",
-                         $"{nodePath.Replace("//RootNode/", "//RootNode/root/")}/{type}",
-                     };
+            string rootedNodePath = nodePath == "//RootNode"
+                ? "//RootNode/root"
+                : nodePath.Replace("//RootNode/", "//RootNode/root/");
+            var nodePaths = new List<string> { nodePath };
+            // A sole imported mesh node can be folded into Unity's synthetic "root". Do not let
+            // Assimp's artificial root claim that path first; it belongs to the real child node.
+            if (nodePath != "//RootNode" || (rawPath.Count > 1 && skip > 0))
+            {
+                nodePaths.Add(rootedNodePath);
+            }
+            IEnumerable<string> objectPaths = type == "GameObject"
+                ? nodePaths
+                : nodePaths.Select(path => $"{path}/{type}");
             foreach (string objectPath in objectPaths)
             {
-                AddHashCandidate(type, objectPath, "0", name, Encoding.UTF8);
+                // Unity increments the suffix when imported objects collide on type/path.
+                // Generate a small candidate range so prefab overrides can resolve those stable
+                // IDs even though Assimp doesn't expose Unity's chosen duplicate index.
+                for (int duplicateIndex = 0; duplicateIndex < 16; duplicateIndex++)
+                {
+                    AddHashCandidate(type, objectPath, duplicateIndex.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture), name, Encoding.UTF8);
+                }
             }
         }
     }
