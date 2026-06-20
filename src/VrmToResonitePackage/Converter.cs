@@ -226,7 +226,8 @@ internal static class Converter
 
                 if (options.NoAvatar)
                 {
-                    await MaterialTuner.Apply(root, assetsSlot, vrm, vrmPath);
+                    await MaterialTuner.Apply(root, assetsSlot, vrm, vrmPath,
+                        options.MtoonTransparentCutoutMaterials);
                     SpringBoneSetup.Apply(root, vrm);
                 }
                 else
@@ -246,7 +247,8 @@ internal static class Converter
                         setupOptions.NearClip = options.NearClip.Value;
                     }
                     AvatarSetup.Build(root, vrm, setupOptions);
-                    await MaterialTuner.Apply(root, assetsSlot, vrm, vrmPath);
+                    await MaterialTuner.Apply(root, assetsSlot, vrm, vrmPath,
+                        options.MtoonTransparentCutoutMaterials);
                     await AvatarSetup.ApplyFirstPersonAutoAsync(root, vrm);
                     SpringBoneSetup.Apply(root, vrm);
                 }

@@ -175,6 +175,7 @@ internal sealed class CliOptions
     public float? ViewUp { get; set; }
     public float? NearClip { get; set; }
     public int ImportTimeoutSeconds { get; set; } = 300;
+    public HashSet<string> MtoonTransparentCutoutMaterials { get; } = new(StringComparer.Ordinal);
     public bool InspectMode { get; set; }
     public bool InspectVerbose { get; set; }
     public bool AssimpDump { get; set; }
@@ -249,6 +250,9 @@ internal sealed class CliOptions
                 case "--import-timeout":
                     options.ImportTimeoutSeconds = (int)RequireFloat(args, ref i, arg, mustBePositive: true);
                     break;
+                case "--mtoon-transparent-cutout":
+                    options.MtoonTransparentCutoutMaterials.Add(RequireValue(args, ref i, arg));
+                    break;
                 default:
                     if (arg.StartsWith('-'))
                     {
@@ -307,6 +311,7 @@ internal sealed class CliOptions
         Console.WriteLine("  --view-up <m>            視点の上方オフセット（既定: 目間距離から自動)");
         Console.WriteLine("  --near-clip <m>          AvatarRenderSettingsのNearClip（既定: 0.075、0で無効）");
         Console.WriteLine("  --import-timeout <sec>   モデルインポートのタイムアウト秒数（既定: 300）");
+        Console.WriteLine("  --mtoon-transparent-cutout <name>  指定したMToon Transparent材質をCutoutに変換");
         Console.WriteLine("  --keep-working-files     作業用一時ファイルを残す（デバッグ用）");
         Console.WriteLine("  -h, --help               このヘルプ");
         Console.WriteLine();

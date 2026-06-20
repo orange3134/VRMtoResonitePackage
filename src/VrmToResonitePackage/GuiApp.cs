@@ -11,6 +11,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using VrmToResonitePackage.Unity;
+using VrmToResonitePackage.Vrm;
 using VrmToResonitePackage.Vrchat;
 
 namespace VrmToResonitePackage;
@@ -324,7 +325,31 @@ internal sealed class MainWindow : Window
         var avatarJobs = new List<CliOptions>();
         foreach (string file in inputFiles)
         {
-            if (string.Equals(Path.GetExtension(file), ".unitypackage", StringComparison.OrdinalIgnoreCase))
+            string extension = Path.GetExtension(file);
+            if (_settings.PromptMtoonTransparentBlendMode &&
+                string.Equals(extension, ".vrm", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowConverting(Path.GetFileName(file) + " を解析中...");
+                IReadOnlyList<string> transparentMaterials = await Task.Run(() => ListMtoonTransparentMaterials(file));
+                if (transparentMaterials.Count > 0)
+                {
+                    IReadOnlyList<string> cutoutMaterials = SelectMtoonTransparentModes(transparentMaterials);
+                    if (cutoutMaterials == null)
+                    {
+                        return null;
+                    }
+
+                    CliOptions option = _settings.ToCliOptions(new[] { file });
+                    foreach (string material in cutoutMaterials)
+                    {
+                        option.MtoonTransparentCutoutMaterials.Add(material);
+                    }
+                    avatarJobs.Add(option);
+                    continue;
+                }
+            }
+
+            if (string.Equals(extension, ".unitypackage", StringComparison.OrdinalIgnoreCase))
             {
                 ShowConverting(Path.GetFileName(file) + " を解析中...");
                 IReadOnlyList<VrchatAvatarChoice> avatars = await Task.Run(() => ListPackageAvatars(file));
@@ -387,10 +412,27 @@ internal sealed class MainWindow : Window
         }
     }
 
+    private static IReadOnlyList<string> ListMtoonTransparentMaterials(string path)
+    {
+        VrmModel model = VrmParser.Parse(path);
+        return model.Materials.Values
+            .Where(material => material.IsMToon && material.AlphaMode == "blend")
+            .Select(material => material.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private string SelectAvatar(string packageFile, IReadOnlyList<VrchatAvatarChoice> avatars)
     {
         var dialog = new AvatarSelectionWindow(Path.GetFileName(packageFile), avatars) { Owner = this };
         return dialog.ShowDialog() == true ? dialog.SelectedAvatar : null;
+    }
+
+    private IReadOnlyList<string> SelectMtoonTransparentModes(IReadOnlyList<string> materials)
+    {
+        var dialog = new MtoonTransparentModeWindow(materials) { Owner = this };
+        return dialog.ShowDialog() == true ? dialog.CutoutMaterials : null;
     }
 
     private static async Task<ConversionRunResult> RunConversionProcessAsync(CliOptions options, string resonitePath)
@@ -503,6 +545,11 @@ internal sealed class MainWindow : Window
         AddNullableFloat(arguments, "--near-clip", options.NearClip);
         arguments.Add("--import-timeout");
         arguments.Add(options.ImportTimeoutSeconds.ToString(CultureInfo.InvariantCulture));
+        foreach (string material in options.MtoonTransparentCutoutMaterials)
+        {
+            arguments.Add("--mtoon-transparent-cutout");
+            arguments.Add(material);
+        }
         foreach (string file in options.InputFiles)
         {
             arguments.Add(file);
@@ -778,6 +825,7 @@ internal sealed class SettingsWindow : Window
     private readonly CheckBox _noExpressionMenu = new() { Content = "表情メニューを生成しない" };
     private readonly CheckBox _defaultUserScale = new() { Content = "アバターの原寸サイズを維持" };
     private readonly CheckBox _keepWorkingFiles = new() { Content = "作業用一時ファイルを残す" };
+    private readonly CheckBox _promptMtoonTransparentBlendMode = new() { Content = "半透明マテリアルの変換先を手動で選ぶ" };
     private readonly TextBox _viewForward = new();
     private readonly TextBox _viewUp = new();
     private readonly TextBox _nearClip = new();
@@ -807,6 +855,7 @@ internal sealed class SettingsWindow : Window
         panel.Children.Add(_noProtection);
         panel.Children.Add(_noExpressionMenu);
         panel.Children.Add(_defaultUserScale);
+        panel.Children.Add(_promptMtoonTransparentBlendMode);
         panel.Children.Add(_keepWorkingFiles);
         panel.Children.Add(Field("視点の前方オフセット(m)", _viewForward));
         panel.Children.Add(Field("視点の上方オフセット(m)", _viewUp));
@@ -849,6 +898,7 @@ internal sealed class SettingsWindow : Window
         _noProtection.IsChecked = Settings.NoProtection;
         _noExpressionMenu.IsChecked = Settings.NoExpressionMenu;
         _defaultUserScale.IsChecked = Settings.DefaultUserScale;
+        _promptMtoonTransparentBlendMode.IsChecked = Settings.PromptMtoonTransparentBlendMode;
         _keepWorkingFiles.IsChecked = Settings.KeepWorkingFiles;
         _viewForward.Text = Settings.ViewForward?.ToString(CultureInfo.InvariantCulture) ?? AutoValueText;
         _viewUp.Text = Settings.ViewUp?.ToString(CultureInfo.InvariantCulture) ?? AutoValueText;
@@ -867,6 +917,7 @@ internal sealed class SettingsWindow : Window
             Settings.NoProtection = _noProtection.IsChecked == true;
             Settings.NoExpressionMenu = _noExpressionMenu.IsChecked == true;
             Settings.DefaultUserScale = _defaultUserScale.IsChecked == true;
+            Settings.PromptMtoonTransparentBlendMode = _promptMtoonTransparentBlendMode.IsChecked == true;
             Settings.KeepWorkingFiles = _keepWorkingFiles.IsChecked == true;
             Settings.ViewForward = ParseNullableFloat(_viewForward.Text, "視点の前方オフセット", AutoValueText);
             Settings.ViewUp = ParseNullableFloat(_viewUp.Text, "視点の上方オフセット", AutoValueText);
@@ -1055,6 +1106,110 @@ internal sealed class AvatarSelectionWindow : Window
     }
 }
 
+/// <summary>Modal dialog that lets users override MToon Transparent materials to Cutout.</summary>
+internal sealed class MtoonTransparentModeWindow : Window
+{
+    private static readonly Brush AccentBrush = new SolidColorBrush(Color.FromRgb(0xca, 0xa4, 0xec));
+    private readonly Dictionary<string, ComboBox> _modeBoxes = new(StringComparer.Ordinal);
+
+    public IReadOnlyList<string> CutoutMaterials { get; private set; } = Array.Empty<string>();
+
+    public MtoonTransparentModeWindow(IReadOnlyList<string> materials)
+    {
+        Title = "半透明マテリアルの変換先設定";
+        Width = 560;
+        Height = 520;
+        MinWidth = 460;
+        MinHeight = 360;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        Background = new SolidColorBrush(Color.FromRgb(248, 244, 252));
+        FontFamily = new FontFamily("Segoe UI");
+
+        TitleBarTheme.Apply(this);
+
+        var root = new DockPanel { Margin = new Thickness(24) };
+        Content = root;
+
+        var header = new StackPanel();
+        DockPanel.SetDock(header, Dock.Top);
+        header.Children.Add(new TextBlock
+        {
+            Text = "半透明マテリアルの変換先設定",
+            FontSize = 20,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e))
+        });
+        header.Margin = new Thickness(0, 0, 0, 14);
+        root.Children.Add(header);
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 16, 0, 0)
+        };
+        DockPanel.SetDock(buttons, Dock.Bottom);
+        var cancel = new Button { Content = "キャンセル", MinWidth = 96, Margin = new Thickness(0, 0, 8, 0) };
+        var ok = new Button
+        {
+            Content = "変換",
+            MinWidth = 96,
+            Background = AccentBrush,
+            Foreground = Brushes.White,
+            BorderBrush = AccentBrush
+        };
+        cancel.Click += (_, _) => DialogResult = false;
+        ok.Click += (_, _) => Confirm();
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(ok);
+        root.Children.Add(buttons);
+
+        var list = new StackPanel();
+        foreach (string material in materials)
+        {
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(new TextBlock
+            {
+                Text = material,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e)),
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+
+            var mode = new ComboBox
+            {
+                Width = 112,
+                Height = 30,
+                Margin = new Thickness(12, 0, 0, 0)
+            };
+            mode.Items.Add("Alpha");
+            mode.Items.Add("Cutout");
+            mode.SelectedIndex = 0;
+            Grid.SetColumn(mode, 1);
+            row.Children.Add(mode);
+            _modeBoxes[material] = mode;
+            list.Children.Add(row);
+        }
+
+        root.Children.Add(new ScrollViewer
+        {
+            Content = list,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        });
+    }
+
+    private void Confirm()
+    {
+        CutoutMaterials = _modeBoxes
+            .Where(pair => string.Equals(pair.Value.SelectedItem as string, "Cutout", StringComparison.Ordinal))
+            .Select(pair => pair.Key)
+            .ToArray();
+        DialogResult = true;
+    }
+}
+
 internal sealed class GuiSettings
 {
     public string OutputDirectory { get; set; }
@@ -1065,6 +1220,7 @@ internal sealed class GuiSettings
     public bool NoExpressionMenu { get; set; }
     public bool DefaultUserScale { get; set; }
     public bool KeepWorkingFiles { get; set; }
+    public bool PromptMtoonTransparentBlendMode { get; set; }
     public float? ViewForward { get; set; }
     public float? ViewUp { get; set; }
     public float? NearClip { get; set; }
@@ -1106,6 +1262,7 @@ internal sealed class GuiSettings
         NoExpressionMenu = NoExpressionMenu,
         DefaultUserScale = DefaultUserScale,
         KeepWorkingFiles = KeepWorkingFiles,
+        PromptMtoonTransparentBlendMode = PromptMtoonTransparentBlendMode,
         ViewForward = ViewForward,
         ViewUp = ViewUp,
         NearClip = NearClip,
@@ -1122,6 +1279,7 @@ internal sealed class GuiSettings
         NoExpressionMenu = other.NoExpressionMenu;
         DefaultUserScale = other.DefaultUserScale;
         KeepWorkingFiles = other.KeepWorkingFiles;
+        PromptMtoonTransparentBlendMode = other.PromptMtoonTransparentBlendMode;
         ViewForward = other.ViewForward;
         ViewUp = other.ViewUp;
         NearClip = other.NearClip;

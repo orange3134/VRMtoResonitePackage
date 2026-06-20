@@ -24,7 +24,8 @@ internal static class MaterialTuner
         GreenToRgb,
     }
 
-    public static async Task Apply(Slot root, Slot assetsSlot, VrmModel vrm, string vrmPath)
+    public static async Task Apply(Slot root, Slot assetsSlot, VrmModel vrm, string vrmPath,
+        IReadOnlySet<string> mtoonTransparentCutoutMaterials = null)
     {
         int tuned = 0;
         var textureCache = new Dictionary<(int ImageIndex, TextureTransform Transform), StaticTexture2D>();
@@ -34,7 +35,8 @@ internal static class MaterialTuner
             VrmMaterialInfo info = FindInfo(vrm, material.Slot.Name);
             if (info != null)
             {
-                await ApplyInfo(material, info, vrmPath, assetsSlot, textureCache, rampCache);
+                await ApplyInfo(material, info, vrmPath, assetsSlot, textureCache, rampCache,
+                    mtoonTransparentCutoutMaterials);
             }
             else
             {
@@ -74,14 +76,28 @@ internal static class MaterialTuner
     private static async Task ApplyInfo(XiexeToonMaterial material, VrmMaterialInfo info,
         string vrmPath, Slot assetsSlot,
         Dictionary<(int ImageIndex, TextureTransform Transform), StaticTexture2D> textureCache,
-        Dictionary<string, StaticTexture2D> rampCache)
+        Dictionary<string, StaticTexture2D> rampCache,
+        IReadOnlySet<string> mtoonTransparentCutoutMaterials)
     {
+        bool useCutoutForTransparent = info.IsMToon &&
+            info.AlphaMode == "blend" &&
+            mtoonTransparentCutoutMaterials?.Contains(info.Name) == true;
+
         // --- Alpha handling (MToon spec: explicit ZWrite + render queue) ---
         switch (info.AlphaMode)
         {
             case "blend":
-                material.BlendMode.Value = BlendMode.Alpha;
-                material.ZWrite.Value = info.TransparentWithZWrite ? ZWrite.On : ZWrite.Off;
+                if (useCutoutForTransparent)
+                {
+                    material.BlendMode.Value = BlendMode.Cutout;
+                    material.AlphaClip.Value = info.AlphaCutoff;
+                    material.ZWrite.Value = ZWrite.On;
+                }
+                else
+                {
+                    material.BlendMode.Value = BlendMode.Alpha;
+                    material.ZWrite.Value = info.TransparentWithZWrite ? ZWrite.On : ZWrite.Off;
+                }
                 break;
             case "mask":
                 material.BlendMode.Value = BlendMode.Cutout;
@@ -93,7 +109,7 @@ internal static class MaterialTuner
                 material.ZWrite.Value = ZWrite.On;
                 break;
         }
-        material.RenderQueue.Value = ComputeRenderQueue(info);
+        material.RenderQueue.Value = ComputeRenderQueue(info, useCutoutForTransparent);
 
         if (info.DoubleSided)
         {
@@ -231,8 +247,12 @@ internal static class MaterialTuner
     }
 
     /// <summary>Unity render queue, following the MToon 1.0 queue layout.</summary>
-    private static int ComputeRenderQueue(VrmMaterialInfo info)
+    private static int ComputeRenderQueue(VrmMaterialInfo info, bool useCutoutForTransparent)
     {
+        if (useCutoutForTransparent)
+        {
+            return 2450;
+        }
         if (info.RenderQueue.HasValue)
         {
             return info.RenderQueue.Value; // VRM0 stores the queue explicitly
