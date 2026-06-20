@@ -162,7 +162,8 @@ internal static class VrchatSceneSetup
                     renderer.BlendShapeWeights.Add();
                 }
                 // Unity blendshape weights are 0-100; Resonite's are 0-1 (1 = full shape).
-                renderer.BlendShapeWeights[index] = weight / 100f;
+                Sync<float> field = renderer.BlendShapeWeights.GetElement(index);
+                field.Value = weight / 100f;
                 appliedNames.Add($"{index}:{renderer.BlendShapeName(index)}={weight:G6}");
                 applied++;
             }

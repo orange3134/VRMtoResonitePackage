@@ -61,6 +61,8 @@ public sealed class VrchatAvatar
     /// </summary>
     public Dictionary<string, IReadOnlyList<string>> FbxBlendShapeNames { get; } =
         new(StringComparer.Ordinal);
+    public Dictionary<string, IReadOnlyList<float>> FbxBlendShapeDefaultWeights { get; } =
+        new(StringComparer.Ordinal);
 
     /// <summary>
     /// FBX embedded material name -> external Unity .mat guid, from ModelImporter.externalObjects.

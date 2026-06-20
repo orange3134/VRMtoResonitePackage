@@ -12,6 +12,11 @@ public sealed class UnityModelFileIdResolver
     private readonly Dictionary<long, string> _names = new();
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNames =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<float>> _blendShapeDefaultWeights =
+        new(StringComparer.Ordinal);
+    private IReadOnlyList<UnityFbxBlendShapeDefaults.Channel> _defaultWeightChannels =
+        Array.Empty<UnityFbxBlendShapeDefaults.Channel>();
+    private bool[] _usedDefaultWeightChannels = Array.Empty<bool>();
 
     public UnityModelFileIdResolver(UnityAsset model)
     {
@@ -31,6 +36,8 @@ public sealed class UnityModelFileIdResolver
         => fileId != 0 && _names.TryGetValue(fileId, out string name) ? name : null;
 
     public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNames => _blendShapeNames;
+    public IReadOnlyDictionary<string, IReadOnlyList<float>> BlendShapeDefaultWeights =>
+        _blendShapeDefaultWeights;
 
     private void AddMetaMappings(UnityAsset model)
     {
@@ -80,6 +87,8 @@ public sealed class UnityModelFileIdResolver
                 importPath = temporaryPath;
             }
             using var context = new AssimpContext();
+            _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath);
+            _usedDefaultWeightChannels = new bool[_defaultWeightChannels.Count];
             Scene scene = context.ImportFile(importPath, PostProcessSteps.None);
             if (scene?.RootNode == null)
             {
@@ -150,6 +159,31 @@ public sealed class UnityModelFileIdResolver
             names.Add(name);
         }
         _blendShapeNames.TryAdd(node.Name, names);
+        var defaults = new float[names.Count];
+        for (int i = 0; i < names.Count; i++)
+        {
+            string attachmentName = names[i];
+            for (int channelIndex = 0; channelIndex < _defaultWeightChannels.Count; channelIndex++)
+            {
+                if (_usedDefaultWeightChannels[channelIndex])
+                {
+                    continue;
+                }
+                UnityFbxBlendShapeDefaults.Channel channel = _defaultWeightChannels[channelIndex];
+                if (string.Equals(attachmentName, channel.Name, StringComparison.Ordinal) ||
+                    string.Equals(attachmentName, $"{channel.Name}.{channel.Name}",
+                        StringComparison.Ordinal))
+                {
+                    defaults[i] = channel.Weight;
+                    _usedDefaultWeightChannels[channelIndex] = true;
+                    break;
+                }
+            }
+        }
+        if (defaults.Any(weight => MathF.Abs(weight) > 0.001f))
+        {
+            _blendShapeDefaultWeights.TryAdd(node.Name, defaults);
+        }
     }
 
     private static void CollectNodes(Node node, List<string> parentPath,

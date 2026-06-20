@@ -136,6 +136,7 @@ public static class VrchatAvatarParser
             ParseFbxBlendShapeNames(package, avatar);
             ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
             ParseVariantRendererOverrides(package, selected.Source.Guid, avatar);
+            ApplyFbxDefaultBlendShapeWeights(avatar);
             return avatar;
         }
 
@@ -156,6 +157,7 @@ public static class VrchatAvatarParser
         ParsePhysBones(selected.Scene, selected.Subtree, avatar);
         ParseRendererMaterials(selected.Scene, selected.Subtree, avatar);
         ParseInactiveGameObjects(selected.Scene, selected.Subtree, avatar);
+        ApplyFbxDefaultBlendShapeWeights(avatar);
         return avatar;
     }
 
@@ -175,10 +177,44 @@ public static class VrchatAvatarParser
             {
                 avatar.FbxBlendShapeNames.TryAdd(rendererName, names);
             }
+            foreach ((string rendererName, IReadOnlyList<float> weights) in
+                     resolver.BlendShapeDefaultWeights)
+            {
+                avatar.FbxBlendShapeDefaultWeights.TryAdd(rendererName, weights);
+            }
         }
         if (avatar.FbxBlendShapeNames.Count > 0)
         {
             UniLog.Log($"FBX blendshape order captured for {avatar.FbxBlendShapeNames.Count} renderer(s).");
+        }
+    }
+
+    private static void ApplyFbxDefaultBlendShapeWeights(VrchatAvatar avatar)
+    {
+        foreach ((string rendererName, IReadOnlyList<float> weights) in
+                 avatar.FbxBlendShapeDefaultWeights)
+        {
+            VrchatRendererMaterials renderer = avatar.RendererMaterials.FirstOrDefault(candidate =>
+                string.Equals(candidate.RendererGameObjectName, rendererName,
+                    StringComparison.Ordinal));
+            if (renderer == null)
+            {
+                renderer = new VrchatRendererMaterials
+                {
+                    RendererGameObjectName = rendererName,
+                };
+                avatar.RendererMaterials.Add(renderer);
+            }
+            for (int index = 0; index < weights.Count; index++)
+            {
+                float weight = weights[index];
+                if (MathF.Abs(weight) <= 0.001f ||
+                    renderer.InitialBlendShapes.Any(entry => entry.Index == index))
+                {
+                    continue;
+                }
+                renderer.InitialBlendShapes.Add((index, weight));
+            }
         }
     }
 
@@ -1471,7 +1507,7 @@ public static class VrchatAvatarParser
                     {
                         renderer.InitialBlendShapes[existing] = (index, weight);
                     }
-                    else if (MathF.Abs(weight) > 0.001f)
+                    else
                     {
                         renderer.InitialBlendShapes.Add((index, weight));
                     }

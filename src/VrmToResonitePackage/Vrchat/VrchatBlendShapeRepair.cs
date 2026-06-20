@@ -96,7 +96,7 @@ internal static class VrchatBlendShapeRepair
                     ? values.Dequeue()
                     : 0f;
                 renderer.BlendShapeWeights.Add();
-                renderer.BlendShapeWeights[renderer.BlendShapeWeights.Count - 1] = value;
+                renderer.BlendShapeWeights.GetElement(renderer.BlendShapeWeights.Count - 1).Value = value;
             }
 
             repaired++;
