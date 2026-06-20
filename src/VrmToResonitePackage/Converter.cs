@@ -309,6 +309,7 @@ internal static class Converter
             ? avatar.Name
             : Path.GetFileNameWithoutExtension(packagePath);
         Console.WriteLine($"VRChatアバター: {displayName}");
+        Console.WriteLine($"Prefab: {Path.GetFileName(avatar.PrefabPath)}");
         Console.WriteLine($"ヒューマノイドボーン: {avatar.HumanBones.Count}, ビセーム: {avatar.Visemes.Count}, " +
                           $"瞬き: {(avatar.Blink != null ? "あり" : "なし")}, PhysBone: {avatar.PhysBones.Count}");
 

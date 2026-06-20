@@ -45,6 +45,8 @@ dotnet publish src/VrmToResonitePackage -c Release -o publish   # 配布用
 - **テスト用モデル**: VRM 0.x / VRM 1.0 の**同一モデルのバージョン違いペア**を用意して
   両系統を確認するのが定石。`.vrm` と `test-input/` `test-output/` は `.gitignore` 済み
   （リポジトリにはコミットしない）。
+- **検証用一時ファイル**: リポジトリ内に作るビルド出力・展開物・変換結果は `.tmp_verify/`
+  配下に置く（`.gitignore` 済み）。`.tmp/` など別名の一時ディレクトリは作らない。
 - **変換ログの場所**: **exe と同じフォルダの `Logs\`**（例:
   `src/VrmToResonitePackage/bin/Debug/Logs/convert_*.log`）。
   ※エンジンのデータ/キャッシュ（`Data\` `Cache\`）は `%LOCALAPPDATA%\ResoPon\`

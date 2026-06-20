@@ -259,14 +259,13 @@ internal sealed class MainWindow : Window
 
         // A .unitypackage may hold several avatars; let the user pick which one (skipped for a
         // single avatar or a VRM). Done before conversion, engine-independent.
-        List<CliOptions> jobs = await BuildConversionJobs(inputFiles);
+        List<ConversionJob> jobs = await BuildConversionJobs(inputFiles);
         if (jobs == null)
         {
             ShowIdle(); // user cancelled the avatar selection
             return;
         }
 
-        ShowConverting(Path.GetFileName(inputFiles[0]));
         try
         {
             string resonitePath = ResoniteLocator.Locate(_settings.ResonitePath);
@@ -274,9 +273,10 @@ internal sealed class MainWindow : Window
             int exitCode = 0;
             int failures = 0;
             string logPath = null;
-            foreach (CliOptions options in jobs)
+            foreach (ConversionJob job in jobs)
             {
-                ConversionRunResult result = await RunConversionProcessAsync(options, resonitePath);
+                ShowConverting(job.DisplayName);
+                ConversionRunResult result = await RunConversionProcessAsync(job.Options, resonitePath);
                 outputs.AddRange(result.OutputFiles);
                 failures += result.Failures;
                 if (!string.IsNullOrWhiteSpace(result.LogPath))
@@ -310,11 +310,11 @@ internal sealed class MainWindow : Window
 
     /// <summary>
     /// Builds the conversion jobs, prompting for avatar selection on any .unitypackage that holds
-    /// more than one avatar. VRMs and single-avatar packages are grouped into one batch job; each
-    /// multi-avatar package becomes its own job carrying the chosen avatar. Returns null if the user
+    /// more than one avatar. VRMs are grouped into one batch job; each .unitypackage becomes its own
+    /// job carrying the selected prefab name for the progress display. Returns null if the user
     /// cancels a selection.
     /// </summary>
-    private async Task<List<CliOptions>> BuildConversionJobs(string[] inputFiles)
+    private async Task<List<ConversionJob>> BuildConversionJobs(string[] inputFiles)
     {
         // Listing a package's avatars uses Elements.Core (UniLog); the GUI process must resolve
         // Resonite's assemblies for that to JIT. The CLI path installs this; the GUI doesn't, so
@@ -322,7 +322,7 @@ internal sealed class MainWindow : Window
         EnsureAssemblyResolver();
 
         var batchFiles = new List<string>();
-        var avatarJobs = new List<CliOptions>();
+        var avatarJobs = new List<ConversionJob>();
         foreach (string file in inputFiles)
         {
             string extension = Path.GetExtension(file);
@@ -344,7 +344,7 @@ internal sealed class MainWindow : Window
                     {
                         option.MtoonTransparentCutoutMaterials.Add(material);
                     }
-                    avatarJobs.Add(option);
+                    avatarJobs.Add(new ConversionJob(option, Path.GetFileName(file)));
                     continue;
                 }
             }
@@ -353,6 +353,7 @@ internal sealed class MainWindow : Window
             {
                 ShowConverting(Path.GetFileName(file) + " を解析中...");
                 IReadOnlyList<VrchatAvatarChoice> avatars = await Task.Run(() => ListPackageAvatars(file));
+                VrchatAvatarChoice selected = avatars.Count == 1 ? avatars[0] : null;
                 if (avatars.Count > 1)
                 {
                     string chosen = SelectAvatar(file, avatars);
@@ -360,23 +361,34 @@ internal sealed class MainWindow : Window
                     {
                         return null; // cancelled
                     }
-                    CliOptions option = _settings.ToCliOptions(new[] { file });
-                    option.AvatarName = chosen;
-                    avatarJobs.Add(option);
-                    continue;
+                    selected = avatars.FirstOrDefault(avatar =>
+                        string.Equals(avatar.Name, chosen, StringComparison.Ordinal));
                 }
+
+                CliOptions option = _settings.ToCliOptions(new[] { file });
+                option.AvatarName = selected?.Name;
+                string prefabName = Path.GetFileName(selected?.SourcePath);
+                string displayName = string.IsNullOrWhiteSpace(prefabName)
+                    ? Path.GetFileName(file)
+                    : $"{Path.GetFileName(file)}\n{prefabName}";
+                avatarJobs.Add(new ConversionJob(option, displayName));
+                continue;
             }
             batchFiles.Add(file);
         }
 
-        var jobs = new List<CliOptions>();
+        var jobs = new List<ConversionJob>();
         if (batchFiles.Count > 0)
         {
-            jobs.Add(_settings.ToCliOptions(batchFiles.ToArray()));
+            jobs.Add(new ConversionJob(
+                _settings.ToCliOptions(batchFiles.ToArray()),
+                Path.GetFileName(batchFiles[0])));
         }
         jobs.AddRange(avatarJobs);
         return jobs;
     }
+
+    private sealed record ConversionJob(CliOptions Options, string DisplayName);
 
     private bool _resolverInstalled;
 
