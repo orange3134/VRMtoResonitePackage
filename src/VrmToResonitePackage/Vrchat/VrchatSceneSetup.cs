@@ -129,7 +129,7 @@ internal static class VrchatSceneSetup
         return avatar.FbxGuid;
     }
 
-    private static void ApplyInitialBlendShapes(Slot root, VrchatAvatar avatar)
+    public static void ApplyInitialBlendShapes(Slot root, VrchatAvatar avatar)
     {
         var renderersByName = new Dictionary<string, SkinnedMeshRenderer>(StringComparer.Ordinal);
         foreach (SkinnedMeshRenderer renderer in root.GetComponentsInChildren<SkinnedMeshRenderer>())
@@ -162,8 +162,7 @@ internal static class VrchatSceneSetup
                     renderer.BlendShapeWeights.Add();
                 }
                 // Unity blendshape weights are 0-100; Resonite's are 0-1 (1 = full shape).
-                Sync<float> field = renderer.BlendShapeWeights.GetElement(index);
-                field.Value = weight / 100f;
+                renderer.SetBlendShapeWeight(index, weight / 100f);
                 appliedNames.Add($"{index}:{renderer.BlendShapeName(index)}={weight:G6}");
                 applied++;
             }
