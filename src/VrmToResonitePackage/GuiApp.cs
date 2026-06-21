@@ -1157,7 +1157,18 @@ internal sealed class MtoonTransparentModeWindow : Window
             FontWeight = FontWeights.SemiBold,
             Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e))
         });
-        header.Margin = new Thickness(0, 0, 0, 14);
+        header.Children.Add(new TextBlock
+        {
+            Text = "Resoniteのシェーダーの仕様により、それぞれ以下のような表示になります。\n" +
+                   "Alpha: 半透明処理が綺麗にできますが、特定のライティングで光って見えます。\n" +
+                   "Cutout: 透明か不透明かのゼロイチになりますが、ライティングに馴染みます。",
+            Margin = new Thickness(0, 10, 0, 0),
+            FontSize = 13,
+            LineHeight = 21,
+            Foreground = new SolidColorBrush(Color.FromRgb(110, 110, 110)),
+            TextWrapping = TextWrapping.Wrap
+        });
+        header.Margin = new Thickness(0, 0, 0, 16);
         root.Children.Add(header);
 
         var buttons = new StackPanel
