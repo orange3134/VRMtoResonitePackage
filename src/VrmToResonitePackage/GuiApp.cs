@@ -72,6 +72,7 @@ internal sealed class MainWindow : Window
         AllowDrop = true;
         Icon = LoadWindowIcon();
         TitleBarTheme.Apply(this);
+        GuiTheme.Apply(this);
 
         _root = new Grid
         {
@@ -79,21 +80,20 @@ internal sealed class MainWindow : Window
         };
         Content = _root;
 
+        // Themed icon button: shares the rounded white/accent-outline style; the accent glyph color
+        // is kept as a local value and zero padding centers the gear in the fixed 44x44 box.
         _settingsButton = new Button
         {
             Content = "⚙",
             Width = 44,
             Height = 44,
             FontSize = 22,
+            Padding = new Thickness(0),
             ToolTip = "設定",
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, 18, 18, 0),
-            Background = Brushes.White,
-            Foreground = AccentBrush,
-            BorderBrush = new SolidColorBrush(Color.FromRgb(225, 210, 242)),
-            BorderThickness = new Thickness(1),
-            Cursor = Cursors.Hand
+            Foreground = AccentBrush
         };
         _settingsButton.Click += (_, _) => OpenSettings();
 
@@ -867,8 +867,10 @@ internal sealed class SettingsWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = new SolidColorBrush(Color.FromRgb(248, 244, 252));
         FontFamily = new FontFamily("Segoe UI");
+        FontSize = 14;
 
         TitleBarTheme.Apply(this);
+        GuiTheme.Apply(this);
 
         var panel = new StackPanel { Margin = new Thickness(28) };
         Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -890,16 +892,14 @@ internal sealed class SettingsWindow : Window
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 24, 0, 0)
+            Margin = new Thickness(0, 28, 0, 0)
         };
-        var cancel = new Button { Content = "キャンセル", MinWidth = 96, Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = "キャンセル", MinWidth = 104, Margin = new Thickness(0, 0, 10, 0) };
         var save = new Button
         {
             Content = "保存",
-            MinWidth = 96,
-            Background = MainWindowAccentBrush,
-            Foreground = Brushes.White,
-            BorderBrush = MainWindowAccentBrush
+            MinWidth = 104,
+            Style = (Style)FindResource(GuiTheme.AccentButtonKey)
         };
         cancel.Click += (_, _) => DialogResult = false;
         save.Click += (_, _) => SaveAndClose();
@@ -911,8 +911,6 @@ internal sealed class SettingsWindow : Window
     }
 
     public GuiSettings Settings { get; private set; }
-
-    private static Brush MainWindowAccentBrush { get; } = new SolidColorBrush(Color.FromRgb(0xca, 0xa4, 0xec));
 
     private void LoadValues()
     {
@@ -962,29 +960,29 @@ internal sealed class SettingsWindow : Window
         FontSize = 22,
         FontWeight = FontWeights.SemiBold,
         Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e)),
-        Margin = new Thickness(0, 0, 0, 18)
+        Margin = new Thickness(0, 0, 0, 20)
     };
 
     private static FrameworkElement Field(string label, TextBox box)
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
+        var panel = new StackPanel { Margin = new Thickness(0, 18, 0, 0) };
         panel.Children.Add(new TextBlock { Text = label, Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e)) });
-        box.Margin = new Thickness(0, 6, 0, 0);
-        box.Height = 32;
+        box.Margin = new Thickness(0, 8, 0, 0);
+        box.Height = 36;
         panel.Children.Add(box);
         return panel;
     }
 
     private FrameworkElement PathRow(string label, TextBox box)
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
+        var panel = new StackPanel { Margin = new Thickness(0, 18, 0, 0) };
         panel.Children.Add(new TextBlock { Text = label, Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e)) });
-        var row = new Grid { Margin = new Thickness(0, 6, 0, 0) };
+        var row = new Grid { Margin = new Thickness(0, 8, 0, 0) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        box.Height = 32;
+        box.Height = 36;
         row.Children.Add(box);
-        var browse = new Button { Content = "参照", MinWidth = 72, Height = 32, Margin = new Thickness(8, 0, 0, 0) };
+        var browse = new Button { Content = "参照", MinWidth = 80, Height = 36, Margin = new Thickness(10, 0, 0, 0) };
         browse.Click += (_, _) =>
         {
             var dialog = new OpenFolderDialog();
@@ -1031,8 +1029,6 @@ internal sealed class SettingsWindow : Window
 /// <summary>Modal dialog that asks which avatar to convert when a package contains several.</summary>
 internal sealed class AvatarSelectionWindow : Window
 {
-    private static readonly Brush AccentBrush = new SolidColorBrush(Color.FromRgb(0xca, 0xa4, 0xec));
-
     private readonly ListBox _list = new();
 
     public string SelectedAvatar { get; private set; }
@@ -1045,10 +1041,12 @@ internal sealed class AvatarSelectionWindow : Window
         MinWidth = 400;
         MinHeight = 320;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = Brushes.White;
+        Background = new SolidColorBrush(Color.FromRgb(248, 244, 252));
         FontFamily = new FontFamily("Segoe UI");
+        FontSize = 14;
 
         TitleBarTheme.Apply(this);
+        GuiTheme.Apply(this);
 
         var root = new DockPanel { Margin = new Thickness(24) };
         Content = root;
@@ -1075,17 +1073,15 @@ internal sealed class AvatarSelectionWindow : Window
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 16, 0, 0)
+            Margin = new Thickness(0, 18, 0, 0)
         };
         DockPanel.SetDock(buttons, Dock.Bottom);
-        var cancel = new Button { Content = "キャンセル", MinWidth = 96, Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = "キャンセル", MinWidth = 104, Margin = new Thickness(0, 0, 10, 0) };
         var ok = new Button
         {
             Content = "変換",
-            MinWidth = 96,
-            Background = AccentBrush,
-            Foreground = Brushes.White,
-            BorderBrush = AccentBrush
+            MinWidth = 104,
+            Style = (Style)FindResource(GuiTheme.AccentButtonKey)
         };
         cancel.Click += (_, _) => DialogResult = false;
         ok.Click += (_, _) => Confirm();
@@ -1114,11 +1110,7 @@ internal sealed class AvatarSelectionWindow : Window
         }
         _list.SelectedIndex = 0;
         _list.MouseDoubleClick += (_, _) => Confirm();
-        root.Children.Add(new ScrollViewer
-        {
-            Content = _list,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
-        });
+        root.Children.Add(_list);
     }
 
     private void Confirm()
@@ -1134,7 +1126,6 @@ internal sealed class AvatarSelectionWindow : Window
 /// <summary>Modal dialog that lets users override MToon Transparent materials to Cutout.</summary>
 internal sealed class MtoonTransparentModeWindow : Window
 {
-    private static readonly Brush AccentBrush = new SolidColorBrush(Color.FromRgb(0xca, 0xa4, 0xec));
     private readonly Dictionary<string, ComboBox> _modeBoxes = new(StringComparer.Ordinal);
 
     public IReadOnlyList<string> CutoutMaterials { get; private set; } = Array.Empty<string>();
@@ -1149,8 +1140,10 @@ internal sealed class MtoonTransparentModeWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = new SolidColorBrush(Color.FromRgb(248, 244, 252));
         FontFamily = new FontFamily("Segoe UI");
+        FontSize = 14;
 
         TitleBarTheme.Apply(this);
+        GuiTheme.Apply(this);
 
         var root = new DockPanel { Margin = new Thickness(24) };
         Content = root;
@@ -1171,17 +1164,15 @@ internal sealed class MtoonTransparentModeWindow : Window
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 16, 0, 0)
+            Margin = new Thickness(0, 18, 0, 0)
         };
         DockPanel.SetDock(buttons, Dock.Bottom);
-        var cancel = new Button { Content = "キャンセル", MinWidth = 96, Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = "キャンセル", MinWidth = 104, Margin = new Thickness(0, 0, 10, 0) };
         var ok = new Button
         {
             Content = "変換",
-            MinWidth = 96,
-            Background = AccentBrush,
-            Foreground = Brushes.White,
-            BorderBrush = AccentBrush
+            MinWidth = 104,
+            Style = (Style)FindResource(GuiTheme.AccentButtonKey)
         };
         cancel.Click += (_, _) => DialogResult = false;
         ok.Click += (_, _) => Confirm();
@@ -1192,7 +1183,7 @@ internal sealed class MtoonTransparentModeWindow : Window
         var list = new StackPanel();
         foreach (string material in materials)
         {
-            var row = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 12) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.Children.Add(new TextBlock
@@ -1205,9 +1196,9 @@ internal sealed class MtoonTransparentModeWindow : Window
 
             var mode = new ComboBox
             {
-                Width = 112,
-                Height = 30,
-                Margin = new Thickness(12, 0, 0, 0)
+                Width = 120,
+                Height = 34,
+                Margin = new Thickness(14, 0, 0, 0)
             };
             mode.Items.Add("Alpha");
             mode.Items.Add("Cutout");
