@@ -93,6 +93,7 @@ internal static class Converter
                         ? await ConvertVrchat(world, inputFile, options).ConfigureAwait(false)
                         : await ConvertOne(world, inputFile, options).ConfigureAwait(false);
                     outputs.Add(output);
+                    Console.WriteLine($"RESOPON_OUTPUT:{output}");
                     Console.WriteLine($"=== 完了: {output} ===");
                 }
                 catch (Exception ex)
@@ -308,13 +309,19 @@ internal static class Converter
             ? avatar.Name
             : Path.GetFileNameWithoutExtension(packagePath);
         Console.WriteLine($"VRChatアバター: {displayName}");
+        Console.WriteLine($"Prefab: {Path.GetFileName(avatar.PrefabPath)}");
         Console.WriteLine($"ヒューマノイドボーン: {avatar.HumanBones.Count}, ビセーム: {avatar.Visemes.Count}, " +
                           $"瞬き: {(avatar.Blink != null ? "あり" : "なし")}, PhysBone: {avatar.PhysBones.Count}");
 
         string outputDirectory = options.OutputDirectory ?? Path.GetDirectoryName(packagePath);
         Directory.CreateDirectory(outputDirectory);
+        string prefabName = Path.GetFileNameWithoutExtension(avatar.PrefabPath);
+        if (string.IsNullOrWhiteSpace(prefabName))
+        {
+            prefabName = displayName;
+        }
         string outputPath = Path.Combine(outputDirectory,
-            SanitizeFileName(Path.GetFileNameWithoutExtension(packagePath)) + ".resonitepackage");
+            SanitizeFileName(prefabName) + ".resonitepackage");
 
         // The extracted FBX content file is named "asset"; Resonite's importer keys off the
         // extension, so copy it to a real .fbx path.
@@ -349,7 +356,10 @@ internal static class Converter
                 settings.CalculateTextureAlpha = true;
                 settings.ImportVertexColors = false;
                 settings.GenerateSkeletonBones = true;
-                settings.Scale = avatar.FbxImportScale;
+                // Apply Unity's ModelImporter unit scale to the imported hierarchy instead.
+                // FrooxEngine's Scale setting scales mesh data but leaves FBX node translations
+                // (including the skeleton) in source units, which produces mismatched giant rigs.
+                settings.Scale = 1f;
 
                 Slot importRoot = root.AddSlot("FBX Import Alignment");
                 var importedFbxRoots = new Dictionary<string, Slot>(StringComparer.OrdinalIgnoreCase);
@@ -380,7 +390,7 @@ internal static class Converter
                     additionalSettings.CalculateTextureAlpha = true;
                     additionalSettings.ImportVertexColors = false;
                     additionalSettings.GenerateSkeletonBones = true;
-                    additionalSettings.Scale = additional.ImportScale;
+                    additionalSettings.Scale = 1f;
                     Slot additionalRoot = importRoot.AddSlot(additional.InstanceName ?? $"Additional FBX {i + 1}");
                     importedFbxRoots[additional.Guid] = additionalRoot;
 
@@ -410,6 +420,7 @@ internal static class Converter
                 {
                     await WaitForAssets(assetsSlot);
                 }
+                Vrchat.VrchatSceneSetup.ApplyInitialBlendShapes(root, avatar);
 
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar);
@@ -506,6 +517,7 @@ internal static class Converter
                 -additional.LocalRotation.Z, additional.LocalRotation.W);
             float3 scale = new(
                 additional.LocalScale.X, additional.LocalScale.Y, additional.LocalScale.Z);
+            scale *= additional.ImportScale;
             instanceRoot.LocalPosition = position;
             instanceRoot.LocalRotation = rotation;
             instanceRoot.LocalScale = scale;
@@ -612,6 +624,7 @@ internal static class Converter
             avatar.FbxLocalRotation.X, -avatar.FbxLocalRotation.Y,
             -avatar.FbxLocalRotation.Z, avatar.FbxLocalRotation.W);
         float3 scale = new(avatar.FbxLocalScale.X, avatar.FbxLocalScale.Y, avatar.FbxLocalScale.Z);
+        scale *= avatar.FbxImportScale;
         instanceRoot.LocalPosition = position;
         instanceRoot.LocalRotation = rotation;
         instanceRoot.LocalScale = scale;

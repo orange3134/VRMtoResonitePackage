@@ -38,12 +38,18 @@ internal static class VrchatMaterialBuilder
             {
                 materialCache[guid] = material;
             }
+            else
+            {
+                UnityAsset asset = package.ByGuid(guid);
+                UniLog.Warning($"Could not convert referenced Unity material: " +
+                               $"{asset?.LogicalPath ?? guid} (guid {guid}).");
+            }
         }
 
         // FBX prefab variants keep their renderer hierarchy as stripped objects, so the prefab
-        // doesn't contain normal SkinnedMeshRenderer documents to read. ModelImporter.externalObjects
-        // still maps every embedded FBX material name to its external .mat; replace the imported
-        // placeholder materials by that name before applying any per-renderer prefab overrides.
+        // doesn't contain normal SkinnedMeshRenderer documents to read. ModelImporter mappings
+        // associate embedded FBX material names with Unity .mat assets; replace the imported
+        // placeholder materials by that mapping before applying per-renderer prefab overrides.
         int assigned = 0;
         foreach (MeshRenderer renderer in root.GetComponentsInChildren<MeshRenderer>())
         {
@@ -177,6 +183,14 @@ internal static class VrchatMaterialBuilder
                 material.BlendMode.Value = BlendMode.Alpha;
                 material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
                 break;
+            case "additive":
+                material.BlendMode.Value = BlendMode.Additive;
+                material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
+                break;
+            case "multiply":
+                material.BlendMode.Value = BlendMode.Multiply;
+                material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
+                break;
             default:
                 material.BlendMode.Value = BlendMode.Opaque;
                 material.ZWrite.Value = ZWrite.On;
@@ -186,10 +200,18 @@ internal static class VrchatMaterialBuilder
         {
             material.RenderQueue.Value = info.RenderQueue;
         }
-        material.Culling.Value = info.Cull == 0 ? Culling.Off : Culling.Back;
+        material.Culling.Value = info.Cull switch
+        {
+            0 => Culling.Off,
+            1 => Culling.Front,
+            _ => Culling.Back,
+        };
+        material.ColorMask.Value = (ColorMask)(byte)info.ColorMask;
 
         // --- Base color + main texture ---
         material.Color.Value = ToColor(info.Color, ColorProfile.sRGB);
+        material.MainTextureScale.Value = ToFloat2(info.MainTexScale);
+        material.MainTextureOffset.Value = ToFloat2(info.MainTexOffset);
         StaticTexture2D mainTex = await GetTexture(assetsSlot, package, info.MainTexGuid, textureCache, "MainTex");
         if (mainTex != null)
         {
@@ -200,14 +222,29 @@ internal static class VrchatMaterialBuilder
         {
             normal.IsNormalMap.Value = true;
             material.NormalMap.Target = normal;
+            material.NormalMapScale.Value = ToFloat2(info.NormalMapScale);
+            material.NormalMapOffset.Value = ToFloat2(info.NormalMapOffset);
+            material.NormalScale.Value = info.NormalScale;
         }
 
-        // Neutral PBR-ish features a toon material shouldn't express.
         material.Saturation.Value = 1f;
-        material.Metallic.Value = 0f;
-        material.Glossiness.Value = 0f;
-        material.Reflectivity.Value = 0f;
-        material.SpecularIntensity.Value = 0f;
+        if (info.UseReflection)
+        {
+            material.Metallic.Value = MathX.Clamp01(info.Metallic);
+            material.Reflectivity.Value = MathX.Clamp01(info.Reflectance);
+            material.SpecularIntensity.Value = info.ApplySpecular ? 1f : 0f;
+            material.SpecularArea.Value = info.SpecularToon
+                ? MathX.Clamp01(MathX.Max(info.Smoothness, 1f - info.SpecularBorder))
+                : MathX.Clamp01(info.Smoothness);
+            material.Glossiness.Value = info.ApplyReflection ? MathX.Clamp01(info.Smoothness) : 0f;
+        }
+        else
+        {
+            material.Metallic.Value = 0f;
+            material.Glossiness.Value = 0f;
+            material.Reflectivity.Value = 0f;
+            material.SpecularIntensity.Value = 0f;
+        }
         material.UseVertexColors.Value = false;
 
         // --- Shadow ramp ---
@@ -216,6 +253,24 @@ internal static class VrchatMaterialBuilder
             material.ShadowRamp.Target = await GenerateShadowRamp(assetsSlot, info);
             material.ShadowSharpness.Value = 0f;
             material.ShadowRim.Value = colorX.White;
+            StaticTexture2D shadowMask = await GetTexture(assetsSlot, package, info.ShadowStrengthMaskGuid,
+                textureCache, "ShadowStrengthMask");
+            shadowMask ??= await GetSolidTexture(assetsSlot, textureCache, "__liltoon_white", color.White,
+                "LilToon White");
+            material.ShadowRampMask.Target = shadowMask;
+            material.ShadowRampMaskScale.Value = ToFloat2(info.ShadowStrengthMaskScale);
+            material.ShadowRampMaskOffset.Value = ToFloat2(info.ShadowStrengthMaskOffset);
+
+            StaticTexture2D occlusion = await GetTexture(assetsSlot, package, info.ShadowBorderMaskGuid,
+                textureCache, "ShadowBorderMask");
+            if (occlusion != null)
+            {
+                material.OcclusionMap.Target = occlusion;
+                material.OcclusionMapScale.Value = ToFloat2(info.ShadowBorderMaskScale);
+                material.OcclusionMapOffset.Value = ToFloat2(info.ShadowBorderMaskOffset);
+            }
+            material.OcclusionColor.Value = ToColor(LerpColor(Vec4.One, info.ShadowColor,
+                MathX.Clamp01(info.ShadowStrength)), ColorProfile.sRGB);
         }
         else
         {
@@ -233,8 +288,11 @@ internal static class VrchatMaterialBuilder
             material.RimAttenuationEffect.Value = 0f;
             // liltoon rim is a fresnel gated by _RimBorder with _RimBlur softness; map the band onto
             // XiexeToon's smoothstep(range±sharpness, 1 - N·V).
-            material.RimRange.Value = MathX.Clamp01(info.RimBorder);
-            material.RimSharpness.Value = MathX.Clamp(MathX.Max(info.RimBlur, 0.01f), 0.01f, 1f);
+            float fresnelPower = MathX.Max(info.RimFresnelPower, 0.001f);
+            float rimLo = MathF.Pow(MathX.Clamp01(info.RimBorder - info.RimBlur * 0.5f), 1f / fresnelPower);
+            float rimHi = MathF.Pow(MathX.Clamp01(info.RimBorder + info.RimBlur * 0.5f), 1f / fresnelPower);
+            material.RimRange.Value = MathX.Clamp01((rimLo + rimHi) * 0.5f);
+            material.RimSharpness.Value = MathX.Clamp((rimHi - rimLo) * 0.5f, 0.001f, 1f);
             material.RimThreshold.Value = 0f;
         }
         else
@@ -243,13 +301,19 @@ internal static class VrchatMaterialBuilder
         }
 
         // --- Emission ---
-        if (info.UseEmission && (info.EmissionColor.X + info.EmissionColor.Y + info.EmissionColor.Z) > 0.001f)
+        if (info.UseEmission)
         {
-            material.EmissionColor.Value = ToColor(info.EmissionColor, ColorProfile.Linear);
+            float emissionScale = MathX.Clamp01(info.EmissionBlend) * info.EmissionColor.W;
+            emissionScale *= MathX.Lerp(1f, 0.375f, MathX.Clamp01(info.EmissionFluorescence));
+            Vec4 emissionColor = new(info.EmissionColor.X * emissionScale, info.EmissionColor.Y * emissionScale,
+                info.EmissionColor.Z * emissionScale, info.EmissionColor.W);
+            material.EmissionColor.Value = ToColor(emissionColor, ColorProfile.Linear);
             StaticTexture2D emission = await GetTexture(assetsSlot, package, info.EmissionMapGuid, textureCache, "EmissionMap");
             if (emission != null)
             {
                 material.EmissionMap.Target = emission;
+                material.EmissionMapScale.Value = ToFloat2(info.EmissionMapScale);
+                material.EmissionMapOffset.Value = ToFloat2(info.EmissionMapOffset);
             }
         }
 
@@ -259,10 +323,11 @@ internal static class VrchatMaterialBuilder
             material.Outline.Value = info.OutlineLit
                 ? XiexeToonMaterial.OutlineStyle.Lit
                 : XiexeToonMaterial.OutlineStyle.Emissive;
-            material.OutlineAlbedoTint.Value = info.OutlineLit;
+            material.OutlineAlbedoTint.Value = info.OutlineAlbedoTint;
             // liltoon and XiexeToon both extrude by width * 0.01 in object space, so the width
             // maps across roughly 1:1.
-            material.OutlineWidth.Value = MathX.Clamp(info.OutlineWidth, 0f, 5f);
+            float outlineWidth = info.OutlineFixWidth ? info.OutlineWidth : info.OutlineWidth * 0.5f;
+            material.OutlineWidth.Value = MathX.Clamp(outlineWidth, 0f, 5f);
             material.OutlineColor.Value = ToColor(info.OutlineColor, ColorProfile.sRGB);
             StaticTexture2D mask = await GetTexture(assetsSlot, package, info.OutlineMaskGuid, textureCache, "OutlineMask");
             if (mask != null)
@@ -276,13 +341,16 @@ internal static class VrchatMaterialBuilder
         }
 
         // --- Matcap ---
-        if (info.UseMatcap)
+        if (info.UseMatcap && info.MatcapBlendMode == 1 && info.MatcapBlendMaskGuid == null)
         {
-            StaticTexture2D matcap = await GetTexture(assetsSlot, package, info.MatcapGuid, textureCache, "Matcap");
+            StaticTexture2D matcap = await GetMatcapTexture(assetsSlot, package, info.MatcapGuid, textureCache);
             if (matcap != null)
             {
                 material.Matcap.Target = matcap;
-                material.MatcapTint.Value = ToColor(info.MatcapColor, ColorProfile.sRGB);
+                float matcapScale = info.MatcapBlend * info.MatcapColor.W;
+                Vec4 tint = new(info.MatcapColor.X * matcapScale, info.MatcapColor.Y * matcapScale,
+                    info.MatcapColor.Z * matcapScale, info.MatcapColor.W);
+                material.MatcapTint.Value = ToColor(tint, ColorProfile.sRGB);
             }
         }
 
@@ -323,6 +391,11 @@ internal static class VrchatMaterialBuilder
     }
 
     private static colorX ToColor(Vec4 c, ColorProfile profile) => new(c.X, c.Y, c.Z, c.W, profile);
+    private static float2 ToFloat2(System.Numerics.Vector2 value) => new(value.X, value.Y);
+
+    private static Vec4 LerpColor(Vec4 from, Vec4 to, float amount) =>
+        new(MathX.Lerp(from.X, to.X, amount), MathX.Lerp(from.Y, to.Y, amount),
+            MathX.Lerp(from.Z, to.Z, amount), MathX.Lerp(from.W, to.W, amount));
 
     // ---------------------------------------------------------------- shadow ramp
 
@@ -331,7 +404,7 @@ internal static class VrchatMaterialBuilder
         Engine engine = assetsSlot.Engine;
         await default(ToBackground);
         const int width = 256;
-        const int height = 8;
+        const int height = 256;
         var bitmap = new Bitmap2D(width, height, TextureFormat.RGBA32, mipmaps: false, ColorProfile.sRGB);
 
         // The fully-shadowed multiplier: liltoon's _ShadowColor is the in-shadow tint, scaled by strength.
@@ -353,7 +426,13 @@ internal static class VrchatMaterialBuilder
                 1f);
             for (int y = 0; y < height; y++)
             {
-                bitmap.SetPixel(x, y, in pixel);
+                float mask = y / (height - 1f);
+                var maskedPixel = new color(
+                    MathX.Lerp(1f, pixel.r, mask),
+                    MathX.Lerp(1f, pixel.g, mask),
+                    MathX.Lerp(1f, pixel.b, mask),
+                    1f);
+                bitmap.SetPixel(x, y, in maskedPixel);
             }
         }
         Uri uri = await engine.LocalDB.SaveAssetAsync(bitmap);
@@ -425,6 +504,92 @@ internal static class VrchatMaterialBuilder
         StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
         texture.URL.Value = uri;
         cache[guid] = texture;
+        return texture;
+    }
+
+    private static async Task<StaticTexture2D> GetMatcapTexture(Slot assetsSlot, UnityPackage package, string guid,
+        Dictionary<string, StaticTexture2D> cache)
+    {
+        if (string.IsNullOrEmpty(guid))
+        {
+            return null;
+        }
+
+        string cacheKey = $"{guid}|matcap-rgb-times-alpha";
+        if (cache.TryGetValue(cacheKey, out StaticTexture2D cached))
+        {
+            return cached;
+        }
+        cache[cacheKey] = null;
+
+        UnityAsset asset = package.ByGuid(guid);
+        if (asset?.HasContent != true)
+        {
+            UniLog.Warning($"MatCap texture (guid {guid}) was not found in the Unity package.");
+            return null;
+        }
+
+        Engine engine = assetsSlot.Engine;
+        Uri uri = null;
+        try
+        {
+            await default(ToBackground);
+            string extension = Path.GetExtension(asset.LogicalPath);
+            using var source = File.OpenRead(asset.DiskPath);
+            Bitmap2D bitmap = TextureDecoder.Decode(source, extension, generateMipMaps: false);
+            MultiplyRgbByAlpha(bitmap);
+            uri = await engine.LocalDB.SaveAssetAsync(bitmap);
+        }
+        catch (Exception ex)
+        {
+            UniLog.Warning($"Failed to post-process MatCap texture (guid {guid}): {ex.Message}");
+        }
+        await default(ToWorld);
+        if (uri == null)
+        {
+            return null;
+        }
+
+        Slot textureSlot = assetsSlot.AddSlot($"Matcap: {Path.GetFileNameWithoutExtension(asset.LogicalPath)}");
+        StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
+        texture.URL.Value = uri;
+        cache[cacheKey] = texture;
+        return texture;
+    }
+
+    private static void MultiplyRgbByAlpha(Bitmap2D bitmap)
+    {
+        for (int y = 0; y < bitmap.Size.y; y++)
+        {
+            for (int x = 0; x < bitmap.Size.x; x++)
+            {
+                color pixel = bitmap.GetPixel(x, y);
+                var processed = new color(pixel.r * pixel.a, pixel.g * pixel.a, pixel.b * pixel.a, pixel.a);
+                bitmap.SetPixel(x, y, in processed);
+            }
+        }
+    }
+
+    private static async Task<StaticTexture2D> GetSolidTexture(Slot assetsSlot,
+        Dictionary<string, StaticTexture2D> cache, string key, color pixel, string name)
+    {
+        if (cache.TryGetValue(key, out StaticTexture2D cached))
+        {
+            return cached;
+        }
+
+        Engine engine = assetsSlot.Engine;
+        await default(ToBackground);
+        var bitmap = new Bitmap2D(1, 1, TextureFormat.RGBA32, mipmaps: false, ColorProfile.sRGB);
+        bitmap.SetPixel(0, 0, in pixel);
+        Uri uri = await engine.LocalDB.SaveAssetAsync(bitmap);
+        await default(ToWorld);
+
+        Slot textureSlot = assetsSlot.AddSlot(name);
+        StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
+        texture.URL.Value = uri;
+        texture.Uncompressed.Value = true;
+        cache[key] = texture;
         return texture;
     }
 }

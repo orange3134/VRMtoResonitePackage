@@ -71,6 +71,17 @@ internal static class PackageInspector
                     }
                     string typeName = ResolveType(componentDict.TryGetNode("Type"), typeNames);
                     componentCounts[typeName] = componentCounts.GetValueOrDefault(typeName) + 1;
+                    if (verbose && typeName.Contains("SkinnedMeshRenderer", StringComparison.Ordinal) &&
+                        componentDict.TryGetNode("Data") is DataTreeDictionary componentData)
+                    {
+                        float[] weights = ExtractFloats(componentData.TryGetNode("BlendShapeWeights"));
+                        if (weights?.Length > 0)
+                        {
+                            Console.WriteLine($"{new string(' ', (depth + 1) * 2)}blendshapes=[" +
+                                              string.Join(", ", weights.Select((weight, index) =>
+                                                  $"{index}={weight:G6}")) + "]");
+                        }
+                    }
                 }
             }
             if (slot.TryGetNode("Children") is DataTreeList children)
@@ -265,7 +276,7 @@ internal static class PackageInspector
         {
             return list.Children.Select(c =>
             {
-                try { return (c as DataTreeValue)?.Extract<float>() ?? 0f; }
+                try { return ExtractField<float>(c); }
                 catch { return 0f; }
             }).ToArray();
         }

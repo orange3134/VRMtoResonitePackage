@@ -28,6 +28,14 @@ internal static class VrchatDump
 
             Console.WriteLine();
             Console.WriteLine("候補診断:");
+            foreach (VrchatAvatarChoice choice in VrchatAvatarParser.ListAvatars(package))
+            {
+                string kind = choice.IsComposedPrefab ? "composition" :
+                    choice.IsPrefabVariant ? "variant" : "scene";
+                string descriptor = choice.HasOwnDescriptor ? "direct" : "inherited";
+                Console.WriteLine($"  {choice.Name} [{kind}, descriptor={descriptor}] {choice.SourcePath}");
+            }
+            Console.WriteLine();
             VrchatAvatarParser.DiagnoseCandidates(package);
 
             VrchatAvatar avatar = VrchatAvatarParser.Parse(package, avatarOverride);
@@ -81,8 +89,10 @@ internal static class VrchatDump
             }
 
             Console.WriteLine();
-            Console.WriteLine($"非アクティブ ({avatar.InactiveGameObjectNames.Count}): " +
-                              string.Join(", ", avatar.InactiveGameObjectNames.OrderBy(name => name)));
+            Console.WriteLine($"非アクティブ ({avatar.InactiveGameObjects.Count}): " +
+                              string.Join(", ", avatar.InactiveGameObjects
+                                  .OrderBy(item => item.Name)
+                                  .Select(item => item.Name)));
             Console.WriteLine();
             Console.WriteLine($"マテリアル割当 ({avatar.RendererMaterials.Count} renderer):");
             foreach (VrchatRendererMaterials rm in avatar.RendererMaterials)

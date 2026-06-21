@@ -61,15 +61,21 @@ public sealed class VrchatAvatar
     /// </summary>
     public Dictionary<string, IReadOnlyList<string>> FbxBlendShapeNames { get; } =
         new(StringComparer.Ordinal);
+    public Dictionary<string, IReadOnlyList<float>> FbxBlendShapeDefaultWeights { get; } =
+        new(StringComparer.Ordinal);
 
     /// <summary>
-    /// FBX embedded material name -> external Unity .mat guid, from ModelImporter.externalObjects.
+    /// FBX embedded material name -> Unity .mat guid, from ModelImporter.externalObjects or
+    /// deterministic ModelImporter material search metadata.
     /// Used when a prefab variant keeps the FBX renderer hierarchy as stripped objects.
     /// </summary>
     public Dictionary<string, string> FbxMaterialGuids { get; } = new(StringComparer.Ordinal);
 
-    /// <summary>GameObject names that start inactive in the prefab (m_IsActive = 0), e.g. costume swaps.</summary>
-    public List<string> InactiveGameObjectNames { get; } = new();
+    /// <summary>
+    /// GameObjects that start inactive in the prefab. FBX GUID scopes duplicate names across
+    /// composed models, such as a base and replacement hair both containing "HairFront".
+    /// </summary>
+    public List<VrchatGameObjectReference> InactiveGameObjects { get; } = new();
 
     /// <summary>
     /// All GameObject names present in the selected prefab's hierarchy. Used to drop imported FBX
@@ -93,8 +99,16 @@ public sealed class VrchatFbxAsset
     public Dictionary<string, string> MaterialGuids { get; } = new(StringComparer.Ordinal);
 }
 
-/// <summary>One avatar a package offers for conversion (root GameObject name + source + hierarchy size).</summary>
-public sealed record VrchatAvatarChoice(string Name, string SourcePath, int Size);
+public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
+
+/// <summary>One avatar prefab a package offers for conversion.</summary>
+public sealed record VrchatAvatarChoice(
+    string Name,
+    string SourcePath,
+    int Size,
+    bool HasOwnDescriptor,
+    bool IsPrefabVariant,
+    bool IsComposedPrefab);
 
 public sealed class VrchatViseme
 {

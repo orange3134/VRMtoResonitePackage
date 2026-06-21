@@ -5,13 +5,20 @@ namespace VrmToResonitePackage.Unity;
 
 /// <summary>
 /// Resolves Unity's stable 64-bit local file IDs for objects imported from a model asset.
-/// ModelImporter fileIdsGeneration=2 hashes the object type and hierarchy path with xxHash64.
+/// ModelImporter fileIdsGeneration=1 hashes the object type and object name, while generation 2
+/// hashes the object type and hierarchy path. Both use xxHash64.
 /// </summary>
 public sealed class UnityModelFileIdResolver
 {
     private readonly Dictionary<long, string> _names = new();
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNames =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<float>> _blendShapeDefaultWeights =
+        new(StringComparer.Ordinal);
+    private readonly List<ModelMaterial> _materials = new();
+    private IReadOnlyList<UnityFbxBlendShapeDefaults.Channel> _defaultWeightChannels =
+        Array.Empty<UnityFbxBlendShapeDefaults.Channel>();
+    private bool[] _usedDefaultWeightChannels = Array.Empty<bool>();
 
     public UnityModelFileIdResolver(UnityAsset model)
     {
@@ -31,6 +38,11 @@ public sealed class UnityModelFileIdResolver
         => fileId != 0 && _names.TryGetValue(fileId, out string name) ? name : null;
 
     public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNames => _blendShapeNames;
+    public IReadOnlyDictionary<string, IReadOnlyList<float>> BlendShapeDefaultWeights =>
+        _blendShapeDefaultWeights;
+    public IReadOnlyList<ModelMaterial> Materials => _materials;
+
+    public readonly record struct ModelMaterial(string Name, string MainTexturePath);
 
     private void AddMetaMappings(UnityAsset model)
     {
@@ -80,10 +92,19 @@ public sealed class UnityModelFileIdResolver
                 importPath = temporaryPath;
             }
             using var context = new AssimpContext();
+            _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath);
+            _usedDefaultWeightChannels = new bool[_defaultWeightChannels.Count];
             Scene scene = context.ImportFile(importPath, PostProcessSteps.None);
             if (scene?.RootNode == null)
             {
                 return;
+            }
+            foreach (Material material in scene.Materials)
+            {
+                string texturePath = material.HasTextureDiffuse
+                    ? material.TextureDiffuse.FilePath
+                    : null;
+                _materials.Add(new ModelMaterial(material.Name, texturePath));
             }
 
             var roots = new List<(Node Node, List<string> Path)>();
@@ -95,15 +116,21 @@ public sealed class UnityModelFileIdResolver
 
                 bool skinned = node.MeshIndices.Any(index =>
                     index >= 0 && index < scene.MeshCount && scene.Meshes[index].HasBones);
-                if (skinned)
+                if (node.MeshCount > 0)
                 {
+                    // Unity's FBX importer can classify a mesh differently from Assimp when skin
+                    // data is optimized or stripped. Stable fileID resolution is exact, so include
+                    // both possible renderer component types as candidates.
                     AddPathVariants("SkinnedMeshRenderer", nodePath, node.Name);
-                    AddBlendShapeNames(scene, node);
-                }
-                else if (node.MeshCount > 0)
-                {
-                    AddPathVariants("MeshFilter", nodePath, node.Name);
                     AddPathVariants("MeshRenderer", nodePath, node.Name);
+                    if (skinned)
+                    {
+                        AddBlendShapeNames(scene, node);
+                    }
+                    else
+                    {
+                        AddPathVariants("MeshFilter", nodePath, node.Name);
+                    }
                 }
             }
         }
@@ -144,6 +171,31 @@ public sealed class UnityModelFileIdResolver
             names.Add(name);
         }
         _blendShapeNames.TryAdd(node.Name, names);
+        var defaults = new float[names.Count];
+        for (int i = 0; i < names.Count; i++)
+        {
+            string attachmentName = names[i];
+            for (int channelIndex = 0; channelIndex < _defaultWeightChannels.Count; channelIndex++)
+            {
+                if (_usedDefaultWeightChannels[channelIndex])
+                {
+                    continue;
+                }
+                UnityFbxBlendShapeDefaults.Channel channel = _defaultWeightChannels[channelIndex];
+                if (string.Equals(attachmentName, channel.Name, StringComparison.Ordinal) ||
+                    string.Equals(attachmentName, $"{channel.Name}.{channel.Name}",
+                        StringComparison.Ordinal))
+                {
+                    defaults[i] = channel.Weight;
+                    _usedDefaultWeightChannels[channelIndex] = true;
+                    break;
+                }
+            }
+        }
+        if (defaults.Any(weight => MathF.Abs(weight) > 0.001f))
+        {
+            _blendShapeDefaultWeights.TryAdd(node.Name, defaults);
+        }
     }
 
     private static void CollectNodes(Node node, List<string> parentPath,
@@ -163,6 +215,14 @@ public sealed class UnityModelFileIdResolver
 
     private void AddPathVariants(string type, List<string> rawPath, string name)
     {
+        // Generation 1 uses only the imported object name. This is still emitted for objects whose
+        // old recycle ID cannot be reused (for example when an FBX node was renamed).
+        for (int duplicateIndex = 0; duplicateIndex < 16; duplicateIndex++)
+        {
+            AddHashCandidate(type, name, duplicateIndex.ToString(
+                System.Globalization.CultureInfo.InvariantCulture), name, Encoding.UTF8);
+        }
+
         // Assimp can expose an artificial FBX root, while Unity always starts the imported path at
         // //RootNode and may fold a single model root. Try the equivalent path forms; only a hash
         // that appears in YAML will be queried, so the extra candidates are harmless.
@@ -171,20 +231,29 @@ public sealed class UnityModelFileIdResolver
             var parts = new List<string> { "//RootNode" };
             parts.AddRange(rawPath.Skip(skip));
             string nodePath = string.Join("/", parts);
-            string[] objectPaths = type == "GameObject"
-                ? new[]
-                {
-                    nodePath,
-                    nodePath.Replace("//RootNode/", "//RootNode/root/"),
-                }
-                : new[]
-                     {
-                         $"{nodePath}/{type}",
-                         $"{nodePath.Replace("//RootNode/", "//RootNode/root/")}/{type}",
-                     };
+            string rootedNodePath = nodePath == "//RootNode"
+                ? "//RootNode/root"
+                : nodePath.Replace("//RootNode/", "//RootNode/root/");
+            var nodePaths = new List<string> { nodePath };
+            // A sole imported mesh node can be folded into Unity's synthetic "root". Do not let
+            // Assimp's artificial root claim that path first; it belongs to the real child node.
+            if (nodePath != "//RootNode" || (rawPath.Count > 1 && skip > 0))
+            {
+                nodePaths.Add(rootedNodePath);
+            }
+            IEnumerable<string> objectPaths = type == "GameObject"
+                ? nodePaths
+                : nodePaths.Select(path => $"{path}/{type}");
             foreach (string objectPath in objectPaths)
             {
-                AddHashCandidate(type, objectPath, "0", name, Encoding.UTF8);
+                // Unity increments the suffix when imported objects collide on type/path.
+                // Generate a small candidate range so prefab overrides can resolve those stable
+                // IDs even though Assimp doesn't expose Unity's chosen duplicate index.
+                for (int duplicateIndex = 0; duplicateIndex < 16; duplicateIndex++)
+                {
+                    AddHashCandidate(type, objectPath, duplicateIndex.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture), name, Encoding.UTF8);
+                }
             }
         }
     }
