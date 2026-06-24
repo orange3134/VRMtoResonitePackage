@@ -270,6 +270,7 @@ public static class VrmParser
     {
         if (vrm.TryGetProperty("meta", out JsonElement meta))
         {
+            model.MetaJson = meta.GetRawText();
             model.Title = GetString(meta, "title");
             model.Author = GetString(meta, "author");
 
@@ -625,6 +626,7 @@ public static class VrmParser
     {
         if (vrm.TryGetProperty("meta", out JsonElement meta))
         {
+            model.MetaJson = meta.GetRawText();
             model.Title = GetString(meta, "name");
             if (meta.TryGetProperty("authors", out JsonElement authors) &&
                 authors.ValueKind == JsonValueKind.Array)

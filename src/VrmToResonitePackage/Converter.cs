@@ -254,6 +254,7 @@ internal static class Converter
                     SpringBoneSetup.Apply(root, vrm);
                 }
 
+                VrmMetadataSetup.Apply(root, vrm);
                 await SetupThumbnail(root, assetsSlot, vrm, vrmPath);
 
                 // Let deferred import tasks (alpha detection, normal map detection, ...) settle.

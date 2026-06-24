@@ -40,6 +40,9 @@ public sealed class VrmModel
     public string Title { get; set; }
     public string Author { get; set; }
 
+    /// <summary>Raw JSON text of the VRM meta block, preserved for Resonite-side metadata use.</summary>
+    public string MetaJson { get; set; }
+
     /// <summary>glTF node index -> node name.</summary>
     public List<string> NodeNames { get; } = new();
 
