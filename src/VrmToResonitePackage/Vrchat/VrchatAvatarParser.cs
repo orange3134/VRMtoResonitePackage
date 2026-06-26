@@ -1158,7 +1158,34 @@ public static class VrchatAvatarParser
                 avatar.HumanBones[vrmName] = boneName;
             }
         }
+        if (avatar.HumanBones.Count == 0)
+        {
+            ParseHumanoidFromSkeleton(meta, avatar);
+        }
         UniLog.Log($"ヒューマノイドボーンを {avatar.HumanBones.Count} 個取得しました。");
+    }
+
+    private static void ParseHumanoidFromSkeleton(YamlNode meta, VrchatAvatar avatar)
+    {
+        YamlNode skeleton = meta["ModelImporter"]?["humanDescription"]?["skeleton"];
+        if (skeleton?.Seq == null)
+        {
+            return;
+        }
+
+        foreach (YamlNode entry in skeleton.Seq)
+        {
+            string boneName = entry?["name"]?.AsString();
+            string vrmName = VrchatConstants.InferHumanNameFromSkeletonName(boneName);
+            if (!string.IsNullOrEmpty(boneName) && vrmName != null)
+            {
+                avatar.HumanBones.TryAdd(vrmName, boneName);
+            }
+        }
+        if (avatar.HumanBones.Count > 0)
+        {
+            UniLog.Warning($"FBXのhumanDescription.humanが空のため、skeleton名から {avatar.HumanBones.Count} 個のヒューマノイドボーンを推定しました。");
+        }
     }
 
     private static string SelectHumanoidFbxGuid(UnityPackage package, IEnumerable<string> guids)

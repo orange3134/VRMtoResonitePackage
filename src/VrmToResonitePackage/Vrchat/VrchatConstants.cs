@@ -70,6 +70,82 @@ internal static class VrchatConstants
     }
 
     /// <summary>
+    /// Infers a VRM humanoid bone from common Blender/Unity bone names when an FBX is marked
+    /// humanoid but its ModelImporter meta contains an empty humanDescription.human list.
+    /// </summary>
+    public static string InferHumanNameFromSkeletonName(string skeletonName)
+    {
+        if (string.IsNullOrWhiteSpace(skeletonName))
+        {
+            return null;
+        }
+
+        string name = skeletonName.Trim();
+        string side = null;
+        if (name.EndsWith(".L", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith("_L", StringComparison.OrdinalIgnoreCase))
+        {
+            side = "left";
+            name = name[..^2];
+        }
+        else if (name.EndsWith(".R", StringComparison.OrdinalIgnoreCase) ||
+                 name.EndsWith("_R", StringComparison.OrdinalIgnoreCase))
+        {
+            side = "right";
+            name = name[..^2];
+        }
+
+        name = name.Replace(" ", "", StringComparison.Ordinal)
+            .Replace("_", "", StringComparison.Ordinal)
+            .Replace("-", "", StringComparison.Ordinal)
+            .ToLowerInvariant();
+
+        if (side == null)
+        {
+            return name switch
+            {
+                "hips" or "pelvis" => "hips",
+                "spine" => "spine",
+                "chest" => "chest",
+                "upperchest" => "upperChest",
+                "neck" => "neck",
+                "head" => "head",
+                "jaw" => "jaw",
+                _ => null,
+            };
+        }
+
+        return name switch
+        {
+            "eye" => side + "Eye",
+            "shoulder" or "clavicle" => side + "Shoulder",
+            "upperarm" or "arm" => side + "UpperArm",
+            "lowerarm" or "forearm" => side + "LowerArm",
+            "hand" or "wrist" => side + "Hand",
+            "upperleg" or "thigh" => side + "UpperLeg",
+            "lowerleg" or "shin" or "calf" => side + "LowerLeg",
+            "foot" => side + "Foot",
+            "toe" or "toes" => side + "Toes",
+            "thumbproximal" => side + "ThumbMetacarpal",
+            "thumbintermediate" => side + "ThumbProximal",
+            "thumbdistal" => side + "ThumbDistal",
+            "indexproximal" => side + "IndexProximal",
+            "indexintermediate" => side + "IndexIntermediate",
+            "indexdistal" => side + "IndexDistal",
+            "middleproximal" => side + "MiddleProximal",
+            "middleintermediate" => side + "MiddleIntermediate",
+            "middledistal" => side + "MiddleDistal",
+            "ringproximal" => side + "RingProximal",
+            "ringintermediate" => side + "RingIntermediate",
+            "ringdistal" => side + "RingDistal",
+            "littleproximal" or "pinkyproximal" => side + "LittleProximal",
+            "littleintermediate" or "pinkyintermediate" => side + "LittleIntermediate",
+            "littledistal" or "pinkydistal" => side + "LittleDistal",
+            _ => null,
+        };
+    }
+
+    /// <summary>
     /// Decodes Unity's compact int-array serialization (e.g. "f1000000ffffffffffffffff" -> [241, -1, -1]).
     /// Used for VRCAvatarDescriptor.customEyeLookSettings.eyelidsBlendshapes.
     /// </summary>
