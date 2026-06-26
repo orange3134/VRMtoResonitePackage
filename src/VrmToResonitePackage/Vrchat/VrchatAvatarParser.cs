@@ -138,6 +138,7 @@ public static class VrchatAvatarParser
             ParseVariantRendererOverrides(
                 package, selected.Source.Guid, selected.Scene, selected.Descriptor,
                 selected.HasOwnDescriptor, avatar);
+            CollectVariantPrefabGameObjectNames(package, selected.Source.Guid, avatar);
             ApplyFbxDefaultBlendShapeWeights(avatar);
             return avatar;
         }
@@ -1702,6 +1703,167 @@ public static class VrchatAvatarParser
             UniLog.Log($"Prefab Variant renderer overrides: {materialAssignments} material assignment(s), " +
                        $"{blendShapeRenderers} renderer(s) with initial blendshape weights, " +
                        $"{activeAssignments} active-state assignment(s).");
+        }
+    }
+
+    private static void CollectVariantPrefabGameObjectNames(
+        UnityPackage package, string sourceGuid, VrchatAvatar avatar)
+    {
+        var keep = new Dictionary<string, bool>(StringComparer.Ordinal);
+        var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(
+            StringComparer.OrdinalIgnoreCase);
+        var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
+        CollectVariantPrefabGameObjectNames(
+            package, sourceGuid, keep, new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            modelResolvers, prefabScenes);
+
+        foreach ((string name, bool included) in keep)
+        {
+            if (included)
+            {
+                avatar.PrefabGameObjectNames.Add(name);
+            }
+        }
+        if (avatar.PrefabGameObjectNames.Count > 0)
+        {
+            UniLog.Log($"Variant prefab renderer keep-list: {avatar.PrefabGameObjectNames.Count} GameObject(s).");
+        }
+    }
+
+    private static void CollectVariantPrefabGameObjectNames(
+        UnityPackage package,
+        string guid,
+        Dictionary<string, bool> keep,
+        HashSet<string> visited,
+        Dictionary<string, UnityModelFileIdResolver> modelResolvers,
+        Dictionary<string, UnityScene> prefabScenes)
+    {
+        if (string.IsNullOrEmpty(guid) || !visited.Add(guid))
+        {
+            return;
+        }
+        UnityAsset asset = package.ByGuid(guid);
+        if (asset?.Extension == ".fbx")
+        {
+            if (!modelResolvers.TryGetValue(guid, out UnityModelFileIdResolver resolver))
+            {
+                resolver = new UnityModelFileIdResolver(asset);
+                modelResolvers.Add(guid, resolver);
+            }
+            foreach (string name in resolver.RendererNames)
+            {
+                if (!string.IsNullOrEmpty(name))
+                {
+                    keep[name] = true;
+                }
+            }
+            return;
+        }
+        if (asset?.Extension != ".prefab" || package.ReadText(asset) == null)
+        {
+            return;
+        }
+
+        UnityScene scene;
+        try
+        {
+            scene = package.ReadScene(asset);
+        }
+        catch
+        {
+            return;
+        }
+        prefabScenes.TryAdd(guid, scene);
+
+        foreach (YamlDocument instance in scene.Documents.Values.Where(
+                     document => document.ClassId == ClassPrefabInstance))
+        {
+            CollectVariantPrefabGameObjectNames(
+                package, instance.Root?["m_SourcePrefab"]?.Guid, keep, visited,
+                modelResolvers, prefabScenes);
+        }
+
+        foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+        {
+            YamlDocument owner = scene.OwnerGameObject(smr);
+            string name = owner != null ? scene.GameObjectName(owner.FileId) : null;
+            if (!string.IsNullOrEmpty(name))
+            {
+                keep[name] = !IsEditorOnly(owner);
+            }
+        }
+
+        foreach (YamlDocument instance in scene.Documents.Values.Where(
+                     document => document.ClassId == ClassPrefabInstance))
+        {
+            ApplyRemovedGameObjects(package, instance, keep, modelResolvers, prefabScenes);
+            ApplyTagModifications(package, instance, keep, modelResolvers, prefabScenes);
+        }
+    }
+
+    private static bool IsEditorOnly(YamlDocument gameObject)
+        => string.Equals(gameObject?.Root?["m_TagString"]?.AsString(), "EditorOnly",
+            StringComparison.Ordinal);
+
+    private static void ApplyRemovedGameObjects(
+        UnityPackage package,
+        YamlDocument instance,
+        Dictionary<string, bool> keep,
+        Dictionary<string, UnityModelFileIdResolver> modelResolvers,
+        Dictionary<string, UnityScene> prefabScenes)
+    {
+        YamlNode removed = instance.Root?["m_Modification"]?["m_RemovedGameObjects"];
+        if (removed?.Seq == null)
+        {
+            return;
+        }
+        foreach (YamlNode entry in removed.Seq)
+        {
+            YamlNode target = entry?["asset"] ?? entry;
+            VariantObjectReference gameObject = ResolveVariantObjectReference(
+                package, target?.Guid, target?.FileID ?? 0, modelResolvers, prefabScenes);
+            if (!string.IsNullOrEmpty(gameObject.Name))
+            {
+                keep[gameObject.Name] = false;
+            }
+        }
+    }
+
+    private static void ApplyTagModifications(
+        UnityPackage package,
+        YamlDocument instance,
+        Dictionary<string, bool> keep,
+        Dictionary<string, UnityModelFileIdResolver> modelResolvers,
+        Dictionary<string, UnityScene> prefabScenes)
+    {
+        YamlNode modifications = instance.Root?["m_Modification"]?["m_Modifications"];
+        if (modifications?.Seq == null)
+        {
+            return;
+        }
+        foreach (YamlNode modification in modifications.Seq)
+        {
+            if (!string.Equals(modification?["propertyPath"]?.AsString(), "m_TagString",
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+            YamlNode target = modification["target"];
+            VariantObjectReference gameObject = ResolveVariantObjectReference(
+                package, target?.Guid, target?.FileID ?? 0, modelResolvers, prefabScenes);
+            if (string.IsNullOrEmpty(gameObject.Name))
+            {
+                continue;
+            }
+            if (string.Equals(modification["value"]?.AsString(), "EditorOnly",
+                    StringComparison.Ordinal))
+            {
+                keep[gameObject.Name] = false;
+            }
+            else if (keep.ContainsKey(gameObject.Name))
+            {
+                keep[gameObject.Name] = true;
+            }
         }
     }
 

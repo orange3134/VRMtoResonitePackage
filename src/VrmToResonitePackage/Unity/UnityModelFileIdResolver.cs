@@ -15,6 +15,7 @@ public sealed class UnityModelFileIdResolver
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<float>> _blendShapeDefaultWeights =
         new(StringComparer.Ordinal);
+    private readonly HashSet<string> _rendererNames = new(StringComparer.Ordinal);
     private readonly List<ModelMaterial> _materials = new();
     private IReadOnlyList<UnityFbxBlendShapeDefaults.Channel> _defaultWeightChannels =
         Array.Empty<UnityFbxBlendShapeDefaults.Channel>();
@@ -40,6 +41,7 @@ public sealed class UnityModelFileIdResolver
     public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNames => _blendShapeNames;
     public IReadOnlyDictionary<string, IReadOnlyList<float>> BlendShapeDefaultWeights =>
         _blendShapeDefaultWeights;
+    public IReadOnlyCollection<string> RendererNames => _rendererNames;
     public IReadOnlyList<ModelMaterial> Materials => _materials;
 
     public readonly record struct ModelMaterial(string Name, string MainTexturePath);
@@ -118,6 +120,7 @@ public sealed class UnityModelFileIdResolver
                     index >= 0 && index < scene.MeshCount && scene.Meshes[index].HasBones);
                 if (node.MeshCount > 0)
                 {
+                    _rendererNames.Add(node.Name);
                     // Unity's FBX importer can classify a mesh differently from Assimp when skin
                     // data is optimized or stripped. Stable fileID resolution is exact, so include
                     // both possible renderer component types as candidates.
