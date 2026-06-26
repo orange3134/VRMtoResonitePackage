@@ -90,6 +90,228 @@ internal static class VrchatSceneSetup
         }
     }
 
+    public static void ApplyModularAvatar(Slot root, VrchatAvatar avatar)
+    {
+        int merged = 0;
+        foreach (VrchatModularMergeArmature merge in avatar.ModularMergeArmatures)
+        {
+            merged += ApplyMergeArmature(root, merge);
+        }
+
+        int proxied = 0;
+        foreach (VrchatModularBoneProxy proxy in avatar.ModularBoneProxies)
+        {
+            if (ApplyBoneProxy(root, proxy))
+            {
+                proxied++;
+            }
+        }
+
+        if (merged > 0 || proxied > 0)
+        {
+            UniLog.Log($"Modular Avatar applied: {merged} Merge Armature bone mapping(s), {proxied} Bone Proxy move(s).");
+        }
+    }
+
+    private static int ApplyMergeArmature(Slot root, VrchatModularMergeArmature merge)
+    {
+        Slot target = FindFirstSlot(root, merge.TargetName);
+        if (target == null)
+        {
+            return 0;
+        }
+
+        Slot source = null;
+        var mappings = new Dictionary<Slot, Slot>();
+        foreach (Slot candidate in FindMergeSourceCandidates(root, merge, target))
+        {
+            var candidateMappings = new Dictionary<Slot, Slot>();
+            CollectBoneMappings(candidate, target, merge, candidateMappings);
+            if (candidateMappings.Count > mappings.Count)
+            {
+                source = candidate;
+                mappings = candidateMappings;
+            }
+        }
+        if (mappings.Count == 0)
+        {
+            return 0;
+        }
+
+        int rewritten = RewriteSkinnedMeshBones(root, mappings);
+        foreach ((Slot src, Slot dst) in mappings.OrderByDescending(pair => Depth(pair.Key)))
+        {
+            MoveUnmappedChildren(src, dst, mappings);
+            if (!HasRendererInSubtree(src))
+            {
+                src.Destroy();
+            }
+        }
+        if (!source.IsDestroyed && !source.Children.Any() && !HasRendererInSubtree(source))
+        {
+            source.Destroy();
+        }
+        return rewritten;
+    }
+
+    private static IEnumerable<Slot> FindMergeSourceCandidates(Slot root, VrchatModularMergeArmature merge,
+        Slot target)
+    {
+        string sourceName = merge.SourceName ?? "";
+        string targetName = merge.TargetName ?? "";
+        return EnumerateSlots(root).Where(slot =>
+            slot != target &&
+            !IsDescendantOf(slot, target) &&
+            !IsDescendantOf(target, slot) &&
+            (string.Equals(slot.Name, sourceName, StringComparison.Ordinal) ||
+             string.Equals(slot.Name, targetName, StringComparison.Ordinal) ||
+             (!string.IsNullOrEmpty(sourceName) && (slot.Name ?? "").StartsWith(sourceName, StringComparison.Ordinal)) ||
+             (!string.IsNullOrEmpty(targetName) && (slot.Name ?? "").StartsWith(targetName, StringComparison.Ordinal))));
+    }
+
+    private static void CollectBoneMappings(Slot source, Slot target, VrchatModularMergeArmature merge,
+        Dictionary<Slot, Slot> mappings)
+    {
+        foreach (Slot sourceChild in source.Children.ToList())
+        {
+            string targetName = StripAffixes(sourceChild.Name, merge.Prefix, merge.Suffix);
+            Slot targetChild = target.Children.FirstOrDefault(child =>
+                string.Equals(child.Name, targetName, StringComparison.Ordinal));
+            if (targetChild == null)
+            {
+                continue;
+            }
+            mappings[sourceChild] = targetChild;
+            CollectBoneMappings(sourceChild, targetChild, merge, mappings);
+        }
+    }
+
+    private static string StripAffixes(string name, string prefix, string suffix)
+    {
+        name ??= "";
+        prefix ??= "";
+        suffix ??= "";
+        if (name.Length <= prefix.Length + suffix.Length ||
+            !name.StartsWith(prefix, StringComparison.Ordinal) ||
+            !name.EndsWith(suffix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+        return name.Substring(prefix.Length, name.Length - prefix.Length - suffix.Length);
+    }
+
+    private static int RewriteSkinnedMeshBones(Slot root, Dictionary<Slot, Slot> mappings)
+    {
+        int rewritten = 0;
+        foreach (SkinnedMeshRenderer renderer in root.GetComponentsInChildren<SkinnedMeshRenderer>())
+        {
+            for (int i = 0; i < renderer.Bones.Count; i++)
+            {
+                Slot bone = renderer.Bones[i];
+                if (bone != null && mappings.TryGetValue(bone, out Slot mapped))
+                {
+                    renderer.Bones[i] = mapped;
+                    rewritten++;
+                }
+            }
+        }
+        return rewritten;
+    }
+
+    private static void MoveUnmappedChildren(Slot source, Slot target, Dictionary<Slot, Slot> mappings)
+    {
+        foreach (Slot child in source.Children.ToList())
+        {
+            if (mappings.ContainsKey(child))
+            {
+                continue;
+            }
+            float3 position = child.GlobalPosition;
+            floatQ rotation = child.GlobalRotation;
+            float3 scale = child.GlobalScale;
+            child.Parent = target;
+            child.GlobalPosition = position;
+            child.GlobalRotation = rotation;
+            child.GlobalScale = scale;
+        }
+    }
+
+    private static bool ApplyBoneProxy(Slot root, VrchatModularBoneProxy proxy)
+    {
+        Slot source = FindFirstSlot(root, proxy.SourceName);
+        Slot target = FindFirstSlot(root, proxy.TargetName, candidate => candidate != source);
+        if (source == null || target == null || source == root || target == source ||
+            IsDescendantOf(target, source))
+        {
+            return false;
+        }
+
+        float3 position = source.GlobalPosition;
+        floatQ rotation = source.GlobalRotation;
+        source.Parent = target;
+
+        switch (proxy.AttachmentMode)
+        {
+            case 2: // AsChildKeepWorldPose
+                source.GlobalPosition = position;
+                source.GlobalRotation = rotation;
+                break;
+            case 3: // AsChildKeepRotation
+                source.LocalPosition = float3.Zero;
+                source.GlobalRotation = rotation;
+                break;
+            case 4: // AsChildKeepPosition
+                source.GlobalPosition = position;
+                source.LocalRotation = floatQ.Identity;
+                break;
+            default:
+                source.LocalPosition = float3.Zero;
+                source.LocalRotation = floatQ.Identity;
+                break;
+        }
+        if (proxy.MatchScale)
+        {
+            source.LocalScale = float3.One;
+        }
+        return true;
+    }
+
+    private static Slot FindFirstSlot(Slot root, string name, Func<Slot, bool> predicate = null)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return null;
+        }
+        return EnumerateSlots(root).FirstOrDefault(slot =>
+            string.Equals(slot.Name, name, StringComparison.Ordinal) &&
+            (predicate == null || predicate(slot)));
+    }
+
+    private static bool IsDescendantOf(Slot slot, Slot ancestor)
+    {
+        for (Slot current = slot?.Parent; current != null; current = current.Parent)
+        {
+            if (current == ancestor)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int Depth(Slot slot)
+    {
+        int depth = 0;
+        for (Slot current = slot; current?.Parent != null; current = current.Parent)
+        {
+            depth++;
+        }
+        return depth;
+    }
+
+    private static bool HasRendererInSubtree(Slot slot)
+        => slot.GetComponentsInChildren<MeshRenderer>().Any();
+
     private static void ApplyInactiveStates(Slot root, VrchatAvatar avatar)
     {
         if (avatar.InactiveGameObjects.Count == 0)

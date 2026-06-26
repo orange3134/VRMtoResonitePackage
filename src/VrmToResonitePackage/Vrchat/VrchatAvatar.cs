@@ -82,6 +82,10 @@ public sealed class VrchatAvatar
     /// meshes that the prefab deleted (avatars built by removing mesh objects from a shared FBX).
     /// </summary>
     public HashSet<string> PrefabGameObjectNames { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Subset of Modular Avatar build operations that affect imported hierarchy/bone bindings.</summary>
+    public List<VrchatModularMergeArmature> ModularMergeArmatures { get; } = new();
+    public List<VrchatModularBoneProxy> ModularBoneProxies { get; } = new();
 }
 
 public sealed class VrchatFbxAsset
@@ -100,6 +104,23 @@ public sealed class VrchatFbxAsset
 }
 
 public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
+
+public sealed class VrchatModularMergeArmature
+{
+    public string SourceName { get; set; }
+    public string TargetName { get; set; }
+    public string Prefix { get; set; } = "";
+    public string Suffix { get; set; } = "";
+    public bool MangleNames { get; set; } = true;
+}
+
+public sealed class VrchatModularBoneProxy
+{
+    public string SourceName { get; set; }
+    public string TargetName { get; set; }
+    public int AttachmentMode { get; set; }
+    public bool MatchScale { get; set; }
+}
 
 /// <summary>One avatar prefab a package offers for conversion.</summary>
 public sealed record VrchatAvatarChoice(

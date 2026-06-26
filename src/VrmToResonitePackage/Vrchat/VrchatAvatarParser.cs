@@ -13,6 +13,9 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 public static class VrchatAvatarParser
 {
+    private const string ModularAvatarMergeArmatureScriptGuid = "2df373bf91cf30b4bbd495e11cb1a2ec";
+    private const string ModularAvatarBoneProxyScriptGuid = "42581d8044b64899834d3d515ab3a144";
+
     // Unity's synthetic Transform for an imported model's //RootNode. This stable local ID is
     // shared by model assets and is the target of the prefab instance's placement overrides.
     private const long UnityModelRootTransformFileId = -8679921383154817045L;
@@ -139,6 +142,7 @@ public static class VrchatAvatarParser
                 package, selected.Source.Guid, selected.Scene, selected.Descriptor,
                 selected.HasOwnDescriptor, avatar);
             CollectVariantPrefabGameObjectNames(package, selected.Source.Guid, avatar);
+            ParseVariantModularAvatar(package, selected.Source.Guid, avatar);
             ApplyFbxDefaultBlendShapeWeights(avatar);
             return avatar;
         }
@@ -160,6 +164,7 @@ public static class VrchatAvatarParser
         ParsePhysBones(selected.Scene, selected.Subtree, avatar);
         ParseRendererMaterials(selected.Scene, selected.Subtree, avatar);
         ParseInactiveGameObjects(selected.Scene, selected.Subtree, avatar);
+        ParseModularAvatar(package, selected.Scene, selected.Subtree, avatar);
         ApplyFbxDefaultBlendShapeWeights(avatar);
         return avatar;
     }
@@ -2036,6 +2041,166 @@ public static class VrchatAvatarParser
         }
         result.Add(scene);
     }
+
+    // ---------------------------------------------------------------- Modular Avatar hierarchy operations
+
+    private static void ParseVariantModularAvatar(UnityPackage package, string sourceGuid,
+        VrchatAvatar avatar)
+    {
+        var scenes = new List<UnityScene>();
+        CollectVariantPrefabScenes(package, sourceGuid, scenes,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        foreach (UnityScene scene in scenes)
+        {
+            ParseModularAvatar(package, scene, null, avatar);
+        }
+    }
+
+    private static void ParseModularAvatar(UnityPackage package, UnityScene scene,
+        HashSet<long> subtree, VrchatAvatar avatar)
+    {
+        int beforeMerge = avatar.ModularMergeArmatures.Count;
+        int beforeProxy = avatar.ModularBoneProxies.Count;
+        foreach (YamlDocument component in scene.MonoBehavioursByScript(ModularAvatarMergeArmatureScriptGuid))
+        {
+            if (subtree != null && !InSubtree(scene, subtree, component))
+            {
+                continue;
+            }
+            YamlDocument owner = scene.OwnerGameObject(component);
+            string sourceName = ResolveSceneObjectName(package, scene, owner?.FileId ?? 0);
+            string targetName = ResolveAvatarObjectReferenceName(component.Root?["mergeTarget"]);
+            if (string.IsNullOrEmpty(sourceName) || string.IsNullOrEmpty(targetName))
+            {
+                continue;
+            }
+            if (avatar.ModularMergeArmatures.Any(existing =>
+                    string.Equals(existing.SourceName, sourceName, StringComparison.Ordinal) &&
+                    string.Equals(existing.TargetName, targetName, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+            avatar.ModularMergeArmatures.Add(new VrchatModularMergeArmature
+            {
+                SourceName = sourceName,
+                TargetName = targetName,
+                Prefix = component.Root?["prefix"]?.AsString() ?? "",
+                Suffix = component.Root?["suffix"]?.AsString() ?? "",
+                MangleNames = component.Root?["mangleNames"]?.AsBool(true) ?? true,
+            });
+        }
+
+        foreach (YamlDocument component in scene.MonoBehavioursByScript(ModularAvatarBoneProxyScriptGuid))
+        {
+            if (subtree != null && !InSubtree(scene, subtree, component))
+            {
+                continue;
+            }
+            YamlDocument owner = scene.OwnerGameObject(component);
+            string sourceName = ResolveSceneObjectName(package, scene, owner?.FileId ?? 0);
+            string targetName = ResolveBoneProxyTargetName(component.Root, avatar);
+            if (string.IsNullOrEmpty(sourceName) || string.IsNullOrEmpty(targetName))
+            {
+                continue;
+            }
+            if (avatar.ModularBoneProxies.Any(existing =>
+                    string.Equals(existing.SourceName, sourceName, StringComparison.Ordinal) &&
+                    string.Equals(existing.TargetName, targetName, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+            avatar.ModularBoneProxies.Add(new VrchatModularBoneProxy
+            {
+                SourceName = sourceName,
+                TargetName = targetName,
+                AttachmentMode = component.Root?["attachmentMode"]?.AsInt(0) ?? 0,
+                MatchScale = component.Root?["matchScale"]?.AsBool(false) ?? false,
+            });
+        }
+
+        int mergeAdded = avatar.ModularMergeArmatures.Count - beforeMerge;
+        int proxyAdded = avatar.ModularBoneProxies.Count - beforeProxy;
+        if (mergeAdded > 0 || proxyAdded > 0)
+        {
+            UniLog.Log($"Modular Avatar operations: +{mergeAdded} Merge Armature, +{proxyAdded} Bone Proxy.");
+        }
+    }
+
+    private static string ResolveSceneObjectName(UnityPackage package, UnityScene scene, long fileId)
+    {
+        if (fileId == 0)
+        {
+            return null;
+        }
+        (string _, string name) = ResolveReferenceNode(package, scene, fileId, 0);
+        return name;
+    }
+
+    private static string ResolveAvatarObjectReferenceName(YamlNode reference)
+    {
+        string path = reference?["referencePath"]?.AsString();
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+        if (string.Equals(path, "$$AVATAR", StringComparison.Ordinal))
+        {
+            return null;
+        }
+        string[] parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 0 ? path : parts[^1];
+    }
+
+    private static string ResolveBoneProxyTargetName(YamlNode root, VrchatAvatar avatar)
+    {
+        string subPath = root?["subPath"]?.AsString();
+        if (string.Equals(subPath, "$$AVATAR", StringComparison.Ordinal))
+        {
+            return avatar.Name;
+        }
+        if (!string.IsNullOrWhiteSpace(subPath))
+        {
+            string[] parts = subPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length > 0)
+            {
+                return parts[^1];
+            }
+        }
+
+        int boneReference = root?["boneReference"]?.AsInt(-1) ?? -1;
+        string vrmBone = UnityHumanBodyBoneToVrmName(boneReference);
+        return vrmBone != null && avatar.HumanBones.TryGetValue(vrmBone, out string boneName)
+            ? boneName
+            : null;
+    }
+
+    private static string UnityHumanBodyBoneToVrmName(int bone)
+        => bone switch
+        {
+            0 => "hips",
+            1 => "leftUpperLeg",
+            2 => "rightUpperLeg",
+            3 => "leftLowerLeg",
+            4 => "rightLowerLeg",
+            5 => "leftFoot",
+            6 => "rightFoot",
+            7 => "spine",
+            8 => "chest",
+            9 => "neck",
+            10 => "head",
+            11 => "leftShoulder",
+            12 => "rightShoulder",
+            13 => "leftUpperArm",
+            14 => "rightUpperArm",
+            15 => "leftLowerArm",
+            16 => "rightLowerArm",
+            17 => "leftHand",
+            18 => "rightHand",
+            19 => "leftToes",
+            20 => "rightToes",
+            54 => "upperChest",
+            _ => null,
+        };
 
     // ---------------------------------------------------------------- physbones
 

@@ -437,6 +437,7 @@ internal static class Converter
 
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar);
+                Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar);
 
                 if (options.NoAvatar)
                 {
