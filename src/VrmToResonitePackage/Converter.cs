@@ -423,6 +423,7 @@ internal static class Converter
                 AlignVrchatImportUp(importRoot, model);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots);
                 RemoveImportAlignment(importRoot, root);
+                CollapseAssimpFbxTransformBones(root);
 
                 Console.WriteLine("アセットの読み込みを待機中...");
                 await WaitForAssets(assetsSlot);
@@ -752,6 +753,60 @@ internal static class Converter
             child.GlobalScale = scale;
         }
         importRoot.Destroy();
+    }
+
+    private static void CollapseAssimpFbxTransformBones(Slot root)
+    {
+        int collapsed = 0;
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (Slot slot in EnumerateSlots(root).ToList())
+            {
+                if (slot == root || slot.IsDestroyed || !IsAssimpFbxTransformBone(slot.Name))
+                {
+                    continue;
+                }
+                List<Slot> children = slot.Children.ToList();
+                if (children.Count != 1 || slot.Parent == null)
+                {
+                    continue;
+                }
+
+                Slot child = children[0];
+                float3 position = child.GlobalPosition;
+                floatQ rotation = child.GlobalRotation;
+                float3 scale = child.GlobalScale;
+                child.Parent = slot.Parent;
+                child.GlobalPosition = position;
+                child.GlobalRotation = rotation;
+                child.GlobalScale = scale;
+                slot.Destroy();
+                collapsed++;
+                changed = true;
+            }
+        } while (changed);
+
+        if (collapsed > 0)
+        {
+            UniLog.Log($"Assimp FBX transform bones collapsed: {collapsed}");
+        }
+    }
+
+    private static bool IsAssimpFbxTransformBone(string name)
+        => name != null && name.Contains("_$AssimpFbx$_", StringComparison.Ordinal);
+
+    private static IEnumerable<Slot> EnumerateSlots(Slot root)
+    {
+        yield return root;
+        foreach (Slot child in root.Children)
+        {
+            foreach (Slot descendant in EnumerateSlots(child))
+            {
+                yield return descendant;
+            }
+        }
     }
 
     /// <summary>
