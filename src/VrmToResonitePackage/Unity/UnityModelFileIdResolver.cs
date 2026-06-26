@@ -163,7 +163,7 @@ public sealed class UnityModelFileIdResolver
         var used = new HashSet<string>(StringComparer.Ordinal);
         foreach (MeshAnimationAttachment attachment in mesh.MeshAnimationAttachments)
         {
-            string name = attachment.Name ?? "";
+            string name = BlendShapeNameNormalizer.CollapseRepeatedName(attachment.Name ?? "");
             while (!used.Add(name))
             {
                 name += "_";
