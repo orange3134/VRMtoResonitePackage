@@ -363,7 +363,7 @@ public static class VrchatAvatarParser
             CollectFbxGuidsFromSource(package, source.Guid, 0, fbxGuids,
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             int inheritedFbxCount = descriptorSource.FbxGuidOverrides?.Count ?? 0;
-            if (fbxGuids.Count == 0 || fbxGuids.Count != inheritedFbxCount ||
+            if (fbxGuids.Count == 0 || (inheritedFbxCount > 0 && fbxGuids.Count != inheritedFbxCount) ||
                 HasRemovedGameObjects(package, source))
             {
                 continue;
@@ -537,6 +537,22 @@ public static class VrchatAvatarParser
         YamlDocument descriptor = scene.MonoBehaviours.FirstOrDefault(IsAvatarDescriptor);
         if (descriptor != null)
         {
+            YamlDocument root = scene.OwnerGameObject(descriptor);
+            string rootName = root != null ? scene.GameObjectName(root.FileId) : null;
+            if (root != null && !string.IsNullOrEmpty(rootName))
+            {
+                return new Candidate
+                {
+                    Source = asset,
+                    Scene = scene,
+                    Root = root,
+                    Descriptor = descriptor,
+                    Subtree = scene.SubtreeGameObjectIds(root.FileId),
+                    Name = rootName,
+                    HasOwnDescriptor = true,
+                };
+            }
+
             List<string> fbxGuids = ResolveVariantFbxGuids(package, scene, descriptor);
             return fbxGuids.Count > 0
                 ? new Candidate { Source = asset, Scene = scene, Descriptor = descriptor, FbxGuidOverrides = fbxGuids }
@@ -601,7 +617,7 @@ public static class VrchatAvatarParser
         }
         if (asset.Extension == ".fbx")
         {
-            result.Add(guid);
+            AddFbxGuid(result, guid);
             return;
         }
         if (asset.Extension != ".prefab")
@@ -627,6 +643,24 @@ public static class VrchatAvatarParser
         {
             CollectFbxGuidsFromSource(package, prefabInstance.Root?["m_SourcePrefab"]?.Guid, depth + 1,
                 result, visited);
+        }
+        foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+        {
+            string meshGuid = smr.Root?["m_Mesh"]?.Guid;
+            UnityAsset meshAsset = package.ByGuid(meshGuid);
+            if (meshAsset?.Extension == ".fbx")
+            {
+                AddFbxGuid(result, meshGuid);
+            }
+        }
+    }
+
+    private static void AddFbxGuid(List<string> result, string guid)
+    {
+        if (!string.IsNullOrEmpty(guid) &&
+            !result.Contains(guid, StringComparer.OrdinalIgnoreCase))
+        {
+            result.Add(guid);
         }
     }
 
@@ -1517,9 +1551,10 @@ public static class VrchatAvatarParser
             {
                 selectedScene = null;
             }
-            selectedInstance = selectedScene?.Documents.Values
+            List<YamlDocument> selectedInstances = selectedScene?.Documents.Values
                 .Where(document => document.ClassId == ClassPrefabInstance)
-                .SingleOrDefault();
+                .ToList();
+            selectedInstance = selectedInstances?.Count == 1 ? selectedInstances[0] : null;
         }
         string selectedSourceGuid = selectedInstance?.Root?["m_SourcePrefab"]?.Guid;
         if (selectedInstance != null)
