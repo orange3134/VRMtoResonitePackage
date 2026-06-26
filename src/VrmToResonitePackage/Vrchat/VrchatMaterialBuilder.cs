@@ -308,13 +308,37 @@ internal static class VrchatMaterialBuilder
             Vec4 emissionColor = new(info.EmissionColor.X * emissionScale, info.EmissionColor.Y * emissionScale,
                 info.EmissionColor.Z * emissionScale, info.EmissionColor.W);
             material.EmissionColor.Value = ToColor(emissionColor, ColorProfile.Linear);
-            StaticTexture2D emission = await GetTexture(assetsSlot, package, info.EmissionMapGuid, textureCache, "EmissionMap");
-            if (emission != null)
+
+            StaticTexture2D emission;
+            if (info.EmissionMapGuid != null)
             {
-                material.EmissionMap.Target = emission;
+                emission = await GetRgbTimesAlphaTexture(assetsSlot, package, info.EmissionMapGuid,
+                    textureCache, "EmissionMap");
                 material.EmissionMapScale.Value = ToFloat2(info.EmissionMapScale);
                 material.EmissionMapOffset.Value = ToFloat2(info.EmissionMapOffset);
             }
+            else if (info.EmissionBlendMaskGuid != null)
+            {
+                emission = await GetRgbTimesAlphaTexture(assetsSlot, package, info.EmissionBlendMaskGuid,
+                    textureCache, "EmissionBlendMask");
+                material.EmissionMapScale.Value = float2.One;
+                material.EmissionMapOffset.Value = float2.Zero;
+            }
+            else if (info.EmissionMainStrength > 0f && info.MainTexGuid != null)
+            {
+                emission = await GetRgbTimesAlphaTexture(assetsSlot, package, info.MainTexGuid,
+                    textureCache, "EmissionMainTexture");
+                material.EmissionMapScale.Value = float2.One;
+                material.EmissionMapOffset.Value = float2.Zero;
+            }
+            else
+            {
+                emission = await GetSolidTexture(assetsSlot, textureCache, "__liltoon_white", color.White,
+                    "LilToon White");
+                material.EmissionMapScale.Value = float2.One;
+                material.EmissionMapOffset.Value = float2.Zero;
+            }
+            material.EmissionMap.Target = emission;
         }
 
         // --- Outline ---
@@ -343,7 +367,8 @@ internal static class VrchatMaterialBuilder
         // --- Matcap ---
         if (info.UseMatcap && info.MatcapBlendMode == 1 && info.MatcapBlendMaskGuid == null)
         {
-            StaticTexture2D matcap = await GetMatcapTexture(assetsSlot, package, info.MatcapGuid, textureCache);
+            StaticTexture2D matcap = await GetRgbTimesAlphaTexture(assetsSlot, package, info.MatcapGuid,
+                textureCache, "Matcap");
             if (matcap != null)
             {
                 material.Matcap.Target = matcap;
@@ -507,15 +532,15 @@ internal static class VrchatMaterialBuilder
         return texture;
     }
 
-    private static async Task<StaticTexture2D> GetMatcapTexture(Slot assetsSlot, UnityPackage package, string guid,
-        Dictionary<string, StaticTexture2D> cache)
+    private static async Task<StaticTexture2D> GetRgbTimesAlphaTexture(Slot assetsSlot, UnityPackage package,
+        string guid, Dictionary<string, StaticTexture2D> cache, string label)
     {
         if (string.IsNullOrEmpty(guid))
         {
             return null;
         }
 
-        string cacheKey = $"{guid}|matcap-rgb-times-alpha";
+        string cacheKey = $"{guid}|rgb-times-alpha";
         if (cache.TryGetValue(cacheKey, out StaticTexture2D cached))
         {
             return cached;
@@ -525,7 +550,7 @@ internal static class VrchatMaterialBuilder
         UnityAsset asset = package.ByGuid(guid);
         if (asset?.HasContent != true)
         {
-            UniLog.Warning($"MatCap texture (guid {guid}) was not found in the Unity package.");
+            UniLog.Warning($"{label} texture (guid {guid}) was not found in the Unity package.");
             return null;
         }
 
@@ -542,7 +567,7 @@ internal static class VrchatMaterialBuilder
         }
         catch (Exception ex)
         {
-            UniLog.Warning($"Failed to post-process MatCap texture (guid {guid}): {ex.Message}");
+            UniLog.Warning($"Failed to post-process {label} texture (guid {guid}): {ex.Message}");
         }
         await default(ToWorld);
         if (uri == null)
@@ -550,7 +575,7 @@ internal static class VrchatMaterialBuilder
             return null;
         }
 
-        Slot textureSlot = assetsSlot.AddSlot($"Matcap: {Path.GetFileNameWithoutExtension(asset.LogicalPath)}");
+        Slot textureSlot = assetsSlot.AddSlot($"{label}: {Path.GetFileNameWithoutExtension(asset.LogicalPath)}");
         StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
         texture.URL.Value = uri;
         cache[cacheKey] = texture;
