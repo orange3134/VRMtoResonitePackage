@@ -303,7 +303,18 @@ internal static class Converter
     private static async Task<string> ConvertVrchat(World world, string packagePath, CliOptions options)
     {
         using Unity.UnityPackage package = Unity.UnityPackage.Extract(packagePath);
-        Vrchat.VrchatAvatar avatar = Vrchat.VrchatAvatarParser.Parse(package, options.AvatarName);
+        Vrchat.VrchatDiagnostics.LogPackageSummary(package, packagePath);
+        Vrchat.VrchatAvatar avatar = null;
+        try
+        {
+            avatar = Vrchat.VrchatAvatarParser.Parse(package, options.AvatarName);
+            Vrchat.VrchatDiagnostics.LogAvatarSummary(package, avatar, "parsed");
+        }
+        catch (Exception ex)
+        {
+            Vrchat.VrchatDiagnostics.LogFailureDiagnostics(package, avatar, ex);
+            throw;
+        }
         VrmModel model = Vrchat.VrchatModelAdapter.ToVrmModel(avatar);
 
         string displayName = !string.IsNullOrWhiteSpace(avatar.Name)
@@ -465,6 +476,11 @@ internal static class Converter
                 Console.WriteLine("パッケージを書き出し中...");
                 await ExportPackage(world, root, outputPath);
             }).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Vrchat.VrchatDiagnostics.LogFailureDiagnostics(package, avatar, ex);
+            throw;
         }
         finally
         {
