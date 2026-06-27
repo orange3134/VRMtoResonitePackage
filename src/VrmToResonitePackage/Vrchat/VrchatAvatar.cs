@@ -33,6 +33,7 @@ public sealed class VrchatAvatar
     public Vec3 FbxLocalPosition { get; set; }
     public System.Numerics.Quaternion FbxLocalRotation { get; set; } = System.Numerics.Quaternion.Identity;
     public Vec3 FbxLocalScale { get; set; } = Vec3.One;
+    public List<VrchatPrefabTransform> FbxParentTransforms { get; } = new();
 
     /// <summary>Additional FBXs composed into the selected prefab, such as separate hair/accessory models.</summary>
     public List<VrchatFbxAsset> AdditionalFbxs { get; } = new();
@@ -82,6 +83,10 @@ public sealed class VrchatAvatar
     /// meshes that the prefab deleted (avatars built by removing mesh objects from a shared FBX).
     /// </summary>
     public HashSet<string> PrefabGameObjectNames { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Subset of Modular Avatar build operations that affect imported hierarchy/bone bindings.</summary>
+    public List<VrchatModularMergeArmature> ModularMergeArmatures { get; } = new();
+    public List<VrchatModularBoneProxy> ModularBoneProxies { get; } = new();
 }
 
 public sealed class VrchatFbxAsset
@@ -96,10 +101,38 @@ public sealed class VrchatFbxAsset
     public Vec3 LocalPosition { get; set; }
     public System.Numerics.Quaternion LocalRotation { get; set; } = System.Numerics.Quaternion.Identity;
     public Vec3 LocalScale { get; set; } = Vec3.One;
+    public List<VrchatPrefabTransform> ParentTransforms { get; } = new();
     public Dictionary<string, string> MaterialGuids { get; } = new(StringComparer.Ordinal);
 }
 
+/// <summary>An ordinary GameObject authored in a prefab between imported FBX hierarchies.</summary>
+public sealed class VrchatPrefabTransform
+{
+    public string Key { get; set; }
+    public string Name { get; set; }
+    public Vec3 LocalPosition { get; set; }
+    public System.Numerics.Quaternion LocalRotation { get; set; } = System.Numerics.Quaternion.Identity;
+    public Vec3 LocalScale { get; set; } = Vec3.One;
+}
+
 public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
+
+public sealed class VrchatModularMergeArmature
+{
+    public string SourceName { get; set; }
+    public string TargetName { get; set; }
+    public string Prefix { get; set; } = "";
+    public string Suffix { get; set; } = "";
+    public bool MangleNames { get; set; } = true;
+}
+
+public sealed class VrchatModularBoneProxy
+{
+    public string SourceName { get; set; }
+    public string TargetName { get; set; }
+    public int AttachmentMode { get; set; }
+    public bool MatchScale { get; set; }
+}
 
 /// <summary>One avatar prefab a package offers for conversion.</summary>
 public sealed record VrchatAvatarChoice(
@@ -155,6 +188,11 @@ public sealed class VrchatPhysBoneCollider
 
 public sealed class VrchatRendererMaterials
 {
+    /// <summary>
+    /// FBX that owns this renderer. Null keeps name-only matching for prefab-authored renderers
+    /// that cannot be traced back to a model asset.
+    /// </summary>
+    public string FbxGuid { get; set; }
     public string RendererGameObjectName { get; set; }
     public List<string> MaterialGuids { get; } = new();
 

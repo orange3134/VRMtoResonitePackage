@@ -24,6 +24,32 @@ internal static class VrchatConstants
     };
 
     /// <summary>
+    /// Built-in lilToon outline shader GUIDs. Avatar unitypackages commonly reference these
+    /// shaders without including the shader assets themselves, so their names cannot be resolved
+    /// from the package. These correspond to the lts/ltsl, tessellation, one/two-pass and multi
+    /// outline variants shipped by lilToon.
+    /// </summary>
+    public static readonly HashSet<string> LilToonOutlineShaderGuids = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "8cf5267d397b04846856f6d3d9561da0", // ltsl_cutout_o
+        "583a88005abb81a4ebbce757b4851a0d", // ltsl_o
+        "701268c07d37f5441b25b2cb99fae4b3", // ltsl_onetrans_o
+        "1c12a37046f07ac4486881deaf0187ea", // ltsl_trans_o
+        "62df797f407281640a224388953448cc", // ltsl_twotrans_o
+        "51b2dee0ab07bd84d8147601ff89e511", // ltsmulti_o
+        "3b4aa19949601f046a20ca8bdaee929f", // lts_cutout_o
+        "efa77a80ca0344749b4f19fdd5891cbe", // lts_o
+        "7171688840c632447b22ec14e2bdef7e", // lts_onetrans_o
+        "5ba517885727277409feada18effa4a6", // lts_tess_cutout_o
+        "c6d605ee23b18fc46903f38c67db701f", // lts_tess_o
+        "67ed0252d63362a4ab23707a720508b7", // lts_tess_onetrans_o
+        "9b0c2630b12933248922527d4507cfa9", // lts_tess_trans_o
+        "7e61dbad981ad4f43a03722155db1c6a", // lts_tess_twotrans_o
+        "3c79b10c7e0b2784aaa4c2f8dd17d55e", // lts_trans_o
+        "9cf054060007d784394b8b0bb703e441", // lts_twotrans_o
+    };
+
+    /// <summary>
     /// VRChat viseme slot order (VRC_AvatarDescriptor.VisemeBlendShapes is indexed by this enum).
     /// </summary>
     public static readonly string[] VisemeOrder =
@@ -67,6 +93,82 @@ internal static class VrchatConstants
         string token = unityHumanName.Replace(" ", "");
         string camel = char.ToLowerInvariant(token[0]) + token[1..];
         return ThumbRemap.TryGetValue(camel, out string remapped) ? remapped : camel;
+    }
+
+    /// <summary>
+    /// Infers a VRM humanoid bone from common Blender/Unity bone names when an FBX is marked
+    /// humanoid but its ModelImporter meta contains an empty humanDescription.human list.
+    /// </summary>
+    public static string InferHumanNameFromSkeletonName(string skeletonName)
+    {
+        if (string.IsNullOrWhiteSpace(skeletonName))
+        {
+            return null;
+        }
+
+        string name = skeletonName.Trim();
+        string side = null;
+        if (name.EndsWith(".L", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith("_L", StringComparison.OrdinalIgnoreCase))
+        {
+            side = "left";
+            name = name[..^2];
+        }
+        else if (name.EndsWith(".R", StringComparison.OrdinalIgnoreCase) ||
+                 name.EndsWith("_R", StringComparison.OrdinalIgnoreCase))
+        {
+            side = "right";
+            name = name[..^2];
+        }
+
+        name = name.Replace(" ", "", StringComparison.Ordinal)
+            .Replace("_", "", StringComparison.Ordinal)
+            .Replace("-", "", StringComparison.Ordinal)
+            .ToLowerInvariant();
+
+        if (side == null)
+        {
+            return name switch
+            {
+                "hips" or "pelvis" => "hips",
+                "spine" => "spine",
+                "chest" => "chest",
+                "upperchest" => "upperChest",
+                "neck" => "neck",
+                "head" => "head",
+                "jaw" => "jaw",
+                _ => null,
+            };
+        }
+
+        return name switch
+        {
+            "eye" => side + "Eye",
+            "shoulder" or "clavicle" => side + "Shoulder",
+            "upperarm" or "arm" => side + "UpperArm",
+            "lowerarm" or "forearm" => side + "LowerArm",
+            "hand" or "wrist" => side + "Hand",
+            "upperleg" or "thigh" => side + "UpperLeg",
+            "lowerleg" or "shin" or "calf" => side + "LowerLeg",
+            "foot" => side + "Foot",
+            "toe" or "toes" => side + "Toes",
+            "thumbproximal" => side + "ThumbMetacarpal",
+            "thumbintermediate" => side + "ThumbProximal",
+            "thumbdistal" => side + "ThumbDistal",
+            "indexproximal" => side + "IndexProximal",
+            "indexintermediate" => side + "IndexIntermediate",
+            "indexdistal" => side + "IndexDistal",
+            "middleproximal" => side + "MiddleProximal",
+            "middleintermediate" => side + "MiddleIntermediate",
+            "middledistal" => side + "MiddleDistal",
+            "ringproximal" => side + "RingProximal",
+            "ringintermediate" => side + "RingIntermediate",
+            "ringdistal" => side + "RingDistal",
+            "littleproximal" or "pinkyproximal" => side + "LittleProximal",
+            "littleintermediate" or "pinkyintermediate" => side + "LittleIntermediate",
+            "littledistal" or "pinkydistal" => side + "LittleDistal",
+            _ => null,
+        };
     }
 
     /// <summary>

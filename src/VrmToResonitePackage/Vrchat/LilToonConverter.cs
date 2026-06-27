@@ -38,18 +38,11 @@ public sealed class LilToonInfo
     public Vec2 ShadowBorderMaskScale { get; set; } = Vec2.One;
     public Vec2 ShadowBorderMaskOffset { get; set; }
 
-    public bool UseRim { get; set; }
-    public Vec4 RimColor { get; set; } = new(1f, 1f, 1f, 1f);
-    public float RimBorder { get; set; } = 0.5f;
-    public float RimBlur { get; set; } = 0.1f;
-    public float RimFresnelPower { get; set; } = 3f;
-
     public bool UseOutline { get; set; }
     public float OutlineWidth { get; set; }
     public Vec4 OutlineColor { get; set; } = new(0f, 0f, 0f, 1f);
     public bool OutlineLit { get; set; } = true;
     public bool OutlineAlbedoTint { get; set; }
-    public bool OutlineFixWidth { get; set; } = true;
     public string OutlineMaskGuid { get; set; }
 
     public bool UseMatcap { get; set; }
@@ -66,6 +59,8 @@ public sealed class LilToonInfo
     public string EmissionMapGuid { get; set; }
     public Vec2 EmissionMapScale { get; set; } = Vec2.One;
     public Vec2 EmissionMapOffset { get; set; }
+    public string EmissionBlendMaskGuid { get; set; }
+    public float EmissionMainStrength { get; set; }
 
     public bool UseReflection { get; set; }
     public float Metallic { get; set; }
@@ -93,7 +88,7 @@ public static class LilToonConverter
         return floats != null && (floats["_ShadowBorder"] != null || floats["_LightMinLimit"] != null);
     }
 
-    public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null)
+    public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null, bool isOutlineShader = false)
     {
         YamlNode root = material.Root;
         YamlNode props = root?["m_SavedProperties"];
@@ -108,6 +103,17 @@ public static class LilToonConverter
         string TexAny(params string[] names) => names.Select(Tex).FirstOrDefault(g => !string.IsNullOrEmpty(g));
         Vec2 TexScale(string name, Vec2 fallback) => ReadVector2(texEnvs?[name]?["m_Scale"], fallback);
         Vec2 TexOffset(string name, Vec2 fallback) => ReadVector2(texEnvs?[name]?["m_Offset"], fallback);
+
+        // Material Variants often serialize only the overridden outline values and omit
+        // _UseOutline. Treat those overrides as enabling the feature, while preserving an
+        // explicitly serialized _UseOutline value. lilToon's dedicated Outline shaders enable
+        // it independently of _UseOutline, matching Resonite.UnitySDK's converter.
+        bool hasOutlineProperties = floats?["_OutlineWidth"] != null ||
+            floats?["_OutlineEnableLighting"] != null || floats?["_OutlineLitApplyTex"] != null ||
+            colors?["_OutlineColor"] != null || texEnvs?["_OutlineWidthMask"] != null;
+        bool useOutline = isOutlineShader || (floats?["_UseOutline"] != null
+            ? B("_UseOutline")
+            : hasOutlineProperties || parent?.UseOutline == true);
 
         int customRenderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
 
@@ -143,18 +149,11 @@ public static class LilToonConverter
             ShadowBorderMaskScale = TexScale("_ShadowBorderMask", parent?.ShadowBorderMaskScale ?? Vec2.One),
             ShadowBorderMaskOffset = TexOffset("_ShadowBorderMask", parent?.ShadowBorderMaskOffset ?? Vec2.Zero),
 
-            UseRim = B("_UseRim", parent?.UseRim ?? false),
-            RimColor = C("_RimColor", parent?.RimColor ?? new Vec4(1f, 1f, 1f, 1f)),
-            RimBorder = F("_RimBorder", parent?.RimBorder ?? 0.5f),
-            RimBlur = F("_RimBlur", parent?.RimBlur ?? 0.1f),
-            RimFresnelPower = F("_RimFresnelPower", parent?.RimFresnelPower ?? 3f),
-
-            UseOutline = B("_UseOutline", parent?.UseOutline ?? false),
+            UseOutline = useOutline,
             OutlineWidth = F("_OutlineWidth", parent?.OutlineWidth ?? 0.08f),
             OutlineColor = C("_OutlineColor", parent?.OutlineColor ?? new Vec4(0f, 0f, 0f, 1f)),
             OutlineLit = B("_OutlineEnableLighting", parent?.OutlineLit ?? true),
             OutlineAlbedoTint = B("_OutlineLitApplyTex", parent?.OutlineAlbedoTint ?? false),
-            OutlineFixWidth = B("_OutlineFixWidth", parent?.OutlineFixWidth ?? true),
             OutlineMaskGuid = Tex("_OutlineWidthMask") ?? parent?.OutlineMaskGuid,
 
             UseMatcap = B("_UseMatCap", parent?.UseMatcap ?? false),
@@ -175,6 +174,8 @@ public static class LilToonConverter
                 : null,
             EmissionMapScale = TexScale("_EmissionMap", parent?.EmissionMapScale ?? Vec2.One),
             EmissionMapOffset = TexOffset("_EmissionMap", parent?.EmissionMapOffset ?? Vec2.Zero),
+            EmissionBlendMaskGuid = Tex("_EmissionBlendMask") ?? parent?.EmissionBlendMaskGuid,
+            EmissionMainStrength = F("_EmissionMainStrength", parent?.EmissionMainStrength ?? 0f),
 
             UseReflection = B("_UseReflection", parent?.UseReflection ?? false),
             Metallic = F("_Metallic", parent?.Metallic ?? 0f),
