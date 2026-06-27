@@ -142,9 +142,7 @@ public static class VrchatAvatarParser
             }
             ParseFbxBlendShapeNames(package, avatar);
             ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
-            ParseVariantRendererOverrides(
-                package, selected.Source.Guid, selected.Scene, selected.Descriptor,
-                selected.HasOwnDescriptor, avatar);
+            ParseVariantRendererOverrides(package, selected.Source.Guid, avatar);
             CollectVariantPrefabGameObjectNames(package, selected.Source.Guid, avatar);
             ParseVariantModularAvatar(package, selected.Source.Guid, avatar);
             ApplyFbxDefaultBlendShapeWeights(avatar);
@@ -1582,52 +1580,15 @@ public static class VrchatAvatarParser
         return null;
     }
 
-    private static void ParseVariantRendererOverrides(UnityPackage package, string sourceGuid,
-        UnityScene descriptorScene, YamlDocument descriptor, bool hasOwnDescriptor,
-        VrchatAvatar avatar)
+    private static void ParseVariantRendererOverrides(
+        UnityPackage package, string sourceGuid, VrchatAvatar avatar)
     {
         var modificationBlocks = new List<YamlNode>();
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        UnityScene selectedScene = descriptorScene;
-        YamlDocument selectedInstance;
-        if (hasOwnDescriptor)
-        {
-            selectedInstance = VariantPrefabInstance(selectedScene, descriptor);
-        }
-        else
-        {
-            UnityAsset selectedAsset = package.ByGuid(sourceGuid);
-            try
-            {
-                selectedScene = selectedAsset?.Extension == ".prefab"
-                    ? package.ReadScene(selectedAsset)
-                    : null;
-            }
-            catch
-            {
-                selectedScene = null;
-            }
-            List<YamlDocument> selectedInstances = selectedScene?.Documents.Values
-                .Where(document => document.ClassId == ClassPrefabInstance)
-                .ToList();
-            selectedInstance = selectedInstances?.Count == 1 ? selectedInstances[0] : null;
-        }
-        string selectedSourceGuid = selectedInstance?.Root?["m_SourcePrefab"]?.Guid;
-        if (selectedInstance != null)
-        {
-            CollectVariantModificationBlocks(
-                package, selectedSourceGuid, modificationBlocks, visited);
-            YamlNode selectedModifications =
-                selectedInstance.Root?["m_Modification"]?["m_Modifications"];
-            if (selectedModifications?.Seq != null)
-            {
-                modificationBlocks.Add(selectedModifications);
-            }
-        }
-        else
-        {
-            CollectVariantModificationBlocks(package, sourceGuid, modificationBlocks, visited);
-        }
+        // Fold the complete selected prefab graph, not just the PrefabInstance that owns the
+        // Avatar Descriptor. Compositions can keep body and clothing in sibling instances, each
+        // with renderer overrides. The collector emits each base before its instance overrides.
+        CollectVariantModificationBlocks(package, sourceGuid, modificationBlocks, visited);
         var renderers = new Dictionary<string, VrchatRendererMaterials>(StringComparer.Ordinal);
         var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(
             StringComparer.OrdinalIgnoreCase);
@@ -1636,7 +1597,7 @@ public static class VrchatAvatarParser
         int activeAssignments = 0;
 
         var inheritedScenes = new List<UnityScene>();
-        CollectVariantPrefabScenes(package, selectedSourceGuid ?? sourceGuid, inheritedScenes,
+        CollectVariantPrefabScenes(package, sourceGuid, inheritedScenes,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         foreach (UnityScene scene in inheritedScenes)
         {
