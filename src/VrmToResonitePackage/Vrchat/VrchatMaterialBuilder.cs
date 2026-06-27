@@ -276,27 +276,9 @@ internal static class VrchatMaterialBuilder
             material.ShadowSharpness.Value = 0f;
         }
 
-        // --- Rim ---
-        if (info.UseRim)
-        {
-            float intensity = MathX.Max(info.RimColor.X, info.RimColor.Y, info.RimColor.Z);
-            material.RimColor.Value = ToColor(info.RimColor, ColorProfile.sRGB);
-            material.RimIntensity.Value = MathX.Clamp(intensity, 0f, 1f);
-            material.RimAlbedoTint.Value = 0f;
-            material.RimAttenuationEffect.Value = 0f;
-            // liltoon rim is a fresnel gated by _RimBorder with _RimBlur softness; map the band onto
-            // XiexeToon's smoothstep(range±sharpness, 1 - N·V).
-            float fresnelPower = MathX.Max(info.RimFresnelPower, 0.001f);
-            float rimLo = MathF.Pow(MathX.Clamp01(info.RimBorder - info.RimBlur * 0.5f), 1f / fresnelPower);
-            float rimHi = MathF.Pow(MathX.Clamp01(info.RimBorder + info.RimBlur * 0.5f), 1f / fresnelPower);
-            material.RimRange.Value = MathX.Clamp01((rimLo + rimHi) * 0.5f);
-            material.RimSharpness.Value = MathX.Clamp((rimHi - rimLo) * 0.5f, 0.001f, 1f);
-            material.RimThreshold.Value = 0f;
-        }
-        else
-        {
-            material.RimIntensity.Value = 0f;
-        }
+        // lilToon's rim model cannot be represented reliably by XiexeToon. Match
+        // Resonite.UnitySDK by leaving rim conversion disabled.
+        material.RimIntensity.Value = 0f;
 
         // --- Emission ---
         if (info.UseEmission)

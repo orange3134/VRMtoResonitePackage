@@ -38,12 +38,6 @@ public sealed class LilToonInfo
     public Vec2 ShadowBorderMaskScale { get; set; } = Vec2.One;
     public Vec2 ShadowBorderMaskOffset { get; set; }
 
-    public bool UseRim { get; set; }
-    public Vec4 RimColor { get; set; } = new(1f, 1f, 1f, 1f);
-    public float RimBorder { get; set; } = 0.5f;
-    public float RimBlur { get; set; } = 0.1f;
-    public float RimFresnelPower { get; set; } = 3f;
-
     public bool UseOutline { get; set; }
     public float OutlineWidth { get; set; }
     public Vec4 OutlineColor { get; set; } = new(0f, 0f, 0f, 1f);
@@ -154,12 +148,6 @@ public static class LilToonConverter
             ShadowBorderMaskGuid = Tex("_ShadowBorderMask") ?? parent?.ShadowBorderMaskGuid,
             ShadowBorderMaskScale = TexScale("_ShadowBorderMask", parent?.ShadowBorderMaskScale ?? Vec2.One),
             ShadowBorderMaskOffset = TexOffset("_ShadowBorderMask", parent?.ShadowBorderMaskOffset ?? Vec2.Zero),
-
-            UseRim = B("_UseRim", parent?.UseRim ?? false),
-            RimColor = C("_RimColor", parent?.RimColor ?? new Vec4(1f, 1f, 1f, 1f)),
-            RimBorder = F("_RimBorder", parent?.RimBorder ?? 0.5f),
-            RimBlur = F("_RimBlur", parent?.RimBlur ?? 0.1f),
-            RimFresnelPower = F("_RimFresnelPower", parent?.RimFresnelPower ?? 3f),
 
             UseOutline = useOutline,
             OutlineWidth = F("_OutlineWidth", parent?.OutlineWidth ?? 0.08f),
