@@ -52,7 +52,9 @@ internal static class VrchatDump
             foreach (VrchatFbxAsset additional in avatar.AdditionalFbxs)
             {
                 Console.WriteLine($"FBX +  : {additional.InstanceName} (guid {additional.Guid}, scale {additional.ImportScale:G6}, " +
-                                  $"parent {additional.ParentNodeName ?? "(root)"}, transform {additional.TransformNodeName ?? "(wrapper)"})");
+                                  $"parent {additional.ParentNodeName ?? "(root)"}, transform {additional.TransformNodeName ?? "(wrapper)"}, " +
+                                  $"via [{string.Join("/", additional.ParentTransforms.Select(t => t.Name))}], " +
+                                  $"pos={additional.LocalPosition}, rot={additional.LocalRotation}, localScale={additional.LocalScale})");
             }
             Console.WriteLine($"FBX scale: {avatar.FbxImportScale:G6}");
             Console.WriteLine($"FBX up axis: {avatar.FbxUpAxis}");

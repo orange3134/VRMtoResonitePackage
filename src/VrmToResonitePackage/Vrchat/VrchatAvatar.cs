@@ -33,6 +33,7 @@ public sealed class VrchatAvatar
     public Vec3 FbxLocalPosition { get; set; }
     public System.Numerics.Quaternion FbxLocalRotation { get; set; } = System.Numerics.Quaternion.Identity;
     public Vec3 FbxLocalScale { get; set; } = Vec3.One;
+    public List<VrchatPrefabTransform> FbxParentTransforms { get; } = new();
 
     /// <summary>Additional FBXs composed into the selected prefab, such as separate hair/accessory models.</summary>
     public List<VrchatFbxAsset> AdditionalFbxs { get; } = new();
@@ -100,7 +101,18 @@ public sealed class VrchatFbxAsset
     public Vec3 LocalPosition { get; set; }
     public System.Numerics.Quaternion LocalRotation { get; set; } = System.Numerics.Quaternion.Identity;
     public Vec3 LocalScale { get; set; } = Vec3.One;
+    public List<VrchatPrefabTransform> ParentTransforms { get; } = new();
     public Dictionary<string, string> MaterialGuids { get; } = new(StringComparer.Ordinal);
+}
+
+/// <summary>An ordinary GameObject authored in a prefab between imported FBX hierarchies.</summary>
+public sealed class VrchatPrefabTransform
+{
+    public string Key { get; set; }
+    public string Name { get; set; }
+    public Vec3 LocalPosition { get; set; }
+    public System.Numerics.Quaternion LocalRotation { get; set; } = System.Numerics.Quaternion.Identity;
+    public Vec3 LocalScale { get; set; } = Vec3.One;
 }
 
 public sealed record VrchatGameObjectReference(string FbxGuid, string Name);

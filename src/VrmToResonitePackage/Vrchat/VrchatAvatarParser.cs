@@ -57,6 +57,7 @@ public static class VrchatAvatarParser
         public Vec3 LocalPosition;
         public Quat LocalRotation = Quat.Identity;
         public Vec3 LocalScale = Vec3.One;
+        public List<VrchatPrefabTransform> ParentTransforms { get; } = new();
     }
 
     /// <summary>
@@ -731,7 +732,7 @@ public static class VrchatAvatarParser
             long parentId = instance.Root?["m_Modification"]?["m_TransformParent"]?.FileID ?? 0;
             FbxPlacement placement = parentId == 0 && inherited != null
                 ? inherited
-                : PlacementFromInstance(package, scene, instance);
+                : PlacementFromInstance(package, scene, guid, instance);
             CollectFbxPlacements(package, childGuid, placement, result, visited, depth + 1);
         }
 
@@ -752,7 +753,8 @@ public static class VrchatAvatarParser
         }
     }
 
-    private static FbxPlacement PlacementFromInstance(UnityPackage package, UnityScene scene, YamlDocument instance)
+    private static FbxPlacement PlacementFromInstance(UnityPackage package, UnityScene scene,
+        string sceneGuid, YamlDocument instance)
     {
         long parentId = instance.Root?["m_Modification"]?["m_TransformParent"]?.FileID ?? 0;
         (string parentGuid, string parentName) = ResolveReferenceNode(package, scene, parentId, 0);
@@ -769,7 +771,7 @@ public static class VrchatAvatarParser
         {
             transformNodeName = instanceName["Siro_".Length..];
         }
-        return new FbxPlacement
+        var placement = new FbxPlacement
         {
             InstanceName = instanceName,
             ParentFbxGuid = parentGuid,
@@ -789,6 +791,61 @@ public static class VrchatAvatarParser
                 FindModificationFloat(instance, transformTarget, "m_LocalScale.y", 1f),
                 FindModificationFloat(instance, transformTarget, "m_LocalScale.z", 1f)),
         };
+        CaptureLocalPlacementParents(package, scene, sceneGuid, parentId, placement);
+        return placement;
+    }
+
+    /// <summary>
+    /// Prefab variants can insert ordinary GameObjects between an FBX bone and another model
+    /// instance. Capture those transforms so the converter can reproduce them as slots, then
+    /// attach the outermost one to the nearest FBX ancestor that exists after import.
+    /// </summary>
+    private static void CaptureLocalPlacementParents(UnityPackage package, UnityScene scene,
+        string sceneGuid, long parentId, FbxPlacement placement)
+    {
+        long current = parentId;
+        var visited = new HashSet<long>();
+        for (int depth = 0; current != 0 && depth < 32 && visited.Add(current); depth++)
+        {
+            (string guid, string name) = ResolveReferenceNode(package, scene, current, 0);
+            if (!string.IsNullOrEmpty(guid))
+            {
+                placement.ParentFbxGuid = guid;
+                placement.ParentNodeName = name;
+                return;
+            }
+
+            YamlDocument transform = scene.Doc(current);
+            YamlNode root = transform?.Root;
+            if (root == null || root["m_Father"] == null)
+            {
+                return;
+            }
+
+            YamlNode position = root["m_LocalPosition"];
+            YamlNode rotation = root["m_LocalRotation"];
+            YamlNode scale = root["m_LocalScale"];
+            Vec3 parentPosition = position != null
+                ? new Vec3(position.Vec("x"), position.Vec("y"), position.Vec("z"))
+                : Vec3.Zero;
+            Quat parentRotation = rotation != null
+                ? new Quat(rotation.Vec("x"), rotation.Vec("y"), rotation.Vec("z"),
+                    rotation["w"] != null ? rotation.Vec("w") : 1f)
+                : Quat.Identity;
+            Vec3 parentScale = scale != null
+                ? new Vec3(scale.Vec("x", 1f), scale.Vec("y", 1f), scale.Vec("z", 1f))
+                : Vec3.One;
+
+            placement.ParentTransforms.Insert(0, new VrchatPrefabTransform
+            {
+                Key = $"{sceneGuid}:{current}",
+                Name = scene.ResolveGameObjectName(current) ?? "GameObject",
+                LocalPosition = parentPosition,
+                LocalRotation = parentRotation,
+                LocalScale = parentScale,
+            });
+            current = root["m_Father"]?.FileID ?? 0;
+        }
     }
 
     private static YamlNode FindPlacementTransformTarget(UnityPackage package, YamlDocument instance)
@@ -1336,6 +1393,10 @@ public static class VrchatAvatarParser
                 fbx, meta, placement?.TransformNodeName, placement?.ParentFbxGuid,
                 placement?.LocalScale ?? Vec3.One),
         };
+        if (placement != null)
+        {
+            additional.ParentTransforms.AddRange(placement.ParentTransforms);
+        }
         ParseFbxMaterialMappings(package, fbx, meta, additional.MaterialGuids);
         avatar.AdditionalFbxs.Add(additional);
         UniLog.Log($"追加FBXを検出しました: {Path.GetFileNameWithoutExtension(fbx.LogicalPath)}");
@@ -1350,6 +1411,10 @@ public static class VrchatAvatarParser
         avatar.FbxLocalPosition = placement?.LocalPosition ?? default;
         avatar.FbxLocalRotation = placement?.LocalRotation ?? Quat.Identity;
         avatar.FbxLocalScale = placement?.LocalScale ?? Vec3.One;
+        if (placement != null)
+        {
+            avatar.FbxParentTransforms.AddRange(placement.ParentTransforms);
+        }
     }
 
     private static void ParseFbxImportScale(UnityAsset fbx, YamlNode meta, VrchatAvatar avatar)

@@ -513,7 +513,8 @@ internal static class Converter
     private static void ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
         Dictionary<string, Slot> importedFbxRoots)
     {
-        ApplyPrimaryFbxPlacement(importRoot, avatar, importedFbxRoots);
+        var prefabSlots = new Dictionary<string, Slot>(StringComparer.Ordinal);
+        ApplyPrimaryFbxPlacement(importRoot, avatar, importedFbxRoots, prefabSlots);
 
         foreach (Vrchat.VrchatFbxAsset additional in avatar.AdditionalFbxs)
         {
@@ -521,19 +522,14 @@ internal static class Converter
             {
                 continue;
             }
-            Slot parent = importRoot;
-            if (!string.IsNullOrEmpty(additional.ParentFbxGuid) &&
-                !string.IsNullOrEmpty(additional.ParentNodeName) &&
-                importedFbxRoots.TryGetValue(additional.ParentFbxGuid, out Slot parentFbxRoot))
-            {
-                parent = SlotIndex.Build(parentFbxRoot).GetValueOrDefault(additional.ParentNodeName) ?? parentFbxRoot;
-            }
+            Slot parent = ResolvePrefabParent(importRoot, additional.ParentFbxGuid,
+                additional.ParentNodeName, additional.ParentTransforms, importedFbxRoots, prefabSlots);
             instanceRoot.Parent = parent;
             float3 position = new(
-                -additional.LocalPosition.X, additional.LocalPosition.Y, additional.LocalPosition.Z);
+                additional.LocalPosition.X, additional.LocalPosition.Y, additional.LocalPosition.Z);
             floatQ rotation = new(
-                additional.LocalRotation.X, -additional.LocalRotation.Y,
-                -additional.LocalRotation.Z, additional.LocalRotation.W);
+                additional.LocalRotation.X, additional.LocalRotation.Y,
+                additional.LocalRotation.Z, additional.LocalRotation.W);
             float3 scale = new(
                 additional.LocalScale.X, additional.LocalScale.Y, additional.LocalScale.Z);
             scale *= additional.ImportScale;
@@ -581,6 +577,43 @@ internal static class Converter
         => string.Equals(nodeName, "RootNode", StringComparison.Ordinal) ||
            string.Equals(nodeName, "//RootNode", StringComparison.Ordinal);
 
+    private static Slot ResolvePrefabParent(Slot importRoot, string parentFbxGuid,
+        string parentNodeName, IReadOnlyList<Vrchat.VrchatPrefabTransform> parentTransforms,
+        Dictionary<string, Slot> importedFbxRoots, Dictionary<string, Slot> prefabSlots)
+    {
+        Slot parent = importRoot;
+        if (!string.IsNullOrEmpty(parentFbxGuid) &&
+            !string.IsNullOrEmpty(parentNodeName) &&
+            importedFbxRoots.TryGetValue(parentFbxGuid, out Slot parentFbxRoot))
+        {
+            parent = SlotIndex.Build(parentFbxRoot).GetValueOrDefault(parentNodeName) ?? parentFbxRoot;
+        }
+
+        foreach (Vrchat.VrchatPrefabTransform transform in parentTransforms)
+        {
+            if (!string.IsNullOrEmpty(transform.Key) &&
+                prefabSlots.TryGetValue(transform.Key, out Slot existing))
+            {
+                parent = existing;
+                continue;
+            }
+            Slot slot = parent.AddSlot(transform.Name ?? "GameObject");
+            slot.LocalPosition = new float3(
+                transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z);
+            slot.LocalRotation = new floatQ(
+                transform.LocalRotation.X, transform.LocalRotation.Y,
+                transform.LocalRotation.Z, transform.LocalRotation.W);
+            slot.LocalScale = new float3(
+                transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z);
+            if (!string.IsNullOrEmpty(transform.Key))
+            {
+                prefabSlots[transform.Key] = slot;
+            }
+            parent = slot;
+        }
+        return parent;
+    }
+
     private static void CollapseAdditionalFbxWrapper(Slot wrapper, Slot rootNode, Slot parent, string instanceName,
         bool resetSinglePayloadTransform)
     {
@@ -618,7 +651,7 @@ internal static class Converter
     }
 
     private static void ApplyPrimaryFbxPlacement(Slot importRoot, Vrchat.VrchatAvatar avatar,
-        Dictionary<string, Slot> importedFbxRoots)
+        Dictionary<string, Slot> importedFbxRoots, Dictionary<string, Slot> prefabSlots)
     {
         if (!importedFbxRoots.TryGetValue(avatar.FbxGuid, out Slot instanceRoot))
         {
@@ -629,19 +662,14 @@ internal static class Converter
             instanceRoot.Name = avatar.FbxInstanceName;
         }
 
-        Slot parent = importRoot;
-        if (!string.IsNullOrEmpty(avatar.FbxParentFbxGuid) &&
-            !string.IsNullOrEmpty(avatar.FbxParentNodeName) &&
-            importedFbxRoots.TryGetValue(avatar.FbxParentFbxGuid, out Slot parentFbxRoot))
-        {
-            parent = SlotIndex.Build(parentFbxRoot).GetValueOrDefault(avatar.FbxParentNodeName) ?? parentFbxRoot;
-        }
+        Slot parent = ResolvePrefabParent(importRoot, avatar.FbxParentFbxGuid,
+            avatar.FbxParentNodeName, avatar.FbxParentTransforms, importedFbxRoots, prefabSlots);
         instanceRoot.Parent = parent;
 
-        float3 position = new(-avatar.FbxLocalPosition.X, avatar.FbxLocalPosition.Y, avatar.FbxLocalPosition.Z);
+        float3 position = new(avatar.FbxLocalPosition.X, avatar.FbxLocalPosition.Y, avatar.FbxLocalPosition.Z);
         floatQ rotation = new(
-            avatar.FbxLocalRotation.X, -avatar.FbxLocalRotation.Y,
-            -avatar.FbxLocalRotation.Z, avatar.FbxLocalRotation.W);
+            avatar.FbxLocalRotation.X, avatar.FbxLocalRotation.Y,
+            avatar.FbxLocalRotation.Z, avatar.FbxLocalRotation.W);
         float3 scale = new(avatar.FbxLocalScale.X, avatar.FbxLocalScale.Y, avatar.FbxLocalScale.Z);
         scale *= avatar.FbxImportScale;
         instanceRoot.LocalPosition = position;
