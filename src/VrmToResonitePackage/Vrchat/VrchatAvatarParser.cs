@@ -37,6 +37,9 @@ public static class VrchatAvatarParser
         public string Name;              // resolved avatar/display name
         public List<string> FbxGuidOverrides; // FBX models composed by a prefab variant
         public Dictionary<string, FbxPlacement> FbxPlacements;
+        // FBX owning the inherited Avatar Descriptor hierarchy. In a composed prefab this is the
+        // avatar body, even when a humanoid clothing FBX happens to be traversed first.
+        public string DescriptorFbxGuid;
         public bool HasOwnDescriptor;
         public bool IsComposedPrefab;
 
@@ -116,7 +119,8 @@ public static class VrchatAvatarParser
             // descriptor. Materials / PhysBones / deletions can't be resolved from the stripped
             // references here, so the avatar imports with rig + visemes + view (bare materials).
             UniLog.Log($"FBXモデルのPrefab Variantとして処理します（基礎マテリアル対応、揺れもの等は制限あり）: {selected.Name}");
-            string primaryFbxGuid = SelectHumanoidFbxGuid(package, selected.FbxGuidOverrides);
+            string primaryFbxGuid = SelectHumanoidFbxGuid(
+                package, selected.FbxGuidOverrides, selected.DescriptorFbxGuid);
             UnityAsset fbx = package.ByGuid(primaryFbxGuid);
             if (fbx?.HasContent != true)
             {
@@ -381,6 +385,7 @@ public static class VrchatAvatarParser
                 Descriptor = descriptorSource.Descriptor,
                 Subtree = new HashSet<long>(),
                 FbxGuidOverrides = fbxGuids,
+                DescriptorFbxGuid = descriptorSource.DescriptorFbxGuid,
                 Name = Path.GetFileNameWithoutExtension(source.LogicalPath),
                 HasOwnDescriptor = false,
             });
@@ -489,6 +494,7 @@ public static class VrchatAvatarParser
             Descriptor = descriptorSource.Descriptor,
             Subtree = new HashSet<long>(),
             FbxGuidOverrides = fbxGuids,
+            DescriptorFbxGuid = descriptorSource.DescriptorFbxGuid,
             Name = Path.GetFileNameWithoutExtension(source.LogicalPath),
             HasOwnDescriptor = false,
             IsComposedPrefab = true,
@@ -547,7 +553,7 @@ public static class VrchatAvatarParser
             string rootName = root != null ? scene.GameObjectName(root.FileId) : null;
             if (root != null && !string.IsNullOrEmpty(rootName))
             {
-                return new Candidate
+                var candidate = new Candidate
                 {
                     Source = asset,
                     Scene = scene,
@@ -557,11 +563,20 @@ public static class VrchatAvatarParser
                     Name = rootName,
                     HasOwnDescriptor = true,
                 };
+                candidate.DescriptorFbxGuid = FindMostReferencedFbxGuid(scene, candidate.Subtree);
+                return candidate;
             }
 
             List<string> fbxGuids = ResolveVariantFbxGuids(package, scene, descriptor);
             return fbxGuids.Count > 0
-                ? new Candidate { Source = asset, Scene = scene, Descriptor = descriptor, FbxGuidOverrides = fbxGuids }
+                ? new Candidate
+                {
+                    Source = asset,
+                    Scene = scene,
+                    Descriptor = descriptor,
+                    FbxGuidOverrides = fbxGuids,
+                    DescriptorFbxGuid = SelectHumanoidFbxGuid(package, fbxGuids),
+                }
                 : null;
         }
         foreach (YamlDocument instance in scene.Documents.Values.Where(d => d.ClassId == ClassPrefabInstance))
@@ -1141,6 +1156,24 @@ public static class VrchatAvatarParser
 
     // ---------------------------------------------------------------- FBX + humanoid
 
+    private static string FindMostReferencedFbxGuid(UnityScene scene, HashSet<long> subtree)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+        {
+            if (!InSubtree(scene, subtree, smr))
+            {
+                continue;
+            }
+            string guid = smr.Root?["m_Mesh"]?.Guid;
+            if (!string.IsNullOrEmpty(guid))
+            {
+                counts[guid] = counts.GetValueOrDefault(guid) + 1;
+            }
+        }
+        return counts.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).FirstOrDefault();
+    }
+
     private static void ResolveFbx(UnityPackage package, UnityScene scene, HashSet<long> subtree, VrchatAvatar avatar)
     {
         // The humanoid FBX is the mesh referenced by the most skinned renderers (within this avatar).
@@ -1228,22 +1261,39 @@ public static class VrchatAvatarParser
         }
     }
 
-    private static string SelectHumanoidFbxGuid(UnityPackage package, IEnumerable<string> guids)
+    private static string SelectHumanoidFbxGuid(
+        UnityPackage package, IEnumerable<string> guids, string preferredGuid = null)
     {
-        foreach (string guid in guids)
+        List<string> candidates = guids
+            .Where(guid => !string.IsNullOrEmpty(guid))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (!string.IsNullOrEmpty(preferredGuid) &&
+            candidates.Contains(preferredGuid, StringComparer.OrdinalIgnoreCase) &&
+            IsHumanoidFbx(package, preferredGuid))
         {
-            UnityAsset fbx = package.ByGuid(guid);
-            if (fbx?.MetaPath == null || !File.Exists(fbx.MetaPath))
-            {
-                continue;
-            }
-            YamlNode meta = UnityYaml.ParseFlatDocument(File.ReadAllText(fbx.MetaPath));
-            if ((meta["ModelImporter"]?["humanDescription"]?["human"]?.Seq?.Count ?? 0) > 0)
+            UniLog.Log($"Avatar Descriptor body FBX selected: {preferredGuid}");
+            return preferredGuid;
+        }
+        foreach (string guid in candidates)
+        {
+            if (IsHumanoidFbx(package, guid))
             {
                 return guid;
             }
         }
-        return guids.First();
+        return candidates.First();
+    }
+
+    private static bool IsHumanoidFbx(UnityPackage package, string guid)
+    {
+        UnityAsset fbx = package.ByGuid(guid);
+        if (fbx?.MetaPath == null || !File.Exists(fbx.MetaPath))
+        {
+            return false;
+        }
+        YamlNode meta = UnityYaml.ParseFlatDocument(File.ReadAllText(fbx.MetaPath));
+        return (meta["ModelImporter"]?["humanDescription"]?["human"]?.Seq?.Count ?? 0) > 0;
     }
 
     private static void AddAdditionalFbx(UnityPackage package, VrchatAvatar avatar, string guid, FbxPlacement placement)
@@ -2074,12 +2124,9 @@ public static class VrchatAvatarParser
             {
                 continue;
             }
-            if (avatar.ModularMergeArmatures.Any(existing =>
-                    string.Equals(existing.SourceName, sourceName, StringComparison.Ordinal) &&
-                    string.Equals(existing.TargetName, targetName, StringComparison.Ordinal)))
-            {
-                continue;
-            }
+            // Preserve separate components even when their resolved names are identical. Composed
+            // prefabs commonly contain several FBXs whose armature roots are all named "Armature";
+            // each Merge Armature component must consume one of those source hierarchies in turn.
             avatar.ModularMergeArmatures.Add(new VrchatModularMergeArmature
             {
                 SourceName = sourceName,
@@ -2131,6 +2178,22 @@ public static class VrchatAvatarParser
         if (fileId == 0)
         {
             return null;
+        }
+        YamlDocument document = scene.Doc(fileId);
+        YamlNode source = document?.Root?["m_CorrespondingSourceObject"];
+        long sourceFileId = source?.FileID ?? 0;
+        if (!string.IsNullOrEmpty(source?.Guid) && sourceFileId != 0)
+        {
+            // The corresponding object can itself be an omitted stripped object in a nested
+            // prefab. Use the XOR-aware resolver rather than stopping at the first prefab level.
+            VariantObjectReference resolved = ResolveVariantObjectReference(
+                package, source.Guid, sourceFileId,
+                new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(resolved.Name))
+            {
+                return resolved.Name;
+            }
         }
         (string _, string name) = ResolveReferenceNode(package, scene, fileId, 0);
         return name;

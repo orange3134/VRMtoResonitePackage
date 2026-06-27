@@ -95,7 +95,10 @@ internal static class VrchatSceneSetup
         int merged = 0;
         foreach (VrchatModularMergeArmature merge in avatar.ModularMergeArmatures)
         {
-            merged += ApplyMergeArmature(root, merge);
+            int rewritten = ApplyMergeArmature(root, merge);
+            merged += rewritten;
+            UniLog.Log($"Modular Avatar Merge Armature: {merge.SourceName} -> {merge.TargetName}, " +
+                       $"{rewritten} bone reference(s) rewritten.");
         }
 
         int proxied = 0;
