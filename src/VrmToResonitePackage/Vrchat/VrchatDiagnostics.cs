@@ -129,7 +129,8 @@ internal static class VrchatDiagnostics
         foreach (VrchatRendererMaterials renderer in avatar.RendererMaterials.Take(30))
         {
             string materials = string.Join(", ", renderer.MaterialGuids.Select(g => AssetLabel(package?.ByGuid(g), g)));
-            UniLog.Log($"    {renderer.RendererGameObjectName}: [{materials}], initialBlendShapes={renderer.InitialBlendShapes.Count}");
+            UniLog.Log($"    {renderer.RendererGameObjectName} (fbx={renderer.FbxGuid ?? "unscoped"}): " +
+                       $"[{materials}], initialBlendShapes={renderer.InitialBlendShapes.Count}");
         }
         if (avatar.RendererMaterials.Count > 30)
         {

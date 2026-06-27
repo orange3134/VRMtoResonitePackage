@@ -103,7 +103,7 @@ internal static class VrchatDump
                     return a != null ? Path.GetFileNameWithoutExtension(a.LogicalPath) : (g ?? "(none)");
                 }));
                 string weights = string.Join(", ", rm.InitialBlendShapes.Select(x => $"{x.Index}={x.Weight:G6}"));
-                Console.WriteLine($"  {rm.RendererGameObjectName}: [{mats}]" +
+                Console.WriteLine($"  {rm.RendererGameObjectName} (fbx={rm.FbxGuid ?? "unscoped"}): [{mats}]" +
                                   (weights.Length > 0 ? $" blendshapes [{weights}]" : ""));
             }
             return 0;

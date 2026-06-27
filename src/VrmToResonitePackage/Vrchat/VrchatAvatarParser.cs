@@ -734,6 +734,22 @@ public static class VrchatAvatarParser
                 : PlacementFromInstance(package, scene, instance);
             CollectFbxPlacements(package, childGuid, placement, result, visited, depth + 1);
         }
+
+        // Some authored prefabs unpack the model hierarchy and reference FBX meshes directly
+        // instead of retaining an FBX PrefabInstance. The FBX discovery pass already finds those
+        // mesh GUIDs; carry the placement inherited through the enclosing prefab chain to them too.
+        foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+        {
+            string meshGuid = smr.Root?["m_Mesh"]?.Guid;
+            UnityAsset meshAsset = package.ByGuid(meshGuid);
+            if (meshAsset?.Extension == ".fbx")
+            {
+                result.TryAdd(meshGuid, inherited ?? new FbxPlacement
+                {
+                    InstanceName = Path.GetFileNameWithoutExtension(meshAsset.LogicalPath),
+                });
+            }
+        }
     }
 
     private static FbxPlacement PlacementFromInstance(UnityPackage package, UnityScene scene, YamlDocument instance)
@@ -1589,7 +1605,7 @@ public static class VrchatAvatarParser
         // Avatar Descriptor. Compositions can keep body and clothing in sibling instances, each
         // with renderer overrides. The collector emits each base before its instance overrides.
         CollectVariantModificationBlocks(package, sourceGuid, modificationBlocks, visited);
-        var renderers = new Dictionary<string, VrchatRendererMaterials>(StringComparer.Ordinal);
+        var renderers = new Dictionary<(string FbxGuid, string Name), VrchatRendererMaterials>();
         var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(
             StringComparer.OrdinalIgnoreCase);
         var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
@@ -1604,6 +1620,7 @@ public static class VrchatAvatarParser
             foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
             {
                 string rendererName = scene.ResolveGameObjectName(smr.FileId);
+                string fbxGuid = smr.Root?["m_Mesh"]?.Guid;
                 YamlNode materials = smr.Root?["m_Materials"];
                 YamlNode weights = smr.Root?["m_BlendShapeWeights"];
                 if (string.IsNullOrEmpty(rendererName) ||
@@ -1611,10 +1628,15 @@ public static class VrchatAvatarParser
                 {
                     continue;
                 }
-                if (!renderers.TryGetValue(rendererName, out VrchatRendererMaterials renderer))
+                var rendererKey = (fbxGuid, rendererName);
+                if (!renderers.TryGetValue(rendererKey, out VrchatRendererMaterials renderer))
                 {
-                    renderer = new VrchatRendererMaterials { RendererGameObjectName = rendererName };
-                    renderers.Add(rendererName, renderer);
+                    renderer = new VrchatRendererMaterials
+                    {
+                        FbxGuid = fbxGuid,
+                        RendererGameObjectName = rendererName,
+                    };
+                    renderers.Add(rendererKey, renderer);
                 }
                 if (materials?.Seq != null)
                 {
@@ -1689,17 +1711,23 @@ public static class VrchatAvatarParser
                 }
 
                 YamlNode target = modification["target"];
-                string rendererName = ResolveVariantRendererName(
+                VariantObjectReference rendererReference = ResolveVariantObjectReference(
                     package, target?.Guid, target?.FileID ?? 0, modelResolvers, prefabScenes);
+                string rendererName = rendererReference.Name;
                 if (string.IsNullOrEmpty(rendererName))
                 {
                     continue;
                 }
 
-                if (!renderers.TryGetValue(rendererName, out VrchatRendererMaterials renderer))
+                var rendererKey = (rendererReference.FbxGuid, rendererName);
+                if (!renderers.TryGetValue(rendererKey, out VrchatRendererMaterials renderer))
                 {
-                    renderer = new VrchatRendererMaterials { RendererGameObjectName = rendererName };
-                    renderers.Add(rendererName, renderer);
+                    renderer = new VrchatRendererMaterials
+                    {
+                        FbxGuid = rendererReference.FbxGuid,
+                        RendererGameObjectName = rendererName,
+                    };
+                    renderers.Add(rendererKey, renderer);
                 }
                 if (isMaterial)
                 {
@@ -1899,12 +1927,6 @@ public static class VrchatAvatarParser
             }
         }
     }
-
-    private static string ResolveVariantRendererName(UnityPackage package, string guid, long fileId,
-        Dictionary<string, UnityModelFileIdResolver> modelResolvers,
-        Dictionary<string, UnityScene> prefabScenes)
-        => ResolveVariantObjectReference(
-            package, guid, fileId, modelResolvers, prefabScenes).Name;
 
     private readonly record struct VariantObjectReference(string FbxGuid, string Name);
 
@@ -2404,7 +2426,11 @@ public static class VrchatAvatarParser
             {
                 continue;
             }
-            var entry = new VrchatRendererMaterials { RendererGameObjectName = name };
+            var entry = new VrchatRendererMaterials
+            {
+                FbxGuid = smr.Root?["m_Mesh"]?.Guid,
+                RendererGameObjectName = name,
+            };
             YamlNode materials = smr.Root?["m_Materials"];
             if (materials?.Seq != null)
             {

@@ -164,7 +164,9 @@ internal static class VrchatSceneSetup
         string targetName = merge.TargetName ?? "";
         return EnumerateSlots(root).Where(slot =>
             slot != target &&
-            !IsDescendantOf(slot, target) &&
+            // A composed clothing FBX can be prefab-parented under the target armature before
+            // Modular Avatar merges it. Keep descendant candidates; the matching-child score
+            // below distinguishes the nested source armature from unrelated same-name slots.
             !IsDescendantOf(target, slot) &&
             (string.Equals(slot.Name, sourceName, StringComparison.Ordinal) ||
              string.Equals(slot.Name, targetName, StringComparison.Ordinal) ||
@@ -229,13 +231,16 @@ internal static class VrchatSceneSetup
             {
                 continue;
             }
-            float3 position = child.GlobalPosition;
-            floatQ rotation = child.GlobalRotation;
-            float3 scale = child.GlobalScale;
+            // Source and target represent the same semantic bone. Preserve the authored local
+            // pose of accessory children when moving between them; preserving world pose bakes
+            // any source/target armature coordinate-system difference into the accessory chain.
+            float3 position = child.LocalPosition;
+            floatQ rotation = child.LocalRotation;
+            float3 scale = child.LocalScale;
             child.Parent = target;
-            child.GlobalPosition = position;
-            child.GlobalRotation = rotation;
-            child.GlobalScale = scale;
+            child.LocalPosition = position;
+            child.LocalRotation = rotation;
+            child.LocalScale = scale;
         }
     }
 
@@ -340,7 +345,7 @@ internal static class VrchatSceneSetup
         UniLog.Log($"非アクティブ状態を {applied} スロットに反映しました。");
     }
 
-    private static string FbxGuidForSlot(Slot root, Slot slot, VrchatAvatar avatar)
+    internal static string FbxGuidForSlot(Slot root, Slot slot, VrchatAvatar avatar)
     {
         for (Slot current = slot; current != null && current != root; current = current.Parent)
         {
@@ -356,21 +361,17 @@ internal static class VrchatSceneSetup
 
     public static void ApplyInitialBlendShapes(Slot root, VrchatAvatar avatar)
     {
-        var renderersByName = new Dictionary<string, SkinnedMeshRenderer>(StringComparer.Ordinal);
-        foreach (SkinnedMeshRenderer renderer in root.GetComponentsInChildren<SkinnedMeshRenderer>())
-        {
-            string name = renderer.Slot.Name;
-            if (name != null && !renderersByName.ContainsKey(name))
-            {
-                renderersByName[name] = renderer;
-            }
-        }
+        List<SkinnedMeshRenderer> renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>().ToList();
 
         int applied = 0;
         foreach (VrchatRendererMaterials rm in avatar.RendererMaterials)
         {
-            if (rm.InitialBlendShapes.Count == 0 ||
-                !renderersByName.TryGetValue(rm.RendererGameObjectName, out SkinnedMeshRenderer renderer))
+            SkinnedMeshRenderer renderer = renderers.FirstOrDefault(candidate =>
+                string.Equals(candidate.Slot.Name, rm.RendererGameObjectName, StringComparison.Ordinal) &&
+                (string.IsNullOrEmpty(rm.FbxGuid) || string.Equals(
+                    FbxGuidForSlot(root, candidate.Slot, avatar), rm.FbxGuid,
+                    StringComparison.OrdinalIgnoreCase)));
+            if (rm.InitialBlendShapes.Count == 0 || renderer == null)
             {
                 continue;
             }

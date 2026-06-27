@@ -68,20 +68,18 @@ internal static class VrchatMaterialBuilder
             }
         }
 
-        // Assign the built materials to the imported renderers (matched by GameObject/slot name).
-        var renderersByName = new Dictionary<string, MeshRenderer>(StringComparer.Ordinal);
-        foreach (MeshRenderer renderer in root.GetComponentsInChildren<MeshRenderer>())
-        {
-            string name = renderer.Slot.Name;
-            if (name != null && !renderersByName.ContainsKey(name))
-            {
-                renderersByName[name] = renderer;
-            }
-        }
+        // Composed FBXs can contain identically named renderers. Keep variant overrides on the
+        // model they came from by matching both the slot name and its owning FBX.
+        List<MeshRenderer> renderers = root.GetComponentsInChildren<MeshRenderer>().ToList();
 
         foreach (VrchatRendererMaterials rm in avatar.RendererMaterials)
         {
-            if (!renderersByName.TryGetValue(rm.RendererGameObjectName, out MeshRenderer renderer))
+            MeshRenderer renderer = renderers.FirstOrDefault(candidate =>
+                string.Equals(candidate.Slot.Name, rm.RendererGameObjectName, StringComparison.Ordinal) &&
+                (string.IsNullOrEmpty(rm.FbxGuid) || string.Equals(
+                    VrchatSceneSetup.FbxGuidForSlot(root, candidate.Slot, avatar), rm.FbxGuid,
+                    StringComparison.OrdinalIgnoreCase)));
+            if (renderer == null)
             {
                 continue;
             }
