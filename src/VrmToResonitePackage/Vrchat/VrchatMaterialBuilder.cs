@@ -340,16 +340,14 @@ internal static class VrchatMaterialBuilder
         }
 
         // --- Outline ---
-        if (info.UseOutline && info.OutlineWidth > 0.00001f)
+        if (info.UseOutline)
         {
             material.Outline.Value = info.OutlineLit
                 ? XiexeToonMaterial.OutlineStyle.Lit
                 : XiexeToonMaterial.OutlineStyle.Emissive;
             material.OutlineAlbedoTint.Value = info.OutlineAlbedoTint;
-            // liltoon and XiexeToon both extrude by width * 0.01 in object space, so the width
-            // maps across roughly 1:1.
-            float outlineWidth = info.OutlineFixWidth ? info.OutlineWidth : info.OutlineWidth * 0.5f;
-            material.OutlineWidth.Value = MathX.Clamp(outlineWidth, 0f, 5f);
+            // lilToon and XiexeToon both use the serialized outline width directly.
+            material.OutlineWidth.Value = info.OutlineWidth;
             material.OutlineColor.Value = ToColor(info.OutlineColor, ColorProfile.sRGB);
             StaticTexture2D mask = await GetTexture(assetsSlot, package, info.OutlineMaskGuid, textureCache, "OutlineMask");
             if (mask != null)
@@ -410,7 +408,40 @@ internal static class VrchatMaterialBuilder
         {
             return null;
         }
-        return LilToonConverter.Parse(matDoc, parent);
+        return LilToonConverter.Parse(matDoc, parent, IsOutlineShader(matDoc, package));
+    }
+
+    private static bool IsOutlineShader(YamlDocument material, UnityPackage package)
+    {
+        string shaderGuid = material.Root?["m_Shader"]?.Guid;
+        if (VrchatConstants.LilToonOutlineShaderGuids.Contains(shaderGuid))
+        {
+            return true;
+        }
+
+        UnityAsset shader = package.ByGuid(shaderGuid);
+        if (shader == null)
+        {
+            return false;
+        }
+
+        if (Path.GetFileNameWithoutExtension(shader.LogicalPath)?
+            .Contains("Outline", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return true;
+        }
+
+        string source = package.ReadText(shader);
+        int declaration = source?.IndexOf("Shader \"", StringComparison.Ordinal) ?? -1;
+        if (declaration < 0)
+        {
+            return false;
+        }
+
+        int nameStart = declaration + "Shader \"".Length;
+        int nameEnd = source.IndexOf('"', nameStart);
+        return nameEnd > nameStart && source[nameStart..nameEnd]
+            .Contains("Outline", StringComparison.OrdinalIgnoreCase);
     }
 
     private static colorX ToColor(Vec4 c, ColorProfile profile) => new(c.X, c.Y, c.Z, c.W, profile);

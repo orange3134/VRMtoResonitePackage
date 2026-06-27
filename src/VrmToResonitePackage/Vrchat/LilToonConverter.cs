@@ -49,7 +49,6 @@ public sealed class LilToonInfo
     public Vec4 OutlineColor { get; set; } = new(0f, 0f, 0f, 1f);
     public bool OutlineLit { get; set; } = true;
     public bool OutlineAlbedoTint { get; set; }
-    public bool OutlineFixWidth { get; set; } = true;
     public string OutlineMaskGuid { get; set; }
 
     public bool UseMatcap { get; set; }
@@ -95,7 +94,7 @@ public static class LilToonConverter
         return floats != null && (floats["_ShadowBorder"] != null || floats["_LightMinLimit"] != null);
     }
 
-    public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null)
+    public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null, bool isOutlineShader = false)
     {
         YamlNode root = material.Root;
         YamlNode props = root?["m_SavedProperties"];
@@ -110,6 +109,17 @@ public static class LilToonConverter
         string TexAny(params string[] names) => names.Select(Tex).FirstOrDefault(g => !string.IsNullOrEmpty(g));
         Vec2 TexScale(string name, Vec2 fallback) => ReadVector2(texEnvs?[name]?["m_Scale"], fallback);
         Vec2 TexOffset(string name, Vec2 fallback) => ReadVector2(texEnvs?[name]?["m_Offset"], fallback);
+
+        // Material Variants often serialize only the overridden outline values and omit
+        // _UseOutline. Treat those overrides as enabling the feature, while preserving an
+        // explicitly serialized _UseOutline value. lilToon's dedicated Outline shaders enable
+        // it independently of _UseOutline, matching Resonite.UnitySDK's converter.
+        bool hasOutlineProperties = floats?["_OutlineWidth"] != null ||
+            floats?["_OutlineEnableLighting"] != null || floats?["_OutlineLitApplyTex"] != null ||
+            colors?["_OutlineColor"] != null || texEnvs?["_OutlineWidthMask"] != null;
+        bool useOutline = isOutlineShader || (floats?["_UseOutline"] != null
+            ? B("_UseOutline")
+            : hasOutlineProperties || parent?.UseOutline == true);
 
         int customRenderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
 
@@ -151,12 +161,11 @@ public static class LilToonConverter
             RimBlur = F("_RimBlur", parent?.RimBlur ?? 0.1f),
             RimFresnelPower = F("_RimFresnelPower", parent?.RimFresnelPower ?? 3f),
 
-            UseOutline = B("_UseOutline", parent?.UseOutline ?? false),
+            UseOutline = useOutline,
             OutlineWidth = F("_OutlineWidth", parent?.OutlineWidth ?? 0.08f),
             OutlineColor = C("_OutlineColor", parent?.OutlineColor ?? new Vec4(0f, 0f, 0f, 1f)),
             OutlineLit = B("_OutlineEnableLighting", parent?.OutlineLit ?? true),
             OutlineAlbedoTint = B("_OutlineLitApplyTex", parent?.OutlineAlbedoTint ?? false),
-            OutlineFixWidth = B("_OutlineFixWidth", parent?.OutlineFixWidth ?? true),
             OutlineMaskGuid = Tex("_OutlineWidthMask") ?? parent?.OutlineMaskGuid,
 
             UseMatcap = B("_UseMatCap", parent?.UseMatcap ?? false),
