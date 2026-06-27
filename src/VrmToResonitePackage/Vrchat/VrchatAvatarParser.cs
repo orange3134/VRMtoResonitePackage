@@ -1644,7 +1644,9 @@ public static class VrchatAvatarParser
             {
                 string rendererName = scene.ResolveGameObjectName(smr.FileId);
                 YamlNode materials = smr.Root?["m_Materials"];
-                if (string.IsNullOrEmpty(rendererName) || materials?.Seq == null)
+                YamlNode weights = smr.Root?["m_BlendShapeWeights"];
+                if (string.IsNullOrEmpty(rendererName) ||
+                    (materials?.Seq == null && weights?.Seq == null))
                 {
                     continue;
                 }
@@ -1653,14 +1655,29 @@ public static class VrchatAvatarParser
                     renderer = new VrchatRendererMaterials { RendererGameObjectName = rendererName };
                     renderers.Add(rendererName, renderer);
                 }
-                renderer.MaterialGuids.Clear();
-                foreach (YamlNode material in materials.Seq)
+                if (materials?.Seq != null)
                 {
-                    string guid = material?.Guid;
-                    renderer.MaterialGuids.Add(guid);
-                    if (!string.IsNullOrEmpty(guid))
+                    renderer.MaterialGuids.Clear();
+                    foreach (YamlNode material in materials.Seq)
                     {
-                        materialAssignments++;
+                        string guid = material?.Guid;
+                        renderer.MaterialGuids.Add(guid);
+                        if (!string.IsNullOrEmpty(guid))
+                        {
+                            materialAssignments++;
+                        }
+                    }
+                }
+                if (weights?.Seq != null)
+                {
+                    renderer.InitialBlendShapes.Clear();
+                    for (int index = 0; index < weights.Seq.Count; index++)
+                    {
+                        float weight = weights.Seq[index]?.AsFloat(0f) ?? 0f;
+                        if (MathF.Abs(weight) > 0.001f)
+                        {
+                            renderer.InitialBlendShapes.Add((index, weight));
+                        }
                     }
                 }
             }
