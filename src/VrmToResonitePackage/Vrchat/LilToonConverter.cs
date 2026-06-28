@@ -84,8 +84,11 @@ public static class LilToonConverter
     public static bool IsLilToon(YamlDocument material)
     {
         YamlNode floats = FlattenProps(material?.Root?["m_SavedProperties"]?["m_Floats"]);
-        // These properties are specific to liltoon's lighting model.
-        return floats != null && (floats["_ShadowBorder"] != null || floats["_LightMinLimit"] != null);
+        // _lilToonVersion is serialized even by minimal special variants such as FakeShadow,
+        // which omit the regular lighting properties. The other properties keep compatibility
+        // with older lilToon materials that predate that version marker.
+        return floats != null && (floats["_lilToonVersion"] != null ||
+            floats["_ShadowBorder"] != null || floats["_LightMinLimit"] != null);
     }
 
     public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null, bool isOutlineShader = false)

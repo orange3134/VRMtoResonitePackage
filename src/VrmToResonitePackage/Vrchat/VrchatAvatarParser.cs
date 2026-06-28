@@ -2045,7 +2045,14 @@ public static class VrchatAvatarParser
             string directName = scene.ResolveGameObjectName(fileId);
             if (!string.IsNullOrEmpty(directName))
             {
-                return new VariantObjectReference(null, directName);
+                // A prefab-authored renderer can directly own a mesh from an FBX without being a
+                // stripped FBX component itself. Preserve that mesh's FBX scope so overrides on an
+                // identically named renderer in a composed avatar do not land on the first match.
+                string meshGuid = document?.Root?["m_Mesh"]?.Guid;
+                string owningFbxGuid = package.ByGuid(meshGuid)?.Extension == ".fbx"
+                    ? meshGuid
+                    : null;
+                return new VariantObjectReference(owningFbxGuid, directName);
             }
 
             // Unity omits most stripped documents from prefab assets. Their local fileID can still
