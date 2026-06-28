@@ -8,6 +8,7 @@ namespace VrmToResonitePackage.Vrchat;
 public sealed class LilToonInfo
 {
     public string Name { get; set; }
+    public bool IsFakeShadow { get; set; }
 
     public Vec4 Color { get; set; } = new(1f, 1f, 1f, 1f);
     public string MainTexGuid { get; set; }
@@ -84,8 +85,11 @@ public static class LilToonConverter
     public static bool IsLilToon(YamlDocument material)
     {
         YamlNode floats = FlattenProps(material?.Root?["m_SavedProperties"]?["m_Floats"]);
-        // These properties are specific to liltoon's lighting model.
-        return floats != null && (floats["_ShadowBorder"] != null || floats["_LightMinLimit"] != null);
+        // _lilToonVersion is serialized even by minimal special variants such as FakeShadow,
+        // which omit the regular lighting properties. The other properties keep compatibility
+        // with older lilToon materials that predate that version marker.
+        return floats != null && (floats["_lilToonVersion"] != null ||
+            floats["_ShadowBorder"] != null || floats["_LightMinLimit"] != null);
     }
 
     public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null, bool isOutlineShader = false)
@@ -120,6 +124,7 @@ public static class LilToonConverter
         var info = new LilToonInfo
         {
             Name = root?["m_Name"]?.AsString(),
+            IsFakeShadow = colors?["_FakeShadowVector"] != null,
             Color = C("_Color", parent?.Color ?? new Vec4(1f, 1f, 1f, 1f)),
             MainTexGuid = TexAny("_MainTex", "_BaseMap", "_BaseColorMap") ?? parent?.MainTexGuid,
             MainTexScale = TexScale("_MainTex", parent?.MainTexScale ?? Vec2.One),

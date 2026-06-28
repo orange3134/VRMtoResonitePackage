@@ -100,6 +100,14 @@ public static class VrchatModelAdapter
             }
             var chain = new VrmSpringChain { Name = pb.RootBoneName, HitRadius = MathX.Max(0.001f, pb.Radius) };
             chain.RootNodes.Add(rootNode);
+            foreach (string ignoredBoneName in pb.IgnoreBoneNames)
+            {
+                int ignoredNode = NodeFor(ignoredBoneName);
+                if (ignoredNode >= 0 && !chain.ExcludedRootNodes.Contains(ignoredNode))
+                {
+                    chain.ExcludedRootNodes.Add(ignoredNode);
+                }
+            }
             foreach (VrchatPhysBoneCollider collider in pb.Colliders)
             {
                 int node = NodeFor(collider.AttachBoneName);

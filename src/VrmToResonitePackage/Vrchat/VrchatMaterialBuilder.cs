@@ -22,7 +22,8 @@ internal static class VrchatMaterialBuilder
     public static async Task Apply(Slot root, Slot assetsSlot, VrchatAvatar avatar, UnityPackage package)
     {
         var textureCache = new Dictionary<string, StaticTexture2D>(StringComparer.OrdinalIgnoreCase);
-        var materialCache = new Dictionary<string, XiexeToonMaterial>(StringComparer.OrdinalIgnoreCase);
+        var materialCache = new Dictionary<string, IAssetProvider<FrooxEngine.Material>>(
+            StringComparer.OrdinalIgnoreCase);
 
         // Build one XiexeToon material per unique liltoon .mat referenced by the avatar.
         IEnumerable<string> uniqueGuids = avatar.RendererMaterials
@@ -33,7 +34,8 @@ internal static class VrchatMaterialBuilder
             .Distinct(StringComparer.OrdinalIgnoreCase);
         foreach (string guid in uniqueGuids)
         {
-            XiexeToonMaterial material = await BuildMaterial(assetsSlot, guid, package, textureCache);
+            IAssetProvider<FrooxEngine.Material> material = await BuildMaterial(
+                assetsSlot, guid, package, textureCache);
             if (material != null)
             {
                 materialCache[guid] = material;
@@ -60,7 +62,7 @@ internal static class VrchatMaterialBuilder
                 string name = MaterialName(placeholder?.Slot?.Name);
                 if (name != null &&
                     fbxMaterialGuids.TryGetValue(name, out string guid) &&
-                    materialCache.TryGetValue(guid, out XiexeToonMaterial material))
+                    materialCache.TryGetValue(guid, out IAssetProvider<FrooxEngine.Material> material))
                 {
                     renderer.Materials[i] = material;
                     assigned++;
@@ -86,7 +88,8 @@ internal static class VrchatMaterialBuilder
             for (int i = 0; i < rm.MaterialGuids.Count; i++)
             {
                 string guid = rm.MaterialGuids[i];
-                if (guid == null || !materialCache.TryGetValue(guid, out XiexeToonMaterial material))
+                if (guid == null || !materialCache.TryGetValue(
+                        guid, out IAssetProvider<FrooxEngine.Material> material))
                 {
                     continue;
                 }
@@ -157,7 +160,8 @@ internal static class VrchatMaterialBuilder
         return null;
     }
 
-    private static async Task<XiexeToonMaterial> BuildMaterial(Slot assetsSlot, string guid,
+    private static async Task<IAssetProvider<FrooxEngine.Material>> BuildMaterial(
+        Slot assetsSlot, string guid,
         UnityPackage package, Dictionary<string, StaticTexture2D> textureCache)
     {
         LilToonInfo info = ResolveMaterialInfo(guid, package, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
@@ -167,6 +171,19 @@ internal static class VrchatMaterialBuilder
         }
 
         Slot slot = assetsSlot.AddSlot($"Material: {info.Name}");
+        if (info.IsFakeShadow)
+        {
+            // Match Resonite.UnitySDK's LilToonFakeShadowConverter. FakeShadow is a projected
+            // helper overlay, so approximating it as a surface XiexeToon material is visibly wrong.
+            UnlitMaterial clear = slot.AttachComponent<UnlitMaterial>();
+            clear.TintColor.Value = new colorX(0f, 0f, 0f, 0f, ColorProfile.sRGB);
+            clear.BlendMode.Value = BlendMode.Cutout;
+            clear.AlphaCutoff.Value = 1f;
+            clear.Sidedness.Value = Sidedness.Front;
+            clear.Texture.Target = null;
+            return clear;
+        }
+
         XiexeToonMaterial material = slot.AttachComponent<XiexeToonMaterial>();
 
         // --- Alpha / culling / queue ---
