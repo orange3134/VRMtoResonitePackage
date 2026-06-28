@@ -63,7 +63,21 @@ internal static class SpringBoneSetup
                         continue;
                     }
                     DynamicBoneChain dynamicChain = boneRoot.AttachComponent<DynamicBoneChain>();
-                    dynamicChain.SetupFromChildren(boneRoot);
+                    HashSet<string> excludedRootNames = chain.ExcludedRootNodes
+                        .Select(vrm.GetNodeName)
+                        .Where(name => !string.IsNullOrEmpty(name))
+                        .ToHashSet(StringComparer.Ordinal);
+                    if (excludedRootNames.Count == 0)
+                    {
+                        dynamicChain.SetupFromChildren(boneRoot);
+                    }
+                    else
+                    {
+                        // PhysBone ignoreTransforms excludes each referenced transform and its whole
+                        // subtree. SetupFromChildren stops descending when its filter rejects a slot.
+                        dynamicChain.SetupFromChildren(boneRoot, false,
+                            slot => !excludedRootNames.Contains(slot.Name));
+                    }
                     if (dynamicChain.Bones.Count == 0)
                     {
                         dynamicChain.Destroy();
@@ -359,7 +373,7 @@ internal static class SpringBoneSetup
 
         private static IDynamicBoneCollider CreateSphere(Slot parent, float3 localPosition, float radius)
         {
-            Slot colliderSlot = parent.AddSlot("VRM Collider");
+            Slot colliderSlot = parent.AddSlot("DB Collider");
             colliderSlot.LocalPosition = localPosition;
             DynamicBoneSphereCollider sphere = colliderSlot.AttachComponent<DynamicBoneSphereCollider>();
             sphere.Radius.Value = radius;

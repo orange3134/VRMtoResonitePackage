@@ -143,6 +143,12 @@ public sealed class VrmSpringChain
     /// <summary>Explicit joint chain (VRM1). Empty for VRM0.</summary>
     public List<int> JointNodes { get; } = new();
 
+    /// <summary>
+    /// Roots of child subtrees that must not participate in this chain. VRChat PhysBone's
+    /// ignoreTransforms are stored here; VRM spring chains leave this empty.
+    /// </summary>
+    public List<int> ExcludedRootNodes { get; } = new();
+
     public float Stiffness { get; set; } = 1f;
     public float GravityPower { get; set; }
     public System.Numerics.Vector3 GravityDir { get; set; } = new(0f, -1f, 0f);
