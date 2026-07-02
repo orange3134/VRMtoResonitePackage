@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\AvatarRootIdentification.resonitepackage" />
+    <EmbeddedResource Include="Resources\loading_standin.resonitepackage" />
     <EmbeddedResource Include="Resources\logo.svg" />
     <EmbeddedResource Include="Resources\loading.svg" />
     <EmbeddedResource Include="Resources\arrow.svg" />
