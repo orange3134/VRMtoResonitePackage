@@ -214,10 +214,11 @@ internal static class SpringBoneSetup
 
                 // Member side: read the variable back into this chain's field.
                 Slot fieldBindingNode = bindingsNode.AddSlot(field.Name);
-                DynamicValueVariableDriver<T> driver = fieldBindingNode.AttachComponent<DynamicValueVariableDriver<T>>();
-                driver.Target.Target = field;
-                driver.DefaultValue.Value = field.Value;
-                StringConcatNode(fieldBindingNode, templateNameField, field.Name, driver.VariableName, DynBoneTemplatePrefix, intron);
+                DynamicField<T> binding = fieldBindingNode.AttachComponent<DynamicField<T>>();
+                binding.TargetField.Value = field.ReferenceID;
+                binding.OverrideOnLink.Value = false;
+                StringConcatNode(fieldBindingNode, templateNameField, field.Name, binding.VariableName,
+                    DynBoneTemplatePrefix, intron);
             }
         }
 
