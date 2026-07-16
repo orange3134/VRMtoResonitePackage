@@ -33,6 +33,7 @@
     <EmbeddedResource Include="Resources\loading.svg" />
     <EmbeddedResource Include="Resources\arrow.svg" />
     <EmbeddedResource Include="Resources\ResoPon.png" />
+    <EmbeddedResource Include="Locales\*.json" />
     <!-- Themed control styles are parsed at runtime with XamlReader (see GuiTheme.cs). Kept out of
          WPF markup compilation (Page) so it doesn't force resolving the Resonite DLL reference
          closure, which the markup compiler can't satisfy (e.g. Elements.Quantity). -->

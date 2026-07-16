@@ -52,14 +52,18 @@ internal sealed class MainWindow : Window
     private readonly RotateTransform _spinnerRotation = new();
     private readonly Border _packageIcon;
     private readonly GuiSettings _settings;
+    private TextBlock _loadingCaption;
+    private TextBlock _dropPrompt;
     private IReadOnlyList<string> _outputFiles = Array.Empty<string>();
     private string _lastLogPath;
+    private ConversionRunResult _lastResult;
     private bool _isConverting;
     private Point _dragStart;
 
     public MainWindow(IReadOnlyList<string> initialFiles)
     {
         _settings = GuiSettings.Load();
+        AppLocalization.Initialize(_settings.Language);
 
         Title = $"ResoPon  v{AppVersion.Display}";
         Width = 760;
@@ -89,7 +93,7 @@ internal sealed class MainWindow : Window
             Height = 44,
             FontSize = 22,
             Padding = new Thickness(0),
-            ToolTip = "設定",
+            ToolTip = AppLocalization.Get("Settings"),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, 18, 18, 0),
@@ -187,6 +191,7 @@ internal sealed class MainWindow : Window
 
     private void ShowIdle()
     {
+        _lastResult = null;
         _isConverting = false;
         _spinnerTimer.Stop();
         _logo.Visibility = Visibility.Visible;
@@ -215,11 +220,12 @@ internal sealed class MainWindow : Window
         _settingsButton.IsEnabled = false;
         _spinnerTimer.Start();
         _message.Text = fileName;
-        _detail.Text = "ログは実行ファイル横の Logs フォルダに出力されます。";
+        _detail.Text = AppLocalization.Get("ConversionLogLocation");
     }
 
     private void ShowComplete(ConversionRunResult result)
     {
+        _lastResult = result;
         _isConverting = false;
         _spinnerTimer.Stop();
         _logo.Visibility = Visibility.Collapsed;
@@ -234,13 +240,15 @@ internal sealed class MainWindow : Window
             ? Visibility.Visible
             : Visibility.Collapsed;
         _lastLogPath = result.LogPath;
-        _title.Text = result.ExitCode == 0 ? "変換完了！" : "変換に失敗しました";
+        _title.Text = result.ExitCode == 0
+            ? AppLocalization.Get("ConversionComplete")
+            : AppLocalization.Get("ConversionFailed");
         _message.Text = result.ExitCode == 0
-            ? "このアイコンをResoniteの画面にドラッグしてください"
-            : "ログを確認してください。";
+            ? AppLocalization.Get("DragPackageToResonite")
+            : AppLocalization.Get("CheckLog");
         _detail.Text = result.ExitCode == 0
             ? Path.GetFileName(result.OutputFiles.FirstOrDefault() ?? "")
-            : $"ログ: {result.LogPath}";
+            : AppLocalization.Format("LogPath", result.LogPath);
     }
 
     private async Task StartConversion(IReadOnlyList<string> files)
@@ -253,7 +261,7 @@ internal sealed class MainWindow : Window
         string[] inputFiles = files.Where(GuiApp.IsSupportedInput).ToArray();
         if (inputFiles.Length == 0)
         {
-            _detail.Text = "VRM ファイルを指定してください。";
+            _detail.Text = AppLocalization.Get("UnsupportedInput");
             return;
         }
 
@@ -302,9 +310,11 @@ internal sealed class MainWindow : Window
             _message.Visibility = Visibility.Visible;
             _detail.Visibility = Visibility.Visible;
             _settingsButton.IsEnabled = true;
-            _title.Text = "変換に失敗しました";
+            _title.Text = AppLocalization.Get("ConversionFailed");
             _message.Text = ex.Message;
-            _detail.Text = string.IsNullOrWhiteSpace(_lastLogPath) ? "" : $"ログ: {_lastLogPath}";
+            _detail.Text = string.IsNullOrWhiteSpace(_lastLogPath)
+                ? ""
+                : AppLocalization.Format("LogPath", _lastLogPath);
         }
     }
 
@@ -329,7 +339,7 @@ internal sealed class MainWindow : Window
             if (_settings.PromptMtoonTransparentBlendMode &&
                 string.Equals(extension, ".vrm", StringComparison.OrdinalIgnoreCase))
             {
-                ShowConverting(Path.GetFileName(file) + " を解析中...");
+                ShowConverting(AppLocalization.Format("AnalyzingFile", Path.GetFileName(file)));
                 IReadOnlyList<string> transparentMaterials = await Task.Run(() => ListMtoonTransparentMaterials(file));
                 if (transparentMaterials.Count > 0)
                 {
@@ -351,7 +361,7 @@ internal sealed class MainWindow : Window
 
             if (string.Equals(extension, ".unitypackage", StringComparison.OrdinalIgnoreCase))
             {
-                ShowConverting(Path.GetFileName(file) + " を解析中...");
+                ShowConverting(AppLocalization.Format("AnalyzingFile", Path.GetFileName(file)));
                 IReadOnlyList<VrchatAvatarChoice> avatars = await Task.Run(() => ListPackageAvatars(file));
                 VrchatAvatarChoice selected = avatars.Count == 1 ? avatars[0] : null;
                 if (avatars.Count > 1)
@@ -501,7 +511,7 @@ internal sealed class MainWindow : Window
         }
         else
         {
-            throw new InvalidOperationException("実行ファイルのパスを取得できませんでした。");
+            throw new InvalidOperationException(AppLocalization.Get("ExecutablePathUnavailable"));
         }
 
         startInfo.UseShellExecute = false;
@@ -692,6 +702,26 @@ internal sealed class MainWindow : Window
         {
             _settings.CopyFrom(dialog.Settings);
             _settings.Save();
+            AppLocalization.Initialize(_settings.Language);
+            ApplyLocalization();
+        }
+    }
+
+    private void ApplyLocalization()
+    {
+        _settingsButton.ToolTip = AppLocalization.Get("Settings");
+        _loadingCaption.Text = AppLocalization.Get("Converting");
+        _dropPrompt.Text = AppLocalization.Get("DropPrompt");
+        if (_lastResult != null)
+        {
+            ShowComplete(_lastResult);
+        }
+        else if (_title.Visibility == Visibility.Visible)
+        {
+            _title.Text = AppLocalization.Get("ConversionFailed");
+            _detail.Text = string.IsNullOrWhiteSpace(_lastLogPath)
+                ? ""
+                : AppLocalization.Format("LogPath", _lastLogPath);
         }
     }
 
@@ -737,20 +767,21 @@ internal sealed class MainWindow : Window
             RenderTransform = _spinnerRotation,
             RenderTransformOrigin = new Point(0.5, 0.5)
         });
-        area.Children.Add(new TextBlock
+        _loadingCaption = new TextBlock
         {
-            Text = "変換中...",
+            Text = AppLocalization.Get("Converting"),
             FontSize = 22,
             FontWeight = FontWeights.SemiBold,
             Foreground = TextBrush,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
-        });
+        };
+        area.Children.Add(_loadingCaption);
         return area;
     }
 
     /// <summary>Large rounded dashed drop target that signals where to drag VRM files.</summary>
-    private static Grid BuildDropZone()
+    private Grid BuildDropZone()
     {
         var zone = new Grid
         {
@@ -782,15 +813,16 @@ internal sealed class MainWindow : Window
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 0, 0, 12)
         });
-        content.Children.Add(new TextBlock
+        _dropPrompt = new TextBlock
         {
-            Text = "VRM ファイルをここにドラッグ＆ドロップ",
+            Text = AppLocalization.Get("DropPrompt"),
             TextAlignment = TextAlignment.Center,
             FontSize = 20,
             FontWeight = FontWeights.SemiBold,
             Foreground = TextBrush,
             TextWrapping = TextWrapping.Wrap
-        });
+        };
+        content.Children.Add(_dropPrompt);
         zone.Children.Add(content);
         return zone;
     }
@@ -838,28 +870,30 @@ internal sealed class MainWindow : Window
 
 internal sealed class SettingsWindow : Window
 {
-    private const string DefaultOutputDirectoryText = "入力ファイルと同じフォルダ";
-    private const string AutoDetectText = "自動検出";
-    private const string AutoValueText = "自動";
+    private static string DefaultOutputDirectoryText => AppLocalization.Get("DefaultOutputDirectory");
+    private static string AutoDetectText => AppLocalization.Get("AutoDetect");
+    private static string AutoValueText => AppLocalization.Get("Auto");
 
+    private readonly ComboBox _language = new();
     private readonly TextBox _outputDirectory = new();
     private readonly TextBox _resonitePath = new();
-    private readonly CheckBox _noAvatar = new() { Content = "アバターセットアップを行わない" };
-    private readonly CheckBox _faceTracking = new() { Content = "フェイストラッキング用ドライバーを生成" };
-    private readonly CheckBox _noProtection = new() { Content = "アバター保護を付けない" };
-    private readonly CheckBox _noExpressionMenu = new() { Content = "表情メニューを生成しない" };
-    private readonly CheckBox _defaultUserScale = new() { Content = "アバターの原寸サイズを維持" };
-    private readonly CheckBox _keepWorkingFiles = new() { Content = "作業用一時ファイルを残す" };
-    private readonly CheckBox _promptMtoonTransparentBlendMode = new() { Content = "半透明マテリアルの変換先を手動で選ぶ" };
+    private readonly CheckBox _noAvatar = new() { Content = AppLocalization.Get("NoAvatarSetup") };
+    private readonly CheckBox _faceTracking = new() { Content = AppLocalization.Get("GenerateFaceTracking") };
+    private readonly CheckBox _noProtection = new() { Content = AppLocalization.Get("NoAvatarProtection") };
+    private readonly CheckBox _noExpressionMenu = new() { Content = AppLocalization.Get("NoExpressionMenu") };
+    private readonly CheckBox _defaultUserScale = new() { Content = AppLocalization.Get("KeepOriginalAvatarScale") };
+    private readonly CheckBox _keepWorkingFiles = new() { Content = AppLocalization.Get("KeepWorkingFiles") };
+    private readonly CheckBox _promptMtoonTransparentBlendMode = new() { Content = AppLocalization.Get("ChooseTransparentMode") };
     private readonly TextBox _viewForward = new();
     private readonly TextBox _viewUp = new();
     private readonly TextBox _nearClip = new();
     private readonly TextBox _importTimeout = new();
+    private bool _languageChanged;
 
     public SettingsWindow(GuiSettings settings)
     {
         Settings = settings.Clone();
-        Title = "設定";
+        Title = AppLocalization.Get("Settings");
         Width = 560;
         Height = 620;
         MinWidth = 480;
@@ -875,17 +909,31 @@ internal sealed class SettingsWindow : Window
         var panel = new StackPanel { Margin = new Thickness(28) };
         Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
-        panel.Children.Add(Header("変換オプション"));
-        panel.Children.Add(PathRow("出力先フォルダ", _outputDirectory));
-        panel.Children.Add(PathRow("Resoniteフォルダ", _resonitePath));
+        foreach (AppLocaleInfo locale in AppLocalization.AvailableLocales)
+        {
+            _language.Items.Add(locale);
+        }
+        _language.SelectedItem = _language.Items
+            .OfType<AppLocaleInfo>()
+            .FirstOrDefault(locale => string.Equals(
+                locale.Code,
+                AppLocalization.CurrentLanguageCode,
+                StringComparison.OrdinalIgnoreCase));
+        _language.SelectionChanged += (_, _) => _languageChanged = true;
+
+        panel.Children.Add(Header(AppLocalization.Get("DisplaySettings")));
+        panel.Children.Add(SelectionField(AppLocalization.Get("Language"), _language));
+        panel.Children.Add(Header(AppLocalization.Get("ConversionOptions"), new Thickness(0, 28, 0, 2)));
+        panel.Children.Add(PathRow(AppLocalization.Get("OutputDirectory"), _outputDirectory));
+        panel.Children.Add(PathRow(AppLocalization.Get("ResoniteDirectory"), _resonitePath));
         panel.Children.Add(_faceTracking);
         panel.Children.Add(_noProtection);
         panel.Children.Add(_noExpressionMenu);
         panel.Children.Add(_defaultUserScale);
         panel.Children.Add(_promptMtoonTransparentBlendMode);
         panel.Children.Add(_keepWorkingFiles);
-        panel.Children.Add(Field("視点の前方オフセット(m)", _viewForward));
-        panel.Children.Add(Field("視点の上方オフセット(m)", _viewUp));
+        panel.Children.Add(Field(AppLocalization.Get("ViewForwardOffset"), _viewForward));
+        panel.Children.Add(Field(AppLocalization.Get("ViewUpOffset"), _viewUp));
         panel.Children.Add(Field("NearClip(m)", _nearClip));
 
         var buttons = new StackPanel
@@ -894,10 +942,10 @@ internal sealed class SettingsWindow : Window
             HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(0, 28, 0, 0)
         };
-        var cancel = new Button { Content = "キャンセル", MinWidth = 104, Margin = new Thickness(0, 0, 10, 0) };
+        var cancel = new Button { Content = AppLocalization.Get("Cancel"), MinWidth = 104, Margin = new Thickness(0, 0, 10, 0) };
         var save = new Button
         {
-            Content = "保存",
+            Content = AppLocalization.Get("Save"),
             MinWidth = 104,
             Style = (Style)FindResource(GuiTheme.AccentButtonKey)
         };
@@ -942,26 +990,40 @@ internal sealed class SettingsWindow : Window
             Settings.DefaultUserScale = _defaultUserScale.IsChecked == true;
             Settings.PromptMtoonTransparentBlendMode = _promptMtoonTransparentBlendMode.IsChecked == true;
             Settings.KeepWorkingFiles = _keepWorkingFiles.IsChecked == true;
-            Settings.ViewForward = ParseNullableFloat(_viewForward.Text, "視点の前方オフセット", AutoValueText);
-            Settings.ViewUp = ParseNullableFloat(_viewUp.Text, "視点の上方オフセット", AutoValueText);
+            if (_languageChanged && _language.SelectedItem is AppLocaleInfo locale)
+            {
+                Settings.Language = locale.Code;
+            }
+            Settings.ViewForward = ParseNullableFloat(_viewForward.Text, AppLocalization.Get("ViewForwardOffsetName"), AutoValueText);
+            Settings.ViewUp = ParseNullableFloat(_viewUp.Text, AppLocalization.Get("ViewUpOffsetName"), AutoValueText);
             Settings.NearClip = ParseNullableFloat(_nearClip.Text, "NearClip");
-            Settings.ImportTimeoutSeconds = (int)(ParseNullableFloat(_importTimeout.Text, "インポートタイムアウト") ?? 300);
+            Settings.ImportTimeoutSeconds = (int)(ParseNullableFloat(_importTimeout.Text, AppLocalization.Get("ImportTimeoutName")) ?? 300);
             DialogResult = true;
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "設定エラー", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, ex.Message, AppLocalization.Get("SettingsError"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
-    private static TextBlock Header(string text) => new()
+    private static TextBlock Header(string text, Thickness? margin = null) => new()
     {
         Text = text,
         FontSize = 22,
         FontWeight = FontWeights.SemiBold,
         Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e)),
-        Margin = new Thickness(0, 0, 0, 20)
+        Margin = margin ?? new Thickness(0, 0, 0, 20)
     };
+
+    private static FrameworkElement SelectionField(string label, ComboBox box)
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+        panel.Children.Add(new TextBlock { Text = label, Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e)) });
+        box.Margin = new Thickness(0, 8, 0, 0);
+        box.Height = 36;
+        panel.Children.Add(box);
+        return panel;
+    }
 
     private static FrameworkElement Field(string label, TextBox box)
     {
@@ -982,7 +1044,7 @@ internal sealed class SettingsWindow : Window
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         box.Height = 36;
         row.Children.Add(box);
-        var browse = new Button { Content = "参照", MinWidth = 80, Height = 36, Margin = new Thickness(10, 0, 0, 0) };
+        var browse = new Button { Content = AppLocalization.Get("Browse"), MinWidth = 80, Height = 36, Margin = new Thickness(10, 0, 0, 0) };
         browse.Click += (_, _) =>
         {
             var dialog = new OpenFolderDialog();
@@ -1020,7 +1082,7 @@ internal sealed class SettingsWindow : Window
         }
         if (!float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out float result))
         {
-            throw new FormatException($"{label} は数値で入力してください。");
+            throw new FormatException(AppLocalization.Format("NumberRequired", label));
         }
         return result;
     }
@@ -1035,7 +1097,7 @@ internal sealed class AvatarSelectionWindow : Window
 
     public AvatarSelectionWindow(string packageName, IReadOnlyList<VrchatAvatarChoice> avatars)
     {
-        Title = "アバターを選択";
+        Title = AppLocalization.Get("SelectAvatarTitle");
         Width = 480;
         Height = 460;
         MinWidth = 400;
@@ -1055,7 +1117,7 @@ internal sealed class AvatarSelectionWindow : Window
         DockPanel.SetDock(header, Dock.Top);
         header.Children.Add(new TextBlock
         {
-            Text = "変換するアバターを選択",
+            Text = AppLocalization.Get("SelectAvatar"),
             FontSize = 20,
             FontWeight = FontWeights.SemiBold,
             Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e))
@@ -1076,10 +1138,10 @@ internal sealed class AvatarSelectionWindow : Window
             Margin = new Thickness(0, 18, 0, 0)
         };
         DockPanel.SetDock(buttons, Dock.Bottom);
-        var cancel = new Button { Content = "キャンセル", MinWidth = 104, Margin = new Thickness(0, 0, 10, 0) };
+        var cancel = new Button { Content = AppLocalization.Get("Cancel"), MinWidth = 104, Margin = new Thickness(0, 0, 10, 0) };
         var ok = new Button
         {
-            Content = "変換",
+            Content = AppLocalization.Get("Convert"),
             MinWidth = 104,
             Style = (Style)FindResource(GuiTheme.AccentButtonKey)
         };
@@ -1132,7 +1194,7 @@ internal sealed class MtoonTransparentModeWindow : Window
 
     public MtoonTransparentModeWindow(IReadOnlyList<string> materials)
     {
-        Title = "半透明マテリアルの変換先設定";
+        Title = AppLocalization.Get("TransparentModeTitle");
         Width = 560;
         Height = 520;
         MinWidth = 460;
@@ -1152,16 +1214,14 @@ internal sealed class MtoonTransparentModeWindow : Window
         DockPanel.SetDock(header, Dock.Top);
         header.Children.Add(new TextBlock
         {
-            Text = "半透明マテリアルの変換先設定",
+            Text = AppLocalization.Get("TransparentModeTitle"),
             FontSize = 20,
             FontWeight = FontWeights.SemiBold,
             Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e))
         });
         header.Children.Add(new TextBlock
         {
-            Text = "Resoniteのシェーダーの仕様により、それぞれ以下のような表示になります。\n" +
-                   "Alpha: 半透明処理が綺麗にできますが、特定のライティングで光って見えます。\n" +
-                   "Cutout: 透明か不透明かのゼロイチになりますが、ライティングに馴染みます。",
+            Text = AppLocalization.Get("TransparentModeDescription"),
             Margin = new Thickness(0, 10, 0, 0),
             FontSize = 13,
             LineHeight = 21,
@@ -1178,10 +1238,10 @@ internal sealed class MtoonTransparentModeWindow : Window
             Margin = new Thickness(0, 18, 0, 0)
         };
         DockPanel.SetDock(buttons, Dock.Bottom);
-        var cancel = new Button { Content = "キャンセル", MinWidth = 104, Margin = new Thickness(0, 0, 10, 0) };
+        var cancel = new Button { Content = AppLocalization.Get("Cancel"), MinWidth = 104, Margin = new Thickness(0, 0, 10, 0) };
         var ok = new Button
         {
-            Content = "変換",
+            Content = AppLocalization.Get("Convert"),
             MinWidth = 104,
             Style = (Style)FindResource(GuiTheme.AccentButtonKey)
         };
@@ -1239,6 +1299,7 @@ internal sealed class MtoonTransparentModeWindow : Window
 
 internal sealed class GuiSettings
 {
+    public string Language { get; set; }
     public string OutputDirectory { get; set; }
     public string ResonitePath { get; set; }
     public bool NoAvatar { get; set; }
@@ -1281,6 +1342,7 @@ internal sealed class GuiSettings
 
     public GuiSettings Clone() => new()
     {
+        Language = Language,
         OutputDirectory = OutputDirectory,
         ResonitePath = ResonitePath,
         NoAvatar = NoAvatar,
@@ -1298,6 +1360,7 @@ internal sealed class GuiSettings
 
     public void CopyFrom(GuiSettings other)
     {
+        Language = other.Language;
         OutputDirectory = other.OutputDirectory;
         ResonitePath = other.ResonitePath;
         NoAvatar = other.NoAvatar;
