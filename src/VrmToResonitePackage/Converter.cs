@@ -257,7 +257,7 @@ internal static class Converter
                 VrmMetadataSetup.Apply(root, vrm);
                 await SetupThumbnail(root, assetsSlot, vrm, vrmPath);
 
-                MeshLoadingSetup.Apply(root);
+                await MeshLoadingSetup.Apply(root);
 
                 // Let deferred import tasks (alpha detection, normal map detection, ...) settle.
                 for (int i = 0; i < 30; i++)
@@ -471,7 +471,7 @@ internal static class Converter
                 // Reflect prefab-authored scene state (inactive GameObjects, initial blendshape weights).
                 Vrchat.VrchatSceneSetup.Apply(root, avatar);
 
-                MeshLoadingSetup.Apply(root);
+                await MeshLoadingSetup.Apply(root);
 
                 for (int i = 0; i < 30; i++)
                 {
