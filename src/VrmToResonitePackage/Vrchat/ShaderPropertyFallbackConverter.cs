@@ -29,6 +29,7 @@ internal static class ShaderPropertyFallbackConverter
         string occlusionMapName = FindName(texEnvs, "_OcclusionMap", "_OcclusionTex");
 
         string Tex(string name) => name == null ? null : TextureGuid(texEnvs?[name]);
+        string TexOrParent(string name, string parentGuid) => name == null ? parentGuid : Tex(name);
         Vec2 TexScale(string name, Vec2 fallback) => name == null
             ? fallback
             : LilToonConverter.ReadVector2(texEnvs?[name]?["m_Scale"], fallback);
@@ -40,13 +41,18 @@ internal static class ShaderPropertyFallbackConverter
             "_Color", "_BaseColor", "_TintColor", "_MainColor");
         Vec4 emissionColor = ReadColor(colors, parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f),
             "_EmissionColor", "_EmissiveColor");
+        string mainTexGuid = TexOrParent(mainTexName, parent?.MainTexGuid);
+        string normalMapGuid = TexOrParent(normalMapName, parent?.NormalMapGuid);
+        string metallicMapGuid = TexOrParent(metallicMapName, parent?.MetallicGlossMapGuid);
+        string emissionMapGuid = TexOrParent(emissionMapName, parent?.EmissionMapGuid);
+        string occlusionMapGuid = TexOrParent(occlusionMapName, parent?.OcclusionMapGuid);
 
         bool hasMetallic = TryFloat(floats, out float metallic, "_Metallic");
         bool hasSmoothness = TryFloat(floats, out float smoothness, "_Glossiness", "_Smoothness");
-        bool useReflection = hasMetallic || hasSmoothness || metallicMapName != null ||
+        bool useReflection = hasMetallic || hasSmoothness || metallicMapGuid != null ||
             parent?.UseReflection == true;
         bool hasEmissionColor = FindName(colors, "_EmissionColor", "_EmissiveColor") != null;
-        bool hasEmissionMap = Tex(emissionMapName) != null;
+        bool hasEmissionMap = emissionMapGuid != null;
 
         int renderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
         string alphaMode = DetermineAlphaMode(floats, renderQueue, parent?.AlphaMode);
@@ -57,10 +63,10 @@ internal static class ShaderPropertyFallbackConverter
             Name = root?["m_Name"]?.AsString() ?? parent?.Name,
             IsLilToon = false,
             Color = color,
-            MainTexGuid = Tex(mainTexName) ?? parent?.MainTexGuid,
+            MainTexGuid = mainTexGuid,
             MainTexScale = TexScale(mainTexName, parent?.MainTexScale ?? Vec2.One),
             MainTexOffset = TexOffset(mainTexName, parent?.MainTexOffset ?? Vec2.Zero),
-            NormalMapGuid = Tex(normalMapName) ?? parent?.NormalMapGuid,
+            NormalMapGuid = normalMapGuid,
             NormalMapScale = TexScale(normalMapName, parent?.NormalMapScale ?? Vec2.One),
             NormalMapOffset = TexOffset(normalMapName, parent?.NormalMapOffset ?? Vec2.Zero),
             NormalScale = Float(floats, parent?.NormalScale ?? 1f, "_BumpScale", "_NormalScale"),
@@ -77,7 +83,7 @@ internal static class ShaderPropertyFallbackConverter
             Smoothness = hasSmoothness ? smoothness : parent?.Smoothness ?? 0f,
             ApplySpecular = useReflection,
             ApplyReflection = useReflection,
-            MetallicGlossMapGuid = Tex(metallicMapName) ?? parent?.MetallicGlossMapGuid,
+            MetallicGlossMapGuid = metallicMapGuid,
             MetallicGlossMapScale = TexScale(metallicMapName, parent?.MetallicGlossMapScale ?? Vec2.One),
             MetallicGlossMapOffset = TexOffset(metallicMapName, parent?.MetallicGlossMapOffset ?? Vec2.Zero),
 
@@ -85,11 +91,11 @@ internal static class ShaderPropertyFallbackConverter
                 parent?.UseEmission == true,
             EmissionColor = emissionColor,
             EmissionBlend = 1f,
-            EmissionMapGuid = Tex(emissionMapName) ?? parent?.EmissionMapGuid,
+            EmissionMapGuid = emissionMapGuid,
             EmissionMapScale = TexScale(emissionMapName, parent?.EmissionMapScale ?? Vec2.One),
             EmissionMapOffset = TexOffset(emissionMapName, parent?.EmissionMapOffset ?? Vec2.Zero),
 
-            OcclusionMapGuid = Tex(occlusionMapName) ?? parent?.OcclusionMapGuid,
+            OcclusionMapGuid = occlusionMapGuid,
             OcclusionMapScale = TexScale(occlusionMapName, parent?.OcclusionMapScale ?? Vec2.One),
             OcclusionMapOffset = TexOffset(occlusionMapName, parent?.OcclusionMapOffset ?? Vec2.Zero),
         };

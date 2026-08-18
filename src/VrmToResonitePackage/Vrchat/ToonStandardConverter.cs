@@ -93,6 +93,7 @@ internal static class ToonStandardConverter
         Vec4 emissionColor = C("_EmissionColor", parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f));
         float emissionStrength = F("_EmissionStrength", parent?.EmissionStrength ?? 1f);
         string emissionMapGuid = TexOrParent("_EmissionMap", parent?.EmissionMapGuid);
+        int renderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
 
         return new LilToonInfo
         {
@@ -109,7 +110,7 @@ internal static class ToonStandardConverter
             NormalScale = F("_BumpScale", parent?.NormalScale ?? 1f),
             AlphaMode = "opaque",
             ZWrite = true,
-            RenderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? parent?.RenderQueue ?? -1,
+            RenderQueue = renderQueue >= 0 ? renderQueue : parent?.RenderQueue ?? -1,
             Cull = (int)F("_Culling", parent?.Cull ?? 2f),
             UseVertexColors = F("_VertexColor", parent?.UseVertexColors == true ? 1f : 0f) >= 0.5f,
 
