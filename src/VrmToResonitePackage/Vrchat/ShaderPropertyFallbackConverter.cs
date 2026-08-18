@@ -21,11 +21,11 @@ internal static class ShaderPropertyFallbackConverter
         YamlNode colors = LilToonConverter.FlattenProps(props?["m_Colors"]);
         YamlNode texEnvs = LilToonConverter.FlattenProps(props?["m_TexEnvs"]);
 
-        string mainTexName = FindName(texEnvs, "_MainTex", "_BaseMap", "_BaseColorMap",
+        string mainTexName = FindName(texEnvs, "_BaseMap", "_BaseColorMap", "_MainTex",
             "_AlbedoMap", "_Albedo", "_DiffuseMap", "_Diffuse");
         string normalMapName = FindName(texEnvs, "_BumpMap", "_NormalMap", "_NormalTex");
         string metallicMapName = FindName(texEnvs, "_MetallicGlossMap");
-        string emissionMapName = FindName(texEnvs, "_EmissionMap", "_EmissiveMap");
+        string emissionMapName = FindName(texEnvs, "_EmissionMap", "_EmissiveColorMap", "_EmissiveMap");
         string occlusionMapName = FindName(texEnvs, "_OcclusionMap", "_OcclusionTex");
 
         string Tex(string name) => name == null ? null : TextureGuid(texEnvs?[name]);
@@ -38,7 +38,7 @@ internal static class ShaderPropertyFallbackConverter
             : LilToonConverter.ReadVector2(texEnvs?[name]?["m_Offset"], fallback);
 
         Vec4 color = ReadColor(colors, parent?.Color ?? Vec4.One,
-            "_Color", "_BaseColor", "_TintColor", "_MainColor");
+            "_BaseColor", "_Color", "_TintColor", "_MainColor");
         Vec4 emissionColor = ReadColor(colors, parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f),
             "_EmissionColor", "_EmissiveColor");
         string mainTexGuid = TexOrParent(mainTexName, parent?.MainTexGuid);
@@ -46,15 +46,27 @@ internal static class ShaderPropertyFallbackConverter
         string metallicMapGuid = TexOrParent(metallicMapName, parent?.MetallicGlossMapGuid);
         string emissionMapGuid = TexOrParent(emissionMapName, parent?.EmissionMapGuid);
         string occlusionMapGuid = TexOrParent(occlusionMapName, parent?.OcclusionMapGuid);
-        int defaultOcclusionChannel = parent?.OcclusionMapChannel ??
-            (occlusionMapName != null && Normalize(occlusionMapName) == Normalize("_OcclusionMap") ? 1 : 0);
+        int defaultOcclusionChannel = occlusionMapName != null
+            ? Normalize(occlusionMapName) == Normalize("_OcclusionMap") ? 1 : 0
+            : parent?.OcclusionMapChannel ?? 0;
 
         bool hasMetallic = TryFloat(floats, out float metallic, "_Metallic");
-        bool hasSmoothness = TryFloat(floats, out float smoothness, "_Glossiness", "_Smoothness");
+        bool hasGlossiness = TryFloat(floats, out float glossiness, "_Glossiness");
+        bool hasUrpSmoothness = TryFloat(floats, out float urpSmoothness, "_Smoothness");
         bool hasGlossMapScale = TryFloat(floats, out float glossMapScale, "_GlossMapScale");
-        bool useReflection = hasMetallic || hasSmoothness || metallicMapGuid != null ||
+        float smoothnessWithoutMap = hasGlossiness
+            ? glossiness
+            : hasUrpSmoothness
+                ? urpSmoothness
+                : parent?.SmoothnessWithoutMap ?? parent?.Smoothness ?? 0f;
+        float smoothnessWithMap = hasGlossMapScale
+            ? glossMapScale
+            : hasUrpSmoothness
+                ? urpSmoothness
+                : parent?.SmoothnessWithMap ?? parent?.Smoothness ?? 1f;
+        bool useReflection = hasMetallic || hasGlossiness || hasUrpSmoothness || hasGlossMapScale ||
+            metallicMapGuid != null ||
             parent?.UseReflection == true;
-        bool hasEmissionColor = FindName(colors, "_EmissionColor", "_EmissiveColor") != null;
         bool hasEmissionMap = emissionMapGuid != null;
 
         int renderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
@@ -74,7 +86,8 @@ internal static class ShaderPropertyFallbackConverter
             NormalMapOffset = TexOffset(normalMapName, parent?.NormalMapOffset ?? Vec2.Zero),
             NormalScale = Float(floats, parent?.NormalScale ?? 1f, "_BumpScale", "_NormalScale"),
             AlphaMode = alphaMode,
-            Cutoff = Float(floats, parent?.Cutoff ?? 0.5f, "_Cutoff", "_AlphaClipThreshold"),
+            Cutoff = Float(floats, parent?.Cutoff ?? 0.5f,
+                "_Cutoff", "_AlphaClipThreshold", "_AlphaCutoff"),
             ZWrite = hasZWrite ? zWrite >= 0.5f : parent?.ZWrite ?? (alphaMode is "opaque" or "cutout"),
             RenderQueue = renderQueue >= 0 ? renderQueue : parent?.RenderQueue ?? -1,
             Cull = (int)Float(floats, parent?.Cull ?? 2f, "_Cull", "_CullMode"),
@@ -83,17 +96,16 @@ internal static class ShaderPropertyFallbackConverter
             UseReflection = useReflection,
             Metallic = hasMetallic ? metallic : parent?.Metallic ?? 0f,
             Reflectance = parent?.Reflectance ?? 0.5f,
-            Smoothness = metallicMapGuid != null && hasGlossMapScale
-                ? glossMapScale
-                : hasSmoothness ? smoothness : parent?.Smoothness ?? 0f,
+            Smoothness = metallicMapGuid != null ? smoothnessWithMap : smoothnessWithoutMap,
+            SmoothnessWithoutMap = smoothnessWithoutMap,
+            SmoothnessWithMap = smoothnessWithMap,
             ApplySpecular = useReflection,
             ApplyReflection = useReflection,
             MetallicGlossMapGuid = metallicMapGuid,
             MetallicGlossMapScale = TexScale(metallicMapName, parent?.MetallicGlossMapScale ?? Vec2.One),
             MetallicGlossMapOffset = TexOffset(metallicMapName, parent?.MetallicGlossMapOffset ?? Vec2.Zero),
 
-            UseEmission = hasEmissionMap || (hasEmissionColor && HasVisibleRgb(emissionColor)) ||
-                parent?.UseEmission == true,
+            UseEmission = hasEmissionMap || HasVisibleRgb(emissionColor),
             EmissionColor = emissionColor,
             EmissionBlend = 1f,
             EmissionMapGuid = emissionMapGuid,
@@ -110,16 +122,19 @@ internal static class ShaderPropertyFallbackConverter
 
     private static string DetermineAlphaMode(YamlNode floats, int renderQueue, string parentMode)
     {
-        if (Float(floats, 0f, "_AlphaClip", "_AlphaTest", "_AlphaToMask") >= 0.5f)
+        bool hasAlphaClip = TryFloat(floats, out float alphaClip,
+            "_AlphaClip", "_AlphaTest", "_AlphaToMask", "_AlphaCutoffEnable");
+        if (hasAlphaClip && alphaClip >= 0.5f)
         {
             return "cutout";
         }
-        if (TryFloat(floats, out float surface, "_Surface"))
+        if (TryFloat(floats, out float surface, "_Surface", "_SurfaceType"))
         {
             return surface >= 0.5f ? DetermineTransparentBlendMode(floats) : "opaque";
         }
         if (TryFloat(floats, out float mode, "_Mode"))
         {
+            if (mode >= 2.5f) return "premultiply";
             if (mode >= 1.5f) return "transparent";
             if (mode >= 0.5f) return "cutout";
             return "opaque";
@@ -131,6 +146,7 @@ internal static class ShaderPropertyFallbackConverter
         }
         if (renderQueue == 2450) return "cutout";
         if (renderQueue >= 2501) return "transparent";
+        if (hasAlphaClip && parentMode == "cutout") return "opaque";
         return parentMode ?? "opaque";
     }
 
@@ -141,6 +157,7 @@ internal static class ShaderPropertyFallbackConverter
             // Unity URP BlendMode: Alpha=0, Premultiply=1, Additive=2, Multiply=3.
             return (int)blend switch
             {
+                1 => "premultiply",
                 2 => "additive",
                 3 => "multiply",
                 _ => "transparent",
@@ -158,7 +175,7 @@ internal static class ShaderPropertyFallbackConverter
         TryFloat(floats, out float srcBlend, "_SrcBlend");
         // UnityEngine.Rendering.BlendMode: Zero=0, One=1, DstColor=2,
         // OneMinusSrcAlpha=10.
-        if ((int)dstBlend == 10) return "transparent";
+        if ((int)dstBlend == 10) return (int)srcBlend == 1 ? "premultiply" : "transparent";
         if ((int)dstBlend == 1) return (int)srcBlend == 2 ? "multiply" : "additive";
         if ((int)dstBlend == 0) return (int)srcBlend == 2 ? "multiply" : "opaque";
         return null;

@@ -199,6 +199,10 @@ internal static class VrchatMaterialBuilder
                 material.BlendMode.Value = BlendMode.Alpha;
                 material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
                 break;
+            case "premultiply":
+                material.BlendMode.Value = BlendMode.Transparent;
+                material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
+                break;
             case "additive":
                 material.BlendMode.Value = BlendMode.Additive;
                 material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
@@ -233,10 +237,10 @@ internal static class VrchatMaterialBuilder
         {
             material.MainTexture.Target = mainTex;
         }
-        StaticTexture2D normal = await GetTexture(assetsSlot, package, info.NormalMapGuid, textureCache, "NormalMap");
+        StaticTexture2D normal = await GetTexture(assetsSlot, package, info.NormalMapGuid, textureCache,
+            "NormalMap", isNormalMap: true);
         if (normal != null)
         {
-            normal.IsNormalMap.Value = true;
             material.NormalMap.Target = normal;
             material.NormalMapScale.Value = ToFloat2(info.NormalMapScale);
             material.NormalMapOffset.Value = ToFloat2(info.NormalMapOffset);
@@ -456,10 +460,13 @@ internal static class VrchatMaterialBuilder
         }
 
         string shaderName = GetShaderName(matDoc, package);
-        if (ToonStandardConverter.IsToonStandard(matDoc, shaderName) || parent?.IsToonStandard == true)
+        bool isToonStandard = ToonStandardConverter.IsToonStandard(matDoc, shaderName);
+        if (isToonStandard || parent?.IsToonStandard == true)
         {
-            return ToonStandardConverter.Parse(matDoc, parent,
-                ToonStandardConverter.IsOutline(matDoc, shaderName));
+            bool isOutline = isToonStandard
+                ? ToonStandardConverter.IsOutline(matDoc, shaderName)
+                : parent?.UseOutline == true;
+            return ToonStandardConverter.Parse(matDoc, parent, isOutline);
         }
 
         return ShaderPropertyFallbackConverter.Parse(matDoc, parent);
@@ -575,7 +582,7 @@ internal static class VrchatMaterialBuilder
 
     private static async Task<StaticTexture2D> GetTexture(Slot assetsSlot, UnityPackage package, string guid,
         Dictionary<string, StaticTexture2D> cache, string label, TextureWrapMode? wrapMode = null,
-        ColorProfile? preferredProfile = null)
+        ColorProfile? preferredProfile = null, bool isNormalMap = false)
     {
         if (string.IsNullOrEmpty(guid))
         {
@@ -589,6 +596,10 @@ internal static class VrchatMaterialBuilder
         if (preferredProfile.HasValue)
         {
             cacheKey += $"|profile-{preferredProfile.Value}";
+        }
+        if (isNormalMap)
+        {
+            cacheKey += "|normal-map";
         }
         if (cache.TryGetValue(cacheKey, out StaticTexture2D cached))
         {
@@ -627,7 +638,7 @@ internal static class VrchatMaterialBuilder
         }
         Slot textureSlot = assetsSlot.AddSlot($"{label}: {Path.GetFileNameWithoutExtension(asset.LogicalPath)}");
         StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
-        texture.URL.Value = uri;
+        texture.IsNormalMap.Value = isNormalMap;
         if (preferredProfile.HasValue)
         {
             texture.PreferredProfile.Value = preferredProfile.Value;
@@ -636,6 +647,7 @@ internal static class VrchatMaterialBuilder
         {
             texture.WrapMode = wrapMode.Value;
         }
+        texture.URL.Value = uri;
         cache[cacheKey] = texture;
         return texture;
     }

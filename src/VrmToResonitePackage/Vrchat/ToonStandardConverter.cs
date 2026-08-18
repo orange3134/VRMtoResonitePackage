@@ -166,7 +166,7 @@ internal static class ToonStandardConverter
             OcclusionMapChannel = (int)F("_OcclusionMapChannel", parent?.OcclusionMapChannel ?? 1f),
             OcclusionStrength = F("_OcclusionStrength", parent?.OcclusionStrength ?? 1f),
 
-            UseOutline = isOutline || parent?.UseOutline == true,
+            UseOutline = isOutline,
             OutlineWidth = F("_OutlineThickness", parent?.OutlineWidth ?? 0.05f),
             OutlineColor = C("_OutlineColor", parent?.OutlineColor ?? new Vec4(0f, 0f, 0f, 1f)),
             // Toon Standard's outline pass is not multiplied by scene lighting.

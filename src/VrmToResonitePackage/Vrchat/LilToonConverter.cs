@@ -21,7 +21,7 @@ public sealed class LilToonInfo
     public Vec2 NormalMapOffset { get; set; }
     public float NormalScale { get; set; } = 1f;
 
-    // opaque / cutout / transparent (+ ZWrite for transparent).
+    // opaque / cutout / transparent / premultiply / additive / multiply.
     public string AlphaMode { get; set; } = "opaque";
     public float Cutoff { get; set; } = 0.5f;
     public bool ZWrite { get; set; } = true;
@@ -75,6 +75,8 @@ public sealed class LilToonInfo
     public bool ApplyReflection { get; set; }
     public bool SpecularToon { get; set; }
     public float Smoothness { get; set; }
+    public float SmoothnessWithoutMap { get; set; }
+    public float SmoothnessWithMap { get; set; } = 1f;
     public float SpecularBorder { get; set; }
     public string MetallicGlossMapGuid { get; set; }
     public Vec2 MetallicGlossMapScale { get; set; } = Vec2.One;
