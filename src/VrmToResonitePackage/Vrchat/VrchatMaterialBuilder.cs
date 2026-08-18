@@ -277,7 +277,8 @@ internal static class VrchatMaterialBuilder
         if (info.UseShadow)
         {
             material.ShadowRamp.Target = info.IsToonStandard
-                ? await GetTexture(assetsSlot, package, info.ShadowRampGuid, textureCache, "ShadowRamp")
+                ? await GetTexture(assetsSlot, package, info.ShadowRampGuid, textureCache, "ShadowRamp",
+                    TextureWrapMode.Clamp)
                 : await GenerateShadowRamp(assetsSlot, info);
             material.ShadowSharpness.Value = 0f;
             material.ShadowRim.Value = colorX.White;
@@ -574,17 +575,18 @@ internal static class VrchatMaterialBuilder
     // ---------------------------------------------------------------- texture import
 
     private static async Task<StaticTexture2D> GetTexture(Slot assetsSlot, UnityPackage package, string guid,
-        Dictionary<string, StaticTexture2D> cache, string label)
+        Dictionary<string, StaticTexture2D> cache, string label, TextureWrapMode? wrapMode = null)
     {
         if (string.IsNullOrEmpty(guid))
         {
             return null;
         }
-        if (cache.TryGetValue(guid, out StaticTexture2D cached))
+        string cacheKey = wrapMode.HasValue ? $"{guid}|wrap-{wrapMode.Value}" : guid;
+        if (cache.TryGetValue(cacheKey, out StaticTexture2D cached))
         {
             return cached;
         }
-        cache[guid] = null;
+        cache[cacheKey] = null;
         UnityAsset asset = package.ByGuid(guid);
         if (asset?.HasContent != true)
         {
@@ -618,7 +620,11 @@ internal static class VrchatMaterialBuilder
         Slot textureSlot = assetsSlot.AddSlot($"{label}: {Path.GetFileNameWithoutExtension(asset.LogicalPath)}");
         StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
         texture.URL.Value = uri;
-        cache[guid] = texture;
+        if (wrapMode.HasValue)
+        {
+            texture.WrapMode = wrapMode.Value;
+        }
+        cache[cacheKey] = texture;
         return texture;
     }
 

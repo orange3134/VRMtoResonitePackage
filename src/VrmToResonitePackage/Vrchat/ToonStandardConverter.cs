@@ -35,6 +35,8 @@ internal static class ToonStandardConverter
         YamlNode texEnvs = LilToonConverter.FlattenProps(props?["m_TexEnvs"]);
 
         string Tex(string name) => ShaderPropertyFallbackConverter.TextureGuid(texEnvs?[name]);
+        string TexOrParent(string name, string parentGuid) =>
+            texEnvs?.Map?.ContainsKey(name) == true ? Tex(name) : parentGuid;
         float F(string name, float fallback) =>
             ShaderPropertyFallbackConverter.Float(floats, fallback, name);
         Vec4 C(string name, Vec4 fallback) =>
@@ -45,7 +47,7 @@ internal static class ToonStandardConverter
             LilToonConverter.ReadVector2(texEnvs?[name]?["m_Offset"], fallback);
         bool Feature(string keyword, bool fallback) => HasKeyword(root, keyword) ?? fallback;
 
-        string rampGuid = Tex("_Ramp") ?? parent?.ShadowRampGuid;
+        string rampGuid = TexOrParent("_Ramp", parent?.ShadowRampGuid);
         bool useSpecular = Feature("USE_SPECULAR", parent?.UseReflection ?? false);
         bool useMatcap = Feature("USE_MATCAP", parent?.UseMatcap ?? false);
         bool useOcclusion = Feature("USE_OCCLUSION_MAP", parent?.OcclusionMapGuid != null);
@@ -53,10 +55,10 @@ internal static class ToonStandardConverter
         bool useEmission = Feature("USE_EMISSION", parent?.UseEmission ?? false);
         float parentMatcapType = parent == null || parent.MatcapBlendMode == 1 ? 0f : 1f;
         int matcapType = (int)F("_MatcapType", parentMatcapType);
-        string matcapMaskGuid = Tex("_MatcapMask") ?? parent?.MatcapBlendMaskGuid;
+        string matcapMaskGuid = TexOrParent("_MatcapMask", parent?.MatcapBlendMaskGuid);
 
-        string metallicMapGuid = Tex("_MetallicMap") ?? parent?.MetallicMapGuid;
-        string glossMapGuid = Tex("_GlossMap") ?? parent?.GlossMapGuid;
+        string metallicMapGuid = TexOrParent("_MetallicMap", parent?.MetallicMapGuid);
+        string glossMapGuid = TexOrParent("_GlossMap", parent?.GlossMapGuid);
         Vec2 metallicMapScale = TexScale("_MetallicMap", parent?.MetallicMapScale ?? Vec2.One);
         Vec2 metallicMapOffset = TexOffset("_MetallicMap", parent?.MetallicMapOffset ?? Vec2.Zero);
         Vec2 glossMapScale = TexScale("_GlossMap", parent?.GlossMapScale ?? Vec2.One);
@@ -90,7 +92,7 @@ internal static class ToonStandardConverter
 
         Vec4 emissionColor = C("_EmissionColor", parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f));
         float emissionStrength = F("_EmissionStrength", parent?.EmissionStrength ?? 1f);
-        string emissionMapGuid = Tex("_EmissionMap") ?? parent?.EmissionMapGuid;
+        string emissionMapGuid = TexOrParent("_EmissionMap", parent?.EmissionMapGuid);
 
         return new LilToonInfo
         {
@@ -98,10 +100,10 @@ internal static class ToonStandardConverter
             IsLilToon = false,
             IsToonStandard = true,
             Color = C("_Color", parent?.Color ?? Vec4.One),
-            MainTexGuid = Tex("_MainTex") ?? parent?.MainTexGuid,
+            MainTexGuid = TexOrParent("_MainTex", parent?.MainTexGuid),
             MainTexScale = TexScale("_MainTex", parent?.MainTexScale ?? Vec2.One),
             MainTexOffset = TexOffset("_MainTex", parent?.MainTexOffset ?? Vec2.Zero),
-            NormalMapGuid = Tex("_BumpMap") ?? parent?.NormalMapGuid,
+            NormalMapGuid = TexOrParent("_BumpMap", parent?.NormalMapGuid),
             NormalMapScale = TexScale("_BumpMap", parent?.NormalMapScale ?? Vec2.One),
             NormalMapOffset = TexOffset("_BumpMap", parent?.NormalMapOffset ?? Vec2.Zero),
             NormalScale = F("_BumpScale", parent?.NormalScale ?? 1f),
@@ -132,7 +134,7 @@ internal static class ToonStandardConverter
             MetallicGlossMapOffset = metallicGlossMapOffset,
 
             UseMatcap = useMatcap && matcapType == 0 && matcapMaskGuid == null,
-            MatcapGuid = Tex("_Matcap") ?? parent?.MatcapGuid,
+            MatcapGuid = TexOrParent("_Matcap", parent?.MatcapGuid),
             MatcapBlend = F("_MatcapStrength", parent?.MatcapBlend ?? 1f),
             MatcapColor = Vec4.One,
             MatcapBlendMode = matcapType == 0 ? 1 : 0,
@@ -152,7 +154,9 @@ internal static class ToonStandardConverter
             EmissionMapScale = TexScale("_EmissionMap", parent?.EmissionMapScale ?? Vec2.One),
             EmissionMapOffset = TexOffset("_EmissionMap", parent?.EmissionMapOffset ?? Vec2.Zero),
 
-            OcclusionMapGuid = useOcclusion ? Tex("_OcclusionMap") ?? parent?.OcclusionMapGuid : null,
+            OcclusionMapGuid = useOcclusion
+                ? TexOrParent("_OcclusionMap", parent?.OcclusionMapGuid)
+                : null,
             OcclusionMapScale = TexScale("_OcclusionMap", parent?.OcclusionMapScale ?? Vec2.One),
             OcclusionMapOffset = TexOffset("_OcclusionMap", parent?.OcclusionMapOffset ?? Vec2.Zero),
             OcclusionMapChannel = (int)F("_OcclusionMapChannel", parent?.OcclusionMapChannel ?? 1f),
@@ -164,7 +168,7 @@ internal static class ToonStandardConverter
             // Toon Standard's outline pass is not multiplied by scene lighting.
             OutlineLit = false,
             OutlineAlbedoTint = F("_OutlineFromAlbedo", parent?.OutlineAlbedoTint == true ? 1f : 0f) >= 0.5f,
-            OutlineMaskGuid = Tex("_OutlineMask") ?? parent?.OutlineMaskGuid,
+            OutlineMaskGuid = TexOrParent("_OutlineMask", parent?.OutlineMaskGuid),
             OutlineMaskChannel = (int)F("_OutlineMaskChannel", parent?.OutlineMaskChannel ?? 0f),
         };
     }
