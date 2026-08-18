@@ -48,6 +48,7 @@ internal static class ToonStandardConverter
         bool Feature(string keyword, bool fallback) => HasKeyword(root, keyword) ?? fallback;
 
         string rampGuid = TexOrParent("_Ramp", parent?.ShadowRampGuid);
+        bool useNormalMap = Feature("USE_NORMAL_MAP", parent?.NormalMapGuid != null);
         bool useSpecular = Feature("USE_SPECULAR", parent?.UseReflection ?? false);
         bool useMatcap = Feature("USE_MATCAP", parent?.UseMatcap ?? false);
         bool useOcclusion = Feature("USE_OCCLUSION_MAP", parent?.OcclusionMapGuid != null);
@@ -104,7 +105,9 @@ internal static class ToonStandardConverter
             MainTexGuid = TexOrParent("_MainTex", parent?.MainTexGuid),
             MainTexScale = TexScale("_MainTex", parent?.MainTexScale ?? Vec2.One),
             MainTexOffset = TexOffset("_MainTex", parent?.MainTexOffset ?? Vec2.Zero),
-            NormalMapGuid = TexOrParent("_BumpMap", parent?.NormalMapGuid),
+            NormalMapGuid = useNormalMap
+                ? TexOrParent("_BumpMap", parent?.NormalMapGuid)
+                : null,
             NormalMapScale = TexScale("_BumpMap", parent?.NormalMapScale ?? Vec2.One),
             NormalMapOffset = TexOffset("_BumpMap", parent?.NormalMapOffset ?? Vec2.Zero),
             NormalScale = F("_BumpScale", parent?.NormalScale ?? 1f),
