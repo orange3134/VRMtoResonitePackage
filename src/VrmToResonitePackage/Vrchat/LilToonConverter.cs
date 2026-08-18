@@ -4,10 +4,12 @@ using VrmToResonitePackage.Unity;
 
 namespace VrmToResonitePackage.Vrchat;
 
-/// <summary>Engine-independent liltoon material properties, normalized for XiexeToon conversion.</summary>
+/// <summary>Engine-independent Unity material properties, normalized for XiexeToon conversion.</summary>
 public sealed class LilToonInfo
 {
     public string Name { get; set; }
+    public bool IsLilToon { get; set; } = true;
+    public bool IsToonStandard { get; set; }
     public bool IsFakeShadow { get; set; }
 
     public Vec4 Color { get; set; } = new(1f, 1f, 1f, 1f);
@@ -25,8 +27,10 @@ public sealed class LilToonInfo
     public bool ZWrite { get; set; } = true;
     public int RenderQueue { get; set; } = -1;
     public int Cull { get; set; } = 2; // 0 = off (double sided), 1 = front, 2 = back
+    public bool UseVertexColors { get; set; }
 
     public bool UseShadow { get; set; }
+    public string ShadowRampGuid { get; set; }
     public Vec4 ShadowColor { get; set; } = new(1f, 1f, 1f, 1f);
     public float ShadowBorder { get; set; } = 0.5f;
     public float ShadowBlur { get; set; } = 0.1f;
@@ -62,6 +66,7 @@ public sealed class LilToonInfo
     public Vec2 EmissionMapOffset { get; set; }
     public string EmissionBlendMaskGuid { get; set; }
     public float EmissionMainStrength { get; set; }
+    public float EmissionStrength { get; set; } = 1f;
 
     public bool UseReflection { get; set; }
     public float Metallic { get; set; }
@@ -71,6 +76,28 @@ public sealed class LilToonInfo
     public bool SpecularToon { get; set; }
     public float Smoothness { get; set; }
     public float SpecularBorder { get; set; }
+    public string MetallicGlossMapGuid { get; set; }
+    public Vec2 MetallicGlossMapScale { get; set; } = Vec2.One;
+    public Vec2 MetallicGlossMapOffset { get; set; }
+    public string MetallicMapGuid { get; set; }
+    public int MetallicMapChannel { get; set; }
+    public string GlossMapGuid { get; set; }
+    public int GlossMapChannel { get; set; } = 3;
+
+    public string OcclusionMapGuid { get; set; }
+    public Vec2 OcclusionMapScale { get; set; } = Vec2.One;
+    public Vec2 OcclusionMapOffset { get; set; }
+    public int OcclusionMapChannel { get; set; }
+    public float OcclusionStrength { get; set; } = 1f;
+
+    public bool UseRim { get; set; }
+    public Vec4 RimColor { get; set; } = Vec4.One;
+    public float RimIntensity { get; set; }
+    public float RimRange { get; set; }
+    public float RimSharpness { get; set; }
+    public float RimAlbedoTint { get; set; }
+
+    public int OutlineMaskChannel { get; set; }
 
     public int ColorMask { get; set; } = 15;
 }
@@ -233,7 +260,7 @@ public static class LilToonConverter
     /// Flattens a sequence of single-key maps (Unity's m_Floats/m_Colors/m_TexEnvs serialization,
     /// where each entry is "- _Prop: value") into one lookup map.
     /// </summary>
-    private static YamlNode FlattenProps(YamlNode seq)
+    internal static YamlNode FlattenProps(YamlNode seq)
     {
         if (seq?.Seq == null)
         {
@@ -253,7 +280,7 @@ public static class LilToonConverter
         return new YamlNode { Map = map };
     }
 
-    private static Vec4 ReadColor(YamlNode node, Vec4 fallback)
+    internal static Vec4 ReadColor(YamlNode node, Vec4 fallback)
     {
         if (node == null || !node.IsMap)
         {
@@ -262,7 +289,7 @@ public static class LilToonConverter
         return new Vec4(node.Vec("r"), node.Vec("g"), node.Vec("b"), node["a"] != null ? node.Vec("a") : 1f);
     }
 
-    private static Vec2 ReadVector2(YamlNode node, Vec2 fallback)
+    internal static Vec2 ReadVector2(YamlNode node, Vec2 fallback)
     {
         if (node == null || !node.IsMap)
         {

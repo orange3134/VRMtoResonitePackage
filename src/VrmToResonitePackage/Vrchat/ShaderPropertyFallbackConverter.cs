@@ -1,0 +1,206 @@
+using Vec2 = System.Numerics.Vector2;
+using Vec4 = System.Numerics.Vector4;
+using VrmToResonitePackage.Unity;
+
+namespace VrmToResonitePackage.Vrchat;
+
+/// <summary>
+/// Reads common material properties when no shader-specific converter is available. This mirrors
+/// Resonite.UnitySDK's property-based fallback: property names, rather than the shader name, decide
+/// which subset can be preserved.
+/// </summary>
+internal static class ShaderPropertyFallbackConverter
+{
+    public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null)
+    {
+        YamlNode root = material.Root;
+        YamlNode props = root?["m_SavedProperties"];
+        YamlNode floats = MergeProperties(
+            LilToonConverter.FlattenProps(props?["m_Floats"]),
+            LilToonConverter.FlattenProps(props?["m_Ints"]));
+        YamlNode colors = LilToonConverter.FlattenProps(props?["m_Colors"]);
+        YamlNode texEnvs = LilToonConverter.FlattenProps(props?["m_TexEnvs"]);
+
+        string mainTexName = FindName(texEnvs, "_MainTex", "_BaseMap", "_BaseColorMap",
+            "_AlbedoMap", "_Albedo", "_DiffuseMap", "_Diffuse");
+        string normalMapName = FindName(texEnvs, "_BumpMap", "_NormalMap", "_NormalTex");
+        string metallicMapName = FindName(texEnvs, "_MetallicGlossMap");
+        string emissionMapName = FindName(texEnvs, "_EmissionMap", "_EmissiveMap");
+        string occlusionMapName = FindName(texEnvs, "_OcclusionMap", "_OcclusionTex");
+
+        string Tex(string name) => name == null ? null : TextureGuid(texEnvs?[name]);
+        Vec2 TexScale(string name, Vec2 fallback) => name == null
+            ? fallback
+            : LilToonConverter.ReadVector2(texEnvs?[name]?["m_Scale"], fallback);
+        Vec2 TexOffset(string name, Vec2 fallback) => name == null
+            ? fallback
+            : LilToonConverter.ReadVector2(texEnvs?[name]?["m_Offset"], fallback);
+
+        Vec4 color = ReadColor(colors, parent?.Color ?? Vec4.One,
+            "_Color", "_BaseColor", "_TintColor", "_MainColor");
+        Vec4 emissionColor = ReadColor(colors, parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f),
+            "_EmissionColor", "_EmissiveColor");
+
+        bool hasMetallic = TryFloat(floats, out float metallic, "_Metallic");
+        bool hasSmoothness = TryFloat(floats, out float smoothness, "_Glossiness", "_Smoothness");
+        bool useReflection = hasMetallic || hasSmoothness || metallicMapName != null ||
+            parent?.UseReflection == true;
+        bool hasEmissionColor = FindName(colors, "_EmissionColor", "_EmissiveColor") != null;
+        bool hasEmissionMap = Tex(emissionMapName) != null;
+
+        int renderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
+        string alphaMode = DetermineAlphaMode(floats, renderQueue, parent?.AlphaMode);
+        bool hasZWrite = TryFloat(floats, out float zWrite, "_ZWrite");
+
+        return new LilToonInfo
+        {
+            Name = root?["m_Name"]?.AsString() ?? parent?.Name,
+            IsLilToon = false,
+            Color = color,
+            MainTexGuid = Tex(mainTexName) ?? parent?.MainTexGuid,
+            MainTexScale = TexScale(mainTexName, parent?.MainTexScale ?? Vec2.One),
+            MainTexOffset = TexOffset(mainTexName, parent?.MainTexOffset ?? Vec2.Zero),
+            NormalMapGuid = Tex(normalMapName) ?? parent?.NormalMapGuid,
+            NormalMapScale = TexScale(normalMapName, parent?.NormalMapScale ?? Vec2.One),
+            NormalMapOffset = TexOffset(normalMapName, parent?.NormalMapOffset ?? Vec2.Zero),
+            NormalScale = Float(floats, parent?.NormalScale ?? 1f, "_BumpScale", "_NormalScale"),
+            AlphaMode = alphaMode,
+            Cutoff = Float(floats, parent?.Cutoff ?? 0.5f, "_Cutoff", "_AlphaClipThreshold"),
+            ZWrite = hasZWrite ? zWrite >= 0.5f : parent?.ZWrite ?? (alphaMode is "opaque" or "cutout"),
+            RenderQueue = renderQueue >= 0 ? renderQueue : parent?.RenderQueue ?? -1,
+            Cull = (int)Float(floats, parent?.Cull ?? 2f, "_Cull", "_CullMode"),
+            ColorMask = (int)Float(floats, parent?.ColorMask ?? 15f, "_ColorMask"),
+
+            UseReflection = useReflection,
+            Metallic = hasMetallic ? metallic : parent?.Metallic ?? 0f,
+            Reflectance = parent?.Reflectance ?? 0.5f,
+            Smoothness = hasSmoothness ? smoothness : parent?.Smoothness ?? 0f,
+            ApplySpecular = useReflection,
+            ApplyReflection = useReflection,
+            MetallicGlossMapGuid = Tex(metallicMapName) ?? parent?.MetallicGlossMapGuid,
+            MetallicGlossMapScale = TexScale(metallicMapName, parent?.MetallicGlossMapScale ?? Vec2.One),
+            MetallicGlossMapOffset = TexOffset(metallicMapName, parent?.MetallicGlossMapOffset ?? Vec2.Zero),
+
+            UseEmission = hasEmissionMap || (hasEmissionColor && HasVisibleRgb(emissionColor)) ||
+                parent?.UseEmission == true,
+            EmissionColor = emissionColor,
+            EmissionBlend = 1f,
+            EmissionMapGuid = Tex(emissionMapName) ?? parent?.EmissionMapGuid,
+            EmissionMapScale = TexScale(emissionMapName, parent?.EmissionMapScale ?? Vec2.One),
+            EmissionMapOffset = TexOffset(emissionMapName, parent?.EmissionMapOffset ?? Vec2.Zero),
+
+            OcclusionMapGuid = Tex(occlusionMapName) ?? parent?.OcclusionMapGuid,
+            OcclusionMapScale = TexScale(occlusionMapName, parent?.OcclusionMapScale ?? Vec2.One),
+            OcclusionMapOffset = TexOffset(occlusionMapName, parent?.OcclusionMapOffset ?? Vec2.Zero),
+        };
+    }
+
+    private static string DetermineAlphaMode(YamlNode floats, int renderQueue, string parentMode)
+    {
+        if (Float(floats, 0f, "_AlphaClip", "_AlphaTest", "_AlphaToMask") >= 0.5f)
+        {
+            return "cutout";
+        }
+        if (TryFloat(floats, out float surface, "_Surface"))
+        {
+            return surface >= 0.5f ? "transparent" : "opaque";
+        }
+        if (TryFloat(floats, out float mode, "_Mode"))
+        {
+            if (mode >= 1.5f) return "transparent";
+            if (mode >= 0.5f) return "cutout";
+            return "opaque";
+        }
+        if (TryFloat(floats, out float dstBlend, "_DstBlend"))
+        {
+            // UnityEngine.Rendering.BlendMode: Zero=0, One=1, DstColor=2,
+            // OneMinusSrcAlpha=10.
+            if ((int)dstBlend == 0) return "opaque";
+            if ((int)dstBlend == 10) return "transparent";
+            if ((int)dstBlend == 1)
+            {
+                return TryFloat(floats, out float srcBlend, "_SrcBlend") && (int)srcBlend == 2
+                    ? "multiply"
+                    : "additive";
+            }
+        }
+        if (renderQueue == 2450) return "cutout";
+        if (renderQueue >= 2451) return "transparent";
+        return parentMode ?? "opaque";
+    }
+
+    internal static Vec4 ReadColor(YamlNode properties, Vec4 fallback, params string[] names)
+    {
+        string name = FindName(properties, names);
+        return name == null ? fallback : LilToonConverter.ReadColor(properties[name], fallback);
+    }
+
+    internal static float Float(YamlNode properties, float fallback, params string[] names)
+        => TryFloat(properties, out float value, names) ? value : fallback;
+
+    internal static bool TryFloat(YamlNode properties, out float value, params string[] names)
+    {
+        string name = FindName(properties, names);
+        if (name != null)
+        {
+            value = properties[name].AsFloat();
+            return true;
+        }
+        value = default;
+        return false;
+    }
+
+    internal static string FindName(YamlNode properties, params string[] names)
+    {
+        if (properties?.Map == null)
+        {
+            return null;
+        }
+        foreach (string candidate in names)
+        {
+            if (properties.Map.ContainsKey(candidate))
+            {
+                return candidate;
+            }
+            string normalized = Normalize(candidate);
+            string match = properties.Map.Keys.FirstOrDefault(key => Normalize(key) == normalized);
+            if (match != null)
+            {
+                return match;
+            }
+        }
+        return null;
+    }
+
+    internal static string TextureGuid(YamlNode textureEnv)
+    {
+        string guid = textureEnv?["m_Texture"]?.Guid;
+        return string.IsNullOrEmpty(guid) || guid == "0000000000000000f000000000000000" ? null : guid;
+    }
+
+    private static string Normalize(string propertyName)
+        => propertyName.Replace("_", "", StringComparison.Ordinal).ToLowerInvariant();
+
+    internal static YamlNode MergeProperties(YamlNode primary, YamlNode secondary)
+    {
+        var map = new Dictionary<string, YamlNode>();
+        if (secondary?.Map != null)
+        {
+            foreach ((string name, YamlNode value) in secondary.Map)
+            {
+                map[name] = value;
+            }
+        }
+        if (primary?.Map != null)
+        {
+            foreach ((string name, YamlNode value) in primary.Map)
+            {
+                map[name] = value;
+            }
+        }
+        return new YamlNode { Map = map };
+    }
+
+    private static bool HasVisibleRgb(Vec4 color)
+        => color.X != 0f || color.Y != 0f || color.Z != 0f;
+}
