@@ -131,7 +131,7 @@ internal static class ShaderPropertyFallbackConverter
             }
         }
         if (renderQueue == 2450) return "cutout";
-        if (renderQueue >= 2451) return "transparent";
+        if (renderQueue >= 2501) return "transparent";
         return parentMode ?? "opaque";
     }
 
