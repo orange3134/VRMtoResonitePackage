@@ -256,7 +256,7 @@ internal static class VrchatMaterialBuilder
             StaticTexture2D metallicGloss = info.IsToonStandard
                 ? await GetMetallicGlossTexture(assetsSlot, package, info, textureCache)
                 : await GetTexture(assetsSlot, package, info.MetallicGlossMapGuid,
-                    textureCache, "MetallicGlossMap");
+                    textureCache, "MetallicGlossMap", preferredProfile: ColorProfile.Linear);
             if (metallicGloss != null)
             {
                 material.MetallicGlossMap.Target = metallicGloss;
@@ -309,11 +309,10 @@ internal static class VrchatMaterialBuilder
             material.ShadowSharpness.Value = 0f;
         }
 
-        StaticTexture2D genericOcclusion = info.IsToonStandard
-            ? await GetChannelTexture(assetsSlot, package, info.OcclusionMapGuid, info.OcclusionMapChannel,
-                info.OcclusionStrength, textureCache, "OcclusionMap")
-            : await GetTexture(assetsSlot, package, info.OcclusionMapGuid,
-                textureCache, "OcclusionMap");
+        StaticTexture2D genericOcclusion = info.IsLilToon
+            ? await GetTexture(assetsSlot, package, info.OcclusionMapGuid, textureCache, "OcclusionMap")
+            : await GetChannelTexture(assetsSlot, package, info.OcclusionMapGuid, info.OcclusionMapChannel,
+                info.OcclusionStrength, textureCache, "OcclusionMap");
         if (genericOcclusion != null)
         {
             material.OcclusionMap.Target = genericOcclusion;
@@ -575,13 +574,22 @@ internal static class VrchatMaterialBuilder
     // ---------------------------------------------------------------- texture import
 
     private static async Task<StaticTexture2D> GetTexture(Slot assetsSlot, UnityPackage package, string guid,
-        Dictionary<string, StaticTexture2D> cache, string label, TextureWrapMode? wrapMode = null)
+        Dictionary<string, StaticTexture2D> cache, string label, TextureWrapMode? wrapMode = null,
+        ColorProfile? preferredProfile = null)
     {
         if (string.IsNullOrEmpty(guid))
         {
             return null;
         }
-        string cacheKey = wrapMode.HasValue ? $"{guid}|wrap-{wrapMode.Value}" : guid;
+        string cacheKey = guid;
+        if (wrapMode.HasValue)
+        {
+            cacheKey += $"|wrap-{wrapMode.Value}";
+        }
+        if (preferredProfile.HasValue)
+        {
+            cacheKey += $"|profile-{preferredProfile.Value}";
+        }
         if (cache.TryGetValue(cacheKey, out StaticTexture2D cached))
         {
             return cached;
@@ -620,6 +628,10 @@ internal static class VrchatMaterialBuilder
         Slot textureSlot = assetsSlot.AddSlot($"{label}: {Path.GetFileNameWithoutExtension(asset.LogicalPath)}");
         StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
         texture.URL.Value = uri;
+        if (preferredProfile.HasValue)
+        {
+            texture.PreferredProfile.Value = preferredProfile.Value;
+        }
         if (wrapMode.HasValue)
         {
             texture.WrapMode = wrapMode.Value;

@@ -46,6 +46,8 @@ internal static class ShaderPropertyFallbackConverter
         string metallicMapGuid = TexOrParent(metallicMapName, parent?.MetallicGlossMapGuid);
         string emissionMapGuid = TexOrParent(emissionMapName, parent?.EmissionMapGuid);
         string occlusionMapGuid = TexOrParent(occlusionMapName, parent?.OcclusionMapGuid);
+        int defaultOcclusionChannel = parent?.OcclusionMapChannel ??
+            (occlusionMapName != null && Normalize(occlusionMapName) == Normalize("_OcclusionMap") ? 1 : 0);
 
         bool hasMetallic = TryFloat(floats, out float metallic, "_Metallic");
         bool hasSmoothness = TryFloat(floats, out float smoothness, "_Glossiness", "_Smoothness");
@@ -98,6 +100,8 @@ internal static class ShaderPropertyFallbackConverter
             OcclusionMapGuid = occlusionMapGuid,
             OcclusionMapScale = TexScale(occlusionMapName, parent?.OcclusionMapScale ?? Vec2.One),
             OcclusionMapOffset = TexOffset(occlusionMapName, parent?.OcclusionMapOffset ?? Vec2.Zero),
+            OcclusionMapChannel = (int)Float(floats, defaultOcclusionChannel, "_OcclusionMapChannel"),
+            OcclusionStrength = Float(floats, parent?.OcclusionStrength ?? 1f, "_OcclusionStrength"),
         };
     }
 
