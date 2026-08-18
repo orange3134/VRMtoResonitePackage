@@ -19,11 +19,13 @@ internal static class MeshLoadingSetup
     private const string HeadBoneVariable = "modular_avatar/HumanBone.head";
     private const string HeadPoseVariable = "modular_avatar/HumanBonePose.head";
     private const string AvatarPoseNodeHeadVariable = "modular_avatar/AvatarPoseNode.Head";
+    private const string VoiceRangeVisualSlotName = "Voice Range Visual";
 
     public static async Task Apply(Slot root)
     {
         List<MeshRenderer> renderers = root.GetComponentsInChildren<MeshRenderer>()
-            .Where(renderer => renderer.Mesh.Target != null)
+            .Where(renderer => renderer.Mesh.Target != null &&
+                !string.Equals(renderer.Slot.Name, VoiceRangeVisualSlotName, StringComparison.Ordinal))
             .ToList();
         if (renderers.Count == 0)
         {
