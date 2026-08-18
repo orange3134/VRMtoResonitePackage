@@ -81,8 +81,12 @@ public sealed class LilToonInfo
     public Vec2 MetallicGlossMapOffset { get; set; }
     public string MetallicMapGuid { get; set; }
     public int MetallicMapChannel { get; set; }
+    public Vec2 MetallicMapScale { get; set; } = Vec2.One;
+    public Vec2 MetallicMapOffset { get; set; }
     public string GlossMapGuid { get; set; }
     public int GlossMapChannel { get; set; } = 3;
+    public Vec2 GlossMapScale { get; set; } = Vec2.One;
+    public Vec2 GlossMapOffset { get; set; }
 
     public string OcclusionMapGuid { get; set; }
     public Vec2 OcclusionMapScale { get; set; } = Vec2.One;

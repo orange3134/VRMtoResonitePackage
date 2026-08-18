@@ -6,6 +6,7 @@ using VrmToResonitePackage.Unity;
 using ColorProfile = Renderite.Shared.ColorProfile;
 using TextureFormat = Renderite.Shared.TextureFormat;
 using TextureWrapMode = Renderite.Shared.TextureWrapMode;
+using Vec2 = System.Numerics.Vector2;
 using Vec4 = System.Numerics.Vector4;
 
 namespace VrmToResonitePackage.Vrchat;
@@ -693,7 +694,13 @@ internal static class VrchatMaterialBuilder
         }
 
         string cacheKey = $"{info.MetallicMapGuid}|{info.MetallicMapChannel}|" +
-            $"{info.GlossMapGuid}|{info.GlossMapChannel}|metallic-gloss";
+            $"{info.MetallicMapScale.X:R},{info.MetallicMapScale.Y:R}|" +
+            $"{info.MetallicMapOffset.X:R},{info.MetallicMapOffset.Y:R}|" +
+            $"{info.GlossMapGuid}|{info.GlossMapChannel}|" +
+            $"{info.GlossMapScale.X:R},{info.GlossMapScale.Y:R}|" +
+            $"{info.GlossMapOffset.X:R},{info.GlossMapOffset.Y:R}|" +
+            $"{info.MetallicGlossMapScale.X:R},{info.MetallicGlossMapScale.Y:R}|" +
+            $"{info.MetallicGlossMapOffset.X:R},{info.MetallicGlossMapOffset.Y:R}|metallic-gloss";
         if (cache.TryGetValue(cacheKey, out StaticTexture2D cached))
         {
             return cached;
@@ -723,9 +730,11 @@ internal static class VrchatMaterialBuilder
                 for (int x = 0; x < width; x++)
                 {
                     float metallicValue = SampleChannel(metallic, x, y, width, height,
-                        info.MetallicMapChannel);
+                        info.MetallicMapChannel, info.MetallicMapScale, info.MetallicMapOffset,
+                        info.MetallicGlossMapScale, info.MetallicGlossMapOffset);
                     float glossValue = SampleChannel(gloss, x, y, width, height,
-                        info.GlossMapChannel);
+                        info.GlossMapChannel, info.GlossMapScale, info.GlossMapOffset,
+                        info.MetallicGlossMapScale, info.MetallicGlossMapOffset);
                     var pixel = new color(metallicValue, metallicValue, metallicValue, glossValue);
                     output.SetPixel(x, y, in pixel);
                 }
@@ -759,15 +768,40 @@ internal static class VrchatMaterialBuilder
         return TextureDecoder.Decode(source, Path.GetExtension(asset.LogicalPath), generateMipMaps: false);
     }
 
-    private static float SampleChannel(Bitmap2D bitmap, int x, int y, int width, int height, int channel)
+    private static float SampleChannel(Bitmap2D bitmap, int x, int y, int width, int height, int channel,
+        Vec2 sourceScale, Vec2 sourceOffset, Vec2 outputScale, Vec2 outputOffset)
     {
         if (bitmap == null)
         {
             return 1f;
         }
-        int sourceX = Math.Min(bitmap.Size.x - 1, x * bitmap.Size.x / width);
-        int sourceY = Math.Min(bitmap.Size.y - 1, y * bitmap.Size.y / height);
+
+        float outputU = (x + 0.5f) / width;
+        float outputV = (y + 0.5f) / height;
+        float sourceU = TransformUv(outputU, sourceScale.X, sourceOffset.X,
+            outputScale.X, outputOffset.X);
+        float sourceV = TransformUv(outputV, sourceScale.Y, sourceOffset.Y,
+            outputScale.Y, outputOffset.Y);
+        int sourceX = WrappedPixel(sourceU, bitmap.Size.x);
+        int sourceY = WrappedPixel(sourceV, bitmap.Size.y);
         return Channel(bitmap.GetPixel(sourceX, sourceY), Math.Clamp(channel, 0, 3));
+    }
+
+    private static float TransformUv(float outputUv, float sourceScale, float sourceOffset,
+        float outputScale, float outputOffset)
+    {
+        if (MathF.Abs(outputScale) < 1e-6f)
+        {
+            return sourceOffset;
+        }
+        float materialUv = (outputUv - outputOffset) / outputScale;
+        return materialUv * sourceScale + sourceOffset;
+    }
+
+    private static int WrappedPixel(float uv, int size)
+    {
+        float wrapped = uv - MathF.Floor(uv);
+        return Math.Min(size - 1, (int)(wrapped * size));
     }
 
     private static float Channel(color pixel, int channel) => channel switch

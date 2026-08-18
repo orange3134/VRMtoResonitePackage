@@ -50,13 +50,43 @@ internal static class ToonStandardConverter
         bool useMatcap = Feature("USE_MATCAP", parent?.UseMatcap ?? false);
         bool useOcclusion = Feature("USE_OCCLUSION_MAP", parent?.OcclusionMapGuid != null);
         bool useRim = Feature("USE_RIMLIGHT", parent?.UseRim ?? false);
+        bool useEmission = Feature("USE_EMISSION", parent?.UseEmission ?? false);
         float parentMatcapType = parent == null || parent.MatcapBlendMode == 1 ? 0f : 1f;
         int matcapType = (int)F("_MatcapType", parentMatcapType);
         string matcapMaskGuid = Tex("_MatcapMask") ?? parent?.MatcapBlendMaskGuid;
 
         string metallicMapGuid = Tex("_MetallicMap") ?? parent?.MetallicMapGuid;
         string glossMapGuid = Tex("_GlossMap") ?? parent?.GlossMapGuid;
-        string metallicGlossTransformName = metallicMapGuid != null ? "_MetallicMap" : "_GlossMap";
+        Vec2 metallicMapScale = TexScale("_MetallicMap", parent?.MetallicMapScale ?? Vec2.One);
+        Vec2 metallicMapOffset = TexOffset("_MetallicMap", parent?.MetallicMapOffset ?? Vec2.Zero);
+        Vec2 glossMapScale = TexScale("_GlossMap", parent?.GlossMapScale ?? Vec2.One);
+        Vec2 glossMapOffset = TexOffset("_GlossMap", parent?.GlossMapOffset ?? Vec2.Zero);
+        Vec2 metallicGlossMapScale;
+        Vec2 metallicGlossMapOffset;
+        if (metallicMapGuid != null && glossMapGuid != null &&
+            (!NearlyEqual(metallicMapScale, glossMapScale) ||
+             !NearlyEqual(metallicMapOffset, glossMapOffset)))
+        {
+            // XiexeToon has one transform for the packed texture. Bake both source transforms
+            // into the generated channels in the material's base UV space.
+            metallicGlossMapScale = Vec2.One;
+            metallicGlossMapOffset = Vec2.Zero;
+        }
+        else if (metallicMapGuid != null)
+        {
+            metallicGlossMapScale = metallicMapScale;
+            metallicGlossMapOffset = metallicMapOffset;
+        }
+        else if (glossMapGuid != null)
+        {
+            metallicGlossMapScale = glossMapScale;
+            metallicGlossMapOffset = glossMapOffset;
+        }
+        else
+        {
+            metallicGlossMapScale = Vec2.One;
+            metallicGlossMapOffset = Vec2.Zero;
+        }
 
         Vec4 emissionColor = C("_EmissionColor", parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f));
         float emissionStrength = F("_EmissionStrength", parent?.EmissionStrength ?? 1f);
@@ -92,12 +122,14 @@ internal static class ToonStandardConverter
             ApplyReflection = useSpecular,
             MetallicMapGuid = metallicMapGuid,
             MetallicMapChannel = (int)F("_MetallicMapChannel", parent?.MetallicMapChannel ?? 0f),
+            MetallicMapScale = metallicMapScale,
+            MetallicMapOffset = metallicMapOffset,
             GlossMapGuid = glossMapGuid,
             GlossMapChannel = (int)F("_GlossMapChannel", parent?.GlossMapChannel ?? 3f),
-            MetallicGlossMapScale = TexScale(metallicGlossTransformName,
-                parent?.MetallicGlossMapScale ?? Vec2.One),
-            MetallicGlossMapOffset = TexOffset(metallicGlossTransformName,
-                parent?.MetallicGlossMapOffset ?? Vec2.Zero),
+            GlossMapScale = glossMapScale,
+            GlossMapOffset = glossMapOffset,
+            MetallicGlossMapScale = metallicGlossMapScale,
+            MetallicGlossMapOffset = metallicGlossMapOffset,
 
             UseMatcap = useMatcap && matcapType == 0 && matcapMaskGuid == null,
             MatcapGuid = Tex("_Matcap") ?? parent?.MatcapGuid,
@@ -113,7 +145,7 @@ internal static class ToonStandardConverter
             RimSharpness = F("_RimSharpness", parent?.RimSharpness ?? 0.1f),
             RimAlbedoTint = F("_RimAlbedoTint", parent?.RimAlbedoTint ?? 0f),
 
-            UseEmission = emissionMapGuid != null || HasVisibleRgb(emissionColor),
+            UseEmission = useEmission && (emissionMapGuid != null || HasVisibleRgb(emissionColor)),
             EmissionColor = emissionColor,
             EmissionStrength = emissionStrength,
             EmissionMapGuid = emissionMapGuid,
@@ -155,4 +187,7 @@ internal static class ToonStandardConverter
 
     private static bool HasVisibleRgb(Vec4 color)
         => color.X != 0f || color.Y != 0f || color.Z != 0f;
+
+    private static bool NearlyEqual(Vec2 left, Vec2 right)
+        => MathF.Abs(left.X - right.X) < 1e-6f && MathF.Abs(left.Y - right.Y) < 1e-6f;
 }
