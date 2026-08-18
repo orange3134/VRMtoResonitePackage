@@ -51,6 +51,7 @@ internal static class ShaderPropertyFallbackConverter
 
         bool hasMetallic = TryFloat(floats, out float metallic, "_Metallic");
         bool hasSmoothness = TryFloat(floats, out float smoothness, "_Glossiness", "_Smoothness");
+        bool hasGlossMapScale = TryFloat(floats, out float glossMapScale, "_GlossMapScale");
         bool useReflection = hasMetallic || hasSmoothness || metallicMapGuid != null ||
             parent?.UseReflection == true;
         bool hasEmissionColor = FindName(colors, "_EmissionColor", "_EmissiveColor") != null;
@@ -82,7 +83,9 @@ internal static class ShaderPropertyFallbackConverter
             UseReflection = useReflection,
             Metallic = hasMetallic ? metallic : parent?.Metallic ?? 0f,
             Reflectance = parent?.Reflectance ?? 0.5f,
-            Smoothness = hasSmoothness ? smoothness : parent?.Smoothness ?? 0f,
+            Smoothness = metallicMapGuid != null && hasGlossMapScale
+                ? glossMapScale
+                : hasSmoothness ? smoothness : parent?.Smoothness ?? 0f,
             ApplySpecular = useReflection,
             ApplyReflection = useReflection,
             MetallicGlossMapGuid = metallicMapGuid,
@@ -113,7 +116,7 @@ internal static class ShaderPropertyFallbackConverter
         }
         if (TryFloat(floats, out float surface, "_Surface"))
         {
-            return surface >= 0.5f ? "transparent" : "opaque";
+            return surface >= 0.5f ? DetermineTransparentBlendMode(floats) : "opaque";
         }
         if (TryFloat(floats, out float mode, "_Mode"))
         {
@@ -121,22 +124,44 @@ internal static class ShaderPropertyFallbackConverter
             if (mode >= 0.5f) return "cutout";
             return "opaque";
         }
-        if (TryFloat(floats, out float dstBlend, "_DstBlend"))
+        string blendMode = DetermineBlendFactorMode(floats);
+        if (blendMode != null)
         {
-            // UnityEngine.Rendering.BlendMode: Zero=0, One=1, DstColor=2,
-            // OneMinusSrcAlpha=10.
-            if ((int)dstBlend == 0) return "opaque";
-            if ((int)dstBlend == 10) return "transparent";
-            if ((int)dstBlend == 1)
-            {
-                return TryFloat(floats, out float srcBlend, "_SrcBlend") && (int)srcBlend == 2
-                    ? "multiply"
-                    : "additive";
-            }
+            return blendMode;
         }
         if (renderQueue == 2450) return "cutout";
         if (renderQueue >= 2501) return "transparent";
         return parentMode ?? "opaque";
+    }
+
+    private static string DetermineTransparentBlendMode(YamlNode floats)
+    {
+        if (TryFloat(floats, out float blend, "_Blend"))
+        {
+            // Unity URP BlendMode: Alpha=0, Premultiply=1, Additive=2, Multiply=3.
+            return (int)blend switch
+            {
+                2 => "additive",
+                3 => "multiply",
+                _ => "transparent",
+            };
+        }
+        return DetermineBlendFactorMode(floats) ?? "transparent";
+    }
+
+    private static string DetermineBlendFactorMode(YamlNode floats)
+    {
+        if (!TryFloat(floats, out float dstBlend, "_DstBlend"))
+        {
+            return null;
+        }
+        TryFloat(floats, out float srcBlend, "_SrcBlend");
+        // UnityEngine.Rendering.BlendMode: Zero=0, One=1, DstColor=2,
+        // OneMinusSrcAlpha=10.
+        if ((int)dstBlend == 10) return "transparent";
+        if ((int)dstBlend == 1) return (int)srcBlend == 2 ? "multiply" : "additive";
+        if ((int)dstBlend == 0) return (int)srcBlend == 2 ? "multiply" : "opaque";
+        return null;
     }
 
     internal static Vec4 ReadColor(YamlNode properties, Vec4 fallback, params string[] names)
