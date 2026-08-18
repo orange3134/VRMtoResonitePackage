@@ -59,7 +59,7 @@ internal static class VrchatMaterialBuilder
             for (int i = 0; i < renderer.Materials.Count; i++)
             {
                 IAssetProvider<FrooxEngine.Material> placeholder = renderer.Materials[i];
-                string name = MaterialName(placeholder?.Slot?.Name);
+                string name = MaterialName((placeholder as Component)?.Slot?.Name);
                 if (name != null &&
                     fbxMaterialGuids.TryGetValue(name, out string guid) &&
                     materialCache.TryGetValue(guid, out IAssetProvider<FrooxEngine.Material> material))

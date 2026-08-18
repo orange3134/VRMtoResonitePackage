@@ -861,27 +861,31 @@ internal static class AvatarSetup
                                      ?? assets.AddSlot("FirstPerson Auto Meshes");
         int configured = 0;
 
-        foreach (VrmFirstPersonMeshAnnotation annotation in autoAnnotations)
+        // Resolve and deduplicate the source renderers before creating any headless children.
+        // Otherwise a later annotation for the same slot can discover a child created by an
+        // earlier annotation and recursively apply another material override to it.
+        List<MeshRenderer> renderers = autoAnnotations
+            .SelectMany(annotation => ResolveAnnotatedRenderers(vrm, slotsByName, annotation))
+            .Distinct()
+            .ToList();
+        foreach (MeshRenderer renderer in renderers)
         {
-            foreach (MeshRenderer renderer in ResolveAnnotatedRenderers(vrm, slotsByName, annotation))
+            switch (renderer)
             {
-                switch (renderer)
-                {
-                    case SkinnedMeshRenderer skinned:
-                        if (await TrySetupAutoSkinnedRenderer(skinned, firstPersonBone, firstPersonMeshAssets,
-                                invisibleMaterial))
-                        {
-                            configured++;
-                        }
-                        break;
+                case SkinnedMeshRenderer skinned:
+                    if (await TrySetupAutoSkinnedRenderer(skinned, firstPersonBone, firstPersonMeshAssets,
+                            invisibleMaterial))
+                    {
+                        configured++;
+                    }
+                    break;
 
-                    default:
-                        if (TrySetupAutoStaticRenderer(renderer, firstPersonBone, invisibleMaterial))
-                        {
-                            configured++;
-                        }
-                        break;
-                }
+                default:
+                    if (TrySetupAutoStaticRenderer(renderer, firstPersonBone, invisibleMaterial))
+                    {
+                        configured++;
+                    }
+                    break;
             }
         }
 
