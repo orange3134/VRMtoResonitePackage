@@ -152,7 +152,7 @@ internal static class ShaderPropertyFallbackConverter
         string blendMode = DetermineBlendFactorMode(floats);
         if (blendMode != null)
         {
-            return blendMode;
+            return useAlphaClip && blendMode == "opaque" ? "cutout" : blendMode;
         }
         if (renderQueue == 2450) return "cutout";
         if (renderQueue >= 2501) return "transparent";
