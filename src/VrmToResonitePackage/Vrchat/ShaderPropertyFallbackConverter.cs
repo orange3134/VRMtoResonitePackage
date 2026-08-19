@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Vec2 = System.Numerics.Vector2;
 using Vec4 = System.Numerics.Vector4;
 using VrmToResonitePackage.Unity;
@@ -11,7 +12,8 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static class ShaderPropertyFallbackConverter
 {
-    public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null)
+    public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null,
+        string shaderSource = null)
     {
         YamlNode root = material.Root;
         YamlNode props = root?["m_SavedProperties"];
@@ -150,7 +152,13 @@ internal static class ShaderPropertyFallbackConverter
                 : hasEmission,
             "_EMISSION") && hasEmission;
 
-        int renderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
+        int customRenderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
+        int inheritedRenderQueue = parent?.RenderQueue ?? -1;
+        int renderQueue = customRenderQueue >= 0
+            ? customRenderQueue
+            : inheritedRenderQueue >= 0
+                ? inheritedRenderQueue
+                : ShaderDefaultRenderQueue(root?["m_Shader"]?.FileID, shaderSource) ?? -1;
         int? srcBlend = TryFloat(floats, out float srcBlendValue, "_SrcBlend")
             ? (int)srcBlendValue
             : parent?.SrcBlend;
@@ -181,7 +189,7 @@ internal static class ShaderPropertyFallbackConverter
             Cutoff = Float(floats, parent?.Cutoff ?? 0.5f,
                 "_Cutoff", "_AlphaClipThreshold", "_AlphaCutoff"),
             ZWrite = hasZWrite ? zWrite >= 0.5f : parent?.ZWrite ?? (alphaMode is "opaque" or "cutout"),
-            RenderQueue = renderQueue >= 0 ? renderQueue : parent?.RenderQueue ?? -1,
+            RenderQueue = renderQueue,
             Cull = (int)Float(floats, parent?.Cull ?? 2f, "_Cull", "_CullMode"),
             ColorMask = (int)Float(floats, parent?.ColorMask ?? 15f, "_ColorMask"),
 
@@ -269,6 +277,46 @@ internal static class ShaderPropertyFallbackConverter
         if (useAlphaClip) return "cutout";
         if (hasAlphaClip && parentMode == "cutout") return "opaque";
         return parentMode ?? "opaque";
+    }
+
+    private static int? ShaderDefaultRenderQueue(long? shaderFileId, string shaderSource)
+    {
+        Match queueTag = Regex.Match(shaderSource ?? string.Empty,
+            @"""Queue""\s*=\s*""(?<value>[^""]+)""",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (queueTag.Success)
+        {
+            Match value = Regex.Match(queueTag.Groups["value"].Value.Trim(),
+                @"^(?<name>Background|Geometry|AlphaTest|Transparent|Overlay)\s*(?<offset>[+-]\s*\d+)?$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (value.Success)
+            {
+                int baseQueue = value.Groups["name"].Value.ToLowerInvariant() switch
+                {
+                    "background" => 1000,
+                    "geometry" => 2000,
+                    "alphatest" => 2450,
+                    "transparent" => 3000,
+                    "overlay" => 4000,
+                    _ => 2000,
+                };
+                string offsetText = value.Groups["offset"].Value.Replace(" ", string.Empty,
+                    StringComparison.Ordinal);
+                return baseQueue + (int.TryParse(offsetText, out int offset) ? offset : 0);
+            }
+        }
+
+        // Built-in shaders have no GUID-backed source in exported packages. These stable Unity
+        // fileIDs cover the common legacy transparent/cutout families and Unlit equivalents.
+        return shaderFileId switch
+        {
+            >= 30 and <= 36 => 3000,
+            >= 50 and <= 54 => 2450,
+            10512 => 2450,
+            10750 => 3000, // Unlit/Transparent
+            10751 => 2450, // Unlit/Transparent Cutout
+            _ => null,
+        };
     }
 
     private static string DetermineTransparentBlendMode(YamlNode floats, int? srcBlend, int? dstBlend)

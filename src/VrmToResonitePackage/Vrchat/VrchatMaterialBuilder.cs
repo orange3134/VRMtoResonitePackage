@@ -476,7 +476,7 @@ internal static class VrchatMaterialBuilder
             return ToonStandardConverter.Parse(matDoc, parent, isOutline);
         }
 
-        return ShaderPropertyFallbackConverter.Parse(matDoc, parent);
+        return ShaderPropertyFallbackConverter.Parse(matDoc, parent, GetShaderSource(matDoc, package));
     }
 
     private static bool IsOutlineShader(YamlDocument material, UnityPackage package)
@@ -505,9 +505,7 @@ internal static class VrchatMaterialBuilder
 
     private static string GetShaderName(YamlDocument material, UnityPackage package)
     {
-        string shaderGuid = material.Root?["m_Shader"]?.Guid;
-        UnityAsset shader = package.ByGuid(shaderGuid);
-        string source = package.ReadText(shader);
+        string source = GetShaderSource(material, package);
         int declaration = source?.IndexOf("Shader \"", StringComparison.Ordinal) ?? -1;
         if (declaration < 0)
         {
@@ -517,6 +515,12 @@ internal static class VrchatMaterialBuilder
         int nameStart = declaration + "Shader \"".Length;
         int nameEnd = source.IndexOf('"', nameStart);
         return nameEnd > nameStart ? source[nameStart..nameEnd] : null;
+    }
+
+    private static string GetShaderSource(YamlDocument material, UnityPackage package)
+    {
+        string shaderGuid = material.Root?["m_Shader"]?.Guid;
+        return package.ReadText(package.ByGuid(shaderGuid));
     }
 
     private static colorX ToColor(Vec4 c, ColorProfile profile) => new(c.X, c.Y, c.Z, c.W, profile);
