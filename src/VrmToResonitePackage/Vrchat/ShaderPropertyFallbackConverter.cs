@@ -64,9 +64,20 @@ internal static class ShaderPropertyFallbackConverter
             : hasUrpSmoothness
                 ? urpSmoothness
                 : parent?.SmoothnessWithMap ?? parent?.Smoothness ?? 1f;
+        bool hasSpecularControl = TryFloat(floats, out float specularHighlights, "_SpecularHighlights");
+        bool hasReflectionControl = TryFloat(floats, out float glossyReflections,
+            "_GlossyReflections", "_EnvironmentReflections");
         bool useReflection = hasMetallic || hasGlossiness || hasUrpSmoothness || hasGlossMapScale ||
             metallicMapGuid != null ||
+            (hasSpecularControl && specularHighlights >= 0.5f) ||
+            (hasReflectionControl && glossyReflections >= 0.5f) ||
             parent?.UseReflection == true;
+        bool applySpecular = hasSpecularControl
+            ? specularHighlights >= 0.5f
+            : parent?.ApplySpecular ?? useReflection;
+        bool applyReflection = hasReflectionControl
+            ? glossyReflections >= 0.5f
+            : parent?.ApplyReflection ?? useReflection;
         bool hasEmissionMap = emissionMapGuid != null;
 
         int renderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
@@ -99,8 +110,8 @@ internal static class ShaderPropertyFallbackConverter
             Smoothness = metallicMapGuid != null ? smoothnessWithMap : smoothnessWithoutMap,
             SmoothnessWithoutMap = smoothnessWithoutMap,
             SmoothnessWithMap = smoothnessWithMap,
-            ApplySpecular = useReflection,
-            ApplyReflection = useReflection,
+            ApplySpecular = applySpecular,
+            ApplyReflection = applyReflection,
             MetallicGlossMapGuid = metallicMapGuid,
             MetallicGlossMapScale = TexScale(metallicMapName, parent?.MetallicGlossMapScale ?? Vec2.One),
             MetallicGlossMapOffset = TexOffset(metallicMapName, parent?.MetallicGlossMapOffset ?? Vec2.Zero),
@@ -124,20 +135,19 @@ internal static class ShaderPropertyFallbackConverter
     {
         bool hasAlphaClip = TryFloat(floats, out float alphaClip,
             "_AlphaClip", "_AlphaTest", "_AlphaToMask", "_AlphaCutoffEnable");
-        if (hasAlphaClip && alphaClip >= 0.5f)
-        {
-            return "cutout";
-        }
+        bool useAlphaClip = hasAlphaClip && alphaClip >= 0.5f;
         if (TryFloat(floats, out float surface, "_Surface", "_SurfaceType"))
         {
-            return surface >= 0.5f ? DetermineTransparentBlendMode(floats) : "opaque";
+            return surface >= 0.5f
+                ? DetermineTransparentBlendMode(floats)
+                : useAlphaClip ? "cutout" : "opaque";
         }
         if (TryFloat(floats, out float mode, "_Mode"))
         {
             if (mode >= 2.5f) return "premultiply";
             if (mode >= 1.5f) return "transparent";
             if (mode >= 0.5f) return "cutout";
-            return "opaque";
+            return useAlphaClip ? "cutout" : "opaque";
         }
         string blendMode = DetermineBlendFactorMode(floats);
         if (blendMode != null)
@@ -146,6 +156,7 @@ internal static class ShaderPropertyFallbackConverter
         }
         if (renderQueue == 2450) return "cutout";
         if (renderQueue >= 2501) return "transparent";
+        if (useAlphaClip) return "cutout";
         if (hasAlphaClip && parentMode == "cutout") return "opaque";
         return parentMode ?? "opaque";
     }
