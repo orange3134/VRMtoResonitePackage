@@ -118,7 +118,13 @@ internal static class ShaderPropertyFallbackConverter
             "_EMISSION") && hasEmission;
 
         int renderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
-        string alphaMode = DetermineAlphaMode(floats, renderQueue, parent?.AlphaMode);
+        int? srcBlend = TryFloat(floats, out float srcBlendValue, "_SrcBlend")
+            ? (int)srcBlendValue
+            : parent?.SrcBlend;
+        int? dstBlend = TryFloat(floats, out float dstBlendValue, "_DstBlend")
+            ? (int)dstBlendValue
+            : parent?.DstBlend;
+        string alphaMode = DetermineAlphaMode(floats, renderQueue, parent?.AlphaMode, srcBlend, dstBlend);
         bool hasZWrite = TryFloat(floats, out float zWrite, "_ZWrite");
 
         return new LilToonInfo
@@ -137,6 +143,8 @@ internal static class ShaderPropertyFallbackConverter
             NormalMapOffset = TexOffset(normalMapName, parent?.NormalMapOffset ?? Vec2.Zero),
             NormalScale = Float(floats, parent?.NormalScale ?? 1f, "_BumpScale", "_NormalScale"),
             AlphaMode = alphaMode,
+            SrcBlend = srcBlend,
+            DstBlend = dstBlend,
             Cutoff = Float(floats, parent?.Cutoff ?? 0.5f,
                 "_Cutoff", "_AlphaClipThreshold", "_AlphaCutoff"),
             ZWrite = hasZWrite ? zWrite >= 0.5f : parent?.ZWrite ?? (alphaMode is "opaque" or "cutout"),
@@ -184,7 +192,8 @@ internal static class ShaderPropertyFallbackConverter
         };
     }
 
-    private static string DetermineAlphaMode(YamlNode floats, int renderQueue, string parentMode)
+    private static string DetermineAlphaMode(YamlNode floats, int renderQueue, string parentMode,
+        int? srcBlend, int? dstBlend)
     {
         bool hasAlphaClip = TryFloat(floats, out float alphaClip,
             "_AlphaClip", "_AlphaTest", "_AlphaToMask", "_AlphaCutoffEnable");
@@ -192,7 +201,7 @@ internal static class ShaderPropertyFallbackConverter
         if (TryFloat(floats, out float surface, "_Surface", "_SurfaceType"))
         {
             return surface >= 0.5f
-                ? DetermineTransparentBlendMode(floats)
+                ? DetermineTransparentBlendMode(floats, srcBlend, dstBlend)
                 : useAlphaClip ? "cutout" : "opaque";
         }
         if (TryFloat(floats, out float mode, "_Mode"))
@@ -202,7 +211,7 @@ internal static class ShaderPropertyFallbackConverter
             if (mode >= 0.5f) return "cutout";
             return useAlphaClip ? "cutout" : "opaque";
         }
-        string blendMode = DetermineBlendFactorMode(floats);
+        string blendMode = DetermineBlendFactorMode(srcBlend, dstBlend);
         if (blendMode != null)
         {
             return useAlphaClip && blendMode == "opaque" ? "cutout" : blendMode;
@@ -214,7 +223,7 @@ internal static class ShaderPropertyFallbackConverter
         return parentMode ?? "opaque";
     }
 
-    private static string DetermineTransparentBlendMode(YamlNode floats)
+    private static string DetermineTransparentBlendMode(YamlNode floats, int? srcBlend, int? dstBlend)
     {
         if (TryFloat(floats, out float blend, "_Blend"))
         {
@@ -227,21 +236,21 @@ internal static class ShaderPropertyFallbackConverter
                 _ => "transparent",
             };
         }
-        return DetermineBlendFactorMode(floats) ?? "transparent";
+        return DetermineBlendFactorMode(srcBlend, dstBlend) ?? "transparent";
     }
 
-    private static string DetermineBlendFactorMode(YamlNode floats)
+    private static string DetermineBlendFactorMode(int? srcBlend, int? dstBlend)
     {
-        if (!TryFloat(floats, out float dstBlend, "_DstBlend"))
+        if (!srcBlend.HasValue || !dstBlend.HasValue)
         {
             return null;
         }
-        TryFloat(floats, out float srcBlend, "_SrcBlend");
+        int source = srcBlend.Value;
         // UnityEngine.Rendering.BlendMode: Zero=0, One=1, DstColor=2,
         // OneMinusSrcAlpha=10.
-        if ((int)dstBlend == 10) return (int)srcBlend == 1 ? "premultiply" : "transparent";
-        if ((int)dstBlend == 1) return (int)srcBlend == 2 ? "multiply" : "additive";
-        if ((int)dstBlend == 0) return (int)srcBlend == 2 ? "multiply" : "opaque";
+        if (dstBlend == 10) return source == 1 ? "premultiply" : "transparent";
+        if (dstBlend == 1) return source == 2 ? "multiply" : "additive";
+        if (dstBlend == 0) return source == 2 ? "multiply" : "opaque";
         return null;
     }
 

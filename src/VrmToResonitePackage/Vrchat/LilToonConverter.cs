@@ -26,6 +26,8 @@ public sealed class LilToonInfo
 
     // opaque / cutout / transparent / premultiply / additive / multiply.
     public string AlphaMode { get; set; } = "opaque";
+    public int? SrcBlend { get; set; }
+    public int? DstBlend { get; set; }
     public float Cutoff { get; set; } = 0.5f;
     public bool ZWrite { get; set; } = true;
     public int RenderQueue { get; set; } = -1;
