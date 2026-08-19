@@ -257,7 +257,7 @@ internal static class VrchatMaterialBuilder
                 ? MathX.Clamp01(MathX.Max(info.Smoothness, 1f - info.SpecularBorder))
                 : MathX.Clamp01(info.Smoothness);
             material.Glossiness.Value = info.ApplyReflection ? MathX.Clamp01(info.Smoothness) : 0f;
-            StaticTexture2D metallicGloss = info.IsToonStandard
+            StaticTexture2D metallicGloss = info.IsToonStandard || info.SmoothnessFromAlbedoAlpha
                 ? await GetMetallicGlossTexture(assetsSlot, package, info, textureCache)
                 : await GetTexture(assetsSlot, package, info.MetallicGlossMapGuid,
                     textureCache, "MetallicGlossMap", preferredProfile: ColorProfile.Linear);

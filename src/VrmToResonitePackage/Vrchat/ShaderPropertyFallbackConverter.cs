@@ -53,6 +53,12 @@ internal static class ShaderPropertyFallbackConverter
         string metallicMapGuid = TexOrParent(metallicMapName, parent?.MetallicGlossMapGuid);
         string emissionMapGuid = TexOrParent(emissionMapName, parent?.EmissionMapGuid);
         string occlusionMapGuid = TexOrParent(occlusionMapName, parent?.OcclusionMapGuid);
+        Vec2 mainTexScale = TexScale(mainTexName, parent?.MainTexScale ?? Vec2.One);
+        Vec2 mainTexOffset = TexOffset(mainTexName, parent?.MainTexOffset ?? Vec2.Zero);
+        Vec2 metallicMapScale = TexScale(metallicMapName,
+            parent?.MetallicMapScale ?? parent?.MetallicGlossMapScale ?? Vec2.One);
+        Vec2 metallicMapOffset = TexOffset(metallicMapName,
+            parent?.MetallicMapOffset ?? parent?.MetallicGlossMapOffset ?? Vec2.Zero);
         int defaultOcclusionChannel = occlusionMapName != null
             ? Normalize(occlusionMapName) == Normalize("_OcclusionMap") ? 1 : 0
             : parent?.OcclusionMapChannel ?? 0;
@@ -61,6 +67,8 @@ internal static class ShaderPropertyFallbackConverter
         bool hasGlossiness = TryFloat(floats, out float glossiness, "_Glossiness");
         bool hasUrpSmoothness = TryFloat(floats, out float urpSmoothness, "_Smoothness");
         bool hasGlossMapScale = TryFloat(floats, out float glossMapScale, "_GlossMapScale");
+        bool smoothnessFromAlbedoAlpha = Float(floats,
+            parent?.SmoothnessFromAlbedoAlpha == true ? 1f : 0f, "_SmoothnessTextureChannel") >= 0.5f;
         float smoothnessWithoutMap = hasGlossiness
             ? glossiness
             : hasUrpSmoothness
@@ -76,6 +84,7 @@ internal static class ShaderPropertyFallbackConverter
             "_GlossyReflections", "_EnvironmentReflections");
         bool useReflection = hasMetallic || hasGlossiness || hasUrpSmoothness || hasGlossMapScale ||
             metallicMapGuid != null ||
+            (smoothnessFromAlbedoAlpha && mainTexGuid != null) ||
             (hasSpecularControl && specularHighlights >= 0.5f) ||
             (hasReflectionControl && glossyReflections >= 0.5f) ||
             parent?.UseReflection == true;
@@ -105,8 +114,8 @@ internal static class ShaderPropertyFallbackConverter
             UsesStandardKeywords = usesStandardKeywords,
             Color = color,
             MainTexGuid = mainTexGuid,
-            MainTexScale = TexScale(mainTexName, parent?.MainTexScale ?? Vec2.One),
-            MainTexOffset = TexOffset(mainTexName, parent?.MainTexOffset ?? Vec2.Zero),
+            MainTexScale = mainTexScale,
+            MainTexOffset = mainTexOffset,
             NormalMapGuid = normalMapGuid,
             UseNormalMap = useNormalMap,
             NormalMapScale = TexScale(normalMapName, parent?.NormalMapScale ?? Vec2.One),
@@ -123,14 +132,25 @@ internal static class ShaderPropertyFallbackConverter
             UseReflection = useReflection,
             Metallic = hasMetallic ? metallic : parent?.Metallic ?? 0f,
             Reflectance = parent?.Reflectance ?? 0.5f,
-            Smoothness = metallicMapGuid != null ? smoothnessWithMap : smoothnessWithoutMap,
+            Smoothness = metallicMapGuid != null || smoothnessFromAlbedoAlpha
+                ? smoothnessWithMap
+                : smoothnessWithoutMap,
             SmoothnessWithoutMap = smoothnessWithoutMap,
             SmoothnessWithMap = smoothnessWithMap,
+            SmoothnessFromAlbedoAlpha = smoothnessFromAlbedoAlpha,
             ApplySpecular = applySpecular,
             ApplyReflection = applyReflection,
             MetallicGlossMapGuid = metallicMapGuid,
-            MetallicGlossMapScale = TexScale(metallicMapName, parent?.MetallicGlossMapScale ?? Vec2.One),
-            MetallicGlossMapOffset = TexOffset(metallicMapName, parent?.MetallicGlossMapOffset ?? Vec2.Zero),
+            MetallicGlossMapScale = smoothnessFromAlbedoAlpha ? Vec2.One : metallicMapScale,
+            MetallicGlossMapOffset = smoothnessFromAlbedoAlpha ? Vec2.Zero : metallicMapOffset,
+            MetallicMapGuid = smoothnessFromAlbedoAlpha ? metallicMapGuid : null,
+            MetallicMapChannel = 0,
+            MetallicMapScale = metallicMapScale,
+            MetallicMapOffset = metallicMapOffset,
+            GlossMapGuid = smoothnessFromAlbedoAlpha ? mainTexGuid : null,
+            GlossMapChannel = 3,
+            GlossMapScale = mainTexScale,
+            GlossMapOffset = mainTexOffset,
 
             UseEmission = useEmission,
             EmissionColor = emissionColor,
