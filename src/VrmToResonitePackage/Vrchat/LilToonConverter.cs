@@ -84,6 +84,7 @@ public sealed class LilToonInfo
     public float SmoothnessWithMap { get; set; } = 1f;
     public bool SmoothnessFromAlbedoAlpha { get; set; }
     public bool IsSpecularWorkflow { get; set; }
+    public Vec4 SpecularColor { get; set; } = new(0.5f, 0.5f, 0.5f, 1f);
     public float SpecularBorder { get; set; }
     public string MetallicGlossMapGuid { get; set; }
     public bool UseMetallicGlossMap { get; set; } = true;

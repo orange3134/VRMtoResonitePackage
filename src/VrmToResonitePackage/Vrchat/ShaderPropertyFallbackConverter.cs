@@ -29,6 +29,7 @@ internal static class ShaderPropertyFallbackConverter
         string emissionMapName = FindName(texEnvs, "_EmissionMap", "_EmissiveColorMap", "_EmissiveMap");
         string occlusionMapName = FindName(texEnvs, "_OcclusionMap", "_OcclusionTex");
         string emissionColorName = FindName(colors, "_EmissionColor", "_EmissiveColor");
+        string specularColorName = FindName(colors, "_SpecColor");
         bool hasUrpSurface = FindName(floats, "_Surface", "_SurfaceType") != null;
         bool hasBuiltInMode = FindName(floats, "_Mode") != null;
         bool usesUrpKeywords = hasUrpSurface ||
@@ -49,6 +50,10 @@ internal static class ShaderPropertyFallbackConverter
 
         Vec4 color = ReadColor(colors, parent?.Color ?? Vec4.One,
             "_BaseColor", "_Color", "_TintColor", "_MainColor");
+        Vec4 specularColor = specularColorName == null
+            ? parent?.SpecularColor ?? new Vec4(0.5f, 0.5f, 0.5f, 1f)
+            : LilToonConverter.ReadColor(colors[specularColorName],
+                parent?.SpecularColor ?? new Vec4(0.5f, 0.5f, 0.5f, 1f));
         Vec4 emissionColor = emissionColorName == null
             ? parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f)
             : LilToonConverter.ReadColor(colors[emissionColorName],
@@ -123,6 +128,7 @@ internal static class ShaderPropertyFallbackConverter
         bool useReflection = hasMetallic || hasGlossiness || hasUrpSmoothness || hasGlossMapScale ||
             (useMetallicGlossMap && metallicMapGuid != null) ||
             (useSpecGlossMap && specGlossMapGuid != null) ||
+            (isSpecularWorkflow && specularColorName != null) ||
             (smoothnessFromAlbedoAlpha && mainTexGuid != null) ||
             (hasSpecularControl && specularHighlights >= 0.5f) ||
             (hasReflectionControl && glossyReflections >= 0.5f) ||
@@ -181,7 +187,9 @@ internal static class ShaderPropertyFallbackConverter
 
             UseReflection = useReflection,
             Metallic = isSpecularWorkflow ? 0f : hasMetallic ? metallic : parent?.Metallic ?? 0f,
-            Reflectance = parent?.Reflectance ?? 0.5f,
+            Reflectance = isSpecularWorkflow
+                ? Math.Max(specularColor.X, Math.Max(specularColor.Y, specularColor.Z))
+                : parent?.Reflectance ?? 0.5f,
             Smoothness = (useMetallicGlossMap && metallicMapGuid != null) ||
                 (useSpecGlossMap && specGlossMapGuid != null) || smoothnessFromAlbedoAlpha
                 ? mappedSmoothness
@@ -190,6 +198,7 @@ internal static class ShaderPropertyFallbackConverter
             SmoothnessWithMap = smoothnessWithMap,
             SmoothnessFromAlbedoAlpha = smoothnessFromAlbedoAlpha,
             IsSpecularWorkflow = isSpecularWorkflow,
+            SpecularColor = specularColor,
             ApplySpecular = applySpecular,
             ApplyReflection = applyReflection,
             MetallicGlossMapGuid = metallicMapGuid,

@@ -23,6 +23,8 @@ internal static class VrchatMaterialBuilder
     public static async Task Apply(Slot root, Slot assetsSlot, VrchatAvatar avatar, UnityPackage package)
     {
         var textureCache = new Dictionary<string, StaticTexture2D>(StringComparer.OrdinalIgnoreCase);
+        var metallicGlossCache = new Dictionary<string, MetallicGlossResult>(
+            StringComparer.OrdinalIgnoreCase);
         var materialCache = new Dictionary<string, IAssetProvider<FrooxEngine.Material>>(
             StringComparer.OrdinalIgnoreCase);
 
@@ -36,7 +38,7 @@ internal static class VrchatMaterialBuilder
         foreach (string guid in uniqueGuids)
         {
             IAssetProvider<FrooxEngine.Material> material = await BuildMaterial(
-                assetsSlot, guid, package, textureCache);
+                assetsSlot, guid, package, textureCache, metallicGlossCache);
             if (material != null)
             {
                 materialCache[guid] = material;
@@ -163,7 +165,8 @@ internal static class VrchatMaterialBuilder
 
     private static async Task<IAssetProvider<FrooxEngine.Material>> BuildMaterial(
         Slot assetsSlot, string guid,
-        UnityPackage package, Dictionary<string, StaticTexture2D> textureCache)
+        UnityPackage package, Dictionary<string, StaticTexture2D> textureCache,
+        Dictionary<string, MetallicGlossResult> metallicGlossCache)
     {
         LilToonInfo info = ResolveMaterialInfo(guid, package, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         if (info == null)
@@ -251,18 +254,19 @@ internal static class VrchatMaterialBuilder
         if (info.UseReflection)
         {
             material.Metallic.Value = MathX.Clamp01(info.Metallic);
-            material.Reflectivity.Value = MathX.Clamp01(info.Reflectance);
             material.SpecularIntensity.Value = info.ApplySpecular ? 1f : 0f;
             material.SpecularArea.Value = info.SpecularToon
                 ? MathX.Clamp01(MathX.Max(info.Smoothness, 1f - info.SpecularBorder))
                 : MathX.Clamp01(info.Smoothness);
             material.Glossiness.Value = info.ApplyReflection ? MathX.Clamp01(info.Smoothness) : 0f;
-            StaticTexture2D metallicGloss = info.IsToonStandard || info.SmoothnessFromAlbedoAlpha ||
+            MetallicGlossResult packed = info.IsToonStandard || info.SmoothnessFromAlbedoAlpha ||
                 info.GlossMapGuid != null
-                ? await GetMetallicGlossTexture(assetsSlot, package, info, textureCache)
-                : await GetTexture(assetsSlot, package,
+                ? await GetMetallicGlossTexture(assetsSlot, package, info, metallicGlossCache)
+                : new MetallicGlossResult(await GetTexture(assetsSlot, package,
                     info.UseMetallicGlossMap ? info.MetallicGlossMapGuid : null,
-                    textureCache, "MetallicGlossMap", preferredProfile: ColorProfile.Linear);
+                    textureCache, "MetallicGlossMap", preferredProfile: ColorProfile.Linear), null);
+            material.Reflectivity.Value = MathX.Clamp01(packed.SpecularReflectance ?? info.Reflectance);
+            StaticTexture2D metallicGloss = packed.Texture;
             if (metallicGloss != null)
             {
                 material.MetallicGlossMap.Target = metallicGloss;
@@ -718,12 +722,15 @@ internal static class VrchatMaterialBuilder
         return texture;
     }
 
-    private static async Task<StaticTexture2D> GetMetallicGlossTexture(Slot assetsSlot,
-        UnityPackage package, LilToonInfo info, Dictionary<string, StaticTexture2D> cache)
+    private readonly record struct MetallicGlossResult(
+        StaticTexture2D Texture, float? SpecularReflectance);
+
+    private static async Task<MetallicGlossResult> GetMetallicGlossTexture(Slot assetsSlot,
+        UnityPackage package, LilToonInfo info, Dictionary<string, MetallicGlossResult> cache)
     {
         if (info.MetallicMapGuid == null && info.GlossMapGuid == null)
         {
-            return null;
+            return default;
         }
 
         string cacheKey = $"{info.MetallicMapGuid}|{info.MetallicMapChannel}|" +
@@ -734,16 +741,19 @@ internal static class VrchatMaterialBuilder
             $"{info.GlossMapOffset.X:R},{info.GlossMapOffset.Y:R}|" +
             $"{info.MetallicGlossMapScale.X:R},{info.MetallicGlossMapScale.Y:R}|" +
             $"{info.MetallicGlossMapOffset.X:R},{info.MetallicGlossMapOffset.Y:R}|metallic-gloss";
-        if (cache.TryGetValue(cacheKey, out StaticTexture2D cached))
+        cacheKey += info.IsSpecularWorkflow && info.UseSpecGlossMap
+            ? "|specular-reflectance"
+            : "|no-specular-reflectance";
+        if (cache.TryGetValue(cacheKey, out MetallicGlossResult cached))
         {
             return cached;
         }
-        cache[cacheKey] = null;
 
         UnityAsset metallicAsset = package.ByGuid(info.MetallicMapGuid);
         UnityAsset glossAsset = package.ByGuid(info.GlossMapGuid);
         Engine engine = assetsSlot.Engine;
         Uri uri = null;
+        float? specularReflectance = null;
         try
         {
             await default(ToBackground);
@@ -758,6 +768,7 @@ internal static class VrchatMaterialBuilder
             int height = Math.Max(metallic?.Size.y ?? 1, gloss?.Size.y ?? 1);
             var output = new Bitmap2D(width, height, TextureFormat.RGBA32, mipmaps: false,
                 ColorProfile.Linear);
+            double specularReflectanceTotal = 0d;
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -765,12 +776,24 @@ internal static class VrchatMaterialBuilder
                     float metallicValue = SampleChannel(metallic, x, y, width, height,
                         info.MetallicMapChannel, info.MetallicMapScale, info.MetallicMapOffset,
                         info.MetallicGlossMapScale, info.MetallicGlossMapOffset);
-                    float glossValue = SampleChannel(gloss, x, y, width, height,
-                        info.GlossMapChannel, info.GlossMapScale, info.GlossMapOffset,
-                        info.MetallicGlossMapScale, info.MetallicGlossMapOffset);
+                    color glossPixel = gloss == null
+                        ? color.White
+                        : SamplePixel(gloss, x, y, width, height,
+                            info.GlossMapScale, info.GlossMapOffset,
+                            info.MetallicGlossMapScale, info.MetallicGlossMapOffset);
+                    float glossValue = Channel(glossPixel, Math.Clamp(info.GlossMapChannel, 0, 3));
+                    if (info.IsSpecularWorkflow && info.UseSpecGlossMap && gloss != null)
+                    {
+                        specularReflectanceTotal += Math.Max(glossPixel.r,
+                            Math.Max(glossPixel.g, glossPixel.b));
+                    }
                     var pixel = new color(metallicValue, metallicValue, metallicValue, glossValue);
                     output.SetPixel(x, y, in pixel);
                 }
+            }
+            if (info.IsSpecularWorkflow && info.UseSpecGlossMap && gloss != null)
+            {
+                specularReflectance = (float)(specularReflectanceTotal / (width * (double)height));
             }
             uri = await engine.LocalDB.SaveAssetAsync(output);
         }
@@ -781,14 +804,15 @@ internal static class VrchatMaterialBuilder
         await default(ToWorld);
         if (uri == null)
         {
-            return null;
+            return default;
         }
 
         Slot textureSlot = assetsSlot.AddSlot($"MetallicGlossMap: {info.Name}");
         StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
         texture.URL.Value = uri;
-        cache[cacheKey] = texture;
-        return texture;
+        var result = new MetallicGlossResult(texture, specularReflectance);
+        cache[cacheKey] = result;
+        return result;
     }
 
     private static Bitmap2D DecodeBitmap(UnityAsset asset)
@@ -809,6 +833,13 @@ internal static class VrchatMaterialBuilder
             return 1f;
         }
 
+        return Channel(SamplePixel(bitmap, x, y, width, height,
+            sourceScale, sourceOffset, outputScale, outputOffset), Math.Clamp(channel, 0, 3));
+    }
+
+    private static color SamplePixel(Bitmap2D bitmap, int x, int y, int width, int height,
+        Vec2 sourceScale, Vec2 sourceOffset, Vec2 outputScale, Vec2 outputOffset)
+    {
         float outputU = (x + 0.5f) / width;
         float outputV = (y + 0.5f) / height;
         float sourceU = TransformUv(outputU, sourceScale.X, sourceOffset.X,
@@ -817,7 +848,7 @@ internal static class VrchatMaterialBuilder
             outputScale.Y, outputOffset.Y);
         int sourceX = WrappedPixel(sourceU, bitmap.Size.x);
         int sourceY = WrappedPixel(sourceV, bitmap.Size.y);
-        return Channel(bitmap.GetPixel(sourceX, sourceY), Math.Clamp(channel, 0, 3));
+        return bitmap.GetPixel(sourceX, sourceY);
     }
 
     private static float TransformUv(float outputUv, float sourceScale, float sourceOffset,
