@@ -728,7 +728,9 @@ internal static class VrchatMaterialBuilder
     private static async Task<MetallicGlossResult> GetMetallicGlossTexture(Slot assetsSlot,
         UnityPackage package, LilToonInfo info, Dictionary<string, MetallicGlossResult> cache)
     {
-        if (info.MetallicMapGuid == null && info.GlossMapGuid == null)
+        bool useSpecularReflectance = info.IsSpecularWorkflow && info.UseSpecGlossMap &&
+            info.SpecGlossMapGuid != null;
+        if (info.MetallicMapGuid == null && info.GlossMapGuid == null && !useSpecularReflectance)
         {
             return default;
         }
@@ -741,8 +743,10 @@ internal static class VrchatMaterialBuilder
             $"{info.GlossMapOffset.X:R},{info.GlossMapOffset.Y:R}|" +
             $"{info.MetallicGlossMapScale.X:R},{info.MetallicGlossMapScale.Y:R}|" +
             $"{info.MetallicGlossMapOffset.X:R},{info.MetallicGlossMapOffset.Y:R}|metallic-gloss";
-        cacheKey += info.IsSpecularWorkflow && info.UseSpecGlossMap
-            ? "|specular-reflectance"
+        cacheKey += useSpecularReflectance
+            ? $"|{info.SpecGlossMapGuid}|" +
+              $"{info.SpecGlossMapScale.X:R},{info.SpecGlossMapScale.Y:R}|" +
+              $"{info.SpecGlossMapOffset.X:R},{info.SpecGlossMapOffset.Y:R}|specular-reflectance"
             : "|no-specular-reflectance";
         if (cache.TryGetValue(cacheKey, out MetallicGlossResult cached))
         {
@@ -751,6 +755,7 @@ internal static class VrchatMaterialBuilder
 
         UnityAsset metallicAsset = package.ByGuid(info.MetallicMapGuid);
         UnityAsset glossAsset = package.ByGuid(info.GlossMapGuid);
+        UnityAsset specularAsset = package.ByGuid(useSpecularReflectance ? info.SpecGlossMapGuid : null);
         Engine engine = assetsSlot.Engine;
         Uri uri = null;
         float? specularReflectance = null;
@@ -759,57 +764,64 @@ internal static class VrchatMaterialBuilder
             await default(ToBackground);
             Bitmap2D metallic = DecodeBitmap(metallicAsset);
             Bitmap2D gloss = DecodeBitmap(glossAsset);
-            if (metallic == null && gloss == null)
+            Bitmap2D specular = !useSpecularReflectance
+                ? null
+                : string.Equals(info.SpecGlossMapGuid, info.GlossMapGuid,
+                    StringComparison.OrdinalIgnoreCase)
+                    ? gloss
+                    : DecodeBitmap(specularAsset);
+            if (specular != null)
             {
-                throw new InvalidDataException("Neither source texture was found in the Unity package.");
+                specularReflectance = AverageSpecularReflectance(specular,
+                    info.SpecGlossMapScale, info.SpecGlossMapOffset);
             }
 
-            int width = Math.Max(metallic?.Size.x ?? 1, gloss?.Size.x ?? 1);
-            int height = Math.Max(metallic?.Size.y ?? 1, gloss?.Size.y ?? 1);
-            var output = new Bitmap2D(width, height, TextureFormat.RGBA32, mipmaps: false,
-                ColorProfile.Linear);
-            double specularReflectanceTotal = 0d;
-            for (int y = 0; y < height; y++)
+            if (metallic != null || gloss != null)
             {
-                for (int x = 0; x < width; x++)
+                int width = Math.Max(metallic?.Size.x ?? 1, gloss?.Size.x ?? 1);
+                int height = Math.Max(metallic?.Size.y ?? 1, gloss?.Size.y ?? 1);
+                var output = new Bitmap2D(width, height, TextureFormat.RGBA32, mipmaps: false,
+                    ColorProfile.Linear);
+                for (int y = 0; y < height; y++)
                 {
-                    float metallicValue = SampleChannel(metallic, x, y, width, height,
-                        info.MetallicMapChannel, info.MetallicMapScale, info.MetallicMapOffset,
-                        info.MetallicGlossMapScale, info.MetallicGlossMapOffset);
-                    color glossPixel = gloss == null
-                        ? color.White
-                        : SamplePixel(gloss, x, y, width, height,
-                            info.GlossMapScale, info.GlossMapOffset,
-                            info.MetallicGlossMapScale, info.MetallicGlossMapOffset);
-                    float glossValue = Channel(glossPixel, Math.Clamp(info.GlossMapChannel, 0, 3));
-                    if (info.IsSpecularWorkflow && info.UseSpecGlossMap && gloss != null)
+                    for (int x = 0; x < width; x++)
                     {
-                        specularReflectanceTotal += Math.Max(glossPixel.r,
-                            Math.Max(glossPixel.g, glossPixel.b));
+                        float metallicValue = SampleChannel(metallic, x, y, width, height,
+                            info.MetallicMapChannel, info.MetallicMapScale, info.MetallicMapOffset,
+                            info.MetallicGlossMapScale, info.MetallicGlossMapOffset);
+                        color glossPixel = gloss == null
+                            ? color.White
+                            : SamplePixel(gloss, x, y, width, height,
+                                info.GlossMapScale, info.GlossMapOffset,
+                                info.MetallicGlossMapScale, info.MetallicGlossMapOffset);
+                        float glossValue = Channel(glossPixel, Math.Clamp(info.GlossMapChannel, 0, 3));
+                        var pixel = new color(metallicValue, metallicValue, metallicValue, glossValue);
+                        output.SetPixel(x, y, in pixel);
                     }
-                    var pixel = new color(metallicValue, metallicValue, metallicValue, glossValue);
-                    output.SetPixel(x, y, in pixel);
                 }
+                uri = await engine.LocalDB.SaveAssetAsync(output);
             }
-            if (info.IsSpecularWorkflow && info.UseSpecGlossMap && gloss != null)
+            else if (specular == null)
             {
-                specularReflectance = (float)(specularReflectanceTotal / (width * (double)height));
+                throw new InvalidDataException("No source texture was found in the Unity package.");
             }
-            uri = await engine.LocalDB.SaveAssetAsync(output);
         }
         catch (Exception ex)
         {
             UniLog.Warning($"Failed to combine Toon Standard metallic/gloss textures: {ex.Message}");
         }
         await default(ToWorld);
-        if (uri == null)
+        StaticTexture2D texture = null;
+        if (uri != null)
+        {
+            Slot textureSlot = assetsSlot.AddSlot($"MetallicGlossMap: {info.Name}");
+            texture = textureSlot.AttachComponent<StaticTexture2D>();
+            texture.URL.Value = uri;
+        }
+        if (texture == null && !specularReflectance.HasValue)
         {
             return default;
         }
-
-        Slot textureSlot = assetsSlot.AddSlot($"MetallicGlossMap: {info.Name}");
-        StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
-        texture.URL.Value = uri;
         var result = new MetallicGlossResult(texture, specularReflectance);
         cache[cacheKey] = result;
         return result;
@@ -849,6 +861,21 @@ internal static class VrchatMaterialBuilder
         int sourceX = WrappedPixel(sourceU, bitmap.Size.x);
         int sourceY = WrappedPixel(sourceV, bitmap.Size.y);
         return bitmap.GetPixel(sourceX, sourceY);
+    }
+
+    private static float AverageSpecularReflectance(Bitmap2D bitmap, Vec2 scale, Vec2 offset)
+    {
+        double total = 0d;
+        for (int y = 0; y < bitmap.Size.y; y++)
+        {
+            for (int x = 0; x < bitmap.Size.x; x++)
+            {
+                color pixel = SamplePixel(bitmap, x, y, bitmap.Size.x, bitmap.Size.y,
+                    scale, offset, Vec2.One, Vec2.Zero);
+                total += Math.Max(pixel.r, Math.Max(pixel.g, pixel.b));
+            }
+        }
+        return (float)(total / (bitmap.Size.x * (double)bitmap.Size.y));
     }
 
     private static float TransformUv(float outputUv, float sourceScale, float sourceOffset,
