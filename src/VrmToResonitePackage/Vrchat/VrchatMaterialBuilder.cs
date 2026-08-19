@@ -219,7 +219,7 @@ internal static class VrchatMaterialBuilder
                 material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
                 break;
         }
-        if (info.RenderQueue > 0)
+        if (info.RenderQueue >= 0)
         {
             material.RenderQueue.Value = info.RenderQueue;
         }
