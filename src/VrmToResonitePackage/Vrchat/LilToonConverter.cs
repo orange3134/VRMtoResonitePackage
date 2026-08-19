@@ -10,6 +10,7 @@ public sealed class LilToonInfo
     public string Name { get; set; }
     public bool IsLilToon { get; set; } = true;
     public bool IsToonStandard { get; set; }
+    public bool UsesStandardKeywords { get; set; }
     public bool IsFakeShadow { get; set; }
 
     public Vec4 Color { get; set; } = new(1f, 1f, 1f, 1f);
@@ -17,6 +18,7 @@ public sealed class LilToonInfo
     public Vec2 MainTexScale { get; set; } = Vec2.One;
     public Vec2 MainTexOffset { get; set; }
     public string NormalMapGuid { get; set; }
+    public bool UseNormalMap { get; set; } = true;
     public Vec2 NormalMapScale { get; set; } = Vec2.One;
     public Vec2 NormalMapOffset { get; set; }
     public float NormalScale { get; set; } = 1f;

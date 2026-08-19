@@ -237,8 +237,8 @@ internal static class VrchatMaterialBuilder
         {
             material.MainTexture.Target = mainTex;
         }
-        StaticTexture2D normal = await GetTexture(assetsSlot, package, info.NormalMapGuid, textureCache,
-            "NormalMap", isNormalMap: true);
+        StaticTexture2D normal = await GetTexture(assetsSlot, package,
+            info.UseNormalMap ? info.NormalMapGuid : null, textureCache, "NormalMap", isNormalMap: true);
         if (normal != null)
         {
             material.NormalMap.Target = normal;

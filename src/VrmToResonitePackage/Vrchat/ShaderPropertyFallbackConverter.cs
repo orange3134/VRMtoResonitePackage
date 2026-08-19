@@ -27,6 +27,9 @@ internal static class ShaderPropertyFallbackConverter
         string metallicMapName = FindName(texEnvs, "_MetallicGlossMap");
         string emissionMapName = FindName(texEnvs, "_EmissionMap", "_EmissiveColorMap", "_EmissiveMap");
         string occlusionMapName = FindName(texEnvs, "_OcclusionMap", "_OcclusionTex");
+        string emissionColorName = FindName(colors, "_EmissionColor", "_EmissiveColor");
+        bool usesStandardKeywords = FindName(floats, "_Mode", "_Surface", "_SurfaceType") != null ||
+            parent?.UsesStandardKeywords == true;
 
         string Tex(string name) => name == null ? null : TextureGuid(texEnvs?[name]);
         string TexOrParent(string name, string parentGuid) => name == null ? parentGuid : Tex(name);
@@ -36,11 +39,15 @@ internal static class ShaderPropertyFallbackConverter
         Vec2 TexOffset(string name, Vec2 fallback) => name == null
             ? fallback
             : LilToonConverter.ReadVector2(texEnvs?[name]?["m_Offset"], fallback);
+        bool Feature(string keyword, bool fallback) =>
+            usesStandardKeywords ? HasKeyword(root, keyword) ?? fallback : fallback;
 
         Vec4 color = ReadColor(colors, parent?.Color ?? Vec4.One,
             "_BaseColor", "_Color", "_TintColor", "_MainColor");
-        Vec4 emissionColor = ReadColor(colors, parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f),
-            "_EmissionColor", "_EmissiveColor");
+        Vec4 emissionColor = emissionColorName == null
+            ? parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f)
+            : LilToonConverter.ReadColor(colors[emissionColorName],
+                parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f));
         string mainTexGuid = TexOrParent(mainTexName, parent?.MainTexGuid);
         string normalMapGuid = TexOrParent(normalMapName, parent?.NormalMapGuid);
         string metallicMapGuid = TexOrParent(metallicMapName, parent?.MetallicGlossMapGuid);
@@ -79,6 +86,13 @@ internal static class ShaderPropertyFallbackConverter
             ? glossyReflections >= 0.5f
             : parent?.ApplyReflection ?? useReflection;
         bool hasEmissionMap = emissionMapGuid != null;
+        bool useNormalMap = Feature("_NORMALMAP",
+            normalMapName == null && parent != null ? parent.UseNormalMap : normalMapGuid != null);
+        bool hasEmission = hasEmissionMap || HasVisibleRgb(emissionColor);
+        bool useEmission = Feature("_EMISSION",
+            emissionMapName == null && emissionColorName == null && parent != null
+                ? parent.UseEmission
+                : hasEmission) && hasEmission;
 
         int renderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
         string alphaMode = DetermineAlphaMode(floats, renderQueue, parent?.AlphaMode);
@@ -88,11 +102,13 @@ internal static class ShaderPropertyFallbackConverter
         {
             Name = root?["m_Name"]?.AsString() ?? parent?.Name,
             IsLilToon = false,
+            UsesStandardKeywords = usesStandardKeywords,
             Color = color,
             MainTexGuid = mainTexGuid,
             MainTexScale = TexScale(mainTexName, parent?.MainTexScale ?? Vec2.One),
             MainTexOffset = TexOffset(mainTexName, parent?.MainTexOffset ?? Vec2.Zero),
             NormalMapGuid = normalMapGuid,
+            UseNormalMap = useNormalMap,
             NormalMapScale = TexScale(normalMapName, parent?.NormalMapScale ?? Vec2.One),
             NormalMapOffset = TexOffset(normalMapName, parent?.NormalMapOffset ?? Vec2.Zero),
             NormalScale = Float(floats, parent?.NormalScale ?? 1f, "_BumpScale", "_NormalScale"),
@@ -116,7 +132,7 @@ internal static class ShaderPropertyFallbackConverter
             MetallicGlossMapScale = TexScale(metallicMapName, parent?.MetallicGlossMapScale ?? Vec2.One),
             MetallicGlossMapOffset = TexOffset(metallicMapName, parent?.MetallicGlossMapOffset ?? Vec2.Zero),
 
-            UseEmission = hasEmissionMap || HasVisibleRgb(emissionColor),
+            UseEmission = useEmission,
             EmissionColor = emissionColor,
             EmissionBlend = 1f,
             EmissionMapGuid = emissionMapGuid,
@@ -239,6 +255,22 @@ internal static class ShaderPropertyFallbackConverter
     {
         string guid = textureEnv?["m_Texture"]?.Guid;
         return string.IsNullOrEmpty(guid) || guid == "0000000000000000f000000000000000" ? null : guid;
+    }
+
+    internal static bool? HasKeyword(YamlNode root, string keyword)
+    {
+        YamlNode valid = root?["m_ValidKeywords"];
+        if (valid?.Seq != null)
+        {
+            return valid.Seq.Any(item => string.Equals(item.AsString(), keyword, StringComparison.Ordinal));
+        }
+        string keywords = root?["m_ShaderKeywords"]?.AsString();
+        if (keywords != null)
+        {
+            return keywords.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(keyword,
+                StringComparer.Ordinal);
+        }
+        return null;
     }
 
     private static string Normalize(string propertyName)

@@ -45,10 +45,12 @@ internal static class ToonStandardConverter
             LilToonConverter.ReadVector2(texEnvs?[name]?["m_Scale"], fallback);
         Vec2 TexOffset(string name, Vec2 fallback) =>
             LilToonConverter.ReadVector2(texEnvs?[name]?["m_Offset"], fallback);
-        bool Feature(string keyword, bool fallback) => HasKeyword(root, keyword) ?? fallback;
+        bool Feature(string keyword, bool fallback) =>
+            ShaderPropertyFallbackConverter.HasKeyword(root, keyword) ?? fallback;
 
         string rampGuid = TexOrParent("_Ramp", parent?.ShadowRampGuid);
-        bool useNormalMap = Feature("USE_NORMAL_MAP", parent?.NormalMapGuid != null);
+        bool useNormalMap = Feature("USE_NORMAL_MAP",
+            parent?.UseNormalMap ?? Tex("_BumpMap") != null);
         bool useSpecular = Feature("USE_SPECULAR", parent?.UseReflection ?? false);
         bool useMatcap = Feature("USE_MATCAP", parent?.UseMatcap ?? false);
         bool useOcclusion = Feature("USE_OCCLUSION_MAP", parent?.OcclusionMapGuid != null);
@@ -105,9 +107,8 @@ internal static class ToonStandardConverter
             MainTexGuid = TexOrParent("_MainTex", parent?.MainTexGuid),
             MainTexScale = TexScale("_MainTex", parent?.MainTexScale ?? Vec2.One),
             MainTexOffset = TexOffset("_MainTex", parent?.MainTexOffset ?? Vec2.Zero),
-            NormalMapGuid = useNormalMap
-                ? TexOrParent("_BumpMap", parent?.NormalMapGuid)
-                : null,
+            NormalMapGuid = TexOrParent("_BumpMap", parent?.NormalMapGuid),
+            UseNormalMap = useNormalMap,
             NormalMapScale = TexScale("_BumpMap", parent?.NormalMapScale ?? Vec2.One),
             NormalMapOffset = TexOffset("_BumpMap", parent?.NormalMapOffset ?? Vec2.Zero),
             NormalScale = F("_BumpScale", parent?.NormalScale ?? 1f),
@@ -175,22 +176,6 @@ internal static class ToonStandardConverter
             OutlineMaskGuid = TexOrParent("_OutlineMask", parent?.OutlineMaskGuid),
             OutlineMaskChannel = (int)F("_OutlineMaskChannel", parent?.OutlineMaskChannel ?? 0f),
         };
-    }
-
-    private static bool? HasKeyword(YamlNode root, string keyword)
-    {
-        YamlNode valid = root?["m_ValidKeywords"];
-        if (valid?.Seq != null)
-        {
-            return valid.Seq.Any(item => string.Equals(item.AsString(), keyword, StringComparison.Ordinal));
-        }
-        string keywords = root?["m_ShaderKeywords"]?.AsString();
-        if (keywords != null)
-        {
-            return keywords.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(keyword,
-                StringComparer.Ordinal);
-        }
-        return null;
     }
 
     private static bool HasVisibleRgb(Vec4 color)
