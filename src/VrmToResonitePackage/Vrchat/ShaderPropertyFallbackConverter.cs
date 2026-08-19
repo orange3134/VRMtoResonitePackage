@@ -152,21 +152,24 @@ internal static class ShaderPropertyFallbackConverter
                 : hasEmission,
             "_EMISSION") && hasEmission;
 
+        ShaderDefaults shaderDefaults = ReadShaderDefaults(root?["m_Shader"]?.FileID, shaderSource);
         int customRenderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
         int inheritedRenderQueue = parent?.RenderQueue ?? -1;
         int renderQueue = customRenderQueue >= 0
             ? customRenderQueue
             : inheritedRenderQueue >= 0
                 ? inheritedRenderQueue
-                : ShaderDefaultRenderQueue(root?["m_Shader"]?.FileID, shaderSource) ?? -1;
+                : shaderDefaults.RenderQueue ?? -1;
         int? srcBlend = TryFloat(floats, out float srcBlendValue, "_SrcBlend")
             ? (int)srcBlendValue
             : parent?.SrcBlend;
         int? dstBlend = TryFloat(floats, out float dstBlendValue, "_DstBlend")
             ? (int)dstBlendValue
             : parent?.DstBlend;
-        string alphaMode = DetermineAlphaMode(floats, renderQueue, parent?.AlphaMode, srcBlend, dstBlend);
+        string alphaMode = DetermineAlphaMode(floats, renderQueue, parent?.AlphaMode,
+            shaderDefaults.AlphaMode, srcBlend, dstBlend);
         bool hasZWrite = TryFloat(floats, out float zWrite, "_ZWrite");
+        bool hasCull = TryFloat(floats, out float cull, "_Cull", "_CullMode");
 
         return new LilToonInfo
         {
@@ -188,9 +191,11 @@ internal static class ShaderPropertyFallbackConverter
             DstBlend = dstBlend,
             Cutoff = Float(floats, parent?.Cutoff ?? 0.5f,
                 "_Cutoff", "_AlphaClipThreshold", "_AlphaCutoff"),
-            ZWrite = hasZWrite ? zWrite >= 0.5f : parent?.ZWrite ?? (alphaMode is "opaque" or "cutout"),
+            ZWrite = hasZWrite
+                ? zWrite >= 0.5f
+                : parent?.ZWrite ?? shaderDefaults.ZWrite ?? (alphaMode is "opaque" or "cutout"),
             RenderQueue = renderQueue,
-            Cull = (int)Float(floats, parent?.Cull ?? 2f, "_Cull", "_CullMode"),
+            Cull = hasCull ? (int)cull : parent?.Cull ?? shaderDefaults.Cull ?? 2,
             ColorMask = (int)Float(floats, parent?.ColorMask ?? 15f, "_ColorMask"),
 
             UseReflection = useReflection,
@@ -249,7 +254,7 @@ internal static class ShaderPropertyFallbackConverter
     }
 
     private static string DetermineAlphaMode(YamlNode floats, int renderQueue, string parentMode,
-        int? srcBlend, int? dstBlend)
+        string shaderMode, int? srcBlend, int? dstBlend)
     {
         bool hasAlphaClip = TryFloat(floats, out float alphaClip,
             "_AlphaClip", "_AlphaTest", "_AlphaToMask", "_AlphaCutoffEnable");
@@ -272,16 +277,44 @@ internal static class ShaderPropertyFallbackConverter
         {
             return useAlphaClip && blendMode == "opaque" ? "cutout" : blendMode;
         }
+        string declaredMode = parentMode ?? shaderMode;
+        if (hasAlphaClip)
+        {
+            if (!useAlphaClip)
+            {
+                return declaredMode is "transparent" or "premultiply" or "additive" or "multiply"
+                    ? declaredMode
+                    : "opaque";
+            }
+            return declaredMode is "transparent" or "premultiply" or "additive" or "multiply"
+                ? declaredMode
+                : "cutout";
+        }
+        if (declaredMode != null)
+        {
+            return declaredMode;
+        }
         if (renderQueue == 2450) return "cutout";
         if (renderQueue >= 2501) return "transparent";
-        if (useAlphaClip) return "cutout";
-        if (hasAlphaClip && parentMode == "cutout") return "opaque";
-        return parentMode ?? "opaque";
+        return "opaque";
     }
 
-    private static int? ShaderDefaultRenderQueue(long? shaderFileId, string shaderSource)
+    private readonly record struct ShaderDefaults(
+        int? RenderQueue, string AlphaMode, bool? ZWrite, int? Cull);
+
+    private static ShaderDefaults ReadShaderDefaults(long? shaderFileId, string shaderSource)
     {
-        Match queueTag = Regex.Match(shaderSource ?? string.Empty,
+        ShaderDefaults builtIn = BuiltInShaderDefaults(shaderFileId);
+        if (string.IsNullOrEmpty(shaderSource))
+        {
+            return builtIn;
+        }
+
+        string source = Regex.Replace(shaderSource, @"/\*.*?\*/|//[^\r\n]*", string.Empty,
+            RegexOptions.Singleline | RegexOptions.CultureInvariant);
+        int? renderQueue = null;
+        string alphaMode = null;
+        Match queueTag = Regex.Match(source,
             @"""Queue""\s*=\s*""(?<value>[^""]+)""",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         if (queueTag.Success)
@@ -302,21 +335,89 @@ internal static class ShaderPropertyFallbackConverter
                 };
                 string offsetText = value.Groups["offset"].Value.Replace(" ", string.Empty,
                     StringComparison.Ordinal);
-                return baseQueue + (int.TryParse(offsetText, out int offset) ? offset : 0);
+                renderQueue = baseQueue + (int.TryParse(offsetText, out int offset) ? offset : 0);
+                alphaMode = value.Groups["name"].Value.ToLowerInvariant() switch
+                {
+                    "alphatest" => "cutout",
+                    "transparent" or "overlay" => "transparent",
+                    _ => "opaque",
+                };
             }
         }
 
+        string fixedBlendMode = FixedShaderBlendMode(source);
+        if (fixedBlendMode != null && !(alphaMode == "cutout" && fixedBlendMode == "opaque"))
+        {
+            alphaMode = fixedBlendMode;
+        }
+        bool? zWrite = MatchOnOff(source, @"\bZWrite\s+(?<value>On|Off)\b");
+        int? cull = MatchCull(source);
+        return new ShaderDefaults(renderQueue ?? builtIn.RenderQueue,
+            alphaMode ?? builtIn.AlphaMode, zWrite ?? builtIn.ZWrite, cull ?? builtIn.Cull);
+    }
+
+    private static ShaderDefaults BuiltInShaderDefaults(long? shaderFileId)
+    {
         // Built-in shaders have no GUID-backed source in exported packages. These stable Unity
-        // fileIDs cover the common legacy transparent/cutout families and Unlit equivalents.
+        // fileIDs cover common legacy, particle, Unlit, Sprite and UI transparent/cutout families.
         return shaderFileId switch
         {
-            >= 30 and <= 36 => 3000,
-            >= 50 and <= 54 => 2450,
-            10512 => 2450,
-            10750 => 3000, // Unlit/Transparent
-            10751 => 2450, // Unlit/Transparent Cutout
+            >= 30 and <= 36 => new ShaderDefaults(3000, "transparent", false, null),
+            >= 50 and <= 54 => new ShaderDefaults(2450, "cutout", true, null),
+            >= 200 and <= 209 => new ShaderDefaults(3000, "transparent", false, 0),
+            10512 => new ShaderDefaults(2450, "cutout", true, null),
+            10750 => new ShaderDefaults(3000, "transparent", false, null), // Unlit/Transparent
+            10751 => new ShaderDefaults(2450, "cutout", true, null), // Unlit/Transparent Cutout
+            10753 or 10757 or >= 10760 and <= 10770 or 10782 or 10783 or 10800 =>
+                new ShaderDefaults(3000, "transparent", false, 0),
+            _ => default,
+        };
+    }
+
+    private static string FixedShaderBlendMode(string source)
+    {
+        Match blend = Regex.Match(source,
+            @"\bBlend\s+(?<source>[A-Za-z]+)\s+(?<destination>[A-Za-z]+)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (!blend.Success)
+        {
+            return null;
+        }
+        string sourceFactor = blend.Groups["source"].Value.ToLowerInvariant();
+        string destinationFactor = blend.Groups["destination"].Value.ToLowerInvariant();
+        return (sourceFactor, destinationFactor) switch
+        {
+            ("one", "zero") => "opaque",
+            ("srcalpha", "oneminussrcalpha") => "transparent",
+            ("one", "oneminussrcalpha") => "premultiply",
+            ("one", "one") or ("srcalpha", "one") => "additive",
+            ("dstcolor", "zero") or ("dstcolor", "oneminussrcalpha") or
+                ("zero", "srccolor") => "multiply",
             _ => null,
         };
+    }
+
+    private static bool? MatchOnOff(string source, string pattern)
+    {
+        Match match = Regex.Match(source, pattern,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success
+            ? string.Equals(match.Groups["value"].Value, "On", StringComparison.OrdinalIgnoreCase)
+            : null;
+    }
+
+    private static int? MatchCull(string source)
+    {
+        Match match = Regex.Match(source, @"\bCull\s+(?<value>Off|Front|Back)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success
+            ? match.Groups["value"].Value.ToLowerInvariant() switch
+            {
+                "off" => 0,
+                "front" => 1,
+                _ => 2,
+            }
+            : null;
     }
 
     private static string DetermineTransparentBlendMode(YamlNode floats, int? srcBlend, int? dstBlend)
@@ -344,7 +445,12 @@ internal static class ShaderPropertyFallbackConverter
         int source = srcBlend.Value;
         // UnityEngine.Rendering.BlendMode: Zero=0, One=1, DstColor=2,
         // OneMinusSrcAlpha=10.
-        if (dstBlend == 10) return source == 1 ? "premultiply" : "transparent";
+        if (dstBlend == 10)
+        {
+            if (source == 1) return "premultiply";
+            if (source == 2) return "multiply";
+            return "transparent";
+        }
         if (dstBlend == 1) return source == 2 ? "multiply" : "additive";
         if (dstBlend == 0) return source == 2 ? "multiply" : "opaque";
         return null;

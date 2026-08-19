@@ -151,7 +151,13 @@ public static class LilToonConverter
         bool B(string name, bool fallback = false) => floats?[name] != null ? F(name) >= 0.5f : fallback;
         Vec4 C(string name, Vec4 fallback) => colors?[name] != null ? ReadColor(colors[name], fallback) : fallback;
         string Tex(string name) => texEnvs?[name]?["m_Texture"]?.Guid is string g && g != "0000000000000000f000000000000000" ? g : null;
-        string TexAny(params string[] names) => names.Select(Tex).FirstOrDefault(g => !string.IsNullOrEmpty(g));
+        bool HasTex(string name) => texEnvs?.Map?.ContainsKey(name) == true;
+        string TexOrParent(string name, string parentGuid) => HasTex(name) ? Tex(name) : parentGuid;
+        string TexAnyOrParent(string parentGuid, params string[] names)
+        {
+            string name = names.FirstOrDefault(HasTex);
+            return name == null ? parentGuid : Tex(name);
+        }
         Vec2 TexScale(string name, Vec2 fallback) => ReadVector2(texEnvs?[name]?["m_Scale"], fallback);
         Vec2 TexOffset(string name, Vec2 fallback) => ReadVector2(texEnvs?[name]?["m_Offset"], fallback);
 
@@ -173,11 +179,11 @@ public static class LilToonConverter
             Name = root?["m_Name"]?.AsString(),
             IsFakeShadow = colors?["_FakeShadowVector"] != null,
             Color = C("_Color", parent?.Color ?? new Vec4(1f, 1f, 1f, 1f)),
-            MainTexGuid = TexAny("_MainTex", "_BaseMap", "_BaseColorMap") ?? parent?.MainTexGuid,
+            MainTexGuid = TexAnyOrParent(parent?.MainTexGuid, "_MainTex", "_BaseMap", "_BaseColorMap"),
             MainTexScale = TexScale("_MainTex", parent?.MainTexScale ?? Vec2.One),
             MainTexOffset = TexOffset("_MainTex", parent?.MainTexOffset ?? Vec2.Zero),
             NormalMapGuid = B("_UseBumpMap", parent?.NormalMapGuid != null)
-                ? Tex("_BumpMap") ?? parent?.NormalMapGuid
+                ? TexOrParent("_BumpMap", parent?.NormalMapGuid)
                 : null,
             NormalMapScale = TexScale("_BumpMap", parent?.NormalMapScale ?? Vec2.One),
             NormalMapOffset = TexOffset("_BumpMap", parent?.NormalMapOffset ?? Vec2.Zero),
@@ -193,11 +199,11 @@ public static class LilToonConverter
             ShadowBorder = F("_ShadowBorder", parent?.ShadowBorder ?? 0.5f),
             ShadowBlur = F("_ShadowBlur", parent?.ShadowBlur ?? 0.1f),
             ShadowStrength = F("_ShadowStrength", parent?.ShadowStrength ?? 1f),
-            ShadowColorTexGuid = Tex("_ShadowColorTex") ?? parent?.ShadowColorTexGuid,
-            ShadowStrengthMaskGuid = Tex("_ShadowStrengthMask") ?? parent?.ShadowStrengthMaskGuid,
+            ShadowColorTexGuid = TexOrParent("_ShadowColorTex", parent?.ShadowColorTexGuid),
+            ShadowStrengthMaskGuid = TexOrParent("_ShadowStrengthMask", parent?.ShadowStrengthMaskGuid),
             ShadowStrengthMaskScale = TexScale("_ShadowStrengthMask", parent?.ShadowStrengthMaskScale ?? Vec2.One),
             ShadowStrengthMaskOffset = TexOffset("_ShadowStrengthMask", parent?.ShadowStrengthMaskOffset ?? Vec2.Zero),
-            ShadowBorderMaskGuid = Tex("_ShadowBorderMask") ?? parent?.ShadowBorderMaskGuid,
+            ShadowBorderMaskGuid = TexOrParent("_ShadowBorderMask", parent?.ShadowBorderMaskGuid),
             ShadowBorderMaskScale = TexScale("_ShadowBorderMask", parent?.ShadowBorderMaskScale ?? Vec2.One),
             ShadowBorderMaskOffset = TexOffset("_ShadowBorderMask", parent?.ShadowBorderMaskOffset ?? Vec2.Zero),
 
@@ -206,27 +212,27 @@ public static class LilToonConverter
             OutlineColor = C("_OutlineColor", parent?.OutlineColor ?? new Vec4(0f, 0f, 0f, 1f)),
             OutlineLit = B("_OutlineEnableLighting", parent?.OutlineLit ?? true),
             OutlineAlbedoTint = B("_OutlineLitApplyTex", parent?.OutlineAlbedoTint ?? false),
-            OutlineMaskGuid = Tex("_OutlineWidthMask") ?? parent?.OutlineMaskGuid,
+            OutlineMaskGuid = TexOrParent("_OutlineWidthMask", parent?.OutlineMaskGuid),
 
             UseMatcap = B("_UseMatCap", parent?.UseMatcap ?? false),
             MatcapColor = C("_MatCapColor", parent?.MatcapColor ?? new Vec4(1f, 1f, 1f, 1f)),
             MatcapBlend = F("_MatCapBlend", parent?.MatcapBlend ?? 1f),
             MatcapBlendMode = (int)F("_MatCapBlendMode", parent?.MatcapBlendMode ?? 1f),
             MatcapGuid = B("_UseMatCap", parent?.MatcapGuid != null)
-                ? TexAny("_MatCapTex", "_MatCap") ?? parent?.MatcapGuid
+                ? TexAnyOrParent(parent?.MatcapGuid, "_MatCapTex", "_MatCap")
                 : null,
-            MatcapBlendMaskGuid = Tex("_MatCapBlendMask") ?? parent?.MatcapBlendMaskGuid,
+            MatcapBlendMaskGuid = TexOrParent("_MatCapBlendMask", parent?.MatcapBlendMaskGuid),
 
             UseEmission = B("_UseEmission", parent?.UseEmission ?? false),
             EmissionColor = C("_EmissionColor", parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f)),
             EmissionBlend = F("_EmissionBlend", parent?.EmissionBlend ?? 1f),
             EmissionFluorescence = F("_EmissionFluorescence", parent?.EmissionFluorescence ?? 0f),
             EmissionMapGuid = B("_UseEmission", parent?.EmissionMapGuid != null)
-                ? Tex("_EmissionMap") ?? parent?.EmissionMapGuid
+                ? TexOrParent("_EmissionMap", parent?.EmissionMapGuid)
                 : null,
             EmissionMapScale = TexScale("_EmissionMap", parent?.EmissionMapScale ?? Vec2.One),
             EmissionMapOffset = TexOffset("_EmissionMap", parent?.EmissionMapOffset ?? Vec2.Zero),
-            EmissionBlendMaskGuid = Tex("_EmissionBlendMask") ?? parent?.EmissionBlendMaskGuid,
+            EmissionBlendMaskGuid = TexOrParent("_EmissionBlendMask", parent?.EmissionBlendMaskGuid),
             EmissionMainStrength = F("_EmissionMainStrength", parent?.EmissionMainStrength ?? 0f),
 
             UseReflection = B("_UseReflection", parent?.UseReflection ?? false),
@@ -258,6 +264,10 @@ public static class LilToonConverter
         }
         if (dstBlend == 10)
         {
+            if (srcBlend == 2)
+            {
+                return "multiply";
+            }
             // lilToon transparent passes premultiply internally. The source texture remains straight alpha.
             return "transparent";
         }
