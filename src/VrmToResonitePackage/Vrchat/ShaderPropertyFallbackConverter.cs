@@ -28,8 +28,12 @@ internal static class ShaderPropertyFallbackConverter
         string emissionMapName = FindName(texEnvs, "_EmissionMap", "_EmissiveColorMap", "_EmissiveMap");
         string occlusionMapName = FindName(texEnvs, "_OcclusionMap", "_OcclusionTex");
         string emissionColorName = FindName(colors, "_EmissionColor", "_EmissiveColor");
-        bool usesStandardKeywords = FindName(floats, "_Mode", "_Surface", "_SurfaceType") != null ||
-            parent?.UsesStandardKeywords == true;
+        bool hasUrpSurface = FindName(floats, "_Surface", "_SurfaceType") != null;
+        bool hasBuiltInMode = FindName(floats, "_Mode") != null;
+        bool usesUrpKeywords = hasUrpSurface ||
+            (!hasBuiltInMode && parent?.UsesUrpKeywords == true);
+        bool usesStandardKeywords = hasBuiltInMode || usesUrpKeywords ||
+            (!hasUrpSurface && parent?.UsesStandardKeywords == true);
 
         string Tex(string name) => name == null ? null : TextureGuid(texEnvs?[name]);
         string TexOrParent(string name, string parentGuid) => name == null ? parentGuid : Tex(name);
@@ -39,8 +43,8 @@ internal static class ShaderPropertyFallbackConverter
         Vec2 TexOffset(string name, Vec2 fallback) => name == null
             ? fallback
             : LilToonConverter.ReadVector2(texEnvs?[name]?["m_Offset"], fallback);
-        bool Feature(string keyword, bool fallback) =>
-            usesStandardKeywords ? HasKeyword(root, keyword) ?? fallback : fallback;
+        bool Feature(bool gated, bool fallback, params string[] keywords) =>
+            gated ? HasAnyKeyword(root, keywords) ?? fallback : fallback;
 
         Vec4 color = ReadColor(colors, parent?.Color ?? Vec4.One,
             "_BaseColor", "_Color", "_TintColor", "_MainColor");
@@ -69,12 +73,14 @@ internal static class ShaderPropertyFallbackConverter
         bool hasGlossMapScale = TryFloat(floats, out float glossMapScale, "_GlossMapScale");
         bool smoothnessFromAlbedoAlpha = Float(floats,
             parent?.SmoothnessFromAlbedoAlpha == true ? 1f : 0f, "_SmoothnessTextureChannel") >= 0.5f;
-        bool useMetallicGlossMap = Feature("_METALLICGLOSSMAP",
+        bool useMetallicGlossMap = Feature(usesStandardKeywords,
             metallicMapName == null && parent != null
                 ? parent.UseMetallicGlossMap
-                : metallicMapGuid != null);
-        bool useOcclusionMap = Feature("_OCCLUSIONMAP",
-            occlusionMapName == null && parent != null ? parent.UseOcclusionMap : occlusionMapGuid != null);
+                : metallicMapGuid != null,
+            "_METALLICGLOSSMAP", "_METALLICSPECGLOSSMAP");
+        bool useOcclusionMap = Feature(usesUrpKeywords,
+            occlusionMapName == null && parent != null ? parent.UseOcclusionMap : occlusionMapGuid != null,
+            "_OCCLUSIONMAP");
         float smoothnessWithoutMap = hasGlossiness
             ? glossiness
             : hasUrpSmoothness
@@ -101,13 +107,15 @@ internal static class ShaderPropertyFallbackConverter
             ? glossyReflections >= 0.5f
             : parent?.ApplyReflection ?? useReflection;
         bool hasEmissionMap = emissionMapGuid != null;
-        bool useNormalMap = Feature("_NORMALMAP",
-            normalMapName == null && parent != null ? parent.UseNormalMap : normalMapGuid != null);
+        bool useNormalMap = Feature(usesStandardKeywords,
+            normalMapName == null && parent != null ? parent.UseNormalMap : normalMapGuid != null,
+            "_NORMALMAP");
         bool hasEmission = hasEmissionMap || HasVisibleRgb(emissionColor);
-        bool useEmission = Feature("_EMISSION",
+        bool useEmission = Feature(usesStandardKeywords,
             emissionMapName == null && emissionColorName == null && parent != null
                 ? parent.UseEmission
-                : hasEmission) && hasEmission;
+                : hasEmission,
+            "_EMISSION") && hasEmission;
 
         int renderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
         string alphaMode = DetermineAlphaMode(floats, renderQueue, parent?.AlphaMode);
@@ -118,6 +126,7 @@ internal static class ShaderPropertyFallbackConverter
             Name = root?["m_Name"]?.AsString() ?? parent?.Name,
             IsLilToon = false,
             UsesStandardKeywords = usesStandardKeywords,
+            UsesUrpKeywords = usesUrpKeywords,
             Color = color,
             MainTexGuid = mainTexGuid,
             MainTexScale = mainTexScale,
@@ -285,18 +294,20 @@ internal static class ShaderPropertyFallbackConverter
         return string.IsNullOrEmpty(guid) || guid == "0000000000000000f000000000000000" ? null : guid;
     }
 
-    internal static bool? HasKeyword(YamlNode root, string keyword)
+    internal static bool? HasKeyword(YamlNode root, string keyword) => HasAnyKeyword(root, keyword);
+
+    internal static bool? HasAnyKeyword(YamlNode root, params string[] keywords)
     {
         YamlNode valid = root?["m_ValidKeywords"];
         if (valid?.Seq != null)
         {
-            return valid.Seq.Any(item => string.Equals(item.AsString(), keyword, StringComparison.Ordinal));
+            return valid.Seq.Any(item => keywords.Contains(item.AsString(), StringComparer.Ordinal));
         }
-        string keywords = root?["m_ShaderKeywords"]?.AsString();
-        if (keywords != null)
+        string serializedKeywords = root?["m_ShaderKeywords"]?.AsString();
+        if (serializedKeywords != null)
         {
-            return keywords.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(keyword,
-                StringComparer.Ordinal);
+            return serializedKeywords.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Any(keyword => keywords.Contains(keyword, StringComparer.Ordinal));
         }
         return null;
     }

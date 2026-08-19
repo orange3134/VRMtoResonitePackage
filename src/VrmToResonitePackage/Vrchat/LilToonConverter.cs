@@ -11,6 +11,7 @@ public sealed class LilToonInfo
     public bool IsLilToon { get; set; } = true;
     public bool IsToonStandard { get; set; }
     public bool UsesStandardKeywords { get; set; }
+    public bool UsesUrpKeywords { get; set; }
     public bool IsFakeShadow { get; set; }
 
     public Vec4 Color { get; set; } = new(1f, 1f, 1f, 1f);
