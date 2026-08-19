@@ -25,6 +25,7 @@ internal static class ShaderPropertyFallbackConverter
             "_AlbedoMap", "_Albedo", "_DiffuseMap", "_Diffuse");
         string normalMapName = FindName(texEnvs, "_BumpMap", "_NormalMap", "_NormalTex");
         string metallicMapName = FindName(texEnvs, "_MetallicGlossMap");
+        string specGlossMapName = FindName(texEnvs, "_SpecGlossMap");
         string emissionMapName = FindName(texEnvs, "_EmissionMap", "_EmissiveColorMap", "_EmissiveMap");
         string occlusionMapName = FindName(texEnvs, "_OcclusionMap", "_OcclusionTex");
         string emissionColorName = FindName(colors, "_EmissionColor", "_EmissiveColor");
@@ -55,6 +56,7 @@ internal static class ShaderPropertyFallbackConverter
         string mainTexGuid = TexOrParent(mainTexName, parent?.MainTexGuid);
         string normalMapGuid = TexOrParent(normalMapName, parent?.NormalMapGuid);
         string metallicMapGuid = TexOrParent(metallicMapName, parent?.MetallicGlossMapGuid);
+        string specGlossMapGuid = TexOrParent(specGlossMapName, parent?.SpecGlossMapGuid);
         string emissionMapGuid = TexOrParent(emissionMapName, parent?.EmissionMapGuid);
         string occlusionMapGuid = TexOrParent(occlusionMapName, parent?.OcclusionMapGuid);
         Vec2 mainTexScale = TexScale(mainTexName, parent?.MainTexScale ?? Vec2.One);
@@ -63,6 +65,8 @@ internal static class ShaderPropertyFallbackConverter
             parent?.MetallicMapScale ?? parent?.MetallicGlossMapScale ?? Vec2.One);
         Vec2 metallicMapOffset = TexOffset(metallicMapName,
             parent?.MetallicMapOffset ?? parent?.MetallicGlossMapOffset ?? Vec2.Zero);
+        Vec2 specGlossMapScale = TexScale(specGlossMapName, parent?.SpecGlossMapScale ?? Vec2.One);
+        Vec2 specGlossMapOffset = TexOffset(specGlossMapName, parent?.SpecGlossMapOffset ?? Vec2.Zero);
         int defaultOcclusionChannel = occlusionMapName != null
             ? Normalize(occlusionMapName) == Normalize("_OcclusionMap") ? 1 : 0
             : parent?.OcclusionMapChannel ?? 0;
@@ -73,11 +77,30 @@ internal static class ShaderPropertyFallbackConverter
         bool hasGlossMapScale = TryFloat(floats, out float glossMapScale, "_GlossMapScale");
         bool smoothnessFromAlbedoAlpha = Float(floats,
             parent?.SmoothnessFromAlbedoAlpha == true ? 1f : 0f, "_SmoothnessTextureChannel") >= 0.5f;
-        bool useMetallicGlossMap = Feature(usesStandardKeywords,
+        bool hasWorkflowMode = TryFloat(floats, out float workflowMode, "_WorkflowMode");
+        bool hasActiveSpecGlossKeyword = HasKeyword(root, "_SPECGLOSSMAP") == true;
+        bool hasActiveMetallicGlossKeyword = HasKeyword(root, "_METALLICGLOSSMAP") == true;
+        bool isSpecularWorkflow = hasWorkflowMode
+            ? workflowMode < 0.5f
+            : hasActiveSpecGlossKeyword
+                ? true
+                : hasActiveMetallicGlossKeyword
+                    ? false
+                    : specGlossMapName != null && metallicMapName == null
+                        ? true
+                        : metallicMapName != null
+                            ? false
+                            : parent?.IsSpecularWorkflow ?? false;
+        bool useMetallicGlossMap = !isSpecularWorkflow && Feature(usesStandardKeywords,
             metallicMapName == null && parent != null
                 ? parent.UseMetallicGlossMap
                 : metallicMapGuid != null,
             "_METALLICGLOSSMAP", "_METALLICSPECGLOSSMAP");
+        bool useSpecGlossMap = isSpecularWorkflow && Feature(usesStandardKeywords,
+            specGlossMapName == null && parent != null
+                ? parent.UseSpecGlossMap
+                : specGlossMapGuid != null,
+            "_SPECGLOSSMAP", "_METALLICSPECGLOSSMAP");
         bool useOcclusionMap = Feature(usesUrpKeywords,
             occlusionMapName == null && parent != null ? parent.UseOcclusionMap : occlusionMapGuid != null,
             "_OCCLUSIONMAP");
@@ -91,11 +114,15 @@ internal static class ShaderPropertyFallbackConverter
             : hasUrpSmoothness
                 ? urpSmoothness
                 : parent?.SmoothnessWithMap ?? parent?.Smoothness ?? 1f;
+        float mappedSmoothness = smoothnessFromAlbedoAlpha
+            ? smoothnessWithMap * color.W
+            : smoothnessWithMap;
         bool hasSpecularControl = TryFloat(floats, out float specularHighlights, "_SpecularHighlights");
         bool hasReflectionControl = TryFloat(floats, out float glossyReflections,
             "_GlossyReflections", "_EnvironmentReflections");
         bool useReflection = hasMetallic || hasGlossiness || hasUrpSmoothness || hasGlossMapScale ||
             (useMetallicGlossMap && metallicMapGuid != null) ||
+            (useSpecGlossMap && specGlossMapGuid != null) ||
             (smoothnessFromAlbedoAlpha && mainTexGuid != null) ||
             (hasSpecularControl && specularHighlights >= 0.5f) ||
             (hasReflectionControl && glossyReflections >= 0.5f) ||
@@ -153,28 +180,40 @@ internal static class ShaderPropertyFallbackConverter
             ColorMask = (int)Float(floats, parent?.ColorMask ?? 15f, "_ColorMask"),
 
             UseReflection = useReflection,
-            Metallic = hasMetallic ? metallic : parent?.Metallic ?? 0f,
+            Metallic = isSpecularWorkflow ? 0f : hasMetallic ? metallic : parent?.Metallic ?? 0f,
             Reflectance = parent?.Reflectance ?? 0.5f,
-            Smoothness = (useMetallicGlossMap && metallicMapGuid != null) || smoothnessFromAlbedoAlpha
-                ? smoothnessWithMap
+            Smoothness = (useMetallicGlossMap && metallicMapGuid != null) ||
+                (useSpecGlossMap && specGlossMapGuid != null) || smoothnessFromAlbedoAlpha
+                ? mappedSmoothness
                 : smoothnessWithoutMap,
             SmoothnessWithoutMap = smoothnessWithoutMap,
             SmoothnessWithMap = smoothnessWithMap,
             SmoothnessFromAlbedoAlpha = smoothnessFromAlbedoAlpha,
+            IsSpecularWorkflow = isSpecularWorkflow,
             ApplySpecular = applySpecular,
             ApplyReflection = applyReflection,
             MetallicGlossMapGuid = metallicMapGuid,
             UseMetallicGlossMap = useMetallicGlossMap,
-            MetallicGlossMapScale = smoothnessFromAlbedoAlpha ? Vec2.One : metallicMapScale,
-            MetallicGlossMapOffset = smoothnessFromAlbedoAlpha ? Vec2.Zero : metallicMapOffset,
+            MetallicGlossMapScale = smoothnessFromAlbedoAlpha || useSpecGlossMap
+                ? Vec2.One
+                : metallicMapScale,
+            MetallicGlossMapOffset = smoothnessFromAlbedoAlpha || useSpecGlossMap
+                ? Vec2.Zero
+                : metallicMapOffset,
             MetallicMapGuid = smoothnessFromAlbedoAlpha && useMetallicGlossMap ? metallicMapGuid : null,
             MetallicMapChannel = 0,
             MetallicMapScale = metallicMapScale,
             MetallicMapOffset = metallicMapOffset,
-            GlossMapGuid = smoothnessFromAlbedoAlpha ? mainTexGuid : null,
+            GlossMapGuid = smoothnessFromAlbedoAlpha
+                ? mainTexGuid
+                : useSpecGlossMap ? specGlossMapGuid : null,
             GlossMapChannel = 3,
-            GlossMapScale = mainTexScale,
-            GlossMapOffset = mainTexOffset,
+            GlossMapScale = smoothnessFromAlbedoAlpha ? mainTexScale : specGlossMapScale,
+            GlossMapOffset = smoothnessFromAlbedoAlpha ? mainTexOffset : specGlossMapOffset,
+            SpecGlossMapGuid = specGlossMapGuid,
+            UseSpecGlossMap = useSpecGlossMap,
+            SpecGlossMapScale = specGlossMapScale,
+            SpecGlossMapOffset = specGlossMapOffset,
 
             UseEmission = useEmission,
             EmissionColor = emissionColor,

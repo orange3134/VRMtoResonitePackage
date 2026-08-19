@@ -83,6 +83,7 @@ public sealed class LilToonInfo
     public float SmoothnessWithoutMap { get; set; }
     public float SmoothnessWithMap { get; set; } = 1f;
     public bool SmoothnessFromAlbedoAlpha { get; set; }
+    public bool IsSpecularWorkflow { get; set; }
     public float SpecularBorder { get; set; }
     public string MetallicGlossMapGuid { get; set; }
     public bool UseMetallicGlossMap { get; set; } = true;
@@ -96,6 +97,10 @@ public sealed class LilToonInfo
     public int GlossMapChannel { get; set; } = 3;
     public Vec2 GlossMapScale { get; set; } = Vec2.One;
     public Vec2 GlossMapOffset { get; set; }
+    public string SpecGlossMapGuid { get; set; }
+    public bool UseSpecGlossMap { get; set; }
+    public Vec2 SpecGlossMapScale { get; set; } = Vec2.One;
+    public Vec2 SpecGlossMapOffset { get; set; }
 
     public string OcclusionMapGuid { get; set; }
     public bool UseOcclusionMap { get; set; } = true;
