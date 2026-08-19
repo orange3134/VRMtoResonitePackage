@@ -69,6 +69,12 @@ internal static class ShaderPropertyFallbackConverter
         bool hasGlossMapScale = TryFloat(floats, out float glossMapScale, "_GlossMapScale");
         bool smoothnessFromAlbedoAlpha = Float(floats,
             parent?.SmoothnessFromAlbedoAlpha == true ? 1f : 0f, "_SmoothnessTextureChannel") >= 0.5f;
+        bool useMetallicGlossMap = Feature("_METALLICGLOSSMAP",
+            metallicMapName == null && parent != null
+                ? parent.UseMetallicGlossMap
+                : metallicMapGuid != null);
+        bool useOcclusionMap = Feature("_OCCLUSIONMAP",
+            occlusionMapName == null && parent != null ? parent.UseOcclusionMap : occlusionMapGuid != null);
         float smoothnessWithoutMap = hasGlossiness
             ? glossiness
             : hasUrpSmoothness
@@ -83,7 +89,7 @@ internal static class ShaderPropertyFallbackConverter
         bool hasReflectionControl = TryFloat(floats, out float glossyReflections,
             "_GlossyReflections", "_EnvironmentReflections");
         bool useReflection = hasMetallic || hasGlossiness || hasUrpSmoothness || hasGlossMapScale ||
-            metallicMapGuid != null ||
+            (useMetallicGlossMap && metallicMapGuid != null) ||
             (smoothnessFromAlbedoAlpha && mainTexGuid != null) ||
             (hasSpecularControl && specularHighlights >= 0.5f) ||
             (hasReflectionControl && glossyReflections >= 0.5f) ||
@@ -132,7 +138,7 @@ internal static class ShaderPropertyFallbackConverter
             UseReflection = useReflection,
             Metallic = hasMetallic ? metallic : parent?.Metallic ?? 0f,
             Reflectance = parent?.Reflectance ?? 0.5f,
-            Smoothness = metallicMapGuid != null || smoothnessFromAlbedoAlpha
+            Smoothness = (useMetallicGlossMap && metallicMapGuid != null) || smoothnessFromAlbedoAlpha
                 ? smoothnessWithMap
                 : smoothnessWithoutMap,
             SmoothnessWithoutMap = smoothnessWithoutMap,
@@ -141,9 +147,10 @@ internal static class ShaderPropertyFallbackConverter
             ApplySpecular = applySpecular,
             ApplyReflection = applyReflection,
             MetallicGlossMapGuid = metallicMapGuid,
+            UseMetallicGlossMap = useMetallicGlossMap,
             MetallicGlossMapScale = smoothnessFromAlbedoAlpha ? Vec2.One : metallicMapScale,
             MetallicGlossMapOffset = smoothnessFromAlbedoAlpha ? Vec2.Zero : metallicMapOffset,
-            MetallicMapGuid = smoothnessFromAlbedoAlpha ? metallicMapGuid : null,
+            MetallicMapGuid = smoothnessFromAlbedoAlpha && useMetallicGlossMap ? metallicMapGuid : null,
             MetallicMapChannel = 0,
             MetallicMapScale = metallicMapScale,
             MetallicMapOffset = metallicMapOffset,
@@ -160,6 +167,7 @@ internal static class ShaderPropertyFallbackConverter
             EmissionMapOffset = TexOffset(emissionMapName, parent?.EmissionMapOffset ?? Vec2.Zero),
 
             OcclusionMapGuid = occlusionMapGuid,
+            UseOcclusionMap = useOcclusionMap,
             OcclusionMapScale = TexScale(occlusionMapName, parent?.OcclusionMapScale ?? Vec2.One),
             OcclusionMapOffset = TexOffset(occlusionMapName, parent?.OcclusionMapOffset ?? Vec2.Zero),
             OcclusionMapChannel = (int)Float(floats, defaultOcclusionChannel, "_OcclusionMapChannel"),

@@ -53,7 +53,8 @@ internal static class ToonStandardConverter
             parent?.UseNormalMap ?? Tex("_BumpMap") != null);
         bool useSpecular = Feature("USE_SPECULAR", parent?.UseReflection ?? false);
         bool useMatcap = Feature("USE_MATCAP", parent?.UseMatcap ?? false);
-        bool useOcclusion = Feature("USE_OCCLUSION_MAP", parent?.OcclusionMapGuid != null);
+        bool useOcclusion = Feature("USE_OCCLUSION_MAP",
+            parent?.UseOcclusionMap ?? Tex("_OcclusionMap") != null);
         bool useRim = Feature("USE_RIMLIGHT", parent?.UseRim ?? false);
         bool useEmission = Feature("USE_EMISSION", parent?.UseEmission ?? false);
         float parentMatcapType = parent == null || parent.MatcapBlendMode == 1 ? 0f : 1f;
@@ -96,6 +97,7 @@ internal static class ToonStandardConverter
         Vec4 emissionColor = C("_EmissionColor", parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f));
         float emissionStrength = F("_EmissionStrength", parent?.EmissionStrength ?? 1f);
         string emissionMapGuid = TexOrParent("_EmissionMap", parent?.EmissionMapGuid);
+        string occlusionMapGuid = TexOrParent("_OcclusionMap", parent?.OcclusionMapGuid);
         int renderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
 
         return new LilToonInfo
@@ -159,9 +161,8 @@ internal static class ToonStandardConverter
             EmissionMapScale = TexScale("_EmissionMap", parent?.EmissionMapScale ?? Vec2.One),
             EmissionMapOffset = TexOffset("_EmissionMap", parent?.EmissionMapOffset ?? Vec2.Zero),
 
-            OcclusionMapGuid = useOcclusion
-                ? TexOrParent("_OcclusionMap", parent?.OcclusionMapGuid)
-                : null,
+            OcclusionMapGuid = occlusionMapGuid,
+            UseOcclusionMap = useOcclusion,
             OcclusionMapScale = TexScale("_OcclusionMap", parent?.OcclusionMapScale ?? Vec2.One),
             OcclusionMapOffset = TexOffset("_OcclusionMap", parent?.OcclusionMapOffset ?? Vec2.Zero),
             OcclusionMapChannel = (int)F("_OcclusionMapChannel", parent?.OcclusionMapChannel ?? 1f),

@@ -193,7 +193,7 @@ internal static class VrchatMaterialBuilder
             case "cutout":
                 material.BlendMode.Value = BlendMode.Cutout;
                 material.AlphaClip.Value = info.Cutoff;
-                material.ZWrite.Value = ZWrite.On;
+                material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
                 break;
             case "transparent":
                 material.BlendMode.Value = BlendMode.Alpha;
@@ -213,7 +213,7 @@ internal static class VrchatMaterialBuilder
                 break;
             default:
                 material.BlendMode.Value = BlendMode.Opaque;
-                material.ZWrite.Value = ZWrite.On;
+                material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
                 break;
         }
         if (info.RenderQueue > 0)
@@ -259,7 +259,8 @@ internal static class VrchatMaterialBuilder
             material.Glossiness.Value = info.ApplyReflection ? MathX.Clamp01(info.Smoothness) : 0f;
             StaticTexture2D metallicGloss = info.IsToonStandard || info.SmoothnessFromAlbedoAlpha
                 ? await GetMetallicGlossTexture(assetsSlot, package, info, textureCache)
-                : await GetTexture(assetsSlot, package, info.MetallicGlossMapGuid,
+                : await GetTexture(assetsSlot, package,
+                    info.UseMetallicGlossMap ? info.MetallicGlossMapGuid : null,
                     textureCache, "MetallicGlossMap", preferredProfile: ColorProfile.Linear);
             if (metallicGloss != null)
             {
@@ -313,9 +314,10 @@ internal static class VrchatMaterialBuilder
             material.ShadowSharpness.Value = 0f;
         }
 
+        string occlusionMapGuid = info.UseOcclusionMap ? info.OcclusionMapGuid : null;
         StaticTexture2D genericOcclusion = info.IsLilToon
-            ? await GetTexture(assetsSlot, package, info.OcclusionMapGuid, textureCache, "OcclusionMap")
-            : await GetChannelTexture(assetsSlot, package, info.OcclusionMapGuid, info.OcclusionMapChannel,
+            ? await GetTexture(assetsSlot, package, occlusionMapGuid, textureCache, "OcclusionMap")
+            : await GetChannelTexture(assetsSlot, package, occlusionMapGuid, info.OcclusionMapChannel,
                 info.OcclusionStrength, textureCache, "OcclusionMap");
         if (genericOcclusion != null)
         {
