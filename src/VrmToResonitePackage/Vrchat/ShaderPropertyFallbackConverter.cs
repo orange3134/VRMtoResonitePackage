@@ -345,13 +345,14 @@ internal static class ShaderPropertyFallbackConverter
             }
         }
 
-        string fixedBlendMode = FixedShaderBlendMode(source);
+        string renderStateSource = SelectRenderStateSource(source, alphaMode);
+        string fixedBlendMode = FixedShaderBlendMode(renderStateSource);
         if (fixedBlendMode != null && !(alphaMode == "cutout" && fixedBlendMode == "opaque"))
         {
             alphaMode = fixedBlendMode;
         }
-        bool? zWrite = MatchOnOff(source, @"\bZWrite\s+(?<value>On|Off)\b");
-        int? cull = MatchCull(source);
+        bool? zWrite = MatchOnOff(renderStateSource, @"\bZWrite\s+(?<value>On|Off)\b");
+        int? cull = MatchCull(renderStateSource);
         return new ShaderDefaults(renderQueue ?? builtIn.RenderQueue,
             alphaMode ?? builtIn.AlphaMode, zWrite ?? builtIn.ZWrite, cull ?? builtIn.Cull);
     }
@@ -396,6 +397,70 @@ internal static class ShaderPropertyFallbackConverter
             _ => null,
         };
     }
+
+    private readonly record struct ShaderPass(int Start, int Length, string Source);
+
+    private static string SelectRenderStateSource(string source, string queueMode)
+    {
+        var passes = new List<ShaderPass>();
+        foreach (Match match in Regex.Matches(source, @"\bPass\s*\{",
+                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Cast<Match>())
+        {
+            int openBrace = source.IndexOf('{', match.Index);
+            int closeBrace = FindClosingBrace(source, openBrace);
+            if (closeBrace >= 0)
+            {
+                passes.Add(new ShaderPass(match.Index, closeBrace - match.Index + 1,
+                    source[match.Index..(closeBrace + 1)]));
+            }
+        }
+
+        string subShaderState = source;
+        foreach (ShaderPass pass in passes.OrderByDescending(pass => pass.Start))
+        {
+            subShaderState = subShaderState.Remove(pass.Start, pass.Length);
+        }
+
+        IEnumerable<ShaderPass> colorPasses = passes.Where(pass => !IsAuxiliaryPass(pass.Source));
+        ShaderPass? selected = IsTransparentMode(queueMode)
+            ? colorPasses.Where(pass =>
+                    FixedShaderBlendMode(pass.Source) is string mode && mode != "opaque")
+                .Cast<ShaderPass?>().FirstOrDefault()
+            : colorPasses.Cast<ShaderPass?>().FirstOrDefault();
+        return selected.HasValue ? $"{selected.Value.Source}\n{subShaderState}" : subShaderState;
+    }
+
+    private static int FindClosingBrace(string source, int openBrace)
+    {
+        int depth = 0;
+        bool inString = false;
+        for (int i = openBrace; i < source.Length; i++)
+        {
+            char current = source[i];
+            if (current == '"' && (i == 0 || source[i - 1] != '\\'))
+            {
+                inString = !inString;
+            }
+            if (inString)
+            {
+                continue;
+            }
+            if (current == '{') depth++;
+            if (current == '}' && --depth == 0) return i;
+        }
+        return -1;
+    }
+
+    private static bool IsAuxiliaryPass(string source)
+        => Regex.IsMatch(source,
+               @"""LightMode""\s*=\s*""(?:ShadowCaster|DepthOnly|DepthNormals|DepthForwardOnly|Meta|MotionVectors|SceneSelectionPass|Picking)""",
+               RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
+           Regex.IsMatch(source,
+               @"\bName\s+""[^""]*(?:Shadow|Depth|Meta|Motion|SceneSelection|Picking)[^""]*""",
+               RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static bool IsTransparentMode(string mode)
+        => mode is "transparent" or "premultiply" or "additive" or "multiply";
 
     private static bool? MatchOnOff(string source, string pattern)
     {
