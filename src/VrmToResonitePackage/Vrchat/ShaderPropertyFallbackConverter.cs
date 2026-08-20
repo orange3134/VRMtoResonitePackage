@@ -1,0 +1,616 @@
+using System.Text.RegularExpressions;
+using Vec2 = System.Numerics.Vector2;
+using Vec4 = System.Numerics.Vector4;
+using VrmToResonitePackage.Unity;
+
+namespace VrmToResonitePackage.Vrchat;
+
+/// <summary>
+/// Reads common material properties when no shader-specific converter is available. This mirrors
+/// Resonite.UnitySDK's property-based fallback: property names, rather than the shader name, decide
+/// which subset can be preserved.
+/// </summary>
+internal static class ShaderPropertyFallbackConverter
+{
+    public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null,
+        string shaderSource = null)
+    {
+        YamlNode root = material.Root;
+        YamlNode props = root?["m_SavedProperties"];
+        YamlNode floats = MergeProperties(
+            LilToonConverter.FlattenProps(props?["m_Floats"]),
+            LilToonConverter.FlattenProps(props?["m_Ints"]));
+        YamlNode colors = LilToonConverter.FlattenProps(props?["m_Colors"]);
+        YamlNode texEnvs = LilToonConverter.FlattenProps(props?["m_TexEnvs"]);
+
+        string mainTexName = FindName(texEnvs, "_BaseMap", "_BaseColorMap", "_MainTex",
+            "_AlbedoMap", "_Albedo", "_DiffuseMap", "_Diffuse");
+        string normalMapName = FindName(texEnvs, "_BumpMap", "_NormalMap", "_NormalTex");
+        string metallicMapName = FindName(texEnvs, "_MetallicGlossMap");
+        string specGlossMapName = FindName(texEnvs, "_SpecGlossMap");
+        string emissionMapName = FindName(texEnvs, "_EmissionMap", "_EmissiveColorMap", "_EmissiveMap");
+        string occlusionMapName = FindName(texEnvs, "_OcclusionMap", "_OcclusionTex");
+        string emissionColorName = FindName(colors, "_EmissionColor", "_EmissiveColor");
+        string specularColorName = FindName(colors, "_SpecColor");
+        bool hasUrpSurface = FindName(floats, "_Surface", "_SurfaceType") != null;
+        bool hasBuiltInMode = FindName(floats, "_Mode") != null;
+        bool usesUrpKeywords = hasUrpSurface ||
+            (!hasBuiltInMode && parent?.UsesUrpKeywords == true);
+        bool usesStandardKeywords = hasBuiltInMode || usesUrpKeywords ||
+            (!hasUrpSurface && parent?.UsesStandardKeywords == true);
+
+        string Tex(string name) => name == null ? null : TextureGuid(texEnvs?[name]);
+        string TexOrParent(string name, string parentGuid) => name == null ? parentGuid : Tex(name);
+        Vec2 TexScale(string name, Vec2 fallback) => name == null
+            ? fallback
+            : LilToonConverter.ReadVector2(texEnvs?[name]?["m_Scale"], fallback);
+        Vec2 TexOffset(string name, Vec2 fallback) => name == null
+            ? fallback
+            : LilToonConverter.ReadVector2(texEnvs?[name]?["m_Offset"], fallback);
+        bool Feature(bool gated, bool fallback, params string[] keywords) =>
+            gated ? HasAnyKeyword(root, keywords) ?? fallback : fallback;
+
+        Vec4 color = ReadColor(colors, parent?.Color ?? Vec4.One,
+            "_BaseColor", "_Color", "_TintColor", "_MainColor");
+        Vec4 specularColor = specularColorName == null
+            ? parent?.SpecularColor ?? new Vec4(0.5f, 0.5f, 0.5f, 1f)
+            : LilToonConverter.ReadColor(colors[specularColorName],
+                parent?.SpecularColor ?? new Vec4(0.5f, 0.5f, 0.5f, 1f));
+        Vec4 emissionColor = emissionColorName == null
+            ? parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f)
+            : LilToonConverter.ReadColor(colors[emissionColorName],
+                parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f));
+        string mainTexGuid = TexOrParent(mainTexName, parent?.MainTexGuid);
+        string normalMapGuid = TexOrParent(normalMapName, parent?.NormalMapGuid);
+        string metallicMapGuid = TexOrParent(metallicMapName, parent?.MetallicGlossMapGuid);
+        string specGlossMapGuid = TexOrParent(specGlossMapName, parent?.SpecGlossMapGuid);
+        string emissionMapGuid = TexOrParent(emissionMapName, parent?.EmissionMapGuid);
+        string occlusionMapGuid = TexOrParent(occlusionMapName, parent?.OcclusionMapGuid);
+        Vec2 mainTexScale = TexScale(mainTexName, parent?.MainTexScale ?? Vec2.One);
+        Vec2 mainTexOffset = TexOffset(mainTexName, parent?.MainTexOffset ?? Vec2.Zero);
+        Vec2 metallicMapScale = TexScale(metallicMapName,
+            parent?.MetallicMapScale ?? parent?.MetallicGlossMapScale ?? Vec2.One);
+        Vec2 metallicMapOffset = TexOffset(metallicMapName,
+            parent?.MetallicMapOffset ?? parent?.MetallicGlossMapOffset ?? Vec2.Zero);
+        Vec2 specGlossMapScale = TexScale(specGlossMapName, parent?.SpecGlossMapScale ?? Vec2.One);
+        Vec2 specGlossMapOffset = TexOffset(specGlossMapName, parent?.SpecGlossMapOffset ?? Vec2.Zero);
+        int defaultOcclusionChannel = occlusionMapName != null
+            ? Normalize(occlusionMapName) == Normalize("_OcclusionMap") ? 1 : 0
+            : parent?.OcclusionMapChannel ?? 0;
+
+        bool hasMetallic = TryFloat(floats, out float metallic, "_Metallic");
+        bool hasGlossiness = TryFloat(floats, out float glossiness, "_Glossiness");
+        bool hasUrpSmoothness = TryFloat(floats, out float urpSmoothness, "_Smoothness");
+        bool hasGlossMapScale = TryFloat(floats, out float glossMapScale, "_GlossMapScale");
+        bool smoothnessFromAlbedoAlpha = Float(floats,
+            parent?.SmoothnessFromAlbedoAlpha == true ? 1f : 0f, "_SmoothnessTextureChannel") >= 0.5f;
+        bool hasWorkflowMode = TryFloat(floats, out float workflowMode, "_WorkflowMode");
+        bool hasActiveSpecGlossKeyword = HasKeyword(root, "_SPECGLOSSMAP") == true;
+        bool hasActiveMetallicGlossKeyword = HasKeyword(root, "_METALLICGLOSSMAP") == true;
+        bool isSpecularWorkflow = hasWorkflowMode
+            ? workflowMode < 0.5f
+            : hasActiveSpecGlossKeyword
+                ? true
+                : hasActiveMetallicGlossKeyword
+                    ? false
+                    : specGlossMapName != null && metallicMapName == null
+                        ? true
+                        : metallicMapName != null
+                            ? false
+                            : parent?.IsSpecularWorkflow ?? false;
+        bool useMetallicGlossMap = !isSpecularWorkflow && Feature(usesStandardKeywords,
+            metallicMapName == null && parent != null
+                ? parent.UseMetallicGlossMap
+                : metallicMapGuid != null,
+            "_METALLICGLOSSMAP", "_METALLICSPECGLOSSMAP");
+        bool useSpecGlossMap = isSpecularWorkflow && Feature(usesStandardKeywords,
+            specGlossMapName == null && parent != null
+                ? parent.UseSpecGlossMap
+                : specGlossMapGuid != null,
+            "_SPECGLOSSMAP", "_METALLICSPECGLOSSMAP");
+        bool useOcclusionMap = Feature(usesUrpKeywords,
+            occlusionMapName == null && parent != null ? parent.UseOcclusionMap : occlusionMapGuid != null,
+            "_OCCLUSIONMAP");
+        float smoothnessWithoutMap = hasGlossiness
+            ? glossiness
+            : hasUrpSmoothness
+                ? urpSmoothness
+                : parent?.SmoothnessWithoutMap ?? parent?.Smoothness ?? 0f;
+        float smoothnessWithMap = hasGlossMapScale
+            ? glossMapScale
+            : hasUrpSmoothness
+                ? urpSmoothness
+                : parent?.SmoothnessWithMap ?? parent?.Smoothness ?? 1f;
+        float mappedSmoothness = smoothnessFromAlbedoAlpha
+            ? smoothnessWithMap * color.W
+            : smoothnessWithMap;
+        bool hasSpecularControl = TryFloat(floats, out float specularHighlights, "_SpecularHighlights");
+        bool hasReflectionControl = TryFloat(floats, out float glossyReflections,
+            "_GlossyReflections", "_EnvironmentReflections");
+        bool useReflection = hasMetallic || hasGlossiness || hasUrpSmoothness || hasGlossMapScale ||
+            (useMetallicGlossMap && metallicMapGuid != null) ||
+            (useSpecGlossMap && specGlossMapGuid != null) ||
+            (isSpecularWorkflow && specularColorName != null) ||
+            (smoothnessFromAlbedoAlpha && mainTexGuid != null) ||
+            (hasSpecularControl && specularHighlights >= 0.5f) ||
+            (hasReflectionControl && glossyReflections >= 0.5f) ||
+            parent?.UseReflection == true;
+        bool applySpecular = hasSpecularControl
+            ? specularHighlights >= 0.5f
+            : parent?.ApplySpecular ?? useReflection;
+        bool applyReflection = hasReflectionControl
+            ? glossyReflections >= 0.5f
+            : parent?.ApplyReflection ?? useReflection;
+        bool hasEmissionMap = emissionMapGuid != null;
+        bool useNormalMap = Feature(usesStandardKeywords,
+            normalMapName == null && parent != null ? parent.UseNormalMap : normalMapGuid != null,
+            "_NORMALMAP");
+        bool hasEmission = hasEmissionMap || HasVisibleRgb(emissionColor);
+        bool useEmission = Feature(usesStandardKeywords,
+            emissionMapName == null && emissionColorName == null && parent != null
+                ? parent.UseEmission
+                : hasEmission,
+            "_EMISSION") && hasEmission;
+
+        ShaderDefaults shaderDefaults = ReadShaderDefaults(root?["m_Shader"]?.FileID, shaderSource);
+        int customRenderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
+        int inheritedRenderQueue = parent?.RenderQueue ?? -1;
+        int renderQueue = customRenderQueue >= 0
+            ? customRenderQueue
+            : inheritedRenderQueue >= 0
+                ? inheritedRenderQueue
+                : shaderDefaults.RenderQueue ?? -1;
+        int? srcBlend = TryFloat(floats, out float srcBlendValue, "_SrcBlend")
+            ? (int)srcBlendValue
+            : parent?.SrcBlend;
+        int? dstBlend = TryFloat(floats, out float dstBlendValue, "_DstBlend")
+            ? (int)dstBlendValue
+            : parent?.DstBlend;
+        string alphaMode = DetermineAlphaMode(floats, renderQueue, parent?.AlphaMode,
+            shaderDefaults.AlphaMode, srcBlend, dstBlend);
+        bool hasZWrite = TryFloat(floats, out float zWrite, "_ZWrite");
+        bool hasCull = TryFloat(floats, out float cull, "_Cull", "_CullMode");
+
+        return new LilToonInfo
+        {
+            Name = root?["m_Name"]?.AsString() ?? parent?.Name,
+            IsLilToon = false,
+            UsesStandardKeywords = usesStandardKeywords,
+            UsesUrpKeywords = usesUrpKeywords,
+            Color = color,
+            MainTexGuid = mainTexGuid,
+            MainTexScale = mainTexScale,
+            MainTexOffset = mainTexOffset,
+            NormalMapGuid = normalMapGuid,
+            UseNormalMap = useNormalMap,
+            NormalMapScale = TexScale(normalMapName, parent?.NormalMapScale ?? Vec2.One),
+            NormalMapOffset = TexOffset(normalMapName, parent?.NormalMapOffset ?? Vec2.Zero),
+            NormalScale = Float(floats, parent?.NormalScale ?? 1f, "_BumpScale", "_NormalScale"),
+            AlphaMode = alphaMode,
+            SrcBlend = srcBlend,
+            DstBlend = dstBlend,
+            Cutoff = Float(floats, parent?.Cutoff ?? 0.5f,
+                "_Cutoff", "_AlphaClipThreshold", "_AlphaCutoff"),
+            ZWrite = hasZWrite
+                ? zWrite >= 0.5f
+                : parent?.ZWrite ?? shaderDefaults.ZWrite ?? (alphaMode is "opaque" or "cutout"),
+            RenderQueue = renderQueue,
+            Cull = hasCull ? (int)cull : parent?.Cull ?? shaderDefaults.Cull ?? 2,
+            ColorMask = (int)Float(floats, parent?.ColorMask ?? 15f, "_ColorMask"),
+
+            UseReflection = useReflection,
+            Metallic = isSpecularWorkflow ? 0f : hasMetallic ? metallic : parent?.Metallic ?? 0f,
+            Reflectance = isSpecularWorkflow
+                ? Math.Max(specularColor.X, Math.Max(specularColor.Y, specularColor.Z))
+                : parent?.Reflectance ?? 0.5f,
+            Smoothness = (useMetallicGlossMap && metallicMapGuid != null) ||
+                (useSpecGlossMap && specGlossMapGuid != null) || smoothnessFromAlbedoAlpha
+                ? mappedSmoothness
+                : smoothnessWithoutMap,
+            SmoothnessWithoutMap = smoothnessWithoutMap,
+            SmoothnessWithMap = smoothnessWithMap,
+            SmoothnessFromAlbedoAlpha = smoothnessFromAlbedoAlpha,
+            IsSpecularWorkflow = isSpecularWorkflow,
+            SpecularColor = specularColor,
+            ApplySpecular = applySpecular,
+            ApplyReflection = applyReflection,
+            MetallicGlossMapGuid = metallicMapGuid,
+            UseMetallicGlossMap = useMetallicGlossMap,
+            MetallicGlossMapScale = smoothnessFromAlbedoAlpha || useSpecGlossMap
+                ? Vec2.One
+                : metallicMapScale,
+            MetallicGlossMapOffset = smoothnessFromAlbedoAlpha || useSpecGlossMap
+                ? Vec2.Zero
+                : metallicMapOffset,
+            MetallicMapGuid = smoothnessFromAlbedoAlpha && useMetallicGlossMap ? metallicMapGuid : null,
+            MetallicMapChannel = 0,
+            MetallicMapScale = metallicMapScale,
+            MetallicMapOffset = metallicMapOffset,
+            GlossMapGuid = smoothnessFromAlbedoAlpha
+                ? mainTexGuid
+                : useSpecGlossMap ? specGlossMapGuid : null,
+            GlossMapChannel = 3,
+            GlossMapScale = smoothnessFromAlbedoAlpha ? mainTexScale : specGlossMapScale,
+            GlossMapOffset = smoothnessFromAlbedoAlpha ? mainTexOffset : specGlossMapOffset,
+            SpecGlossMapGuid = specGlossMapGuid,
+            UseSpecGlossMap = useSpecGlossMap,
+            SpecGlossMapScale = specGlossMapScale,
+            SpecGlossMapOffset = specGlossMapOffset,
+
+            UseEmission = useEmission,
+            EmissionColor = emissionColor,
+            EmissionBlend = 1f,
+            EmissionMapGuid = emissionMapGuid,
+            EmissionMapScale = TexScale(emissionMapName, parent?.EmissionMapScale ?? Vec2.One),
+            EmissionMapOffset = TexOffset(emissionMapName, parent?.EmissionMapOffset ?? Vec2.Zero),
+
+            OcclusionMapGuid = occlusionMapGuid,
+            UseOcclusionMap = useOcclusionMap,
+            OcclusionMapScale = TexScale(occlusionMapName, parent?.OcclusionMapScale ?? Vec2.One),
+            OcclusionMapOffset = TexOffset(occlusionMapName, parent?.OcclusionMapOffset ?? Vec2.Zero),
+            OcclusionMapChannel = (int)Float(floats, defaultOcclusionChannel, "_OcclusionMapChannel"),
+            OcclusionStrength = Float(floats, parent?.OcclusionStrength ?? 1f, "_OcclusionStrength"),
+        };
+    }
+
+    private static string DetermineAlphaMode(YamlNode floats, int renderQueue, string parentMode,
+        string shaderMode, int? srcBlend, int? dstBlend)
+    {
+        bool hasAlphaClip = TryFloat(floats, out float alphaClip,
+            "_AlphaClip", "_AlphaTest", "_AlphaToMask", "_AlphaCutoffEnable");
+        bool useAlphaClip = hasAlphaClip && alphaClip >= 0.5f;
+        if (TryFloat(floats, out float surface, "_Surface", "_SurfaceType"))
+        {
+            return surface >= 0.5f
+                ? DetermineTransparentBlendMode(floats, srcBlend, dstBlend)
+                : useAlphaClip ? "cutout" : "opaque";
+        }
+        if (TryFloat(floats, out float mode, "_Mode"))
+        {
+            if (mode >= 2.5f) return "premultiply";
+            if (mode >= 1.5f) return "transparent";
+            if (mode >= 0.5f) return "cutout";
+            return useAlphaClip ? "cutout" : "opaque";
+        }
+        string blendMode = DetermineBlendFactorMode(srcBlend, dstBlend);
+        if (blendMode != null)
+        {
+            return useAlphaClip && blendMode == "opaque" ? "cutout" : blendMode;
+        }
+        string declaredMode = parentMode ?? shaderMode;
+        if (hasAlphaClip)
+        {
+            if (!useAlphaClip)
+            {
+                return declaredMode is "transparent" or "premultiply" or "additive" or "multiply"
+                    ? declaredMode
+                    : "opaque";
+            }
+            return declaredMode is "transparent" or "premultiply" or "additive" or "multiply"
+                ? declaredMode
+                : "cutout";
+        }
+        if (declaredMode != null)
+        {
+            return declaredMode;
+        }
+        if (renderQueue == 2450) return "cutout";
+        if (renderQueue >= 2501) return "transparent";
+        return "opaque";
+    }
+
+    private readonly record struct ShaderDefaults(
+        int? RenderQueue, string AlphaMode, bool? ZWrite, int? Cull);
+
+    private static ShaderDefaults ReadShaderDefaults(long? shaderFileId, string shaderSource)
+    {
+        ShaderDefaults builtIn = BuiltInShaderDefaults(shaderFileId);
+        if (string.IsNullOrEmpty(shaderSource))
+        {
+            return builtIn;
+        }
+
+        string source = Regex.Replace(shaderSource, @"/\*.*?\*/|//[^\r\n]*", string.Empty,
+            RegexOptions.Singleline | RegexOptions.CultureInvariant);
+        int? renderQueue = null;
+        string alphaMode = null;
+        Match queueTag = Regex.Match(source,
+            @"""Queue""\s*=\s*""(?<value>[^""]+)""",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (queueTag.Success)
+        {
+            Match value = Regex.Match(queueTag.Groups["value"].Value.Trim(),
+                @"^(?<name>Background|Geometry|AlphaTest|Transparent|Overlay)\s*(?<offset>[+-]\s*\d+)?$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (value.Success)
+            {
+                int baseQueue = value.Groups["name"].Value.ToLowerInvariant() switch
+                {
+                    "background" => 1000,
+                    "geometry" => 2000,
+                    "alphatest" => 2450,
+                    "transparent" => 3000,
+                    "overlay" => 4000,
+                    _ => 2000,
+                };
+                string offsetText = value.Groups["offset"].Value.Replace(" ", string.Empty,
+                    StringComparison.Ordinal);
+                renderQueue = baseQueue + (int.TryParse(offsetText, out int offset) ? offset : 0);
+                alphaMode = value.Groups["name"].Value.ToLowerInvariant() switch
+                {
+                    "alphatest" => "cutout",
+                    "transparent" or "overlay" => "transparent",
+                    _ => "opaque",
+                };
+            }
+        }
+
+        string renderStateSource = SelectRenderStateSource(source, alphaMode);
+        string fixedBlendMode = FixedShaderBlendMode(renderStateSource);
+        if (fixedBlendMode != null && !(alphaMode == "cutout" && fixedBlendMode == "opaque"))
+        {
+            alphaMode = fixedBlendMode;
+        }
+        bool? zWrite = MatchOnOff(renderStateSource, @"\bZWrite\s+(?<value>On|Off)\b");
+        int? cull = MatchCull(renderStateSource);
+        return new ShaderDefaults(renderQueue ?? builtIn.RenderQueue,
+            alphaMode ?? builtIn.AlphaMode, zWrite ?? builtIn.ZWrite, cull ?? builtIn.Cull);
+    }
+
+    private static ShaderDefaults BuiltInShaderDefaults(long? shaderFileId)
+    {
+        // Built-in shaders have no GUID-backed source in exported packages. These stable Unity
+        // fileIDs cover common legacy, particle, Unlit, Sprite and UI transparent/cutout families.
+        return shaderFileId switch
+        {
+            >= 30 and <= 36 => new ShaderDefaults(3000, "transparent", false, null),
+            >= 50 and <= 54 => new ShaderDefaults(2450, "cutout", true, null),
+            >= 200 and <= 209 => new ShaderDefaults(3000, "transparent", false, 0),
+            10512 => new ShaderDefaults(2450, "cutout", true, null),
+            10750 => new ShaderDefaults(3000, "transparent", false, null), // Unlit/Transparent
+            10751 => new ShaderDefaults(2450, "cutout", true, null), // Unlit/Transparent Cutout
+            10753 or 10757 or >= 10760 and <= 10770 or 10782 or 10783 or 10800 =>
+                new ShaderDefaults(3000, "transparent", false, 0),
+            _ => default,
+        };
+    }
+
+    private static string FixedShaderBlendMode(string source)
+    {
+        Match blend = Regex.Match(source,
+            @"\bBlend\s+(?<source>[A-Za-z]+)\s+(?<destination>[A-Za-z]+)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (!blend.Success)
+        {
+            return null;
+        }
+        string sourceFactor = blend.Groups["source"].Value.ToLowerInvariant();
+        string destinationFactor = blend.Groups["destination"].Value.ToLowerInvariant();
+        return (sourceFactor, destinationFactor) switch
+        {
+            ("one", "zero") => "opaque",
+            ("srcalpha", "oneminussrcalpha") => "transparent",
+            ("one", "oneminussrcalpha") => "premultiply",
+            ("one", "one") or ("srcalpha", "one") => "additive",
+            ("dstcolor", "zero") or ("dstcolor", "oneminussrcalpha") or
+                ("zero", "srccolor") => "multiply",
+            _ => null,
+        };
+    }
+
+    private readonly record struct ShaderPass(int Start, int Length, string Source);
+
+    private static string SelectRenderStateSource(string source, string queueMode)
+    {
+        var passes = new List<ShaderPass>();
+        foreach (Match match in Regex.Matches(source, @"\bPass\s*\{",
+                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Cast<Match>())
+        {
+            int openBrace = source.IndexOf('{', match.Index);
+            int closeBrace = FindClosingBrace(source, openBrace);
+            if (closeBrace >= 0)
+            {
+                passes.Add(new ShaderPass(match.Index, closeBrace - match.Index + 1,
+                    source[match.Index..(closeBrace + 1)]));
+            }
+        }
+
+        string subShaderState = source;
+        foreach (ShaderPass pass in passes.OrderByDescending(pass => pass.Start))
+        {
+            subShaderState = subShaderState.Remove(pass.Start, pass.Length);
+        }
+
+        IEnumerable<ShaderPass> colorPasses = passes.Where(pass => !IsAuxiliaryPass(pass.Source));
+        ShaderPass? selected = IsTransparentMode(queueMode)
+            ? colorPasses.Where(pass =>
+                    FixedShaderBlendMode(pass.Source) is string mode && mode != "opaque")
+                .Cast<ShaderPass?>().FirstOrDefault()
+            : colorPasses.Cast<ShaderPass?>().FirstOrDefault();
+        return selected.HasValue ? $"{selected.Value.Source}\n{subShaderState}" : subShaderState;
+    }
+
+    private static int FindClosingBrace(string source, int openBrace)
+    {
+        int depth = 0;
+        bool inString = false;
+        for (int i = openBrace; i < source.Length; i++)
+        {
+            char current = source[i];
+            if (current == '"' && (i == 0 || source[i - 1] != '\\'))
+            {
+                inString = !inString;
+            }
+            if (inString)
+            {
+                continue;
+            }
+            if (current == '{') depth++;
+            if (current == '}' && --depth == 0) return i;
+        }
+        return -1;
+    }
+
+    private static bool IsAuxiliaryPass(string source)
+        => Regex.IsMatch(source,
+               @"""LightMode""\s*=\s*""(?:ShadowCaster|DepthOnly|DepthNormals|DepthForwardOnly|Meta|MotionVectors|SceneSelectionPass|Picking)""",
+               RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
+           Regex.IsMatch(source,
+               @"\bName\s+""[^""]*(?:Shadow|Depth|Meta|Motion|SceneSelection|Picking)[^""]*""",
+               RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static bool IsTransparentMode(string mode)
+        => mode is "transparent" or "premultiply" or "additive" or "multiply";
+
+    private static bool? MatchOnOff(string source, string pattern)
+    {
+        Match match = Regex.Match(source, pattern,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success
+            ? string.Equals(match.Groups["value"].Value, "On", StringComparison.OrdinalIgnoreCase)
+            : null;
+    }
+
+    private static int? MatchCull(string source)
+    {
+        Match match = Regex.Match(source, @"\bCull\s+(?<value>Off|Front|Back)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success
+            ? match.Groups["value"].Value.ToLowerInvariant() switch
+            {
+                "off" => 0,
+                "front" => 1,
+                _ => 2,
+            }
+            : null;
+    }
+
+    private static string DetermineTransparentBlendMode(YamlNode floats, int? srcBlend, int? dstBlend)
+    {
+        if (TryFloat(floats, out float blend, "_Blend"))
+        {
+            // Unity URP BlendMode: Alpha=0, Premultiply=1, Additive=2, Multiply=3.
+            return (int)blend switch
+            {
+                1 => "premultiply",
+                2 => "additive",
+                3 => "multiply",
+                _ => "transparent",
+            };
+        }
+        return DetermineBlendFactorMode(srcBlend, dstBlend) ?? "transparent";
+    }
+
+    private static string DetermineBlendFactorMode(int? srcBlend, int? dstBlend)
+    {
+        if (!srcBlend.HasValue || !dstBlend.HasValue)
+        {
+            return null;
+        }
+        int source = srcBlend.Value;
+        // UnityEngine.Rendering.BlendMode: Zero=0, One=1, DstColor=2,
+        // OneMinusSrcAlpha=10.
+        if (dstBlend == 10)
+        {
+            if (source == 1) return "premultiply";
+            if (source == 2) return "multiply";
+            return "transparent";
+        }
+        if (dstBlend == 1) return source == 2 ? "multiply" : "additive";
+        if (dstBlend == 0) return source == 2 ? "multiply" : "opaque";
+        return null;
+    }
+
+    internal static Vec4 ReadColor(YamlNode properties, Vec4 fallback, params string[] names)
+    {
+        string name = FindName(properties, names);
+        return name == null ? fallback : LilToonConverter.ReadColor(properties[name], fallback);
+    }
+
+    internal static float Float(YamlNode properties, float fallback, params string[] names)
+        => TryFloat(properties, out float value, names) ? value : fallback;
+
+    internal static bool TryFloat(YamlNode properties, out float value, params string[] names)
+    {
+        string name = FindName(properties, names);
+        if (name != null)
+        {
+            value = properties[name].AsFloat();
+            return true;
+        }
+        value = default;
+        return false;
+    }
+
+    internal static string FindName(YamlNode properties, params string[] names)
+    {
+        if (properties?.Map == null)
+        {
+            return null;
+        }
+        foreach (string candidate in names)
+        {
+            if (properties.Map.ContainsKey(candidate))
+            {
+                return candidate;
+            }
+            string normalized = Normalize(candidate);
+            string match = properties.Map.Keys.FirstOrDefault(key => Normalize(key) == normalized);
+            if (match != null)
+            {
+                return match;
+            }
+        }
+        return null;
+    }
+
+    internal static string TextureGuid(YamlNode textureEnv)
+    {
+        string guid = textureEnv?["m_Texture"]?.Guid;
+        return string.IsNullOrEmpty(guid) || guid == "0000000000000000f000000000000000" ? null : guid;
+    }
+
+    internal static bool? HasKeyword(YamlNode root, string keyword) => HasAnyKeyword(root, keyword);
+
+    internal static bool? HasAnyKeyword(YamlNode root, params string[] keywords)
+    {
+        YamlNode valid = root?["m_ValidKeywords"];
+        if (valid?.Seq != null)
+        {
+            return valid.Seq.Any(item => keywords.Contains(item.AsString(), StringComparer.Ordinal));
+        }
+        string serializedKeywords = root?["m_ShaderKeywords"]?.AsString();
+        if (serializedKeywords != null)
+        {
+            return serializedKeywords.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Any(keyword => keywords.Contains(keyword, StringComparer.Ordinal));
+        }
+        return null;
+    }
+
+    private static string Normalize(string propertyName)
+        => propertyName.Replace("_", "", StringComparison.Ordinal).ToLowerInvariant();
+
+    internal static YamlNode MergeProperties(YamlNode primary, YamlNode secondary)
+    {
+        var map = new Dictionary<string, YamlNode>();
+        if (secondary?.Map != null)
+        {
+            foreach ((string name, YamlNode value) in secondary.Map)
+            {
+                map[name] = value;
+            }
+        }
+        if (primary?.Map != null)
+        {
+            foreach ((string name, YamlNode value) in primary.Map)
+            {
+                map[name] = value;
+            }
+        }
+        return new YamlNode { Map = map };
+    }
+
+    private static bool HasVisibleRgb(Vec4 color)
+        => color.X != 0f || color.Y != 0f || color.Z != 0f;
+}

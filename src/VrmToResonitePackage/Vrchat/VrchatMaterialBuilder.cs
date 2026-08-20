@@ -6,12 +6,13 @@ using VrmToResonitePackage.Unity;
 using ColorProfile = Renderite.Shared.ColorProfile;
 using TextureFormat = Renderite.Shared.TextureFormat;
 using TextureWrapMode = Renderite.Shared.TextureWrapMode;
+using Vec2 = System.Numerics.Vector2;
 using Vec4 = System.Numerics.Vector4;
 
 namespace VrmToResonitePackage.Vrchat;
 
 /// <summary>
-/// Builds XiexeToon materials from the avatar's liltoon .mat files (textures + tone parameters)
+/// Builds XiexeToon materials from the avatar's Unity .mat files (textures + tone parameters)
 /// and assigns them to the imported renderers per the prefab's material slot order. The FBX import
 /// only produces bare materials (Unity FBX avatars keep materials/textures in separate files), so
 /// these are created here rather than tuned in place. The conversion targets the same XiexeToon
@@ -22,10 +23,12 @@ internal static class VrchatMaterialBuilder
     public static async Task Apply(Slot root, Slot assetsSlot, VrchatAvatar avatar, UnityPackage package)
     {
         var textureCache = new Dictionary<string, StaticTexture2D>(StringComparer.OrdinalIgnoreCase);
+        var metallicGlossCache = new Dictionary<string, MetallicGlossResult>(
+            StringComparer.OrdinalIgnoreCase);
         var materialCache = new Dictionary<string, IAssetProvider<FrooxEngine.Material>>(
             StringComparer.OrdinalIgnoreCase);
 
-        // Build one XiexeToon material per unique liltoon .mat referenced by the avatar.
+        // Build one XiexeToon material per unique Unity .mat referenced by the avatar.
         IEnumerable<string> uniqueGuids = avatar.RendererMaterials
             .SelectMany(r => r.MaterialGuids)
             .Concat(avatar.FbxMaterialGuids.Values)
@@ -35,7 +38,7 @@ internal static class VrchatMaterialBuilder
         foreach (string guid in uniqueGuids)
         {
             IAssetProvider<FrooxEngine.Material> material = await BuildMaterial(
-                assetsSlot, guid, package, textureCache);
+                assetsSlot, guid, package, textureCache, metallicGlossCache);
             if (material != null)
             {
                 materialCache[guid] = material;
@@ -162,7 +165,8 @@ internal static class VrchatMaterialBuilder
 
     private static async Task<IAssetProvider<FrooxEngine.Material>> BuildMaterial(
         Slot assetsSlot, string guid,
-        UnityPackage package, Dictionary<string, StaticTexture2D> textureCache)
+        UnityPackage package, Dictionary<string, StaticTexture2D> textureCache,
+        Dictionary<string, MetallicGlossResult> metallicGlossCache)
     {
         LilToonInfo info = ResolveMaterialInfo(guid, package, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         if (info == null)
@@ -192,10 +196,14 @@ internal static class VrchatMaterialBuilder
             case "cutout":
                 material.BlendMode.Value = BlendMode.Cutout;
                 material.AlphaClip.Value = info.Cutoff;
-                material.ZWrite.Value = ZWrite.On;
+                material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
                 break;
             case "transparent":
                 material.BlendMode.Value = BlendMode.Alpha;
+                material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
+                break;
+            case "premultiply":
+                material.BlendMode.Value = BlendMode.Transparent;
                 material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
                 break;
             case "additive":
@@ -208,10 +216,10 @@ internal static class VrchatMaterialBuilder
                 break;
             default:
                 material.BlendMode.Value = BlendMode.Opaque;
-                material.ZWrite.Value = ZWrite.On;
+                material.ZWrite.Value = info.ZWrite ? ZWrite.On : ZWrite.Off;
                 break;
         }
-        if (info.RenderQueue > 0)
+        if (info.RenderQueue >= 0)
         {
             material.RenderQueue.Value = info.RenderQueue;
         }
@@ -232,10 +240,10 @@ internal static class VrchatMaterialBuilder
         {
             material.MainTexture.Target = mainTex;
         }
-        StaticTexture2D normal = await GetTexture(assetsSlot, package, info.NormalMapGuid, textureCache, "NormalMap");
+        StaticTexture2D normal = await GetTexture(assetsSlot, package,
+            info.UseNormalMap ? info.NormalMapGuid : null, textureCache, "NormalMap", isNormalMap: true);
         if (normal != null)
         {
-            normal.IsNormalMap.Value = true;
             material.NormalMap.Target = normal;
             material.NormalMapScale.Value = ToFloat2(info.NormalMapScale);
             material.NormalMapOffset.Value = ToFloat2(info.NormalMapOffset);
@@ -246,12 +254,25 @@ internal static class VrchatMaterialBuilder
         if (info.UseReflection)
         {
             material.Metallic.Value = MathX.Clamp01(info.Metallic);
-            material.Reflectivity.Value = MathX.Clamp01(info.Reflectance);
             material.SpecularIntensity.Value = info.ApplySpecular ? 1f : 0f;
             material.SpecularArea.Value = info.SpecularToon
                 ? MathX.Clamp01(MathX.Max(info.Smoothness, 1f - info.SpecularBorder))
                 : MathX.Clamp01(info.Smoothness);
             material.Glossiness.Value = info.ApplyReflection ? MathX.Clamp01(info.Smoothness) : 0f;
+            MetallicGlossResult packed = info.IsToonStandard || info.SmoothnessFromAlbedoAlpha ||
+                info.GlossMapGuid != null
+                ? await GetMetallicGlossTexture(assetsSlot, package, info, metallicGlossCache)
+                : new MetallicGlossResult(await GetTexture(assetsSlot, package,
+                    info.UseMetallicGlossMap ? info.MetallicGlossMapGuid : null,
+                    textureCache, "MetallicGlossMap", preferredProfile: ColorProfile.Linear), null);
+            material.Reflectivity.Value = MathX.Clamp01(packed.SpecularReflectance ?? info.Reflectance);
+            StaticTexture2D metallicGloss = packed.Texture;
+            if (metallicGloss != null)
+            {
+                material.MetallicGlossMap.Target = metallicGloss;
+                material.MetallicGlossMapScale.Value = ToFloat2(info.MetallicGlossMapScale);
+                material.MetallicGlossMapOffset.Value = ToFloat2(info.MetallicGlossMapOffset);
+            }
         }
         else
         {
@@ -260,16 +281,21 @@ internal static class VrchatMaterialBuilder
             material.Reflectivity.Value = 0f;
             material.SpecularIntensity.Value = 0f;
         }
-        material.UseVertexColors.Value = false;
+        material.UseVertexColors.Value = info.UseVertexColors;
 
         // --- Shadow ramp ---
         if (info.UseShadow)
         {
-            material.ShadowRamp.Target = await GenerateShadowRamp(assetsSlot, info);
+            material.ShadowRamp.Target = info.IsToonStandard
+                ? await GetTexture(assetsSlot, package, info.ShadowRampGuid, textureCache, "ShadowRamp",
+                    TextureWrapMode.Clamp)
+                : await GenerateShadowRamp(assetsSlot, info);
             material.ShadowSharpness.Value = 0f;
             material.ShadowRim.Value = colorX.White;
-            StaticTexture2D shadowMask = await GetTexture(assetsSlot, package, info.ShadowStrengthMaskGuid,
-                textureCache, "ShadowStrengthMask");
+            StaticTexture2D shadowMask = info.IsToonStandard
+                ? null
+                : await GetTexture(assetsSlot, package, info.ShadowStrengthMaskGuid,
+                    textureCache, "ShadowStrengthMask");
             shadowMask ??= await GetSolidTexture(assetsSlot, textureCache, "__liltoon_white", color.White,
                 "LilToon White");
             material.ShadowRampMask.Target = shadowMask;
@@ -293,24 +319,53 @@ internal static class VrchatMaterialBuilder
             material.ShadowSharpness.Value = 0f;
         }
 
-        // lilToon's rim model cannot be represented reliably by XiexeToon. Match
-        // Resonite.UnitySDK by leaving rim conversion disabled.
-        material.RimIntensity.Value = 0f;
+        string occlusionMapGuid = info.UseOcclusionMap ? info.OcclusionMapGuid : null;
+        StaticTexture2D genericOcclusion = info.IsLilToon
+            ? await GetTexture(assetsSlot, package, occlusionMapGuid, textureCache, "OcclusionMap")
+            : await GetChannelTexture(assetsSlot, package, occlusionMapGuid, info.OcclusionMapChannel,
+                info.OcclusionStrength, textureCache, "OcclusionMap");
+        if (genericOcclusion != null)
+        {
+            material.OcclusionMap.Target = genericOcclusion;
+            material.OcclusionMapScale.Value = ToFloat2(info.OcclusionMapScale);
+            material.OcclusionMapOffset.Value = ToFloat2(info.OcclusionMapOffset);
+        }
+
+        if (info.UseRim)
+        {
+            material.RimColor.Value = ToColor(info.RimColor, ColorProfile.sRGB);
+            material.RimIntensity.Value = info.RimIntensity;
+            material.RimRange.Value = MathX.Clamp01(info.RimRange);
+            material.RimSharpness.Value = MathX.Clamp01(info.RimSharpness);
+            material.RimAlbedoTint.Value = MathX.Clamp01(info.RimAlbedoTint);
+        }
+        else
+        {
+            // lilToon's rim model cannot be represented reliably by XiexeToon. Match
+            // Resonite.UnitySDK by leaving rim conversion disabled.
+            material.RimIntensity.Value = 0f;
+        }
 
         // --- Emission ---
         if (info.UseEmission)
         {
-            float emissionScale = MathX.Clamp01(info.EmissionBlend) * info.EmissionColor.W;
-            emissionScale *= MathX.Lerp(1f, 0.375f, MathX.Clamp01(info.EmissionFluorescence));
+            float emissionScale = info.IsLilToon
+                ? MathX.Clamp01(info.EmissionBlend) * info.EmissionColor.W *
+                  MathX.Lerp(1f, 0.375f, MathX.Clamp01(info.EmissionFluorescence))
+                : info.IsToonStandard ? info.EmissionStrength : 1f;
             Vec4 emissionColor = new(info.EmissionColor.X * emissionScale, info.EmissionColor.Y * emissionScale,
                 info.EmissionColor.Z * emissionScale, info.EmissionColor.W);
-            material.EmissionColor.Value = ToColor(emissionColor, ColorProfile.Linear);
+            material.EmissionColor.Value = ToColor(emissionColor,
+                info.IsLilToon ? ColorProfile.Linear : ColorProfile.sRGB);
 
             StaticTexture2D emission;
             if (info.EmissionMapGuid != null)
             {
-                emission = await GetRgbTimesAlphaTexture(assetsSlot, package, info.EmissionMapGuid,
-                    textureCache, "EmissionMap");
+                emission = info.IsLilToon
+                    ? await GetRgbTimesAlphaTexture(assetsSlot, package, info.EmissionMapGuid,
+                        textureCache, "EmissionMap")
+                    : await GetTexture(assetsSlot, package, info.EmissionMapGuid,
+                        textureCache, "EmissionMap");
                 material.EmissionMapScale.Value = ToFloat2(info.EmissionMapScale);
                 material.EmissionMapOffset.Value = ToFloat2(info.EmissionMapOffset);
             }
@@ -348,7 +403,10 @@ internal static class VrchatMaterialBuilder
             // lilToon and XiexeToon both use the serialized outline width directly.
             material.OutlineWidth.Value = info.OutlineWidth;
             material.OutlineColor.Value = ToColor(info.OutlineColor, ColorProfile.sRGB);
-            StaticTexture2D mask = await GetTexture(assetsSlot, package, info.OutlineMaskGuid, textureCache, "OutlineMask");
+            StaticTexture2D mask = info.IsToonStandard
+                ? await GetChannelTexture(assetsSlot, package, info.OutlineMaskGuid,
+                    info.OutlineMaskChannel, 1f, textureCache, "OutlineMask")
+                : await GetTexture(assetsSlot, package, info.OutlineMaskGuid, textureCache, "OutlineMask");
             if (mask != null)
             {
                 material.OutlineMask.Target = mask;
@@ -403,11 +461,22 @@ internal static class VrchatMaterialBuilder
             parent = ResolveMaterialInfo(parentGuid, package, resolving);
         }
 
-        if (!LilToonConverter.IsLilToon(matDoc) && parent == null)
+        if (LilToonConverter.IsLilToon(matDoc) || parent?.IsLilToon == true)
         {
-            return null;
+            return LilToonConverter.Parse(matDoc, parent, IsOutlineShader(matDoc, package));
         }
-        return LilToonConverter.Parse(matDoc, parent, IsOutlineShader(matDoc, package));
+
+        string shaderName = GetShaderName(matDoc, package);
+        bool isToonStandard = ToonStandardConverter.IsToonStandard(matDoc, shaderName);
+        if (isToonStandard || parent?.IsToonStandard == true)
+        {
+            bool isOutline = isToonStandard
+                ? ToonStandardConverter.IsOutline(matDoc, shaderName)
+                : parent?.UseOutline == true;
+            return ToonStandardConverter.Parse(matDoc, parent, isOutline);
+        }
+
+        return ShaderPropertyFallbackConverter.Parse(matDoc, parent, GetShaderSource(matDoc, package));
     }
 
     private static bool IsOutlineShader(YamlDocument material, UnityPackage package)
@@ -430,17 +499,28 @@ internal static class VrchatMaterialBuilder
             return true;
         }
 
-        string source = package.ReadText(shader);
+        string shaderName = GetShaderName(material, package);
+        return shaderName?.Contains("Outline", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static string GetShaderName(YamlDocument material, UnityPackage package)
+    {
+        string source = GetShaderSource(material, package);
         int declaration = source?.IndexOf("Shader \"", StringComparison.Ordinal) ?? -1;
         if (declaration < 0)
         {
-            return false;
+            return null;
         }
 
         int nameStart = declaration + "Shader \"".Length;
         int nameEnd = source.IndexOf('"', nameStart);
-        return nameEnd > nameStart && source[nameStart..nameEnd]
-            .Contains("Outline", StringComparison.OrdinalIgnoreCase);
+        return nameEnd > nameStart ? source[nameStart..nameEnd] : null;
+    }
+
+    private static string GetShaderSource(YamlDocument material, UnityPackage package)
+    {
+        string shaderGuid = material.Root?["m_Shader"]?.Guid;
+        return package.ReadText(package.ByGuid(shaderGuid));
     }
 
     private static colorX ToColor(Vec4 c, ColorProfile profile) => new(c.X, c.Y, c.Z, c.W, profile);
@@ -512,17 +592,31 @@ internal static class VrchatMaterialBuilder
     // ---------------------------------------------------------------- texture import
 
     private static async Task<StaticTexture2D> GetTexture(Slot assetsSlot, UnityPackage package, string guid,
-        Dictionary<string, StaticTexture2D> cache, string label)
+        Dictionary<string, StaticTexture2D> cache, string label, TextureWrapMode? wrapMode = null,
+        ColorProfile? preferredProfile = null, bool isNormalMap = false)
     {
         if (string.IsNullOrEmpty(guid))
         {
             return null;
         }
-        if (cache.TryGetValue(guid, out StaticTexture2D cached))
+        string cacheKey = guid;
+        if (wrapMode.HasValue)
+        {
+            cacheKey += $"|wrap-{wrapMode.Value}";
+        }
+        if (preferredProfile.HasValue)
+        {
+            cacheKey += $"|profile-{preferredProfile.Value}";
+        }
+        if (isNormalMap)
+        {
+            cacheKey += "|normal-map";
+        }
+        if (cache.TryGetValue(cacheKey, out StaticTexture2D cached))
         {
             return cached;
         }
-        cache[guid] = null;
+        cache[cacheKey] = null;
         UnityAsset asset = package.ByGuid(guid);
         if (asset?.HasContent != true)
         {
@@ -555,10 +649,263 @@ internal static class VrchatMaterialBuilder
         }
         Slot textureSlot = assetsSlot.AddSlot($"{label}: {Path.GetFileNameWithoutExtension(asset.LogicalPath)}");
         StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
+        texture.IsNormalMap.Value = isNormalMap;
+        if (preferredProfile.HasValue)
+        {
+            texture.PreferredProfile.Value = preferredProfile.Value;
+        }
+        if (wrapMode.HasValue)
+        {
+            texture.WrapMode = wrapMode.Value;
+        }
         texture.URL.Value = uri;
-        cache[guid] = texture;
+        cache[cacheKey] = texture;
         return texture;
     }
+
+    private static async Task<StaticTexture2D> GetChannelTexture(Slot assetsSlot, UnityPackage package,
+        string guid, int channel, float strength, Dictionary<string, StaticTexture2D> cache, string label)
+    {
+        if (string.IsNullOrEmpty(guid))
+        {
+            return null;
+        }
+
+        channel = Math.Clamp(channel, 0, 3);
+        strength = MathX.Clamp01(strength);
+        string cacheKey = $"{guid}|channel-{channel}|strength-{strength:R}";
+        if (cache.TryGetValue(cacheKey, out StaticTexture2D cached))
+        {
+            return cached;
+        }
+        cache[cacheKey] = null;
+
+        UnityAsset asset = package.ByGuid(guid);
+        if (asset?.HasContent != true)
+        {
+            UniLog.Warning($"{label} texture (guid {guid}) was not found in the Unity package.");
+            return null;
+        }
+
+        Engine engine = assetsSlot.Engine;
+        Uri uri = null;
+        try
+        {
+            await default(ToBackground);
+            using FileStream source = File.OpenRead(asset.DiskPath);
+            Bitmap2D bitmap = TextureDecoder.Decode(source, Path.GetExtension(asset.LogicalPath),
+                generateMipMaps: false);
+            var output = new Bitmap2D(bitmap.Size.x, bitmap.Size.y, TextureFormat.RGBA32,
+                mipmaps: false, ColorProfile.Linear);
+            for (int y = 0; y < bitmap.Size.y; y++)
+            {
+                for (int x = 0; x < bitmap.Size.x; x++)
+                {
+                    float value = Channel(bitmap.GetPixel(x, y), channel);
+                    value = MathX.Lerp(1f, value, strength);
+                    var pixel = new color(value, value, value, 1f);
+                    output.SetPixel(x, y, in pixel);
+                }
+            }
+            uri = await engine.LocalDB.SaveAssetAsync(output);
+        }
+        catch (Exception ex)
+        {
+            UniLog.Warning($"Failed to extract {label} channel (guid {guid}): {ex.Message}");
+        }
+        await default(ToWorld);
+        if (uri == null)
+        {
+            return null;
+        }
+
+        Slot textureSlot = assetsSlot.AddSlot($"{label}: {Path.GetFileNameWithoutExtension(asset.LogicalPath)}");
+        StaticTexture2D texture = textureSlot.AttachComponent<StaticTexture2D>();
+        texture.URL.Value = uri;
+        cache[cacheKey] = texture;
+        return texture;
+    }
+
+    private readonly record struct MetallicGlossResult(
+        StaticTexture2D Texture, float? SpecularReflectance);
+
+    private static async Task<MetallicGlossResult> GetMetallicGlossTexture(Slot assetsSlot,
+        UnityPackage package, LilToonInfo info, Dictionary<string, MetallicGlossResult> cache)
+    {
+        bool useSpecularReflectance = info.IsSpecularWorkflow && info.UseSpecGlossMap &&
+            info.SpecGlossMapGuid != null;
+        if (info.MetallicMapGuid == null && info.GlossMapGuid == null && !useSpecularReflectance)
+        {
+            return default;
+        }
+
+        string cacheKey = $"{info.MetallicMapGuid}|{info.MetallicMapChannel}|" +
+            $"{info.MetallicMapScale.X:R},{info.MetallicMapScale.Y:R}|" +
+            $"{info.MetallicMapOffset.X:R},{info.MetallicMapOffset.Y:R}|" +
+            $"{info.GlossMapGuid}|{info.GlossMapChannel}|" +
+            $"{info.GlossMapScale.X:R},{info.GlossMapScale.Y:R}|" +
+            $"{info.GlossMapOffset.X:R},{info.GlossMapOffset.Y:R}|" +
+            $"{info.MetallicGlossMapScale.X:R},{info.MetallicGlossMapScale.Y:R}|" +
+            $"{info.MetallicGlossMapOffset.X:R},{info.MetallicGlossMapOffset.Y:R}|metallic-gloss";
+        cacheKey += useSpecularReflectance
+            ? $"|{info.SpecGlossMapGuid}|" +
+              $"{info.SpecGlossMapScale.X:R},{info.SpecGlossMapScale.Y:R}|" +
+              $"{info.SpecGlossMapOffset.X:R},{info.SpecGlossMapOffset.Y:R}|specular-reflectance"
+            : "|no-specular-reflectance";
+        if (cache.TryGetValue(cacheKey, out MetallicGlossResult cached))
+        {
+            return cached;
+        }
+
+        UnityAsset metallicAsset = package.ByGuid(info.MetallicMapGuid);
+        UnityAsset glossAsset = package.ByGuid(info.GlossMapGuid);
+        UnityAsset specularAsset = package.ByGuid(useSpecularReflectance ? info.SpecGlossMapGuid : null);
+        Engine engine = assetsSlot.Engine;
+        Uri uri = null;
+        float? specularReflectance = null;
+        try
+        {
+            await default(ToBackground);
+            Bitmap2D metallic = DecodeBitmap(metallicAsset);
+            Bitmap2D gloss = DecodeBitmap(glossAsset);
+            Bitmap2D specular = !useSpecularReflectance
+                ? null
+                : string.Equals(info.SpecGlossMapGuid, info.GlossMapGuid,
+                    StringComparison.OrdinalIgnoreCase)
+                    ? gloss
+                    : DecodeBitmap(specularAsset);
+            if (specular != null)
+            {
+                specularReflectance = AverageSpecularReflectance(specular,
+                    info.SpecGlossMapScale, info.SpecGlossMapOffset);
+            }
+
+            if (metallic != null || gloss != null)
+            {
+                int width = Math.Max(metallic?.Size.x ?? 1, gloss?.Size.x ?? 1);
+                int height = Math.Max(metallic?.Size.y ?? 1, gloss?.Size.y ?? 1);
+                var output = new Bitmap2D(width, height, TextureFormat.RGBA32, mipmaps: false,
+                    ColorProfile.Linear);
+                for (int y = 0; y < height; y++)
+                {
+                    for (int x = 0; x < width; x++)
+                    {
+                        float metallicValue = SampleChannel(metallic, x, y, width, height,
+                            info.MetallicMapChannel, info.MetallicMapScale, info.MetallicMapOffset,
+                            info.MetallicGlossMapScale, info.MetallicGlossMapOffset);
+                        color glossPixel = gloss == null
+                            ? color.White
+                            : SamplePixel(gloss, x, y, width, height,
+                                info.GlossMapScale, info.GlossMapOffset,
+                                info.MetallicGlossMapScale, info.MetallicGlossMapOffset);
+                        float glossValue = Channel(glossPixel, Math.Clamp(info.GlossMapChannel, 0, 3));
+                        var pixel = new color(metallicValue, metallicValue, metallicValue, glossValue);
+                        output.SetPixel(x, y, in pixel);
+                    }
+                }
+                uri = await engine.LocalDB.SaveAssetAsync(output);
+            }
+            else if (specular == null)
+            {
+                throw new InvalidDataException("No source texture was found in the Unity package.");
+            }
+        }
+        catch (Exception ex)
+        {
+            UniLog.Warning($"Failed to combine Toon Standard metallic/gloss textures: {ex.Message}");
+        }
+        await default(ToWorld);
+        StaticTexture2D texture = null;
+        if (uri != null)
+        {
+            Slot textureSlot = assetsSlot.AddSlot($"MetallicGlossMap: {info.Name}");
+            texture = textureSlot.AttachComponent<StaticTexture2D>();
+            texture.URL.Value = uri;
+        }
+        if (texture == null && !specularReflectance.HasValue)
+        {
+            return default;
+        }
+        var result = new MetallicGlossResult(texture, specularReflectance);
+        cache[cacheKey] = result;
+        return result;
+    }
+
+    private static Bitmap2D DecodeBitmap(UnityAsset asset)
+    {
+        if (asset?.HasContent != true)
+        {
+            return null;
+        }
+        using FileStream source = File.OpenRead(asset.DiskPath);
+        return TextureDecoder.Decode(source, Path.GetExtension(asset.LogicalPath), generateMipMaps: false);
+    }
+
+    private static float SampleChannel(Bitmap2D bitmap, int x, int y, int width, int height, int channel,
+        Vec2 sourceScale, Vec2 sourceOffset, Vec2 outputScale, Vec2 outputOffset)
+    {
+        if (bitmap == null)
+        {
+            return 1f;
+        }
+
+        return Channel(SamplePixel(bitmap, x, y, width, height,
+            sourceScale, sourceOffset, outputScale, outputOffset), Math.Clamp(channel, 0, 3));
+    }
+
+    private static color SamplePixel(Bitmap2D bitmap, int x, int y, int width, int height,
+        Vec2 sourceScale, Vec2 sourceOffset, Vec2 outputScale, Vec2 outputOffset)
+    {
+        float outputU = (x + 0.5f) / width;
+        float outputV = (y + 0.5f) / height;
+        float sourceU = TransformUv(outputU, sourceScale.X, sourceOffset.X,
+            outputScale.X, outputOffset.X);
+        float sourceV = TransformUv(outputV, sourceScale.Y, sourceOffset.Y,
+            outputScale.Y, outputOffset.Y);
+        int sourceX = WrappedPixel(sourceU, bitmap.Size.x);
+        int sourceY = WrappedPixel(sourceV, bitmap.Size.y);
+        return bitmap.GetPixel(sourceX, sourceY);
+    }
+
+    private static float AverageSpecularReflectance(Bitmap2D bitmap, Vec2 scale, Vec2 offset)
+    {
+        double total = 0d;
+        for (int y = 0; y < bitmap.Size.y; y++)
+        {
+            for (int x = 0; x < bitmap.Size.x; x++)
+            {
+                color pixel = SamplePixel(bitmap, x, y, bitmap.Size.x, bitmap.Size.y,
+                    scale, offset, Vec2.One, Vec2.Zero);
+                total += Math.Max(pixel.r, Math.Max(pixel.g, pixel.b));
+            }
+        }
+        return (float)(total / (bitmap.Size.x * (double)bitmap.Size.y));
+    }
+
+    private static float TransformUv(float outputUv, float sourceScale, float sourceOffset,
+        float outputScale, float outputOffset)
+    {
+        if (MathF.Abs(outputScale) < 1e-6f)
+        {
+            return sourceOffset;
+        }
+        float materialUv = (outputUv - outputOffset) / outputScale;
+        return materialUv * sourceScale + sourceOffset;
+    }
+
+    private static int WrappedPixel(float uv, int size)
+    {
+        float wrapped = uv - MathF.Floor(uv);
+        return Math.Min(size - 1, (int)(wrapped * size));
+    }
+
+    private static float Channel(color pixel, int channel) => channel switch
+    {
+        1 => pixel.g,
+        2 => pixel.b,
+        3 => pixel.a,
+        _ => pixel.r,
+    };
 
     private static async Task<StaticTexture2D> GetRgbTimesAlphaTexture(Slot assetsSlot, UnityPackage package,
         string guid, Dictionary<string, StaticTexture2D> cache, string label)

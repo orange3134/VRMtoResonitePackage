@@ -4,10 +4,14 @@ using VrmToResonitePackage.Unity;
 
 namespace VrmToResonitePackage.Vrchat;
 
-/// <summary>Engine-independent liltoon material properties, normalized for XiexeToon conversion.</summary>
+/// <summary>Engine-independent Unity material properties, normalized for XiexeToon conversion.</summary>
 public sealed class LilToonInfo
 {
     public string Name { get; set; }
+    public bool IsLilToon { get; set; } = true;
+    public bool IsToonStandard { get; set; }
+    public bool UsesStandardKeywords { get; set; }
+    public bool UsesUrpKeywords { get; set; }
     public bool IsFakeShadow { get; set; }
 
     public Vec4 Color { get; set; } = new(1f, 1f, 1f, 1f);
@@ -15,18 +19,23 @@ public sealed class LilToonInfo
     public Vec2 MainTexScale { get; set; } = Vec2.One;
     public Vec2 MainTexOffset { get; set; }
     public string NormalMapGuid { get; set; }
+    public bool UseNormalMap { get; set; } = true;
     public Vec2 NormalMapScale { get; set; } = Vec2.One;
     public Vec2 NormalMapOffset { get; set; }
     public float NormalScale { get; set; } = 1f;
 
-    // opaque / cutout / transparent (+ ZWrite for transparent).
+    // opaque / cutout / transparent / premultiply / additive / multiply.
     public string AlphaMode { get; set; } = "opaque";
+    public int? SrcBlend { get; set; }
+    public int? DstBlend { get; set; }
     public float Cutoff { get; set; } = 0.5f;
     public bool ZWrite { get; set; } = true;
     public int RenderQueue { get; set; } = -1;
     public int Cull { get; set; } = 2; // 0 = off (double sided), 1 = front, 2 = back
+    public bool UseVertexColors { get; set; }
 
     public bool UseShadow { get; set; }
+    public string ShadowRampGuid { get; set; }
     public Vec4 ShadowColor { get; set; } = new(1f, 1f, 1f, 1f);
     public float ShadowBorder { get; set; } = 0.5f;
     public float ShadowBlur { get; set; } = 0.1f;
@@ -62,6 +71,7 @@ public sealed class LilToonInfo
     public Vec2 EmissionMapOffset { get; set; }
     public string EmissionBlendMaskGuid { get; set; }
     public float EmissionMainStrength { get; set; }
+    public float EmissionStrength { get; set; } = 1f;
 
     public bool UseReflection { get; set; }
     public float Metallic { get; set; }
@@ -70,7 +80,44 @@ public sealed class LilToonInfo
     public bool ApplyReflection { get; set; }
     public bool SpecularToon { get; set; }
     public float Smoothness { get; set; }
+    public float SmoothnessWithoutMap { get; set; }
+    public float SmoothnessWithMap { get; set; } = 1f;
+    public bool SmoothnessFromAlbedoAlpha { get; set; }
+    public bool IsSpecularWorkflow { get; set; }
+    public Vec4 SpecularColor { get; set; } = new(0.5f, 0.5f, 0.5f, 1f);
     public float SpecularBorder { get; set; }
+    public string MetallicGlossMapGuid { get; set; }
+    public bool UseMetallicGlossMap { get; set; } = true;
+    public Vec2 MetallicGlossMapScale { get; set; } = Vec2.One;
+    public Vec2 MetallicGlossMapOffset { get; set; }
+    public string MetallicMapGuid { get; set; }
+    public int MetallicMapChannel { get; set; }
+    public Vec2 MetallicMapScale { get; set; } = Vec2.One;
+    public Vec2 MetallicMapOffset { get; set; }
+    public string GlossMapGuid { get; set; }
+    public int GlossMapChannel { get; set; } = 3;
+    public Vec2 GlossMapScale { get; set; } = Vec2.One;
+    public Vec2 GlossMapOffset { get; set; }
+    public string SpecGlossMapGuid { get; set; }
+    public bool UseSpecGlossMap { get; set; }
+    public Vec2 SpecGlossMapScale { get; set; } = Vec2.One;
+    public Vec2 SpecGlossMapOffset { get; set; }
+
+    public string OcclusionMapGuid { get; set; }
+    public bool UseOcclusionMap { get; set; } = true;
+    public Vec2 OcclusionMapScale { get; set; } = Vec2.One;
+    public Vec2 OcclusionMapOffset { get; set; }
+    public int OcclusionMapChannel { get; set; }
+    public float OcclusionStrength { get; set; } = 1f;
+
+    public bool UseRim { get; set; }
+    public Vec4 RimColor { get; set; } = Vec4.One;
+    public float RimIntensity { get; set; }
+    public float RimRange { get; set; }
+    public float RimSharpness { get; set; }
+    public float RimAlbedoTint { get; set; }
+
+    public int OutlineMaskChannel { get; set; }
 
     public int ColorMask { get; set; } = 15;
 }
@@ -104,7 +151,13 @@ public static class LilToonConverter
         bool B(string name, bool fallback = false) => floats?[name] != null ? F(name) >= 0.5f : fallback;
         Vec4 C(string name, Vec4 fallback) => colors?[name] != null ? ReadColor(colors[name], fallback) : fallback;
         string Tex(string name) => texEnvs?[name]?["m_Texture"]?.Guid is string g && g != "0000000000000000f000000000000000" ? g : null;
-        string TexAny(params string[] names) => names.Select(Tex).FirstOrDefault(g => !string.IsNullOrEmpty(g));
+        bool HasTex(string name) => texEnvs?.Map?.ContainsKey(name) == true;
+        string TexOrParent(string name, string parentGuid) => HasTex(name) ? Tex(name) : parentGuid;
+        string TexAnyOrParent(string parentGuid, params string[] names)
+        {
+            string name = names.FirstOrDefault(HasTex);
+            return name == null ? parentGuid : Tex(name);
+        }
         Vec2 TexScale(string name, Vec2 fallback) => ReadVector2(texEnvs?[name]?["m_Scale"], fallback);
         Vec2 TexOffset(string name, Vec2 fallback) => ReadVector2(texEnvs?[name]?["m_Offset"], fallback);
 
@@ -126,11 +179,11 @@ public static class LilToonConverter
             Name = root?["m_Name"]?.AsString(),
             IsFakeShadow = colors?["_FakeShadowVector"] != null,
             Color = C("_Color", parent?.Color ?? new Vec4(1f, 1f, 1f, 1f)),
-            MainTexGuid = TexAny("_MainTex", "_BaseMap", "_BaseColorMap") ?? parent?.MainTexGuid,
+            MainTexGuid = TexAnyOrParent(parent?.MainTexGuid, "_MainTex", "_BaseMap", "_BaseColorMap"),
             MainTexScale = TexScale("_MainTex", parent?.MainTexScale ?? Vec2.One),
             MainTexOffset = TexOffset("_MainTex", parent?.MainTexOffset ?? Vec2.Zero),
             NormalMapGuid = B("_UseBumpMap", parent?.NormalMapGuid != null)
-                ? Tex("_BumpMap") ?? parent?.NormalMapGuid
+                ? TexOrParent("_BumpMap", parent?.NormalMapGuid)
                 : null,
             NormalMapScale = TexScale("_BumpMap", parent?.NormalMapScale ?? Vec2.One),
             NormalMapOffset = TexOffset("_BumpMap", parent?.NormalMapOffset ?? Vec2.Zero),
@@ -146,11 +199,11 @@ public static class LilToonConverter
             ShadowBorder = F("_ShadowBorder", parent?.ShadowBorder ?? 0.5f),
             ShadowBlur = F("_ShadowBlur", parent?.ShadowBlur ?? 0.1f),
             ShadowStrength = F("_ShadowStrength", parent?.ShadowStrength ?? 1f),
-            ShadowColorTexGuid = Tex("_ShadowColorTex") ?? parent?.ShadowColorTexGuid,
-            ShadowStrengthMaskGuid = Tex("_ShadowStrengthMask") ?? parent?.ShadowStrengthMaskGuid,
+            ShadowColorTexGuid = TexOrParent("_ShadowColorTex", parent?.ShadowColorTexGuid),
+            ShadowStrengthMaskGuid = TexOrParent("_ShadowStrengthMask", parent?.ShadowStrengthMaskGuid),
             ShadowStrengthMaskScale = TexScale("_ShadowStrengthMask", parent?.ShadowStrengthMaskScale ?? Vec2.One),
             ShadowStrengthMaskOffset = TexOffset("_ShadowStrengthMask", parent?.ShadowStrengthMaskOffset ?? Vec2.Zero),
-            ShadowBorderMaskGuid = Tex("_ShadowBorderMask") ?? parent?.ShadowBorderMaskGuid,
+            ShadowBorderMaskGuid = TexOrParent("_ShadowBorderMask", parent?.ShadowBorderMaskGuid),
             ShadowBorderMaskScale = TexScale("_ShadowBorderMask", parent?.ShadowBorderMaskScale ?? Vec2.One),
             ShadowBorderMaskOffset = TexOffset("_ShadowBorderMask", parent?.ShadowBorderMaskOffset ?? Vec2.Zero),
 
@@ -159,27 +212,27 @@ public static class LilToonConverter
             OutlineColor = C("_OutlineColor", parent?.OutlineColor ?? new Vec4(0f, 0f, 0f, 1f)),
             OutlineLit = B("_OutlineEnableLighting", parent?.OutlineLit ?? true),
             OutlineAlbedoTint = B("_OutlineLitApplyTex", parent?.OutlineAlbedoTint ?? false),
-            OutlineMaskGuid = Tex("_OutlineWidthMask") ?? parent?.OutlineMaskGuid,
+            OutlineMaskGuid = TexOrParent("_OutlineWidthMask", parent?.OutlineMaskGuid),
 
             UseMatcap = B("_UseMatCap", parent?.UseMatcap ?? false),
             MatcapColor = C("_MatCapColor", parent?.MatcapColor ?? new Vec4(1f, 1f, 1f, 1f)),
             MatcapBlend = F("_MatCapBlend", parent?.MatcapBlend ?? 1f),
             MatcapBlendMode = (int)F("_MatCapBlendMode", parent?.MatcapBlendMode ?? 1f),
             MatcapGuid = B("_UseMatCap", parent?.MatcapGuid != null)
-                ? TexAny("_MatCapTex", "_MatCap") ?? parent?.MatcapGuid
+                ? TexAnyOrParent(parent?.MatcapGuid, "_MatCapTex", "_MatCap")
                 : null,
-            MatcapBlendMaskGuid = Tex("_MatCapBlendMask") ?? parent?.MatcapBlendMaskGuid,
+            MatcapBlendMaskGuid = TexOrParent("_MatCapBlendMask", parent?.MatcapBlendMaskGuid),
 
             UseEmission = B("_UseEmission", parent?.UseEmission ?? false),
             EmissionColor = C("_EmissionColor", parent?.EmissionColor ?? new Vec4(0f, 0f, 0f, 1f)),
             EmissionBlend = F("_EmissionBlend", parent?.EmissionBlend ?? 1f),
             EmissionFluorescence = F("_EmissionFluorescence", parent?.EmissionFluorescence ?? 0f),
             EmissionMapGuid = B("_UseEmission", parent?.EmissionMapGuid != null)
-                ? Tex("_EmissionMap") ?? parent?.EmissionMapGuid
+                ? TexOrParent("_EmissionMap", parent?.EmissionMapGuid)
                 : null,
             EmissionMapScale = TexScale("_EmissionMap", parent?.EmissionMapScale ?? Vec2.One),
             EmissionMapOffset = TexOffset("_EmissionMap", parent?.EmissionMapOffset ?? Vec2.Zero),
-            EmissionBlendMaskGuid = Tex("_EmissionBlendMask") ?? parent?.EmissionBlendMaskGuid,
+            EmissionBlendMaskGuid = TexOrParent("_EmissionBlendMask", parent?.EmissionBlendMaskGuid),
             EmissionMainStrength = F("_EmissionMainStrength", parent?.EmissionMainStrength ?? 0f),
 
             UseReflection = B("_UseReflection", parent?.UseReflection ?? false),
@@ -211,6 +264,10 @@ public static class LilToonConverter
         }
         if (dstBlend == 10)
         {
+            if (srcBlend == 2)
+            {
+                return "multiply";
+            }
             // lilToon transparent passes premultiply internally. The source texture remains straight alpha.
             return "transparent";
         }
@@ -233,7 +290,7 @@ public static class LilToonConverter
     /// Flattens a sequence of single-key maps (Unity's m_Floats/m_Colors/m_TexEnvs serialization,
     /// where each entry is "- _Prop: value") into one lookup map.
     /// </summary>
-    private static YamlNode FlattenProps(YamlNode seq)
+    internal static YamlNode FlattenProps(YamlNode seq)
     {
         if (seq?.Seq == null)
         {
@@ -253,7 +310,7 @@ public static class LilToonConverter
         return new YamlNode { Map = map };
     }
 
-    private static Vec4 ReadColor(YamlNode node, Vec4 fallback)
+    internal static Vec4 ReadColor(YamlNode node, Vec4 fallback)
     {
         if (node == null || !node.IsMap)
         {
@@ -262,7 +319,7 @@ public static class LilToonConverter
         return new Vec4(node.Vec("r"), node.Vec("g"), node.Vec("b"), node["a"] != null ? node.Vec("a") : 1f);
     }
 
-    private static Vec2 ReadVector2(YamlNode node, Vec2 fallback)
+    internal static Vec2 ReadVector2(YamlNode node, Vec2 fallback)
     {
         if (node == null || !node.IsMap)
         {
