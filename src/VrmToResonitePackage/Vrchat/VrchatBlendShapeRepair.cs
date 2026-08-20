@@ -13,6 +13,14 @@ internal static class VrchatBlendShapeRepair
     public static async Task<int> Apply(Slot root, VrchatAvatar avatar)
     {
         int repaired = await NormalizeRepeatedBlendShapeNames(root);
+        if (repaired > 0)
+        {
+            // Changing StaticMesh.URL starts an asynchronous asset reload. Indexed-shape repair
+            // needs the normalized mesh data, so do not let the second pass observe Asset.Data as
+            // null and silently skip the renderer. The converter's outer asset wait happens only
+            // after this method returns and is therefore too late for this dependency.
+            await WaitForRendererMeshes(root);
+        }
         if (avatar.FbxBlendShapeNames.Count == 0)
         {
             return repaired;
@@ -103,6 +111,24 @@ internal static class VrchatBlendShapeRepair
             UniLog.Log($"Restored {inserted} stripped blendshape(s) on {renderer.Slot.Name}.");
         }
         return repaired;
+    }
+
+    private static async Task WaitForRendererMeshes(Slot root)
+    {
+        const int timeoutFrames = 60 * 120; // ~2 minutes at 60 ticks
+        for (int frame = 0; frame < timeoutFrames; frame++)
+        {
+            bool allReady = root.GetComponentsInChildren<SkinnedMeshRenderer>()
+                .All(renderer => renderer.Mesh.Target == null ||
+                                 renderer.Mesh.Target.IsAssetAvailable);
+            if (allReady)
+            {
+                return;
+            }
+            await default(NextUpdate);
+        }
+        UniLog.Warning("Timed out waiting for normalized blendshape meshes to reload; " +
+                       "indexed blendshape repair may be incomplete.");
     }
 
     private static async Task<int> NormalizeRepeatedBlendShapeNames(Slot root)
