@@ -1743,7 +1743,12 @@ public static class VrchatAvatarParser
                     VariantObjectReference gameObject = ResolveVariantObjectReference(
                         package, activeTarget?.Guid, activeTarget?.FileID ?? 0,
                         modelResolvers, prefabScenes);
-                    if (!string.IsNullOrEmpty(gameObject.Name))
+                    // Only imported FBX objects can receive active-state overrides. Prefab-only
+                    // helper objects (for example collider anchors named Hips/Upperleg.L) are not
+                    // imported as slots. Treating their unscoped names as overrides would disable
+                    // identically named bones in the avatar's FBX hierarchy.
+                    if (!string.IsNullOrEmpty(gameObject.Name) &&
+                        !string.IsNullOrEmpty(gameObject.FbxGuid))
                     {
                         var reference = new VrchatGameObjectReference(
                             gameObject.FbxGuid, gameObject.Name);
