@@ -356,6 +356,10 @@ VRM に加え、VRChat アバター入りの `.unitypackage` も変換できる�
   無い。複数アバターの列挙（`ListAvatars`）は `Elements.Core.UniLog` を参照するため、リゾルバ未導入だと
   JIT 例外→catch で握り潰し→空リスト→ダイアログが出ずバッチ直行になる。
   `MainWindow.EnsureAssemblyResolver()` で列挙前にリゾルバを導入すること。
+  GUI の完了判定では、選択した `.unitypackage` アバターの表示名ではなく `SourcePath` の prefab basename を
+  期待出力名に使う。両者は異なることがある（`V3おじさんquest版` の出力は
+  `V3おじさんquest.resonitepackage`）。また、日本語を含む `RESOPON_OUTPUT:` のパスを壊さないよう、
+  子コンバーターの stdout/stderr は UTF-8 として読み取る。
 
 ### VRChat 経路の実機検証 TODO（未確認の係数・前提）
 
