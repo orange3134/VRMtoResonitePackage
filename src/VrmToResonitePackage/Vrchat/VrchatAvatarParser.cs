@@ -161,7 +161,7 @@ public static class VrchatAvatarParser
             }
         }
 
-        ResolveFbx(package, selected.Scene, selected.Subtree, avatar);
+        ResolveFbx(package, selected.Scene, selected.Root, selected.Subtree, avatar);
         ParseFbxBlendShapeNames(package, avatar);
         ParseHumanoid(package, avatar);
         ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
@@ -1246,15 +1246,16 @@ public static class VrchatAvatarParser
         return counts.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).FirstOrDefault();
     }
 
-    private static void ResolveFbx(UnityPackage package, UnityScene scene, HashSet<long> subtree, VrchatAvatar avatar)
+    private static void ResolveFbx(UnityPackage package, UnityScene scene, YamlDocument avatarRoot,
+        HashSet<long> subtree, VrchatAvatar avatar)
     {
         // An unpacked/baked avatar prefab can reference standalone Mesh .asset files from its
         // renderers, while the root Animator still points at the humanoid Avatar sub-asset in the
         // original FBX. Prefer that authoritative reference; otherwise an accessory FBX with more
         // direct renderer references can be mistaken for the avatar body.
         const int classAnimator = 95;
-        string fbxGuid = scene.Documents.Values
-            .Where(document => document.ClassId == classAnimator && InSubtree(scene, subtree, document))
+        string fbxGuid = scene.ComponentsOf(avatarRoot)
+            .Where(document => document.ClassId == classAnimator)
             .Select(document => document.Root?["m_Avatar"]?.Guid)
             .FirstOrDefault(guid => IsHumanoidFbx(package, guid));
         if (fbxGuid != null)
