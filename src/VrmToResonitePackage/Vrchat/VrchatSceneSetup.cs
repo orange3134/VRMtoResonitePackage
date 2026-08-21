@@ -362,16 +362,23 @@ internal static class VrchatSceneSetup
     public static void ApplyInitialBlendShapes(Slot root, VrchatAvatar avatar)
     {
         List<SkinnedMeshRenderer> renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>().ToList();
+        var assignedRendererSlots = new HashSet<Slot>();
 
         int applied = 0;
         foreach (VrchatRendererMaterials rm in avatar.RendererMaterials)
         {
             SkinnedMeshRenderer renderer = renderers.FirstOrDefault(candidate =>
+                !assignedRendererSlots.Contains(candidate.Slot) &&
                 string.Equals(candidate.Slot.Name, rm.RendererGameObjectName, StringComparison.Ordinal) &&
                 (string.IsNullOrEmpty(rm.FbxGuid) || string.Equals(
                     FbxGuidForSlot(root, candidate.Slot, avatar), rm.FbxGuid,
                     StringComparison.OrdinalIgnoreCase)));
-            if (rm.InitialBlendShapes.Count == 0 || renderer == null)
+            if (renderer == null)
+            {
+                continue;
+            }
+            assignedRendererSlots.Add(renderer.Slot);
+            if (rm.InitialBlendShapes.Count == 0)
             {
                 continue;
             }

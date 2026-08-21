@@ -76,10 +76,12 @@ internal static class VrchatMaterialBuilder
         // Composed FBXs can contain identically named renderers. Keep variant overrides on the
         // model they came from by matching both the slot name and its owning FBX.
         List<MeshRenderer> renderers = root.GetComponentsInChildren<MeshRenderer>().ToList();
+        var assignedRendererSlots = new HashSet<Slot>();
 
         foreach (VrchatRendererMaterials rm in avatar.RendererMaterials)
         {
             MeshRenderer renderer = renderers.FirstOrDefault(candidate =>
+                !assignedRendererSlots.Contains(candidate.Slot) &&
                 string.Equals(candidate.Slot.Name, rm.RendererGameObjectName, StringComparison.Ordinal) &&
                 (string.IsNullOrEmpty(rm.FbxGuid) || string.Equals(
                     VrchatSceneSetup.FbxGuidForSlot(root, candidate.Slot, avatar), rm.FbxGuid,
@@ -88,6 +90,7 @@ internal static class VrchatMaterialBuilder
             {
                 continue;
             }
+            assignedRendererSlots.Add(renderer.Slot);
             for (int i = 0; i < rm.MaterialGuids.Count; i++)
             {
                 string guid = rm.MaterialGuids[i];
