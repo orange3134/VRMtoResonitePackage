@@ -4,6 +4,10 @@
 ガイドです。プロジェクト固有の前提・ハマりどころ・実機検証で確定した値をまとめています。
 ユーザー向けの使い方は [README.md](README.md) を参照してください。
 
+## メンテナンス手順
+
+作業過程で今後役立つ再利用可能なプロジェクト知識、注意すべきポイント、検証手順、ローカルパス、コーディング規約などが判明した場合、同じ変更の一環としてこの`CLAUDE.md`を積極的に更新してください。追加内容は簡潔かつこのリポジトリに特化したものにしてください。
+
 ## プロジェクト概要
 
 VRM アバター（および VRChat アバター入り `.unitypackage`）を Resonite の
@@ -54,17 +58,17 @@ dotnet publish src/VrmToResonitePackage -c Release -o publish   # 配布用
 
 ### 主な診断・オプションフラグ（`Program.cs`）
 
-| フラグ | 用途 |
-|---|---|
-| `--inspect` / `--inspect-verbose` | エンジン起動なしでパッケージ構造を表示 |
-| `--assimp-dump` | 各ブレンドシェイプの `movedVerts`（実際に動く頂点数）を出力 |
-| `--vrchat-dump` | `.unitypackage` の解析結果をエンジン不要で確認 |
-| `--avatar <name>` | VRChat パッケージ内の対象アバターを指定（完全一致優先→部分一致） |
-| `--face-tracking` | VRM 表情のフェイストラッキング連動をオプトイン（既定は付与しない） |
-| `--no-protection` | SimpleAvatarProtection を付けない（既定は付与） |
-| `--view-forward` / `--view-up` / `--near-clip` | 視点オフセット・NearClip の上書き |
-| `--import-timeout <sec>` | インポートのタイムアウト（既定 300） |
-| `--keep-working-files` | 中間ファイルを残す |
+| フラグ                                         | 用途                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| `--inspect` / `--inspect-verbose`              | エンジン起動なしでパッケージ構造を表示                             |
+| `--assimp-dump`                                | 各ブレンドシェイプの `movedVerts`（実際に動く頂点数）を出力        |
+| `--vrchat-dump`                                | `.unitypackage` の解析結果をエンジン不要で確認                     |
+| `--avatar <name>`                              | VRChat パッケージ内の対象アバターを指定（完全一致優先→部分一致）   |
+| `--face-tracking`                              | VRM 表情のフェイストラッキング連動をオプトイン（既定は付与しない） |
+| `--no-protection`                              | SimpleAvatarProtection を付けない（既定は付与）                    |
+| `--view-forward` / `--view-up` / `--near-clip` | 視点オフセット・NearClip の上書き                                  |
+| `--import-timeout <sec>`                       | インポートのタイムアウト（既定 300）                               |
+| `--keep-working-files`                         | 中間ファイルを残す                                                 |
 
 ## リポジトリ構成
 
