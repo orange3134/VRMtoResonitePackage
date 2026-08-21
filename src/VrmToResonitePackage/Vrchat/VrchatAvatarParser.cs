@@ -166,7 +166,7 @@ public static class VrchatAvatarParser
         ParseHumanoid(package, avatar);
         ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
         ParsePhysBones(selected.Scene, selected.Subtree, avatar);
-        ParseRendererMaterials(selected.Scene, selected.Subtree, avatar);
+        ParseRendererMaterials(package, selected.Scene, selected.Subtree, avatar);
         ParseInactiveGameObjects(selected.Scene, selected.Subtree, avatar);
         ParseModularAvatar(package, selected.Scene, selected.Subtree, avatar);
         ApplyFbxDefaultBlendShapeWeights(avatar);
@@ -1248,21 +1248,38 @@ public static class VrchatAvatarParser
 
     private static void ResolveFbx(UnityPackage package, UnityScene scene, HashSet<long> subtree, VrchatAvatar avatar)
     {
-        // The humanoid FBX is the mesh referenced by the most skinned renderers (within this avatar).
-        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+        // An unpacked/baked avatar prefab can reference standalone Mesh .asset files from its
+        // renderers, while the root Animator still points at the humanoid Avatar sub-asset in the
+        // original FBX. Prefer that authoritative reference; otherwise an accessory FBX with more
+        // direct renderer references can be mistaken for the avatar body.
+        const int classAnimator = 95;
+        string fbxGuid = scene.Documents.Values
+            .Where(document => document.ClassId == classAnimator && InSubtree(scene, subtree, document))
+            .Select(document => document.Root?["m_Avatar"]?.Guid)
+            .FirstOrDefault(guid => IsHumanoidFbx(package, guid));
+        if (fbxGuid != null)
         {
-            if (!InSubtree(scene, subtree, smr))
-            {
-                continue;
-            }
-            string guid = smr.Root?["m_Mesh"]?.Guid;
-            if (!string.IsNullOrEmpty(guid))
-            {
-                counts[guid] = counts.GetValueOrDefault(guid) + 1;
-            }
+            UniLog.Log($"Animator humanoid Avatar FBX selected: {fbxGuid}");
         }
-        string fbxGuid = counts.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).FirstOrDefault();
+
+        // The humanoid FBX is the mesh referenced by the most skinned renderers (within this avatar).
+        if (fbxGuid == null)
+        {
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+            {
+                if (!InSubtree(scene, subtree, smr))
+                {
+                    continue;
+                }
+                string guid = smr.Root?["m_Mesh"]?.Guid;
+                if (package.ByGuid(guid)?.Extension == ".fbx")
+                {
+                    counts[guid] = counts.GetValueOrDefault(guid) + 1;
+                }
+            }
+            fbxGuid = counts.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).FirstOrDefault();
+        }
         if (fbxGuid == null)
         {
             throw new InvalidDataException("アバターのメッシュ(FBX)参照が見つかりませんでした。");
@@ -2684,7 +2701,8 @@ public static class VrchatAvatarParser
 
     // ---------------------------------------------------------------- material assignments
 
-    private static void ParseRendererMaterials(UnityScene scene, HashSet<long> subtree, VrchatAvatar avatar)
+    private static void ParseRendererMaterials(UnityPackage package, UnityScene scene,
+        HashSet<long> subtree, VrchatAvatar avatar)
     {
         foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
         {
@@ -2697,9 +2715,13 @@ public static class VrchatAvatarParser
             {
                 continue;
             }
+            string meshGuid = smr.Root?["m_Mesh"]?.Guid;
             var entry = new VrchatRendererMaterials
             {
-                FbxGuid = smr.Root?["m_Mesh"]?.Guid,
+                // Standalone baked Mesh .asset files have their own GUID, not the GUID of the FBX
+                // whose renderer will receive this override after import. Leave those unscoped so
+                // renderer-name matching can apply their materials and initial blendshape weights.
+                FbxGuid = package.ByGuid(meshGuid)?.Extension == ".fbx" ? meshGuid : null,
                 RendererGameObjectName = name,
             };
             YamlNode materials = smr.Root?["m_Materials"];
