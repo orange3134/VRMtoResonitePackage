@@ -10,6 +10,8 @@
 
 GitHub PR のレビュー指摘に対応した場合は、修正を commit・push し、PR の head に反映されたことを確認してから、対応済みの該当レビュースレッドを resolve してください。未対応、未検証、未 push の指摘は resolve しないでください。
 
+GitHub PR を作成するときは、Draft ではなく通常の PR として作成してください。
+
 ## プロジェクト概要
 
 VRM アバター（および VRChat アバター入り `.unitypackage`）を Resonite の
