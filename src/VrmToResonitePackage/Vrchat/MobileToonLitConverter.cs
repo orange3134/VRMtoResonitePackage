@@ -49,7 +49,7 @@ internal static class MobileToonLitConverter
             ZWrite = true,
             RenderQueue = renderQueue >= 0 ? renderQueue : parent?.RenderQueue ?? -1,
             Cull = 2,
-            UseVertexColors = true,
+            UseVertexColors = false,
 
             // The VRChat shader applies direct and indirect light without N.L shading. A
             // constant-white toon ramp keeps XiexeToon's light response flat across the mesh.

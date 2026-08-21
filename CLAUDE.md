@@ -417,6 +417,7 @@ VRM に加え、VRChat アバター入りの `.unitypackage` も変換できる�
 
 ## lilToon conversion notes
 
+- VRChat's legacy `VRChat/Mobile/Toon Lit` shader ignores mesh vertex colors. Keep XiexeToon's `UseVertexColors` disabled so unrelated vertex-color masks do not tint or darken converted materials.
 - The VRChat path is headless and parses Unity material YAML, so it cannot run lilToon's editor baker shaders. Preserve directly representable properties and texture scale/offset; main-layer, alpha-mask, combined-normal, emission-mask, and channel-combine baking require separate image processing.
 - Xiexe `ShadowRampMask` needs a white fallback when lilToon `_ShadowStrengthMask` is absent. Generated lilToon ramps must vary vertically from white to the horizontal ramp so the mask can select shadow strength.
 - lilToon MatCap maps only when `_MatCapBlendMode == 1` (Add) and `_MatCapBlendMask` is absent. Scale MatCap RGB by `_MatCapBlend * _MatCapColor.a`.
