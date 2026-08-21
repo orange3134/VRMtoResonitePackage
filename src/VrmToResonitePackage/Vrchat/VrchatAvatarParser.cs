@@ -1305,19 +1305,17 @@ public static class VrchatAvatarParser
         ParseFbxImportScale(fbx, meta, avatar);
         ParseFbxMaterialMappings(package, fbx, meta, avatar.FbxMaterialGuids);
         YamlNode human = meta["ModelImporter"]?["humanDescription"]?["human"];
-        if (human?.Seq == null)
+        if (human?.Seq != null)
         {
-            UniLog.Warning("FBXの.metaにhumanDescription.humanがありません（Humanoidリグでない可能性）。");
-            return;
-        }
-        foreach (YamlNode entry in human.Seq)
-        {
-            string boneName = entry?["boneName"]?.AsString();
-            string humanName = entry?["humanName"]?.AsString();
-            string vrmName = VrchatConstants.NormalizeHumanName(humanName);
-            if (!string.IsNullOrEmpty(boneName) && vrmName != null)
+            foreach (YamlNode entry in human.Seq)
             {
-                avatar.HumanBones[vrmName] = boneName;
+                string boneName = entry?["boneName"]?.AsString();
+                string humanName = entry?["humanName"]?.AsString();
+                string vrmName = VrchatConstants.NormalizeHumanName(humanName);
+                if (!string.IsNullOrEmpty(boneName) && vrmName != null)
+                {
+                    avatar.HumanBones[vrmName] = boneName;
+                }
             }
         }
         if (avatar.HumanBones.Count == 0)
@@ -1382,7 +1380,17 @@ public static class VrchatAvatarParser
             return false;
         }
         YamlNode meta = UnityYaml.ParseFlatDocument(File.ReadAllText(fbx.MetaPath));
-        return (meta["ModelImporter"]?["humanDescription"]?["human"]?.Seq?.Count ?? 0) > 0;
+        YamlNode humanDescription = meta["ModelImporter"]?["humanDescription"];
+        if ((humanDescription?["human"]?.Seq?.Count ?? 0) > 0)
+        {
+            return true;
+        }
+        return humanDescription?["skeleton"]?.Seq?.Any(entry =>
+        {
+            string boneName = entry?["name"]?.AsString();
+            return !string.IsNullOrEmpty(boneName) &&
+                VrchatConstants.InferHumanNameFromSkeletonName(boneName) != null;
+        }) == true;
     }
 
     private static void AddAdditionalFbx(UnityPackage package, VrchatAvatar avatar, string guid, FbxPlacement placement)
