@@ -50,6 +50,12 @@ internal static class VrchatConstants
     };
 
     /// <summary>
+    /// lilToon FakeShadow shader GUID. Regular lilToon shaders also serialize the
+    /// _FakeShadowVector property, so that property cannot be used to identify this variant.
+    /// </summary>
+    public const string LilToonFakeShadowShaderGuid = "00795bf598b44dc4e9bd363348e77085";
+
+    /// <summary>
     /// VRChat viseme slot order (VRC_AvatarDescriptor.VisemeBlendShapes is indexed by this enum).
     /// </summary>
     public static readonly string[] VisemeOrder =

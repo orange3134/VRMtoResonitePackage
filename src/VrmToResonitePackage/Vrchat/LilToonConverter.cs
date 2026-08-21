@@ -140,7 +140,8 @@ public static class LilToonConverter
             floats["_ShadowBorder"] != null || floats["_LightMinLimit"] != null);
     }
 
-    public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null, bool isOutlineShader = false)
+    public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null,
+        bool isOutlineShader = false, bool isFakeShadowShader = false)
     {
         YamlNode root = material.Root;
         YamlNode props = root?["m_SavedProperties"];
@@ -178,7 +179,7 @@ public static class LilToonConverter
         var info = new LilToonInfo
         {
             Name = root?["m_Name"]?.AsString(),
-            IsFakeShadow = colors?["_FakeShadowVector"] != null,
+            IsFakeShadow = isFakeShadowShader || parent?.IsFakeShadow == true,
             Color = C("_Color", parent?.Color ?? new Vec4(1f, 1f, 1f, 1f)),
             MainTexGuid = TexAnyOrParent(parent?.MainTexGuid, "_MainTex", "_BaseMap", "_BaseColorMap"),
             MainTexScale = TexScale("_MainTex", parent?.MainTexScale ?? Vec2.One),

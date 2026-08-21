@@ -463,7 +463,8 @@ internal static class VrchatMaterialBuilder
 
         if (LilToonConverter.IsLilToon(matDoc) || parent?.IsLilToon == true)
         {
-            return LilToonConverter.Parse(matDoc, parent, IsOutlineShader(matDoc, package));
+            return LilToonConverter.Parse(matDoc, parent, IsOutlineShader(matDoc, package),
+                IsFakeShadowShader(matDoc, package));
         }
 
         string shaderName = GetShaderName(matDoc, package);
@@ -507,6 +508,20 @@ internal static class VrchatMaterialBuilder
 
         string shaderName = GetShaderName(material, package);
         return shaderName?.Contains("Outline", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static bool IsFakeShadowShader(YamlDocument material, UnityPackage package)
+    {
+        string shaderGuid = material.Root?["m_Shader"]?.Guid;
+        if (string.Equals(shaderGuid, VrchatConstants.LilToonFakeShadowShaderGuid,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        string shaderName = GetShaderName(material, package);
+        return string.Equals(shaderName, "_lil/[Optional] lilToonFakeShadow",
+            StringComparison.Ordinal);
     }
 
     private static string GetShaderName(YamlDocument material, UnityPackage package)
