@@ -2051,12 +2051,9 @@ public static class VrchatAvatarParser
             if (!string.IsNullOrEmpty(directName))
             {
                 // A prefab-authored renderer can directly own a mesh from an FBX without being a
-                // stripped FBX component itself. Preserve that mesh's FBX scope so overrides on an
-                // identically named renderer in a composed avatar do not land on the first match.
-                string meshGuid = document?.Root?["m_Mesh"]?.Guid;
-                string owningFbxGuid = package.ByGuid(meshGuid)?.Extension == ".fbx"
-                    ? meshGuid
-                    : null;
+                // stripped FBX component itself. An active-state override targets its GameObject,
+                // so also inspect that GameObject's components for the renderer's mesh scope.
+                string owningFbxGuid = ResolvePrefabObjectFbxGuid(package, scene, document);
                 return new VariantObjectReference(owningFbxGuid, directName);
             }
 
@@ -2090,6 +2087,33 @@ public static class VrchatAvatarParser
             return resolved;
         }
         return default;
+    }
+
+    private static string ResolvePrefabObjectFbxGuid(
+        UnityPackage package, UnityScene scene, YamlDocument document)
+    {
+        long gameObjectFileId = document?.Root?["m_GameObject"]?.FileID ?? document?.FileId ?? 0;
+        YamlDocument gameObject = scene.Doc(gameObjectFileId);
+        string resolvedGuid = null;
+
+        IEnumerable<YamlDocument> candidates = gameObject != null
+            ? new[] { document }.Concat(scene.ComponentsOf(gameObject))
+            : new[] { document };
+        foreach (YamlDocument candidate in candidates)
+        {
+            string meshGuid = candidate?.Root?["m_Mesh"]?.Guid;
+            if (package.ByGuid(meshGuid)?.Extension != ".fbx")
+            {
+                continue;
+            }
+            if (!string.IsNullOrEmpty(resolvedGuid) &&
+                !string.Equals(resolvedGuid, meshGuid, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+            resolvedGuid = meshGuid;
+        }
+        return resolvedGuid;
     }
 
     private static IEnumerable<long> ReversePrefabInstanceFileId(long localFileId,
