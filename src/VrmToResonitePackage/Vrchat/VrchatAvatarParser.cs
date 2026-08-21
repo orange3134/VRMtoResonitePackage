@@ -2725,12 +2725,14 @@ public static class VrchatAvatarParser
                 continue;
             }
             string meshGuid = smr.Root?["m_Mesh"]?.Guid;
+            UnityAsset meshAsset = package.ByGuid(meshGuid);
             var entry = new VrchatRendererMaterials
             {
                 // Standalone baked Mesh .asset files have their own GUID, not the GUID of the FBX
                 // whose renderer will receive this override after import. Leave those unscoped so
                 // renderer-name matching can apply their materials and initial blendshape weights.
-                FbxGuid = package.ByGuid(meshGuid)?.Extension == ".fbx" ? meshGuid : null,
+                // Keep unresolved GUIDs scoped so missing dependencies cannot match by name.
+                FbxGuid = meshAsset?.Extension == ".asset" ? null : meshGuid,
                 RendererGameObjectName = name,
             };
             YamlNode materials = smr.Root?["m_Materials"];
