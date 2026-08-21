@@ -4,6 +4,12 @@
 ガイドです。プロジェクト固有の前提・ハマりどころ・実機検証で確定した値をまとめています。
 ユーザー向けの使い方は [README.md](README.md) を参照してください。
 
+## メンテナンス手順
+
+作業過程で今後役立つ再利用可能なプロジェクト知識、注意すべきポイント、検証手順、ローカルパス、コーディング規約などが判明した場合、同じ変更の一環としてこの`CLAUDE.md`を積極的に更新してください。追加内容は簡潔かつこのリポジトリに特化したものにしてください。
+
+GitHub PR のレビュー指摘に対応した場合は、修正を commit・push し、PR の head に反映されたことを確認してから、対応済みの該当レビュースレッドを resolve してください。未対応、未検証、未 push の指摘は resolve しないでください。
+
 ## プロジェクト概要
 
 VRM アバター（および VRChat アバター入り `.unitypackage`）を Resonite の
@@ -54,17 +60,17 @@ dotnet publish src/VrmToResonitePackage -c Release -o publish   # 配布用
 
 ### 主な診断・オプションフラグ（`Program.cs`）
 
-| フラグ | 用途 |
-|---|---|
-| `--inspect` / `--inspect-verbose` | エンジン起動なしでパッケージ構造を表示 |
-| `--assimp-dump` | 各ブレンドシェイプの `movedVerts`（実際に動く頂点数）を出力 |
-| `--vrchat-dump` | `.unitypackage` の解析結果をエンジン不要で確認 |
-| `--avatar <name>` | VRChat パッケージ内の対象アバターを指定（完全一致優先→部分一致） |
-| `--face-tracking` | VRM 表情のフェイストラッキング連動をオプトイン（既定は付与しない） |
-| `--no-protection` | SimpleAvatarProtection を付けない（既定は付与） |
-| `--view-forward` / `--view-up` / `--near-clip` | 視点オフセット・NearClip の上書き |
-| `--import-timeout <sec>` | インポートのタイムアウト（既定 300） |
-| `--keep-working-files` | 中間ファイルを残す |
+| フラグ                                         | 用途                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| `--inspect` / `--inspect-verbose`              | エンジン起動なしでパッケージ構造を表示                             |
+| `--assimp-dump`                                | 各ブレンドシェイプの `movedVerts`（実際に動く頂点数）を出力        |
+| `--vrchat-dump`                                | `.unitypackage` の解析結果をエンジン不要で確認                     |
+| `--avatar <name>`                              | VRChat パッケージ内の対象アバターを指定（完全一致優先→部分一致）   |
+| `--face-tracking`                              | VRM 表情のフェイストラッキング連動をオプトイン（既定は付与しない） |
+| `--no-protection`                              | SimpleAvatarProtection を付けない（既定は付与）                    |
+| `--view-forward` / `--view-up` / `--near-clip` | 視点オフセット・NearClip の上書き                                  |
+| `--import-timeout <sec>`                       | インポートのタイムアウト（既定 300）                               |
+| `--keep-working-files`                         | 中間ファイルを残す                                                 |
 
 ## リポジトリ構成
 
@@ -402,6 +408,7 @@ VRM に加え、VRChat アバター入りの `.unitypackage` も変換できる�
 - Unity can fold a sole real mesh node under Assimp's artificial FBX root into the synthetic stable-ID path `//RootNode/root`. Register that path for the real child node, not the artificial root; Fyuett's Tulip uses `//RootNode/root/MeshRenderer` and `//RootNode/root/SkinnedMeshRenderer`.
 - Unity model stable fileID hashing uses the bare hierarchy path for `GameObject` (`Type:GameObject->//RootNode/root/Bra0`), unlike components which append `/Transform`, `/SkinnedMeshRenderer`, etc. Including `/GameObject` produces the wrong hash. Resolve inherited `m_IsActive` modifications with these GameObject IDs in base-to-derived order; Eku/Eku_Another should import `Bra` and `Underwear` with `Active=false`.
 - Scope prefab `m_IsActive` overrides by resolved source FBX GUID as well as GameObject name. Composed FBXs can reuse names: Fyuett_All_Lala disables the base FBX `HairFront` but its additional `Hair_Front_Macaron_Lala` FBX also contains `HairFront`, which must remain active.
+- A prefab variant `m_IsActive` modification can target a prefab-authored GameObject whose `SkinnedMeshRenderer` component directly references an FBX mesh. Resolve the FBX scope from the target GameObject's components before rejecting it as unscoped; checking only the target document drops valid visibility overrides.
 - Scope renderer material and initial blendshape overrides the same way. Name-only matching can assign the base `HairFront` materials to the additional hair FBX, or vice versa.
 - Unity applies FBX `BlendShapeChannel.DeformPercent` as the model prefab's default blendshape weight, so it does not appear as a prefab override. Assimp/Resonite imports the shape geometry but not this default weight; read binary FBX channel defaults, normalize by the channel's final `FullWeights` value like Unity's renderer conversion, and apply them before export, while letting explicit prefab `m_BlendShapeWeights` (including zero) win. Pilica/Kumagaya `Body_A` has `all=100`, and `Face` has `Mouth_N=100`.
 - Apply VRChat initial blendshape weights to each imported `SkinnedMeshRenderer` immediately after blendshape repair, before `AvatarSetup.Build`, then reapply them during final scene setup. Use `SkinnedMeshRenderer.SetBlendShapeWeight`; do not bake default shapes into mesh geometry.
@@ -410,6 +417,7 @@ VRM に加え、VRChat アバター入りの `.unitypackage` も変換できる�
 
 ## lilToon conversion notes
 
+- VRChat's legacy `VRChat/Mobile/Toon Lit` shader ignores mesh vertex colors. Keep XiexeToon's `UseVertexColors` disabled so unrelated vertex-color masks do not tint or darken converted materials.
 - The VRChat path is headless and parses Unity material YAML, so it cannot run lilToon's editor baker shaders. Preserve directly representable properties and texture scale/offset; main-layer, alpha-mask, combined-normal, emission-mask, and channel-combine baking require separate image processing.
 - Xiexe `ShadowRampMask` needs a white fallback when lilToon `_ShadowStrengthMask` is absent. Generated lilToon ramps must vary vertically from white to the horizontal ramp so the mask can select shadow strength.
 - lilToon MatCap maps only when `_MatCapBlendMode == 1` (Add) and `_MatCapBlendMask` is absent. Scale MatCap RGB by `_MatCapBlend * _MatCapColor.a`.

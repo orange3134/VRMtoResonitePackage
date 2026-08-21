@@ -1743,7 +1743,12 @@ public static class VrchatAvatarParser
                     VariantObjectReference gameObject = ResolveVariantObjectReference(
                         package, activeTarget?.Guid, activeTarget?.FileID ?? 0,
                         modelResolvers, prefabScenes);
-                    if (!string.IsNullOrEmpty(gameObject.Name))
+                    // Only imported FBX objects can receive active-state overrides. Prefab-only
+                    // helper objects (for example collider anchors named Hips/Upperleg.L) are not
+                    // imported as slots. Treating their unscoped names as overrides would disable
+                    // identically named bones in the avatar's FBX hierarchy.
+                    if (!string.IsNullOrEmpty(gameObject.Name) &&
+                        !string.IsNullOrEmpty(gameObject.FbxGuid))
                     {
                         var reference = new VrchatGameObjectReference(
                             gameObject.FbxGuid, gameObject.Name);
@@ -2046,12 +2051,9 @@ public static class VrchatAvatarParser
             if (!string.IsNullOrEmpty(directName))
             {
                 // A prefab-authored renderer can directly own a mesh from an FBX without being a
-                // stripped FBX component itself. Preserve that mesh's FBX scope so overrides on an
-                // identically named renderer in a composed avatar do not land on the first match.
-                string meshGuid = document?.Root?["m_Mesh"]?.Guid;
-                string owningFbxGuid = package.ByGuid(meshGuid)?.Extension == ".fbx"
-                    ? meshGuid
-                    : null;
+                // stripped FBX component itself. An active-state override targets its GameObject,
+                // so also inspect that GameObject's components for the renderer's mesh scope.
+                string owningFbxGuid = ResolvePrefabObjectFbxGuid(package, scene, document);
                 return new VariantObjectReference(owningFbxGuid, directName);
             }
 
@@ -2085,6 +2087,33 @@ public static class VrchatAvatarParser
             return resolved;
         }
         return default;
+    }
+
+    private static string ResolvePrefabObjectFbxGuid(
+        UnityPackage package, UnityScene scene, YamlDocument document)
+    {
+        long gameObjectFileId = document?.Root?["m_GameObject"]?.FileID ?? document?.FileId ?? 0;
+        YamlDocument gameObject = scene.Doc(gameObjectFileId);
+        string resolvedGuid = null;
+
+        IEnumerable<YamlDocument> candidates = gameObject != null
+            ? new[] { document }.Concat(scene.ComponentsOf(gameObject))
+            : new[] { document };
+        foreach (YamlDocument candidate in candidates)
+        {
+            string meshGuid = candidate?.Root?["m_Mesh"]?.Guid;
+            if (package.ByGuid(meshGuid)?.Extension != ".fbx")
+            {
+                continue;
+            }
+            if (!string.IsNullOrEmpty(resolvedGuid) &&
+                !string.Equals(resolvedGuid, meshGuid, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+            resolvedGuid = meshGuid;
+        }
+        return resolvedGuid;
     }
 
     private static IEnumerable<long> ReversePrefabInstanceFileId(long localFileId,

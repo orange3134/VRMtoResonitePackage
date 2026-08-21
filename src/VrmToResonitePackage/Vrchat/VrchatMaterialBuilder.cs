@@ -476,6 +476,12 @@ internal static class VrchatMaterialBuilder
             return ToonStandardConverter.Parse(matDoc, parent, isOutline);
         }
 
+        if (MobileToonLitConverter.IsMobileToonLit(matDoc, shaderName) ||
+            parent?.IsMobileToonLit == true)
+        {
+            return MobileToonLitConverter.Parse(matDoc, parent);
+        }
+
         return ShaderPropertyFallbackConverter.Parse(matDoc, parent, GetShaderSource(matDoc, package));
     }
 
