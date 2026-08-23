@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -284,7 +285,10 @@ internal sealed class MainWindow : Window
             foreach (ConversionJob job in jobs)
             {
                 ShowConverting(job.DisplayName);
-                ConversionRunResult result = await RunConversionProcessAsync(job.Options, resonitePath);
+                ConversionRunResult result = await RunConversionProcessAsync(
+                    job.Options,
+                    resonitePath,
+                    job.ExpectedOutputName);
                 outputs.AddRange(result.OutputFiles);
                 failures += result.Failures;
                 if (!string.IsNullOrWhiteSpace(result.LogPath))
@@ -381,7 +385,10 @@ internal sealed class MainWindow : Window
                 string displayName = string.IsNullOrWhiteSpace(prefabName)
                     ? Path.GetFileName(file)
                     : $"{Path.GetFileName(file)}\n{prefabName}";
-                avatarJobs.Add(new ConversionJob(option, displayName));
+                avatarJobs.Add(new ConversionJob(
+                    option,
+                    displayName,
+                    Path.GetFileNameWithoutExtension(selected?.SourcePath)));
                 continue;
             }
             batchFiles.Add(file);
@@ -398,7 +405,10 @@ internal sealed class MainWindow : Window
         return jobs;
     }
 
-    private sealed record ConversionJob(CliOptions Options, string DisplayName);
+    private sealed record ConversionJob(
+        CliOptions Options,
+        string DisplayName,
+        string ExpectedOutputName = null);
 
     private bool _resolverInstalled;
 
@@ -457,7 +467,10 @@ internal sealed class MainWindow : Window
         return dialog.ShowDialog() == true ? dialog.CutoutMaterials : null;
     }
 
-    private static async Task<ConversionRunResult> RunConversionProcessAsync(CliOptions options, string resonitePath)
+    private static async Task<ConversionRunResult> RunConversionProcessAsync(
+        CliOptions options,
+        string resonitePath,
+        string expectedOutputName)
     {
         string logsDirectory = Path.Combine(AppContext.BaseDirectory, "Logs");
         DateTime startTime = DateTime.Now;
@@ -483,7 +496,7 @@ internal sealed class MainWindow : Window
             .ToArray();
         string[] outputFiles = reportedOutputFiles.Length > 0
             ? reportedOutputFiles
-            : GetExpectedOutputFiles(options).Where(File.Exists).ToArray();
+            : GetExpectedOutputFiles(options, expectedOutputName).Where(File.Exists).ToArray();
         if (process.ExitCode != 0 && string.IsNullOrWhiteSpace(logPath))
         {
             logPath = WriteGuiProcessFailureLog(logsDirectory, output, error);
@@ -517,6 +530,8 @@ internal sealed class MainWindow : Window
         startInfo.UseShellExecute = false;
         startInfo.RedirectStandardOutput = true;
         startInfo.RedirectStandardError = true;
+        startInfo.StandardOutputEncoding = Encoding.UTF8;
+        startInfo.StandardErrorEncoding = Encoding.UTF8;
         startInfo.CreateNoWindow = true;
         startInfo.WorkingDirectory = AppContext.BaseDirectory;
         return startInfo;
@@ -597,7 +612,7 @@ internal sealed class MainWindow : Window
         arguments.Add(value.Value.ToString(CultureInfo.InvariantCulture));
     }
 
-    private static string[] GetExpectedOutputFiles(CliOptions options)
+    private static string[] GetExpectedOutputFiles(CliOptions options, string expectedOutputName)
     {
         return options.InputFiles
             .Select(file =>
@@ -605,8 +620,8 @@ internal sealed class MainWindow : Window
                 string outputDirectory = options.OutputDirectory ?? Path.GetDirectoryName(file);
                 string outputName = string.Equals(
                         Path.GetExtension(file), ".unitypackage", StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(options.AvatarName)
-                        ? options.AvatarName
+                    !string.IsNullOrWhiteSpace(expectedOutputName)
+                        ? expectedOutputName
                         : Path.GetFileNameWithoutExtension(file);
                 return Path.Combine(
                     outputDirectory,

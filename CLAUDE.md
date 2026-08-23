@@ -10,6 +10,8 @@
 
 GitHub PR のレビュー指摘に対応した場合は、修正を commit・push し、PR の head に反映されたことを確認してから、対応済みの該当レビュースレッドを resolve してください。未対応、未検証、未 push の指摘は resolve しないでください。
 
+GitHub PR を作成するときは、Draft ではなく通常の PR として作成してください。
+
 ## プロジェクト概要
 
 VRM アバター（および VRChat アバター入り `.unitypackage`）を Resonite の
@@ -356,6 +358,10 @@ VRM に加え、VRChat アバター入りの `.unitypackage` も変換できる�
   無い。複数アバターの列挙（`ListAvatars`）は `Elements.Core.UniLog` を参照するため、リゾルバ未導入だと
   JIT 例外→catch で握り潰し→空リスト→ダイアログが出ずバッチ直行になる。
   `MainWindow.EnsureAssemblyResolver()` で列挙前にリゾルバを導入すること。
+  GUI の完了判定では、選択した `.unitypackage` アバターの表示名ではなく `SourcePath` の prefab basename を
+  期待出力名に使う。両者は異なることがある（`V3おじさんquest版` の出力は
+  `V3おじさんquest.resonitepackage`）。また、日本語を含む `RESOPON_OUTPUT:` のパスを壊さないよう、
+  子コンバーターの stdout/stderr は UTF-8 として読み取る。
 
 ### VRChat 経路の実機検証 TODO（未確認の係数・前提）
 
@@ -393,6 +399,7 @@ VRM に加え、VRChat アバター入りの `.unitypackage` も変換できる�
 - FBX prefab variants can assign every renderer material through `PrefabInstance.m_Modifications` entries such as `m_Materials.Array.data[0]`, while `ModelImporter.externalObjects` is empty or incomplete. Resolve each modification target's FBX renderer fileID with `UnityModelFileIdResolver` and collect the `objectReference.guid` by material slot index. MANUKA lilToon is the regression case: it has 23 prefab material assignments but only one FBX external material mapping.
 - A selectable avatar variant may inherit its `VRCAvatarDescriptor` and use exactly the same FBX set as its parent. Do not require an outer prefab to add another FBX before listing it; merge renderer material/blendshape overrides from the prefab inheritance chain in base-to-derived order. `Eku_Another.prefab -> Eku.prefab -> Eku.fbx` is the regression case. Variants with `m_RemovedGameObjects` remain excluded until outer-variant object deletion is supported.
 - For a composed avatar, choose the humanoid FBX belonging to the inherited `VRCAvatarDescriptor` hierarchy as primary. Traversal order is not sufficient because clothing FBXs can also contain a valid humanoid map. `Legnia 4P` is the regression case: `Legnia` must be primary and `Legnia_clothD` additional, so Merge Armature maps clothing bones onto the body skeleton rather than the reverse.
+- Treat an Animator-referenced FBX as humanoid when its `humanDescription.skeleton` contains the complete set of required Unity/VRM humanoid bones, even if `humanDescription.human` is missing or empty. A single inferable name such as `Head` or `Hips` is not enough. When selecting among composed FBXs without an authoritative descriptor FBX, prefer an explicit `humanDescription.human` map over skeleton inference. Baked prefabs can store renderer meshes as standalone `.asset` files, leaving the Animator avatar as the only authoritative body FBX reference. Only use an Animator attached directly to the selected avatar root; nested accessory or clothing Animators must not select the primary FBX.
 - Do not deduplicate Modular Avatar Merge Armature components by resolved source/target names. Separate composed FBXs often use the same `Armature -> Armature` pair; apply each component so successive operations consume each matching source hierarchy. `Legnia 4P` has separate merges for `Legnia_clothD` and `Legnia_hairB`.
 - When collecting inherited renderer state for a prefab variant/composition, read direct `SkinnedMeshRenderer.m_BlendShapeWeights` from each nested prefab as well as material slots, then apply outer `PrefabInstance` modifications afterward. `Legnia 4P` stores non-zero `bodybase` shape weights directly in `Legnia_Side D_kisekae.prefab`.
 - Fold renderer state from every `PrefabInstance` reachable from the selected prefab, not only the instance that owns the inherited/added `VRCAvatarDescriptor`. Process each source before its instance modifications so sibling body/clothing FBXs and outer variants share one base-to-derived pipeline. `V3おじさん（スーツ）PC` stores `スーツ一式PC用` weights on a clothing FBX instance sibling to the descriptor-bearing body FBX.
@@ -410,6 +417,7 @@ VRM に加え、VRChat アバター入りの `.unitypackage` も変換できる�
 - Scope prefab `m_IsActive` overrides by resolved source FBX GUID as well as GameObject name. Composed FBXs can reuse names: Fyuett_All_Lala disables the base FBX `HairFront` but its additional `Hair_Front_Macaron_Lala` FBX also contains `HairFront`, which must remain active.
 - A prefab variant `m_IsActive` modification can target a prefab-authored GameObject whose `SkinnedMeshRenderer` component directly references an FBX mesh. Resolve the FBX scope from the target GameObject's components before rejecting it as unscoped; checking only the target document drops valid visibility overrides.
 - Scope renderer material and initial blendshape overrides the same way. Name-only matching can assign the base `HairFront` materials to the additional hair FBX, or vice versa.
+- Baked prefab renderers can reference standalone Mesh `.asset` files, so their original FBX GUID is unavailable and name-only matching is required. Remove the scope only when the GUID resolves to a confirmed `.asset`; preserve unresolved nonempty GUIDs so missing dependencies cannot match an unrelated renderer by name. Apply the same distinction when ranking the primary renderer FBX: exclude confirmed `.asset` meshes, but keep unresolved GUIDs so a missing body FBX reaches the missing-dependency error instead of silently selecting an included accessory FBX. When names are duplicated, consume matching imported renderer slots in order for every override entry (including entries with no materials or no blendshape weights) so material and blendshape passes keep the same one-to-one mapping.
 - Unity applies FBX `BlendShapeChannel.DeformPercent` as the model prefab's default blendshape weight, so it does not appear as a prefab override. Assimp/Resonite imports the shape geometry but not this default weight; read binary FBX channel defaults, normalize by the channel's final `FullWeights` value like Unity's renderer conversion, and apply them before export, while letting explicit prefab `m_BlendShapeWeights` (including zero) win. Pilica/Kumagaya `Body_A` has `all=100`, and `Face` has `Mouth_N=100`.
 - Apply VRChat initial blendshape weights to each imported `SkinnedMeshRenderer` immediately after blendshape repair, before `AvatarSetup.Build`, then reapply them during final scene setup. Use `SkinnedMeshRenderer.SetBlendShapeWeight`; do not bake default shapes into mesh geometry.
 - `--inspect-verbose` reports each saved `SkinnedMeshRenderer`'s `blendshapes=[...]`. Sync-list entries are field dictionaries in the package DataTree, so inspect them through the field's `Data` node rather than treating list children as direct float values.

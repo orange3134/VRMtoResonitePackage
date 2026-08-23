@@ -20,6 +20,25 @@ public static class VrchatAvatarParser
     // shared by model assets and is the target of the prefab instance's placement overrides.
     private const long UnityModelRootTransformFileId = -8679921383154817045L;
 
+    private enum HumanoidFbxKind
+    {
+        None,
+        Inferred,
+        Explicit,
+    }
+
+    // These are the required humanoid bones shared by Unity Humanoid and VRM. Requiring the
+    // complete core prevents a generic-rig accessory containing only names such as Head or Hips
+    // from being treated as the avatar body.
+    private static readonly HashSet<string> RequiredInferredHumanoidBones = new(StringComparer.Ordinal)
+    {
+        "hips", "spine", "head",
+        "leftUpperArm", "leftLowerArm", "leftHand",
+        "rightUpperArm", "rightLowerArm", "rightHand",
+        "leftUpperLeg", "leftLowerLeg", "leftFoot",
+        "rightUpperLeg", "rightLowerLeg", "rightFoot",
+    };
+
     private static readonly System.Text.RegularExpressions.Regex BlendShapeWeightPath =
         new(@"^m_BlendShapeWeights\.Array\.data\[(\d+)\]$",
             System.Text.RegularExpressions.RegexOptions.CultureInvariant);
@@ -161,12 +180,12 @@ public static class VrchatAvatarParser
             }
         }
 
-        ResolveFbx(package, selected.Scene, selected.Subtree, avatar);
+        ResolveFbx(package, selected.Scene, selected.Root, selected.Subtree, avatar);
         ParseFbxBlendShapeNames(package, avatar);
         ParseHumanoid(package, avatar);
         ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
         ParsePhysBones(selected.Scene, selected.Subtree, avatar);
-        ParseRendererMaterials(selected.Scene, selected.Subtree, avatar);
+        ParseRendererMaterials(package, selected.Scene, selected.Subtree, avatar);
         ParseInactiveGameObjects(selected.Scene, selected.Subtree, avatar);
         ParseModularAvatar(package, selected.Scene, selected.Subtree, avatar);
         ApplyFbxDefaultBlendShapeWeights(avatar);
@@ -1246,23 +1265,43 @@ public static class VrchatAvatarParser
         return counts.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).FirstOrDefault();
     }
 
-    private static void ResolveFbx(UnityPackage package, UnityScene scene, HashSet<long> subtree, VrchatAvatar avatar)
+    private static void ResolveFbx(UnityPackage package, UnityScene scene, YamlDocument avatarRoot,
+        HashSet<long> subtree, VrchatAvatar avatar)
     {
-        // The humanoid FBX is the mesh referenced by the most skinned renderers (within this avatar).
-        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+        // An unpacked/baked avatar prefab can reference standalone Mesh .asset files from its
+        // renderers, while the root Animator still points at the humanoid Avatar sub-asset in the
+        // original FBX. Prefer that authoritative reference; otherwise an accessory FBX with more
+        // direct renderer references can be mistaken for the avatar body.
+        const int classAnimator = 95;
+        string fbxGuid = scene.ComponentsOf(avatarRoot)
+            .Where(document => document.ClassId == classAnimator)
+            .Select(document => document.Root?["m_Avatar"]?.Guid)
+            .FirstOrDefault(guid => IsHumanoidFbx(package, guid));
+        if (fbxGuid != null)
         {
-            if (!InSubtree(scene, subtree, smr))
-            {
-                continue;
-            }
-            string guid = smr.Root?["m_Mesh"]?.Guid;
-            if (!string.IsNullOrEmpty(guid))
-            {
-                counts[guid] = counts.GetValueOrDefault(guid) + 1;
-            }
+            UniLog.Log($"Animator humanoid Avatar FBX selected: {fbxGuid}");
         }
-        string fbxGuid = counts.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).FirstOrDefault();
+
+        // The humanoid FBX is the mesh referenced by the most skinned renderers (within this avatar).
+        if (fbxGuid == null)
+        {
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+            {
+                if (!InSubtree(scene, subtree, smr))
+                {
+                    continue;
+                }
+                string guid = smr.Root?["m_Mesh"]?.Guid;
+                UnityAsset meshAsset = package.ByGuid(guid);
+                if (!string.IsNullOrEmpty(guid) &&
+                    !string.Equals(meshAsset?.Extension, ".asset", StringComparison.OrdinalIgnoreCase))
+                {
+                    counts[guid] = counts.GetValueOrDefault(guid) + 1;
+                }
+            }
+            fbxGuid = counts.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).FirstOrDefault();
+        }
         if (fbxGuid == null)
         {
             throw new InvalidDataException("アバターのメッシュ(FBX)参照が見つかりませんでした。");
@@ -1288,19 +1327,17 @@ public static class VrchatAvatarParser
         ParseFbxImportScale(fbx, meta, avatar);
         ParseFbxMaterialMappings(package, fbx, meta, avatar.FbxMaterialGuids);
         YamlNode human = meta["ModelImporter"]?["humanDescription"]?["human"];
-        if (human?.Seq == null)
+        if (human?.Seq != null)
         {
-            UniLog.Warning("FBXの.metaにhumanDescription.humanがありません（Humanoidリグでない可能性）。");
-            return;
-        }
-        foreach (YamlNode entry in human.Seq)
-        {
-            string boneName = entry?["boneName"]?.AsString();
-            string humanName = entry?["humanName"]?.AsString();
-            string vrmName = VrchatConstants.NormalizeHumanName(humanName);
-            if (!string.IsNullOrEmpty(boneName) && vrmName != null)
+            foreach (YamlNode entry in human.Seq)
             {
-                avatar.HumanBones[vrmName] = boneName;
+                string boneName = entry?["boneName"]?.AsString();
+                string humanName = entry?["humanName"]?.AsString();
+                string vrmName = VrchatConstants.NormalizeHumanName(humanName);
+                if (!string.IsNullOrEmpty(boneName) && vrmName != null)
+                {
+                    avatar.HumanBones[vrmName] = boneName;
+                }
             }
         }
         if (avatar.HumanBones.Count == 0)
@@ -1347,25 +1384,57 @@ public static class VrchatAvatarParser
             UniLog.Log($"Avatar Descriptor body FBX selected: {preferredGuid}");
             return preferredGuid;
         }
-        foreach (string guid in candidates)
+        List<(string Guid, HumanoidFbxKind Kind)> classified = candidates
+            .Select(guid => (guid, GetHumanoidFbxKind(package, guid)))
+            .ToList();
+        string explicitGuid = classified
+            .FirstOrDefault(candidate => candidate.Kind == HumanoidFbxKind.Explicit).Guid;
+        if (explicitGuid != null)
         {
-            if (IsHumanoidFbx(package, guid))
-            {
-                return guid;
-            }
+            return explicitGuid;
+        }
+        string inferredGuid = classified
+            .FirstOrDefault(candidate => candidate.Kind == HumanoidFbxKind.Inferred).Guid;
+        if (inferredGuid != null)
+        {
+            return inferredGuid;
         }
         return candidates.First();
     }
 
     private static bool IsHumanoidFbx(UnityPackage package, string guid)
+        => GetHumanoidFbxKind(package, guid) != HumanoidFbxKind.None;
+
+    private static HumanoidFbxKind GetHumanoidFbxKind(UnityPackage package, string guid)
     {
         UnityAsset fbx = package.ByGuid(guid);
         if (fbx?.MetaPath == null || !File.Exists(fbx.MetaPath))
         {
-            return false;
+            return HumanoidFbxKind.None;
         }
         YamlNode meta = UnityYaml.ParseFlatDocument(File.ReadAllText(fbx.MetaPath));
-        return (meta["ModelImporter"]?["humanDescription"]?["human"]?.Seq?.Count ?? 0) > 0;
+        YamlNode humanDescription = meta["ModelImporter"]?["humanDescription"];
+        if ((humanDescription?["human"]?.Seq?.Count ?? 0) > 0)
+        {
+            return HumanoidFbxKind.Explicit;
+        }
+
+        var inferredBones = new HashSet<string>(StringComparer.Ordinal);
+        if (humanDescription?["skeleton"]?.Seq != null)
+        {
+            foreach (YamlNode entry in humanDescription["skeleton"].Seq)
+            {
+                string humanName = VrchatConstants.InferHumanNameFromSkeletonName(
+                    entry?["name"]?.AsString());
+                if (humanName != null)
+                {
+                    inferredBones.Add(humanName);
+                }
+            }
+        }
+        return inferredBones.IsSupersetOf(RequiredInferredHumanoidBones)
+            ? HumanoidFbxKind.Inferred
+            : HumanoidFbxKind.None;
     }
 
     private static void AddAdditionalFbx(UnityPackage package, VrchatAvatar avatar, string guid, FbxPlacement placement)
@@ -2684,7 +2753,8 @@ public static class VrchatAvatarParser
 
     // ---------------------------------------------------------------- material assignments
 
-    private static void ParseRendererMaterials(UnityScene scene, HashSet<long> subtree, VrchatAvatar avatar)
+    private static void ParseRendererMaterials(UnityPackage package, UnityScene scene,
+        HashSet<long> subtree, VrchatAvatar avatar)
     {
         foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
         {
@@ -2697,9 +2767,15 @@ public static class VrchatAvatarParser
             {
                 continue;
             }
+            string meshGuid = smr.Root?["m_Mesh"]?.Guid;
+            UnityAsset meshAsset = package.ByGuid(meshGuid);
             var entry = new VrchatRendererMaterials
             {
-                FbxGuid = smr.Root?["m_Mesh"]?.Guid,
+                // Standalone baked Mesh .asset files have their own GUID, not the GUID of the FBX
+                // whose renderer will receive this override after import. Leave those unscoped so
+                // renderer-name matching can apply their materials and initial blendshape weights.
+                // Keep unresolved GUIDs scoped so missing dependencies cannot match by name.
+                FbxGuid = meshAsset?.Extension == ".asset" ? null : meshGuid,
                 RendererGameObjectName = name,
             };
             YamlNode materials = smr.Root?["m_Materials"];
