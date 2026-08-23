@@ -20,6 +20,25 @@ public static class VrchatAvatarParser
     // shared by model assets and is the target of the prefab instance's placement overrides.
     private const long UnityModelRootTransformFileId = -8679921383154817045L;
 
+    private enum HumanoidFbxKind
+    {
+        None,
+        Inferred,
+        Explicit,
+    }
+
+    // These are the required humanoid bones shared by Unity Humanoid and VRM. Requiring the
+    // complete core prevents a generic-rig accessory containing only names such as Head or Hips
+    // from being treated as the avatar body.
+    private static readonly HashSet<string> RequiredInferredHumanoidBones = new(StringComparer.Ordinal)
+    {
+        "hips", "spine", "head",
+        "leftUpperArm", "leftLowerArm", "leftHand",
+        "rightUpperArm", "rightLowerArm", "rightHand",
+        "leftUpperLeg", "leftLowerLeg", "leftFoot",
+        "rightUpperLeg", "rightLowerLeg", "rightFoot",
+    };
+
     private static readonly System.Text.RegularExpressions.Regex BlendShapeWeightPath =
         new(@"^m_BlendShapeWeights\.Array\.data\[(\d+)\]$",
             System.Text.RegularExpressions.RegexOptions.CultureInvariant);
@@ -1363,35 +1382,57 @@ public static class VrchatAvatarParser
             UniLog.Log($"Avatar Descriptor body FBX selected: {preferredGuid}");
             return preferredGuid;
         }
-        foreach (string guid in candidates)
+        List<(string Guid, HumanoidFbxKind Kind)> classified = candidates
+            .Select(guid => (guid, GetHumanoidFbxKind(package, guid)))
+            .ToList();
+        string explicitGuid = classified
+            .FirstOrDefault(candidate => candidate.Kind == HumanoidFbxKind.Explicit).Guid;
+        if (explicitGuid != null)
         {
-            if (IsHumanoidFbx(package, guid))
-            {
-                return guid;
-            }
+            return explicitGuid;
+        }
+        string inferredGuid = classified
+            .FirstOrDefault(candidate => candidate.Kind == HumanoidFbxKind.Inferred).Guid;
+        if (inferredGuid != null)
+        {
+            return inferredGuid;
         }
         return candidates.First();
     }
 
     private static bool IsHumanoidFbx(UnityPackage package, string guid)
+        => GetHumanoidFbxKind(package, guid) != HumanoidFbxKind.None;
+
+    private static HumanoidFbxKind GetHumanoidFbxKind(UnityPackage package, string guid)
     {
         UnityAsset fbx = package.ByGuid(guid);
         if (fbx?.MetaPath == null || !File.Exists(fbx.MetaPath))
         {
-            return false;
+            return HumanoidFbxKind.None;
         }
         YamlNode meta = UnityYaml.ParseFlatDocument(File.ReadAllText(fbx.MetaPath));
         YamlNode humanDescription = meta["ModelImporter"]?["humanDescription"];
         if ((humanDescription?["human"]?.Seq?.Count ?? 0) > 0)
         {
-            return true;
+            return HumanoidFbxKind.Explicit;
         }
-        return humanDescription?["skeleton"]?.Seq?.Any(entry =>
+
+        var inferredBones = new HashSet<string>(StringComparer.Ordinal);
+        if (humanDescription?["skeleton"]?.Seq != null)
         {
-            string boneName = entry?["name"]?.AsString();
-            return !string.IsNullOrEmpty(boneName) &&
-                VrchatConstants.InferHumanNameFromSkeletonName(boneName) != null;
-        }) == true;
+            foreach (YamlNode entry in humanDescription["skeleton"].Seq)
+            {
+                string humanName = VrchatConstants.InferHumanNameFromSkeletonName(
+                    entry?["name"]?.AsString());
+                if (humanName != null)
+                {
+                    inferredBones.Add(humanName);
+                }
+            }
+        }
+        return inferredBones.IsSupersetOf(RequiredInferredHumanoidBones)
+            ? HumanoidFbxKind.Inferred
+            : HumanoidFbxKind.None;
     }
 
     private static void AddAdditionalFbx(UnityPackage package, VrchatAvatar avatar, string guid, FbxPlacement placement)
