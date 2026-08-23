@@ -1293,7 +1293,9 @@ public static class VrchatAvatarParser
                     continue;
                 }
                 string guid = smr.Root?["m_Mesh"]?.Guid;
-                if (package.ByGuid(guid)?.Extension == ".fbx")
+                UnityAsset meshAsset = package.ByGuid(guid);
+                if (!string.IsNullOrEmpty(guid) &&
+                    !string.Equals(meshAsset?.Extension, ".asset", StringComparison.OrdinalIgnoreCase))
                 {
                     counts[guid] = counts.GetValueOrDefault(guid) + 1;
                 }
