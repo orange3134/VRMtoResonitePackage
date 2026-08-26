@@ -69,6 +69,7 @@ internal static class GlbPreprocessor
         byte[] appendedBin = Array.Empty<byte>();
         if (root != null)
         {
+            changed |= FixTextureTransforms(root);
             changed |= FixTargetNames(root);
             changed |= FixMorphTargetAttributes(root);
             // VRM0 imports facing -Z, which forces VRIK to spin CenteredRoot 180°. Baking a
@@ -150,6 +151,117 @@ internal static class GlbPreprocessor
             }
         }
         return baked;
+    }
+
+    /// <summary>
+    /// Repairs non-conforming KHR_texture_transform values emitted by some VRM exporters.
+    /// The glTF extension requires offset and scale to be two-element arrays, but exporters
+    /// in the wild sometimes serialize vector objects instead. Assimp rejects the entire
+    /// material (and therefore the model) when it encounters one of those values.
+    /// </summary>
+    private static bool FixTextureTransforms(JsonNode node)
+    {
+        bool changed = false;
+        if (node is JsonObject obj)
+        {
+            if (obj["KHR_texture_transform"] is JsonObject transform)
+            {
+                changed |= FixTextureTransformVector(transform, "offset");
+                changed |= FixTextureTransformVector(transform, "scale");
+
+                if (transform["rotation"] is JsonNode rotation && !IsNumber(rotation))
+                {
+                    transform.Remove("rotation");
+                    changed = true;
+                }
+                if (transform["texCoord"] is JsonNode texCoord && !IsInteger(texCoord))
+                {
+                    transform.Remove("texCoord");
+                    changed = true;
+                }
+            }
+
+            // Snapshot the children because normalization above can replace/remove properties.
+            foreach (JsonNode child in obj.Select(property => property.Value).Where(value => value != null).ToArray())
+            {
+                changed |= FixTextureTransforms(child);
+            }
+        }
+        else if (node is JsonArray array)
+        {
+            foreach (JsonNode child in array.Where(value => value != null).ToArray())
+            {
+                changed |= FixTextureTransforms(child);
+            }
+        }
+        return changed;
+    }
+
+    private static bool FixTextureTransformVector(JsonObject transform, string propertyName)
+    {
+        if (transform[propertyName] is not JsonNode value)
+        {
+            return false;
+        }
+
+        if (value is JsonArray array && array.Count == 2 &&
+            array[0] is JsonNode x && IsNumber(x) &&
+            array[1] is JsonNode y && IsNumber(y))
+        {
+            return false;
+        }
+
+        if (value is JsonObject vector &&
+            TryGetVectorComponent(vector, "x", out double objectX) &&
+            TryGetVectorComponent(vector, "y", out double objectY))
+        {
+            transform[propertyName] = new JsonArray(objectX, objectY);
+        }
+        else
+        {
+            // Both fields have identity defaults in KHR_texture_transform, so omitting a value
+            // that cannot be recovered is preferable to making the whole model unimportable.
+            transform.Remove(propertyName);
+        }
+        return true;
+    }
+
+    private static bool TryGetVectorComponent(JsonObject vector, string name, out double result)
+    {
+        JsonNode component = vector.FirstOrDefault(property =>
+            string.Equals(property.Key, name, StringComparison.OrdinalIgnoreCase)).Value;
+        return TryGetNumber(component, out result);
+    }
+
+    private static bool IsNumber(JsonNode node) => TryGetNumber(node, out _);
+
+    private static bool IsInteger(JsonNode node)
+    {
+        return node is JsonValue value &&
+            (value.TryGetValue<int>(out _) || value.TryGetValue<long>(out _));
+    }
+
+    private static bool TryGetNumber(JsonNode node, out double result)
+    {
+        if (node is JsonValue value)
+        {
+            if (value.TryGetValue<double>(out result))
+            {
+                return double.IsFinite(result);
+            }
+            if (value.TryGetValue<float>(out float single))
+            {
+                result = single;
+                return float.IsFinite(single);
+            }
+            if (value.TryGetValue<long>(out long integer))
+            {
+                result = integer;
+                return true;
+            }
+        }
+        result = default;
+        return false;
     }
 
     /// <summary>
