@@ -256,9 +256,9 @@ internal static class AvatarSetup
         BipedRig heuristicRig = existingRigs.FirstOrDefault();
         if (heuristicRig != null)
         {
-            foreach (KeyValuePair<BodyNode, SyncRef<Slot>> entry in heuristicRig.Bones)
+            foreach (var entry in heuristicRig.Bones)
             {
-                heuristicBones[entry.Key] = entry.Value.Target?.Name;
+                heuristicBones[entry.Key] = entry.Value?.Name;
             }
         }
 
