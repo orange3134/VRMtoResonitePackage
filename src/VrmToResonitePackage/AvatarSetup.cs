@@ -256,9 +256,16 @@ internal static class AvatarSetup
         BipedRig heuristicRig = existingRigs.FirstOrDefault();
         if (heuristicRig != null)
         {
-            foreach (var entry in heuristicRig.Bones)
+            // Do not enumerate BipedRig.Bones directly. Resonite changed SyncDictionary's
+            // enumerated value here from SyncRef<Slot> to Slot, which is a binary-breaking
+            // GetEnumerator signature change. The rig API abstracts over that storage detail.
+            foreach (BodyNode node in Enum.GetValues<BodyNode>())
             {
-                heuristicBones[entry.Key] = entry.Value?.Name;
+                Slot bone = heuristicRig.TryGetBone(node);
+                if (bone != null)
+                {
+                    heuristicBones[node] = bone.Name;
+                }
             }
         }
 
