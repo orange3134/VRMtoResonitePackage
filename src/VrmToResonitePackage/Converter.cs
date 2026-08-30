@@ -2,6 +2,7 @@ using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.Store;
 using SkyFrost.Base;
+using System.Security.Cryptography;
 using VrmToResonitePackage.Vrm;
 
 namespace VrmToResonitePackage;
@@ -40,6 +41,8 @@ internal static class Converter
         // Written straight to the log file (not the console) so every log starts with the build
         // version for bug reports, without duplicating the console header printed by Program.Main.
         logWriter.WriteLine($"バージョン: {AppVersion.Display}");
+        logWriter.WriteLine($"Resoniteバージョン: {Engine.CurrentVersion}");
+        logWriter.WriteLine(DescribeResoniteBinary(resonitePath));
         Console.WriteLine($"ログ: {logPath}");
         Console.WriteLine("FrooxEngineをヘッドレスで起動しています（初回はしばらくかかります）...");
 
@@ -129,6 +132,23 @@ internal static class Converter
             unhookLogging();
             Console.SetOut(originalOut);
             Console.SetError(originalError);
+        }
+    }
+
+    private static string DescribeResoniteBinary(string resonitePath)
+    {
+        string path = Path.Combine(resonitePath, "FrooxEngine.dll");
+        try
+        {
+            var info = new FileInfo(path);
+            using FileStream stream = File.OpenRead(path);
+            string sha256 = Convert.ToHexString(SHA256.HashData(stream));
+            return $"FrooxEngine.dll: {info.Length} bytes, " +
+                   $"更新日時(UTC): {info.LastWriteTimeUtc:O}, SHA-256: {sha256}";
+        }
+        catch (Exception ex)
+        {
+            return $"FrooxEngine.dll情報: 取得失敗 ({ex.GetType().Name}: {ex.Message})";
         }
     }
 
