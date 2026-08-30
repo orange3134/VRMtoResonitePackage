@@ -40,7 +40,7 @@ internal static class Converter
 
         // Written straight to the log file (not the console) so every log starts with the build
         // version for bug reports, without duplicating the console header printed by Program.Main.
-        logWriter.WriteLine($"バージョン: {AppVersion.Display}");
+        logWriter.WriteLine($"ResoPonバージョン: {AppVersion.Display}");
         logWriter.WriteLine($"Resoniteバージョン: {Engine.CurrentVersion}");
         logWriter.WriteLine(DescribeResoniteBinary(resonitePath));
         Console.WriteLine($"ログ: {logPath}");
