@@ -35,6 +35,11 @@ dotnet publish src/VrmToResonitePackage -c Release -o publish   # 配布用
   から FrooxEngine 系 DLL を参照する。これらは**コンパイル時参照のみで再配布しない**
   （`<Private>false</Private>`）。別パスにインストールしている場合は
   `-p:ResonitePath="D:\Games\Resonite"`。
+- **Resonite 更新後のバイナリ互換性**: Resonite 側の API 更新後に `MissingMethodException` などで
+  変換が壊れた場合は、更新済み Resonite の DLL を `ResonitePath` に指定して ResoPon を
+  再ビルドすれば解決する。配布版も同様に、対象の Resonite DLL に対して再ビルドして出し直す。
+  変換ログ先頭の `Resoniteバージョン` と `FrooxEngine.dll` の SHA-256 を比較し、ビルド時と
+  実行時の API 世代が一致しているか確認する。同じ表示バージョンでも DLL が異なる場合がある。
 - **バージョン**: csproj の `<Version>` がビルド日時 `yyyy.MM.dd.HHmm` で自動生成される
   （`-p:Version=...` で上書き可）。`AppVersion.Display` が AssemblyInformationalVersion から
   取得し、変換ログ先頭・コンソールヘッダ・GUI タイトルに表示する。
