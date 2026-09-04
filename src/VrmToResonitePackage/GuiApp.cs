@@ -59,6 +59,7 @@ internal sealed class MainWindow : Window
     private string _lastLogPath;
     private ConversionRunResult _lastResult;
     private bool _isConverting;
+    private bool _isCheckingForUpdates;
     private Point _dragStart;
 
     public MainWindow(IReadOnlyList<string> initialFiles)
@@ -177,7 +178,17 @@ internal sealed class MainWindow : Window
     {
         if (_settings.CheckForUpdates && AutoUpdater.CanSelfUpdate)
         {
-            if (await CheckForUpdateAsync(initialFiles))
+            bool installingUpdate;
+            _isCheckingForUpdates = true;
+            try
+            {
+                installingUpdate = await CheckForUpdateAsync(initialFiles);
+            }
+            finally
+            {
+                _isCheckingForUpdates = false;
+            }
+            if (installingUpdate)
             {
                 return;
             }
@@ -726,7 +737,9 @@ internal sealed class MainWindow : Window
 
     private void WindowOnDragEnter(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) && !_isConverting
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) &&
+                    !_isConverting &&
+                    !_isCheckingForUpdates
             ? DragDropEffects.Copy
             : DragDropEffects.None;
         e.Handled = true;
@@ -734,7 +747,7 @@ internal sealed class MainWindow : Window
 
     private async void WindowOnDrop(object sender, DragEventArgs e)
     {
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop) || _isConverting)
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop) || _isConverting || _isCheckingForUpdates)
         {
             return;
         }

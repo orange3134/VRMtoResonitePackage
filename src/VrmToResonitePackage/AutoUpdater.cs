@@ -108,11 +108,14 @@ internal static class AutoUpdater
 
         try
         {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromMinutes(5));
+            CancellationToken downloadToken = timeout.Token;
             using var client = CreateHttpClient(TimeSpan.FromMinutes(5));
             using HttpResponseMessage response = await client.GetAsync(
                 release.DownloadUrl,
                 HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
+                downloadToken);
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength is long contentLength &&
                 (contentLength > MaximumDownloadSize || release.Size > 0 && contentLength != release.Size))
@@ -120,7 +123,7 @@ internal static class AutoUpdater
                 throw new InvalidDataException("The update download size does not match the release metadata.");
             }
 
-            await using Stream source = await response.Content.ReadAsStreamAsync(cancellationToken);
+            await using Stream source = await response.Content.ReadAsStreamAsync(downloadToken);
             await using (var output = new FileStream(
                              partial,
                              FileMode.Create,
@@ -132,16 +135,16 @@ internal static class AutoUpdater
                 var buffer = new byte[81920];
                 long total = 0;
                 int count;
-                while ((count = await source.ReadAsync(buffer, cancellationToken)) != 0)
+                while ((count = await source.ReadAsync(buffer, downloadToken)) != 0)
                 {
                     total += count;
                     if (total > MaximumDownloadSize)
                     {
                         throw new InvalidDataException("The update download is too large.");
                     }
-                    await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
+                    await output.WriteAsync(buffer.AsMemory(0, count), downloadToken);
                 }
-                await output.FlushAsync(cancellationToken);
+                await output.FlushAsync(downloadToken);
 
                 if (release.Size > 0 && total != release.Size)
                 {
@@ -214,6 +217,9 @@ internal static class AutoUpdater
             return 2;
         }
 
+        string replacement = targetPath + ".new";
+        string backup = targetPath + ".old";
+        bool backupCreated = false;
         try
         {
             try
@@ -229,21 +235,12 @@ internal static class AutoUpdater
                 // The old process has already exited.
             }
 
-            string replacement = targetPath + ".new";
-            string backup = targetPath + ".old";
             TryDelete(replacement);
             File.Copy(downloadedPath, replacement, true);
             TryDelete(backup);
             File.Move(targetPath, backup);
-            try
-            {
-                File.Move(replacement, targetPath);
-            }
-            catch
-            {
-                File.Move(backup, targetPath, true);
-                throw;
-            }
+            backupCreated = true;
+            File.Move(replacement, targetPath);
 
             var startInfo = new ProcessStartInfo(targetPath)
             {
@@ -259,8 +256,30 @@ internal static class AutoUpdater
         }
         catch
         {
+            if (backupCreated)
+            {
+                TryRestoreBackup(targetPath, backup);
+            }
             TryStart(targetPath, restartArguments);
             return 1;
+        }
+    }
+
+    private static bool TryRestoreBackup(string targetPath, string backupPath)
+    {
+        try
+        {
+            if (!File.Exists(backupPath))
+            {
+                return false;
+            }
+            TryDelete(targetPath);
+            File.Move(backupPath, targetPath, true);
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 
