@@ -11,6 +11,8 @@
 - GitHub PR のレビュー指摘に対応した場合は、修正を commit・push して PR の head へ反映した後、
   対応済みのスレッドだけを resolve する。未対応・未検証・未 push の指摘は resolve しない。
 - PR は Draft ではなく通常の PR として作成する。
+- GitHub CLI (`gh`) はサンドボックス内では認証やAPIアクセスが失敗するため、常にサンドボックス外の
+  通常環境で実行する。
 - リポジトリ内の一時ビルド、展開物、変換結果は `.tmp_verify/` に置く。
   `.vrm`、`.unitypackage`、テスト出力はコミットしない。
 
