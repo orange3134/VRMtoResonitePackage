@@ -15,6 +15,7 @@ internal static class Program
         {
             return updateExitCode;
         }
+        args = AutoUpdater.CleanupUpdateHelper(args);
 
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (ShouldLaunchGui(args))

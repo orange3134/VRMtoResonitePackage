@@ -12,6 +12,7 @@ internal static class AutoUpdater
         "https://api.github.com/repos/orange3134/VRMtoResonitePackage/releases/latest";
     private const string ReleaseAssetName = "ResoPon.exe";
     private const string ApplyUpdateArgument = "--resopon-apply-update";
+    private const string CleanupUpdateArgument = "--resopon-cleanup-update";
     private const long MaximumDownloadSize = 512L * 1024 * 1024;
 
     public static bool CanSelfUpdate =>
@@ -38,6 +39,47 @@ internal static class AutoUpdater
         string[] restartArguments = args.Skip(4).ToArray();
         exitCode = ApplyUpdate(targetPath, downloadedPath, processId, restartArguments);
         return true;
+    }
+
+    public static string[] CleanupUpdateHelper(string[] args)
+    {
+        if (args.Length < 3 ||
+            !string.Equals(args[0], CleanupUpdateArgument, StringComparison.Ordinal) ||
+            !int.TryParse(args[1], out int helperProcessId))
+        {
+            return args;
+        }
+
+        string helperPath;
+        try
+        {
+            helperPath = Path.GetFullPath(args[2]);
+        }
+        catch
+        {
+            return args.Skip(3).ToArray();
+        }
+
+        if (IsStagedUpdatePath(helperPath))
+        {
+            try
+            {
+                using Process helperProcess = Process.GetProcessById(helperProcessId);
+                helperProcess.WaitForExit(30_000);
+            }
+            catch (ArgumentException)
+            {
+                // The helper has already exited.
+            }
+            catch
+            {
+                // Cleanup is best-effort and must not prevent the updated app from starting.
+            }
+
+            TryDeleteDirectory(Path.GetDirectoryName(helperPath));
+        }
+
+        return args.Skip(3).ToArray();
     }
 
     public static async Task<UpdateRelease> CheckAsync(CancellationToken cancellationToken = default)
@@ -247,6 +289,9 @@ internal static class AutoUpdater
                 UseShellExecute = true,
                 WorkingDirectory = Path.GetDirectoryName(targetPath)
             };
+            startInfo.ArgumentList.Add(CleanupUpdateArgument);
+            startInfo.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            startInfo.ArgumentList.Add(downloadedPath);
             foreach (string argument in restartArguments)
             {
                 startInfo.ArgumentList.Add(argument);
@@ -335,6 +380,20 @@ internal static class AutoUpdater
                    StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsStagedUpdatePath(string path)
+    {
+        string updatesRoot = Path.GetFullPath(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ResoPon",
+            "Updates"));
+        string relativePath = Path.GetRelativePath(updatesRoot, path);
+        return !Path.IsPathRooted(relativePath) &&
+               !string.Equals(relativePath, "..", StringComparison.Ordinal) &&
+               !relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) &&
+               relativePath.Contains(Path.DirectorySeparatorChar) &&
+               string.Equals(Path.GetFileName(path), ReleaseAssetName, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void VerifyDigest(string path, string digest)
     {
         ValidateDigest(digest);
@@ -367,6 +426,20 @@ internal static class AutoUpdater
             if (File.Exists(path))
             {
                 File.Delete(path);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+            {
+                Directory.Delete(path, true);
             }
         }
         catch
