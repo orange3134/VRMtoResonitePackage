@@ -11,6 +11,11 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (AutoUpdater.TryRunUpdateHelper(args, out int updateExitCode))
+        {
+            return updateExitCode;
+        }
+
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (ShouldLaunchGui(args))
         {
