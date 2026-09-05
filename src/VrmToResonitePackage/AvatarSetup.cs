@@ -704,6 +704,7 @@ internal static class AvatarSetup
                 DirectVisemeDriver driver = skin.Slot.GetComponent<DirectVisemeDriver>()
                                             ?? skin.Slot.AttachComponent<DirectVisemeDriver>();
                 driver[viseme].ForceLink(field);
+                UniLog.Log($"DirectVisemeDriver: {skin.Slot.Name} / {viseme} -> {field.Name}");
                 if (!drivers.Contains(driver))
                 {
                     drivers.Add(driver);

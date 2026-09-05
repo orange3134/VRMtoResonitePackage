@@ -171,6 +171,7 @@ public sealed class VrchatViseme
 
 public sealed class VrchatBlink
 {
+    public string BlendShapeName { get; set; }
     public string MeshGameObjectName { get; set; }
     public int BlendShapeIndex { get; set; }
 }

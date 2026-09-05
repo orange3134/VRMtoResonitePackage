@@ -24,12 +24,64 @@ static void Run()
     // Keep fixtures for inspection; never recursively delete a computed directory.
     string root = Path.Combine(Path.GetTempPath(), "ResoPonPrefabSmoke", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(Path.Combine(root, "ProjectSettings"));
+    var signedIds = UnityScene.Parse("--- !u!1102 &-9223372036854775808\nAnimatorState:\n  m_Name: Negative\n--- !u!1102 &42\nAnimatorState:\n  m_Name: Positive\n");
+    Check(signedIds.Doc(long.MinValue)?.Root["m_Name"]?.AsString() == "Negative" && signedIds.Doc(42) != null,
+        "Signed 64-bit YAML document IDs remain distinct");
     string selectedGuid = new('a', 32);
     string otherGuid = new('b', 32);
     string materialGuid = new('c', 32);
     string selected = Asset("Assets/Selected.prefab", selectedGuid, Avatar("Selected"));
     Asset("Assets/Other.prefab", otherGuid, Avatar("Other"));
     Asset("Library/PackageCache/com.example.materials@123/Surface.mat", materialGuid, "Material:\n  m_Name: Surface\n");
+    string controllerGuid = new('e', 32);
+    var controller = new System.Text.StringBuilder("--- !u!91 &91\nAnimatorController:\n  m_AnimatorLayers:\n  - m_StateMachine: {fileID: -100}\n--- !u!1107 &-100\nAnimatorStateMachine:\n  m_EntryTransitions:\n");
+    for (int i = 1; i <= 15; i++) controller.Append($"  - {{fileID: {-100 - i}}}\n");
+    for (int i = 0; i < 15; i++)
+    {
+        string clipGuid = i.ToString("x32");
+        Asset($"Assets/Face{i}.anim", clipGuid, $$"""
+--- !u!74 &7400000
+AnimationClip:
+  m_FloatCurves:
+  - curve:
+      m_Curve:
+      - value: 0
+      - value: 100
+    attribute: blendShape.face{{i}}
+    path: Body
+    classID: 137
+  - curve:
+      m_Curve:
+      - value: 0
+    attribute: blendShape.reset
+    path: Body
+    classID: 137
+""");
+        int entry = i == 0 ? 15 : i;
+        controller.Append($"--- !u!1109 &{-100 - entry}\nAnimatorTransition:\n");
+        controller.Append(i == 0 ? "  m_Conditions: []\n" : $"  m_Conditions:\n  - m_ConditionMode: 6\n    m_ConditionEvent: Viseme\n    m_EventTreshold: {i}\n");
+        controller.Append($"  m_DstState: {{fileID: {-200 - i}}}\n--- !u!1102 &{-200 - i}\nAnimatorState:\n  m_Motion: {{fileID: 7400000, guid: {clipGuid}}}\n");
+    }
+    Asset("Assets/Face.controller", controllerGuid, controller.ToString());
+    using (UnityPackage package = UnityPackage.Open(selected))
+    {
+        var descriptor = UnityYaml.ParseFlatDocument($"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  isDefault: 0\n  animatorController: {{fileID: 91, guid: {controllerGuid}}}\n");
+        var face = new VrchatAvatar();
+        VrchatAnimatorFaceParser.Apply(package, descriptor, face);
+        Check(face.Visemes.Count == 15 && face.Visemes.All(v => v.MeshGameObjectName == "Body"),
+            "Animator visemes resolve all fifteen shapes through negative state and transition IDs");
+        foreach (var (preset, slot) in new[] { "sil", "PP", "FF", "TH", "DD", "kk", "CH", "SS", "nn", "RR", "aa", "E", "ih", "oh", "ou" }.Select((p, i) => (p, i)))
+            Check(face.Visemes.Single(v => v.ResonitePreset == preset).BlendShapeName == $"face{slot}", "Animator mapping " + preset);
+        face.Blink = new VrchatBlink { MeshGameObjectName = "Body", BlendShapeIndex = 0 };
+        face.FbxBlendShapeNames["Body"] = new List<string> { "blink" };
+        var model = VrchatModelAdapter.ToVrmModel(face);
+        var blinkBind = model.Expressions.Single(e => e.Preset == "blink").Binds.Single();
+        Check(model.MeshTargetNames[blinkBind.MeshIndex][blinkBind.MorphIndex] == "blink",
+            "Blink index does not alias the first synthetic viseme on Body");
+        var ordinary = new VrchatAvatar();
+        VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument($"lipSync: 3\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {controllerGuid}}}\n"), ordinary);
+        Check(ordinary.Visemes.Count == 0, "Animator inference preserves descriptor-driven lip sync");
+    }
     using (UnityPackage package = UnityPackage.Open(selected))
     {
         Check(package.InputPrefab.Guid == selectedGuid, "Selected prefab GUID");

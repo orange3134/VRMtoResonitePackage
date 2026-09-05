@@ -171,6 +171,7 @@ public static class VrchatAvatarParser
             avatar.AdditionalFbxs.RemoveAll(model => avatar.EditorOnlyFbxGuids.Contains(model.Guid));
             ParseFbxBlendShapeNames(package, avatar);
             ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
+            VrchatAnimatorFaceParser.Apply(package, selected.Descriptor.Root, avatar);
             ParseVariantRendererOverrides(package, selected.Source.Guid, avatar);
             avatar.RendererMaterials.RemoveAll(renderer => avatar.EditorOnlyFbxGuids.Contains(renderer.FbxGuid ?? ""));
             foreach (string excluded in avatar.EditorOnlyFbxGuids)
@@ -195,6 +196,7 @@ public static class VrchatAvatarParser
         ParseFbxBlendShapeNames(package, avatar);
         ParseHumanoid(package, avatar);
         ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
+        VrchatAnimatorFaceParser.Apply(package, selected.Descriptor.Root, avatar);
         ParsePhysBones(selected.Scene, selected.Subtree, avatar);
         ParseRendererMaterials(package, selected.Scene, selected.Subtree, avatar);
         ParseInactiveGameObjects(selected.Scene, selected.Subtree, avatar);

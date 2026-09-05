@@ -77,12 +77,33 @@ public static class VrchatModelAdapter
         // Blink (resolved by blendshape index on the eyelid mesh; VRChat stores an index, not a name).
         if (avatar.Blink != null)
         {
-            int meshIndex = MeshFor(avatar.Blink.MeshGameObjectName);
+            string shapeName = avatar.Blink.BlendShapeName;
+            if (shapeName == null && avatar.Blink.MeshGameObjectName != null &&
+                avatar.FbxBlendShapeNames.TryGetValue(avatar.Blink.MeshGameObjectName, out var shapes) &&
+                avatar.Blink.BlendShapeIndex >= 0 && avatar.Blink.BlendShapeIndex < shapes.Count)
+                shapeName = shapes[avatar.Blink.BlendShapeIndex];
+            int meshIndex;
+            int morphIndex;
+            if (shapeName != null)
+            {
+                meshIndex = MeshFor(avatar.Blink.MeshGameObjectName);
+                morphIndex = model.MeshTargetNames[meshIndex].Count;
+                model.MeshTargetNames[meshIndex].Add(shapeName);
+            }
+            else
+            {
+                // Raw Unity indices must not index the synthetic viseme-name table on this mesh.
+                meshIndex = model.MeshTargetNames.Count;
+                model.MeshTargetNames.Add(new List<string>());
+                int node = NodeFor(avatar.Blink.MeshGameObjectName);
+                model.MeshToNodes[meshIndex] = node >= 0 ? new List<int> { node } : new List<int>();
+                morphIndex = avatar.Blink.BlendShapeIndex;
+            }
             var blink = new VrmExpression { Preset = "blink", Name = "blink" };
             blink.Binds.Add(new VrmExpressionBind
             {
                 MeshIndex = meshIndex,
-                MorphIndex = avatar.Blink.BlendShapeIndex,
+                MorphIndex = morphIndex,
                 Weight = 1f,
             });
             model.Expressions.Add(blink);
