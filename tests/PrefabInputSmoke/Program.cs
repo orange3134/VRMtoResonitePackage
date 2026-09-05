@@ -17,6 +17,10 @@ Run();
 [MethodImpl(MethodImplOptions.NoInlining)]
 static void Run()
 {
+    var rootResolver = new UnityModelFileIdResolver(null);
+    Check(rootResolver.ResolveName(919132149155446097L) == "RootNode" &&
+          rootResolver.ResolveName(-8679921383154817045L) == "RootNode",
+        "Unity synthetic root IDs cannot resolve to an arbitrary clothing or armature node");
     // Keep fixtures for inspection; never recursively delete a computed directory.
     string root = Path.Combine(Path.GetTempPath(), "ResoPonPrefabSmoke", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(Path.Combine(root, "ProjectSettings"));
@@ -70,6 +74,118 @@ static void Run()
         extracted = package.ByGuid(selectedGuid).DiskPath;
     }
     Check(!File.Exists(extracted) && File.Exists(archive), "Only extracted temporary files are cleaned up");
+
+    // A clothing prefab can include an EditorOnly copy of the avatar's Body. That copy must
+    // not exclude the Body renderer in a different FBX, even when the composition loads it last.
+    string bodyModel = new('1', 32);
+    string clothingModel = new('2', 32);
+    string bodyPrefab = new('3', 32);
+    string clothingPrefab = new('4', 32);
+    Asset("Assets/Body.fbx", bodyModel, "");
+    Asset("Assets/Clothing.fbx", clothingModel, "");
+    Asset("Assets/Body.prefab", bodyPrefab, RendererPrefab(bodyModel, "Untagged"));
+    Asset("Assets/Clothing.prefab", clothingPrefab, RendererPrefab(clothingModel, "EditorOnly"));
+    string composed = Asset("Assets/Composed.prefab", new string('5', 32), $$"""
+        %YAML 1.1
+        --- !u!1001 &10
+        PrefabInstance:
+          m_SourcePrefab: {fileID: 100100000, guid: {{bodyPrefab}}, type: 3}
+        --- !u!1001 &20
+        PrefabInstance:
+          m_SourcePrefab: {fileID: 100100000, guid: {{clothingPrefab}}, type: 3}
+        """);
+    using (UnityPackage package = UnityPackage.Open(composed))
+    {
+        var avatar = new VrchatAvatar();
+        typeof(VrchatAvatarParser).GetMethod("CollectVariantPrefabGameObjectNames",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
+            new[] { typeof(UnityPackage), typeof(string), typeof(VrchatAvatar) })!
+            .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
+        Check(avatar.ShouldKeepRenderer(bodyModel, "Body"), "Body survives another model's EditorOnly Body");
+        Check(!avatar.ShouldKeepRenderer(clothingModel, "Body"), "EditorOnly clothing Body stays excluded");
+        Check(!avatar.ShouldKeepRenderer(bodyModel, "Absent"), "Unreferenced meshes stay excluded");
+        avatar.PrefabRendererStates.Clear();
+        avatar.PrefabGameObjectNames.Clear();
+        avatar.PrefabRendererStates[new VrchatGameObjectReference(bodyModel, "Body")] = false;
+        Check(!avatar.ShouldKeepRenderer(bodyModel, "Body"), "An all-excluded filter still removes meshes");
+        avatar.PrefabRendererStates.Clear();
+        avatar.PrefabGameObjectNames.Add("Body");
+        Check(avatar.ShouldKeepRenderer(bodyModel, "Body") && !avatar.ShouldKeepRenderer(bodyModel, "Absent"),
+            "Regular prefab name filtering remains supported");
+    }
+
+    string parentGuid = new('6', 32);
+    string nestedGuid = new('7', 32);
+    Asset("Assets/Nested.prefab", nestedGuid, RendererPrefab(clothingModel, "Untagged"));
+    string parentPath = Asset("Assets/EditorParent.prefab", parentGuid, $$"""
+        %YAML 1.1
+        --- !u!1 &1
+        GameObject:
+          m_Name: ClothingRoot
+          m_TagString: EditorOnly
+        --- !u!4 &10
+        Transform:
+          m_GameObject: {fileID: 1}
+          m_Father: {fileID: 0}
+        --- !u!1 &2
+        GameObject:
+          m_Name: Body
+          m_TagString: Untagged
+          m_Component:
+          - component: {fileID: 3}
+        --- !u!4 &20
+        Transform:
+          m_GameObject: {fileID: 2}
+          m_Father: {fileID: 10}
+        --- !u!137 &3
+        SkinnedMeshRenderer:
+          m_GameObject: {fileID: 2}
+          m_Mesh: {fileID: 4300000, guid: {{bodyModel}}, type: 3}
+        --- !u!1001 &100
+        PrefabInstance:
+          m_SourcePrefab: {fileID: 100100000, guid: {{nestedGuid}}, type: 3}
+          m_Modification:
+            m_TransformParent: {fileID: 20}
+        """);
+    VrchatAvatar excluded = ReadFilter(parentPath);
+    Check(!excluded.ShouldKeepRenderer(bodyModel, "Body"), "EditorOnly parent excludes an Untagged child");
+    Check(!excluded.ShouldKeepRenderer(clothingModel, "Body"), "EditorOnly parent excludes nested prefab meshes");
+    Check(excluded.EditorOnlyFbxGuids.SetEquals(new[] { bodyModel, clothingModel }),
+        "Entire EditorOnly models are omitted before importing their armatures");
+    Check(excluded.EditorOnlyPrefabObjects[parentGuid].IsSupersetOf(new long[] { 1, 2 }),
+        "EditorOnly subtree includes parent and child objects, not only renderers");
+
+    string restoredPath = Asset("Assets/Restored.prefab", new string('8', 32), $$"""
+        %YAML 1.1
+        --- !u!1001 &100
+        PrefabInstance:
+          m_SourcePrefab: {fileID: 100100000, guid: {{parentGuid}}, type: 3}
+          m_Modification:
+            m_Modifications:
+            - target: {fileID: 1, guid: {{parentGuid}}, type: 3}
+              propertyPath: m_TagString
+              value: Untagged
+        """);
+    VrchatAvatar restored = ReadFilter(restoredPath);
+    Check(restored.ShouldKeepRenderer(bodyModel, "Body") && restored.ShouldKeepRenderer(clothingModel, "Body"),
+        "Variant Untagged override restores the formerly EditorOnly subtree");
+    Check(restored.EditorOnlyFbxGuids.Count == 0 && restored.EditorOnlyPrefabObjects.Count == 0,
+        "Restored objects and armatures are eligible for import again");
+
+    string childTaggedPath = Asset("Assets/ChildTagged.prefab", new string('9', 32), $$"""
+        %YAML 1.1
+        --- !u!1001 &100
+        PrefabInstance:
+          m_SourcePrefab: {fileID: 100100000, guid: {{parentGuid}}, type: 3}
+          m_Modification:
+            m_Modifications:
+            - target: {fileID: 2, guid: {{parentGuid}}, type: 3}
+              propertyPath: m_TagString
+              value: Untagged
+        """);
+    Check(!ReadFilter(childTaggedPath).ShouldKeepRenderer(bodyModel, "Body"),
+        "Child tag override cannot escape an EditorOnly ancestor");
+
     Asset("Assets/Duplicate.mat", materialGuid, "Material:\n");
     Asset("Assets/Duplicate2.mat", materialGuid, "Material:\n");
     ExpectInvalid(() => UnityPackage.Open(selected));
@@ -83,6 +199,17 @@ static void Run()
         File.WriteAllText(path + ".meta", "fileFormatVersion: 2\nguid: " + guid + "\n");
         return path;
     }
+}
+
+static VrchatAvatar ReadFilter(string path)
+{
+    using UnityPackage package = UnityPackage.Open(path);
+    var avatar = new VrchatAvatar();
+    typeof(VrchatAvatarParser).GetMethod("CollectVariantPrefabGameObjectNames",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
+        new[] { typeof(UnityPackage), typeof(string), typeof(VrchatAvatar) })!
+        .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
+    return avatar;
 }
 
 static void Check(bool condition, string label)
@@ -111,4 +238,18 @@ Transform:
 MonoBehaviour:
   m_GameObject: {fileID: 1}
   m_Script: {fileID: 11500000, guid: 67cc4cb7839cd3741b63733d5adf0442, type: 3}
+""";
+
+static string RendererPrefab(string modelGuid, string tag) => $$"""
+%YAML 1.1
+--- !u!1 &1
+GameObject:
+  m_Name: Body
+  m_TagString: {{tag}}
+  m_Component:
+  - component: {fileID: 2}
+--- !u!137 &2
+SkinnedMeshRenderer:
+  m_GameObject: {fileID: 1}
+  m_Mesh: {fileID: 4300000, guid: {{modelGuid}}, type: 3}
 """;

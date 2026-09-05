@@ -16,6 +16,8 @@ public sealed class UnityModelFileIdResolver
     private readonly Dictionary<string, IReadOnlyList<float>> _blendShapeDefaultWeights =
         new(StringComparer.Ordinal);
     private readonly HashSet<string> _rendererNames = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string>> _subtreeRenderers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string>> _subtreeNodes = new(StringComparer.Ordinal);
     private readonly List<ModelMaterial> _materials = new();
     private IReadOnlyList<UnityFbxBlendShapeDefaults.Channel> _defaultWeightChannels =
         Array.Empty<UnityFbxBlendShapeDefaults.Channel>();
@@ -36,12 +38,34 @@ public sealed class UnityModelFileIdResolver
     }
 
     public string ResolveName(long fileId)
-        => fileId != 0 && _names.TryGetValue(fileId, out string name) ? name : null;
+        => fileId == 0 ? null : IsRootFileId(fileId) ? "RootNode" :
+           _names.TryGetValue(fileId, out string name) ? name : null;
 
     public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNames => _blendShapeNames;
     public IReadOnlyDictionary<string, IReadOnlyList<float>> BlendShapeDefaultWeights =>
         _blendShapeDefaultWeights;
     public IReadOnlyCollection<string> RendererNames => _rendererNames;
+    public IEnumerable<string> RendererNamesUnder(string nodeName)
+        => nodeName != null && _subtreeRenderers.TryGetValue(nodeName, out var names)
+            ? names : Array.Empty<string>();
+    public IEnumerable<string> RendererNamesUnder(long fileId)
+    {
+        // Unity can fold the model into a synthetic root which Assimp names after a child
+        // armature. Identify that root by its ID, not the heuristic display-name mapping.
+        if (IsRootFileId(fileId))
+            return RendererNames;
+        return RendererNamesUnder(ResolveName(fileId));
+    }
+    public static bool IsRootFileId(long fileId)
+        => fileId == 0 || fileId == Compute("GameObject", "//RootNode", 0) ||
+           fileId == Compute("GameObject", "//RootNode/root", 0) ||
+           fileId == Compute("Transform", "//RootNode/Transform", 0) ||
+           fileId == Compute("Transform", "//RootNode/root/Transform", 0);
+
+    public IEnumerable<string> NodeNamesUnder(long fileId)
+        => IsRootFileId(fileId) ? _subtreeNodes.Keys :
+           ResolveName(fileId) is string name && _subtreeNodes.TryGetValue(name, out var nodes)
+               ? nodes : Array.Empty<string>();
     public IReadOnlyList<ModelMaterial> Materials => _materials;
 
     public readonly record struct ModelMaterial(string Name, string MainTexturePath);
@@ -111,6 +135,24 @@ public sealed class UnityModelFileIdResolver
 
             var roots = new List<(Node Node, List<string> Path)>();
             CollectNodes(scene.RootNode, new List<string>(), roots);
+            foreach ((Node node, List<string> nodePath) in roots)
+            {
+                foreach (string ancestor in nodePath.Select(NormalizeName))
+                {
+                    if (!_subtreeNodes.TryGetValue(ancestor, out var names))
+                        _subtreeNodes[ancestor] = names = new HashSet<string>(StringComparer.Ordinal);
+                    names.Add(node.Name);
+                }
+            }
+            foreach ((Node node, List<string> nodePath) in roots.Where(entry => entry.Node.MeshCount > 0))
+            {
+                foreach (string ancestor in nodePath.Select(NormalizeName))
+                {
+                    if (!_subtreeRenderers.TryGetValue(ancestor, out var names))
+                        _subtreeRenderers[ancestor] = names = new HashSet<string>(StringComparer.Ordinal);
+                    names.Add(node.Name);
+                }
+            }
             foreach ((Node node, List<string> nodePath) in roots)
             {
                 AddPathVariants("GameObject", nodePath, node.Name);

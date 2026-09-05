@@ -84,6 +84,25 @@ public sealed class VrchatAvatar
     /// </summary>
     public HashSet<string> PrefabGameObjectNames { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>Variant renderer inclusion, scoped by source model so clothing cannot delete a
+    /// same-named renderer in the avatar's body model. False entries retain explicit exclusions.</summary>
+    public Dictionary<VrchatGameObjectReference, bool> PrefabRendererStates { get; } = new();
+    /// <summary>Whole excluded models; never import their geometry or skeletons.</summary>
+    public HashSet<string> EditorOnlyFbxGuids { get; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Excluded model nodes, including bones and non-rendering objects.</summary>
+    public HashSet<VrchatGameObjectReference> EditorOnlyModelObjects { get; } = new();
+    /// <summary>Excluded authored/stripped GameObject IDs for filtering component conversion.</summary>
+    public Dictionary<string, HashSet<long>> EditorOnlyPrefabObjects { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public bool ShouldKeepRenderer(string fbxGuid, string name)
+    {
+        if (PrefabRendererStates.Count == 0)
+            return PrefabGameObjectNames.Count == 0 || PrefabGameObjectNames.Contains(name);
+        return PrefabRendererStates.TryGetValue(new VrchatGameObjectReference(fbxGuid, name), out bool keep)
+            ? keep
+            : PrefabRendererStates.GetValueOrDefault(new VrchatGameObjectReference(null, name));
+    }
+
     /// <summary>Subset of Modular Avatar build operations that affect imported hierarchy/bone bindings.</summary>
     public List<VrchatModularMergeArmature> ModularMergeArmatures { get; } = new();
     public List<VrchatModularBoneProxy> ModularBoneProxies { get; } = new();

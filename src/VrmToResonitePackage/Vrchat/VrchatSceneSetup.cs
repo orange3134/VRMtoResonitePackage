@@ -10,6 +10,25 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static class VrchatSceneSetup
 {
+    public static Dictionary<Slot, string> CaptureImportedObjects(IReadOnlyDictionary<string, Slot> roots)
+    {
+        var sources = new Dictionary<Slot, string>();
+        foreach ((string guid, Slot root) in roots)
+            foreach (Slot slot in EnumerateSlots(root)) sources[slot] = guid;
+        return sources;
+    }
+
+    public static void RemoveEditorOnlyObjects(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources)
+    {
+        foreach ((Slot slot, string guid) in sources)
+        {
+            if (slot.IsDestroyed || !avatar.EditorOnlyModelObjects.Contains(new VrchatGameObjectReference(guid, slot.Name)))
+                continue;
+            UniLog.Log($"Removing EditorOnly object subtree: {slot.Name} (fbx={guid})");
+            slot.Destroy();
+        }
+    }
+
     public static void Apply(Slot root, VrchatAvatar avatar)
     {
         ApplyInactiveStates(root, avatar);
@@ -22,20 +41,23 @@ internal static class VrchatSceneSetup
     /// brings them all back, so any renderer whose GameObject is not in the prefab is dropped.
     /// Must run before avatar/material setup so nothing downstream references the removed meshes.
     /// </summary>
-    public static void RemoveDeletedMeshes(Slot root, VrchatAvatar avatar)
+    public static void RemoveDeletedMeshes(Slot root, VrchatAvatar avatar,
+        IReadOnlyDictionary<Slot, string> importedMeshSources)
     {
-        if (avatar.PrefabGameObjectNames.Count == 0)
+        if (avatar.PrefabGameObjectNames.Count == 0 && avatar.PrefabRendererStates.Count == 0)
         {
             return;
         }
-        HashSet<string> keep = avatar.PrefabGameObjectNames;
+        string SourceGuid(Slot slot) => importedMeshSources.TryGetValue(slot, out string guid)
+            ? guid : FbxGuidForSlot(root, slot, avatar);
+        bool Keep(Slot slot) => avatar.ShouldKeepRenderer(SourceGuid(slot), slot.Name);
 
         // Renderer slots whose GameObject name the prefab does not contain.
         var extras = new List<Slot>();
         foreach (MeshRenderer renderer in root.GetComponentsInChildren<MeshRenderer>())
         {
             Slot slot = renderer.Slot;
-            if (slot.Name != null && !keep.Contains(slot.Name))
+            if (slot.Name != null && !Keep(slot))
             {
                 extras.Add(slot);
             }
@@ -51,7 +73,8 @@ internal static class VrchatSceneSetup
             // Don't destroy a slot that still hosts a kept mesh somewhere below it; just strip its
             // own renderer/mesh in that (rare) case.
             bool hasKeptDescendant = slot.GetComponentsInChildren<MeshRenderer>()
-                .Any(r => r.Slot != slot && r.Slot.Name != null && keep.Contains(r.Slot.Name));
+                .Any(r => r.Slot != slot && r.Slot.Name != null && Keep(r.Slot));
+            UniLog.Log($"Removing prefab-excluded mesh: {slot.Name} (fbx={SourceGuid(slot)})");
             if (hasKeptDescendant)
             {
                 foreach (MeshRenderer r in slot.GetComponents<MeshRenderer>())
@@ -87,6 +110,11 @@ internal static class VrchatSceneSetup
         if (removed > 0)
         {
             UniLog.Log($"prefabに含まれないメッシュを {removed} 個削除しました。");
+        }
+        foreach (var group in root.GetComponentsInChildren<MeshRenderer>().GroupBy(r => SourceGuid(r.Slot)))
+        {
+            UniLog.Log($"Retained prefab meshes (fbx={group.Key}): " +
+                       string.Join(", ", group.Select(r => r.Slot.Name).Distinct()));
         }
     }
 
