@@ -845,7 +845,8 @@ internal static class AvatarSetup
         List<VrmFirstPersonMeshAnnotation> autoAnnotations = vrm.FirstPersonMeshAnnotations
             .Where(a => a.Flag == VrmFirstPersonFlag.Auto)
             .ToList();
-        if (autoAnnotations.Count == 0)
+        bool autoVrchat = vrm.Source == ModelSource.VrchatFbx;
+        if (autoAnnotations.Count == 0 && !autoVrchat)
         {
             return;
         }
@@ -874,8 +875,9 @@ internal static class AvatarSetup
         // Resolve and deduplicate the source renderers before creating any headless children.
         // Otherwise a later annotation for the same slot can discover a child created by an
         // earlier annotation and recursively apply another material override to it.
-        List<MeshRenderer> renderers = autoAnnotations
-            .SelectMany(annotation => ResolveAnnotatedRenderers(vrm, slotsByName, annotation))
+        List<MeshRenderer> renderers = (autoVrchat
+            ? root.GetComponentsInChildren<MeshRenderer>()
+            : autoAnnotations.SelectMany(annotation => ResolveAnnotatedRenderers(vrm, slotsByName, annotation)))
             .Distinct()
             .ToList();
         foreach (MeshRenderer renderer in renderers)
@@ -886,6 +888,7 @@ internal static class AvatarSetup
                     if (await TrySetupAutoSkinnedRenderer(skinned, firstPersonBone, firstPersonMeshAssets,
                             invisibleMaterial))
                     {
+                        UniLog.Log($"FirstPerson RenderMaterialOverride: {renderer.Slot.Name}");
                         configured++;
                     }
                     break;

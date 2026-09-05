@@ -491,6 +491,7 @@ internal static class Converter
                     }
                     AvatarSetup.Build(root, model, setupOptions);
                     await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package);
+                    await AvatarSetup.ApplyFirstPersonAutoAsync(root, model);
                     SpringBoneSetup.Apply(root, model);
                 }
 
