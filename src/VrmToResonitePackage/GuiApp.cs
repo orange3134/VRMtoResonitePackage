@@ -59,6 +59,7 @@ internal sealed class MainWindow : Window
     private string _lastLogPath;
     private ConversionRunResult _lastResult;
     private bool _isConverting;
+    private bool _isCheckingForUpdates;
     private Point _dragStart;
 
     public MainWindow(IReadOnlyList<string> initialFiles)
@@ -170,10 +171,82 @@ internal sealed class MainWindow : Window
         _spinnerTimer.Tick += (_, _) => _spinnerRotation.Angle = (_spinnerRotation.Angle + 7) % 360;
 
         ShowIdle();
+        Loaded += async (_, _) => await OnLoadedAsync(initialFiles);
+    }
+
+    private async Task OnLoadedAsync(IReadOnlyList<string> initialFiles)
+    {
+        if (_settings.CheckForUpdates && AutoUpdater.CanSelfUpdate)
+        {
+            bool installingUpdate;
+            _isCheckingForUpdates = true;
+            try
+            {
+                installingUpdate = await CheckForUpdateAsync(initialFiles);
+            }
+            finally
+            {
+                _isCheckingForUpdates = false;
+            }
+            if (installingUpdate)
+            {
+                return;
+            }
+        }
 
         if (initialFiles.Count > 0)
         {
-            Loaded += async (_, _) => await StartConversion(initialFiles);
+            await StartConversion(initialFiles);
+        }
+    }
+
+    private async Task<bool> CheckForUpdateAsync(IReadOnlyList<string> restartArguments)
+    {
+        UpdateRelease release;
+        try
+        {
+            release = await AutoUpdater.CheckAsync();
+        }
+        catch
+        {
+            // Startup update checks are best-effort and must never prevent conversion.
+            return false;
+        }
+
+        if (release == null)
+        {
+            return false;
+        }
+
+        MessageBoxResult choice = MessageBox.Show(
+            this,
+            AppLocalization.Format("UpdateAvailableMessage", AppVersion.Display, release.Version),
+            AppLocalization.Get("UpdateAvailableTitle"),
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Information);
+        if (choice != MessageBoxResult.Yes)
+        {
+            return false;
+        }
+
+        try
+        {
+            ShowConverting(AppLocalization.Get("DownloadingUpdate"));
+            string downloadedPath = await AutoUpdater.DownloadAsync(release);
+            AutoUpdater.StartInstallAndRestart(downloadedPath, restartArguments);
+            Application.Current.Shutdown();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ShowIdle();
+            MessageBox.Show(
+                this,
+                AppLocalization.Format("UpdateFailedMessage", ex.Message),
+                AppLocalization.Get("UpdateFailedTitle"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
         }
     }
 
@@ -664,7 +737,9 @@ internal sealed class MainWindow : Window
 
     private void WindowOnDragEnter(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) && !_isConverting
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) &&
+                    !_isConverting &&
+                    !_isCheckingForUpdates
             ? DragDropEffects.Copy
             : DragDropEffects.None;
         e.Handled = true;
@@ -672,7 +747,7 @@ internal sealed class MainWindow : Window
 
     private async void WindowOnDrop(object sender, DragEventArgs e)
     {
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop) || _isConverting)
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop) || _isConverting || _isCheckingForUpdates)
         {
             return;
         }
@@ -899,6 +974,7 @@ internal sealed class SettingsWindow : Window
     private readonly CheckBox _defaultUserScale = new() { Content = AppLocalization.Get("KeepOriginalAvatarScale") };
     private readonly CheckBox _keepWorkingFiles = new() { Content = AppLocalization.Get("KeepWorkingFiles") };
     private readonly CheckBox _promptMtoonTransparentBlendMode = new() { Content = AppLocalization.Get("ChooseTransparentMode") };
+    private readonly CheckBox _checkForUpdates = new() { Content = AppLocalization.Get("CheckForUpdates") };
     private readonly TextBox _viewForward = new();
     private readonly TextBox _viewUp = new();
     private readonly TextBox _nearClip = new();
@@ -938,6 +1014,7 @@ internal sealed class SettingsWindow : Window
 
         panel.Children.Add(Header(AppLocalization.Get("DisplaySettings")));
         panel.Children.Add(SelectionField(AppLocalization.Get("Language"), _language));
+        panel.Children.Add(_checkForUpdates);
         panel.Children.Add(Header(AppLocalization.Get("ConversionOptions"), new Thickness(0, 28, 0, 2)));
         panel.Children.Add(PathRow(AppLocalization.Get("OutputDirectory"), _outputDirectory));
         panel.Children.Add(PathRow(AppLocalization.Get("ResoniteDirectory"), _resonitePath));
@@ -986,6 +1063,7 @@ internal sealed class SettingsWindow : Window
         _defaultUserScale.IsChecked = Settings.DefaultUserScale;
         _promptMtoonTransparentBlendMode.IsChecked = Settings.PromptMtoonTransparentBlendMode;
         _keepWorkingFiles.IsChecked = Settings.KeepWorkingFiles;
+        _checkForUpdates.IsChecked = Settings.CheckForUpdates;
         _viewForward.Text = Settings.ViewForward?.ToString(CultureInfo.InvariantCulture) ?? AutoValueText;
         _viewUp.Text = Settings.ViewUp?.ToString(CultureInfo.InvariantCulture) ?? AutoValueText;
         _nearClip.Text = Settings.NearClip?.ToString(CultureInfo.InvariantCulture) ?? "0.075";
@@ -1005,6 +1083,7 @@ internal sealed class SettingsWindow : Window
             Settings.DefaultUserScale = _defaultUserScale.IsChecked == true;
             Settings.PromptMtoonTransparentBlendMode = _promptMtoonTransparentBlendMode.IsChecked == true;
             Settings.KeepWorkingFiles = _keepWorkingFiles.IsChecked == true;
+            Settings.CheckForUpdates = _checkForUpdates.IsChecked == true;
             if (_languageChanged && _language.SelectedItem is AppLocaleInfo locale)
             {
                 Settings.Language = locale.Code;
@@ -1324,6 +1403,7 @@ internal sealed class GuiSettings
     public bool DefaultUserScale { get; set; }
     public bool KeepWorkingFiles { get; set; }
     public bool PromptMtoonTransparentBlendMode { get; set; }
+    public bool CheckForUpdates { get; set; } = true;
     public float? ViewForward { get; set; }
     public float? ViewUp { get; set; }
     public float? NearClip { get; set; }
@@ -1367,6 +1447,7 @@ internal sealed class GuiSettings
         DefaultUserScale = DefaultUserScale,
         KeepWorkingFiles = KeepWorkingFiles,
         PromptMtoonTransparentBlendMode = PromptMtoonTransparentBlendMode,
+        CheckForUpdates = CheckForUpdates,
         ViewForward = ViewForward,
         ViewUp = ViewUp,
         NearClip = NearClip,
@@ -1385,6 +1466,7 @@ internal sealed class GuiSettings
         DefaultUserScale = other.DefaultUserScale;
         KeepWorkingFiles = other.KeepWorkingFiles;
         PromptMtoonTransparentBlendMode = other.PromptMtoonTransparentBlendMode;
+        CheckForUpdates = other.CheckForUpdates;
         ViewForward = other.ViewForward;
         ViewUp = other.ViewUp;
         NearClip = other.NearClip;
