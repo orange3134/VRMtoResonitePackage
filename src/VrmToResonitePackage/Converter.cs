@@ -90,8 +90,8 @@ internal static class Converter
                 Console.WriteLine($"=== 変換中: {Path.GetFileName(inputFile)} ===");
                 try
                 {
-                    bool isUnityPackage = string.Equals(Path.GetExtension(inputFile), ".unitypackage",
-                        StringComparison.OrdinalIgnoreCase);
+                    bool isUnityPackage = string.Equals(Path.GetExtension(inputFile), ".prefab", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(Path.GetExtension(inputFile), ".unitypackage", StringComparison.OrdinalIgnoreCase);
                     string output = isUnityPackage
                         ? await ConvertVrchat(world, inputFile, options).ConfigureAwait(false)
                         : await ConvertOne(world, inputFile, options).ConfigureAwait(false);
@@ -324,7 +324,7 @@ internal static class Converter
     /// </summary>
     private static async Task<string> ConvertVrchat(World world, string packagePath, CliOptions options)
     {
-        using Unity.UnityPackage package = Unity.UnityPackage.Extract(packagePath);
+        using Unity.UnityPackage package = Unity.UnityPackage.Open(packagePath);
         Vrchat.VrchatDiagnostics.LogPackageSummary(package, packagePath);
         Vrchat.VrchatAvatar avatar = null;
         try

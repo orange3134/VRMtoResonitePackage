@@ -300,9 +300,10 @@ internal sealed class CliOptions
     public static void PrintUsage()
     {
         Console.WriteLine("使い方:");
-        Console.WriteLine("  ResoPon.exe <model.vrm> [...] [オプション]");
+        Console.WriteLine("  ResoPon.exe <model.vrm|avatar.unitypackage|avatar.prefab> [...] [オプション]");
         Console.WriteLine();
-        Console.WriteLine("  VRM をこのexeにドラッグ&ドロップするだけでも変換できます。");
+        Console.WriteLine("  VRM / .unitypackage / .prefab をこのexeにドラッグ&ドロップするだけでも変換できます。");
+        Console.WriteLine("  .prefab はUnityプロジェクト内のファイルを指定してください（関連アセットと.metaが必要です）。");
         Console.WriteLine("  出力は入力ファイルと同じ場所に <名前>.resonitepackage として保存されます。");
         Console.WriteLine();
         Console.WriteLine("オプション:");

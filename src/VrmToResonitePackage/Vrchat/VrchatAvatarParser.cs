@@ -111,6 +111,11 @@ public static class VrchatAvatarParser
     public static VrchatAvatar Parse(UnityPackage package, string avatarOverride = null)
     {
         List<Candidate> candidates = FindCandidates(package);
+        if (package.InputPrefab != null && candidates.Count == 0)
+        {
+            Candidate composed = TryCreateComposedCandidate(package, package.InputPrefab);
+            if (composed != null) candidates.Add(composed);
+        }
         AddRequestedComposedCandidate(package, candidates, avatarOverride);
         if (candidates.Count == 0)
         {
@@ -283,7 +288,7 @@ public static class VrchatAvatarParser
         // scene; scan both. The descriptor may sit on the file root, on a nested GameObject, or be
         // inline in a prefab variant — find it by component, not by requiring a root match. It is
         // detected by script GUID or, GUID-independently, by its characteristic field signature.
-        foreach (UnityAsset source in package.ByExtension(".prefab").Concat(package.ByExtension(".unity")))
+        foreach (UnityAsset source in package.AvatarSources)
         {
             string text = package.ReadText(source);
             if (text == null ||
@@ -360,7 +365,7 @@ public static class VrchatAvatarParser
     {
         var existingSources = new HashSet<string>(
             candidates.Select(c => c.Source.Guid), StringComparer.OrdinalIgnoreCase);
-        foreach (UnityAsset source in package.ByExtension(".prefab"))
+        foreach (UnityAsset source in package.AvatarSources.Where(asset => asset.Extension == ".prefab"))
         {
             if (existingSources.Contains(source.Guid))
             {
@@ -420,7 +425,7 @@ public static class VrchatAvatarParser
     {
         var existingSources = new HashSet<string>(
             result.Select(choice => choice.SourcePath), StringComparer.OrdinalIgnoreCase);
-        foreach (UnityAsset source in package.ByExtension(".prefab"))
+        foreach (UnityAsset source in package.AvatarSources.Where(asset => asset.Extension == ".prefab"))
         {
             string name = Path.GetFileNameWithoutExtension(source.LogicalPath);
             if (existingSources.Contains(source.LogicalPath) || seenNames.Contains(name))
@@ -451,7 +456,7 @@ public static class VrchatAvatarParser
         {
             return;
         }
-        IEnumerable<UnityAsset> sources = package.ByExtension(".prefab")
+        IEnumerable<UnityAsset> sources = package.AvatarSources.Where(asset => asset.Extension == ".prefab")
             .Where(source => candidates.All(candidate =>
                 !string.Equals(candidate.Source.Guid, source.Guid, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(source => string.Equals(
@@ -1093,7 +1098,7 @@ public static class VrchatAvatarParser
     public static void DiagnoseCandidates(UnityPackage package)
     {
         const int classPrefabInstance = 1001;
-        foreach (UnityAsset source in package.ByExtension(".prefab").Concat(package.ByExtension(".unity")))
+        foreach (UnityAsset source in package.AvatarSources)
         {
             string text = package.ReadText(source);
             if (text == null ||

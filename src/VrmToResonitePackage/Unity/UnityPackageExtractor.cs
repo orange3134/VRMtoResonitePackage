@@ -42,6 +42,70 @@ public sealed class UnityPackage : IDisposable
 
     public IReadOnlyDictionary<string, UnityAsset> Assets => _byGuid;
 
+    /// <summary>When reading a project, only this prefab is an avatar input.</summary>
+    public UnityAsset InputPrefab { get; private set; }
+
+    public IEnumerable<UnityAsset> AvatarSources => InputPrefab != null
+        ? new[] { InputPrefab }
+        : ByExtension(".prefab").Concat(ByExtension(".unity"));
+
+    public static UnityPackage Open(string path) =>
+        string.Equals(Path.GetExtension(path), ".prefab", StringComparison.OrdinalIgnoreCase)
+            ? OpenProjectPrefab(path) : Extract(path);
+
+    private static UnityPackage OpenProjectPrefab(string path)
+    {
+        path = Path.GetFullPath(path);
+        if (!File.Exists(path))
+            throw new FileNotFoundException("Prefabが見つかりません。", path);
+        DirectoryInfo project = new FileInfo(path).Directory;
+        while (project != null && !(Directory.Exists(Path.Combine(project.FullName, "Assets")) &&
+                                   Directory.Exists(Path.Combine(project.FullName, "ProjectSettings"))))
+            project = project.Parent;
+        if (project == null)
+            throw new InvalidDataException("Unityプロジェクト内のPrefabを指定してください（AssetsとProjectSettingsが必要です）。");
+
+        var assets = new Dictionary<string, UnityAsset>(StringComparer.OrdinalIgnoreCase);
+        var enumeration = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = false,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+        };
+        // Assets plus embedded and resolved registry packages. Project files are read-only;
+        // _root stays null so Dispose never deletes any of them.
+        foreach (string folder in new[] { "Assets", "Packages", "Library/PackageCache" })
+        {
+            string directory = Path.Combine(project.FullName, folder);
+            if (!Directory.Exists(directory)) continue;
+            foreach (string meta in Directory.EnumerateFiles(directory, "*.meta", enumeration))
+            {
+                string diskPath = meta[..^5];
+                if (!File.Exists(diskPath)) continue;
+                string guid = File.ReadLines(meta).FirstOrDefault(line => line.StartsWith("guid: ", StringComparison.Ordinal))?[6..].Trim();
+                if (guid == null || guid.Length != 32 || !guid.All(Uri.IsHexDigit)) continue;
+                string logicalPath = Path.GetRelativePath(project.FullName, diskPath).Replace('\\', '/');
+                if (folder == "Library/PackageCache")
+                {
+                    string relative = Path.GetRelativePath(directory, diskPath).Replace('\\', '/');
+                    int slash = relative.IndexOf('/');
+                    string packageName = slash < 0 ? relative : relative[..slash];
+                    int version = packageName.IndexOf('@');
+                    if (version >= 0) packageName = packageName[..version];
+                    logicalPath = "Packages/" + packageName + (slash < 0 ? "" : relative[slash..]);
+                }
+                var asset = new UnityAsset { Guid = guid, LogicalPath = logicalPath, DiskPath = diskPath, MetaPath = meta };
+                if (!assets.TryAdd(guid, asset) && folder != "Library/PackageCache")
+                    throw new InvalidDataException($"GUIDが重複しています: {assets[guid].LogicalPath}, {logicalPath}");
+            }
+        }
+        UnityAsset input = assets.Values.FirstOrDefault(asset =>
+            string.Equals(asset.DiskPath, path, StringComparison.OrdinalIgnoreCase));
+        if (input == null)
+            throw new InvalidDataException("Prefabの.metaが存在しないか、有効なGUIDがありません。");
+        return new UnityPackage(null, assets) { InputPrefab = input };
+    }
+
     public UnityAsset ByGuid(string guid)
         => guid != null && _byGuid.TryGetValue(guid, out UnityAsset a) ? a : null;
 

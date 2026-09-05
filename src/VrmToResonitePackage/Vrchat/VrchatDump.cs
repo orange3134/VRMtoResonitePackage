@@ -19,7 +19,7 @@ internal static class VrchatDump
         UniLog.OnError += Log;
         try
         {
-            using UnityPackage package = UnityPackage.Extract(packagePath);
+            using UnityPackage package = UnityPackage.Open(packagePath);
             Console.WriteLine($"アセット数: {package.Assets.Count}  " +
                               $"(prefab {package.ByExtension(".prefab").Count()}, " +
                               $"fbx {package.ByExtension(".fbx").Count()}, " +
