@@ -19,6 +19,23 @@ namespace VrmToResonitePackage;
 
 internal static class GuiApp
 {
+    internal static void OpenLogFolder(Window owner)
+    {
+        try
+        {
+            string logsDirectory = Path.Combine(AppContext.BaseDirectory, "Logs");
+            Directory.CreateDirectory(logsDirectory);
+            Process.Start(new ProcessStartInfo(logsDirectory) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(owner,
+                AppLocalization.Format("OpenLogFolderFailedMessage", ex.Message),
+                AppLocalization.Get("OpenLogFolderFailedTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     public static int Run(IReadOnlyList<string> initialFiles)
     {
         var app = new Application
@@ -48,6 +65,7 @@ internal sealed class MainWindow : Window
     private readonly TextBlock _message;
     private readonly TextBlock _detail;
     private readonly Button _settingsButton;
+    private readonly Button _openLogsButton;
     private readonly DispatcherTimer _spinnerTimer;
     private readonly Grid _loadingArea;
     private readonly RotateTransform _spinnerRotation = new();
@@ -147,6 +165,15 @@ internal sealed class MainWindow : Window
             TextWrapping = TextWrapping.Wrap
         };
 
+        _openLogsButton = new Button
+        {
+            Content = AppLocalization.Get("OpenLogFolder"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 16, 0, 0),
+            Visibility = Visibility.Collapsed
+        };
+        _openLogsButton.Click += (_, _) => GuiApp.OpenLogFolder(this);
+
         _dropZone = BuildDropZone();
 
         _packageIcon = BuildPackageIcon();
@@ -161,6 +188,7 @@ internal sealed class MainWindow : Window
         center.Children.Add(_dropZone);
         center.Children.Add(_message);
         center.Children.Add(_detail);
+        center.Children.Add(_openLogsButton);
         _root.Children.Add(center);
         _root.Children.Add(_settingsButton);
 
@@ -265,6 +293,7 @@ internal sealed class MainWindow : Window
 
     private void ShowIdle()
     {
+        _openLogsButton.Visibility = Visibility.Collapsed;
         _lastResult = null;
         _isConverting = false;
         _spinnerTimer.Stop();
@@ -283,6 +312,7 @@ internal sealed class MainWindow : Window
 
     private void ShowConverting(string fileName)
     {
+        _openLogsButton.Visibility = Visibility.Collapsed;
         _isConverting = true;
         _logo.Visibility = Visibility.Collapsed;
         _dropZone.Visibility = Visibility.Collapsed;
@@ -299,6 +329,7 @@ internal sealed class MainWindow : Window
 
     private void ShowComplete(ConversionRunResult result)
     {
+        _openLogsButton.Visibility = result.ExitCode == 0 ? Visibility.Collapsed : Visibility.Visible;
         _lastResult = result;
         _isConverting = false;
         _spinnerTimer.Stop();
@@ -378,6 +409,8 @@ internal sealed class MainWindow : Window
         catch (Exception ex)
         {
             _isConverting = false;
+            _lastResult = null;
+            _openLogsButton.Visibility = Visibility.Visible;
             _spinnerTimer.Stop();
             _logo.Visibility = Visibility.Collapsed;
             _dropZone.Visibility = Visibility.Collapsed;
@@ -799,6 +832,7 @@ internal sealed class MainWindow : Window
 
     private void ApplyLocalization()
     {
+        _openLogsButton.Content = AppLocalization.Get("OpenLogFolder");
         _settingsButton.ToolTip = AppLocalization.Get("Settings");
         _loadingCaption.Text = AppLocalization.Get("Converting");
         _dropPrompt.Text = AppLocalization.Get("DropPrompt");
@@ -1028,11 +1062,22 @@ internal sealed class SettingsWindow : Window
         panel.Children.Add(Field(AppLocalization.Get("ViewUpOffset"), _viewUp));
         panel.Children.Add(Field("NearClip(m)", _nearClip));
 
+        var openLogs = new Button
+        {
+            Content = AppLocalization.Get("OpenLogFolder"),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 10, 0)
+        };
+        openLogs.Click += (_, _) => GuiApp.OpenLogFolder(this);
+
+        var buttonRow = new DockPanel { Margin = new Thickness(0, 28, 0, 0) };
+        DockPanel.SetDock(openLogs, Dock.Left);
+        buttonRow.Children.Add(openLogs);
+
         var buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 28, 0, 0)
+            HorizontalAlignment = HorizontalAlignment.Right
         };
         var cancel = new Button { Content = AppLocalization.Get("Cancel"), MinWidth = 104, Margin = new Thickness(0, 0, 10, 0) };
         var save = new Button
@@ -1045,7 +1090,8 @@ internal sealed class SettingsWindow : Window
         save.Click += (_, _) => SaveAndClose();
         buttons.Children.Add(cancel);
         buttons.Children.Add(save);
-        panel.Children.Add(buttons);
+        buttonRow.Children.Add(buttons);
+        panel.Children.Add(buttonRow);
 
         LoadValues();
     }
