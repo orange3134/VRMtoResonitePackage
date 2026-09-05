@@ -63,6 +63,7 @@ AnimationClip:
         controller.Append($"  m_DstState: {{fileID: {-200 - i}}}\n--- !u!1102 &{-200 - i}\nAnimatorState:\n  m_Motion: {{fileID: 7400000, guid: {clipGuid}}}\n");
     }
     Asset("Assets/Face.controller", controllerGuid, controller.ToString());
+    CheckAnimatorBlink(Asset, selected);
     using (UnityPackage package = UnityPackage.Open(selected))
     {
         var descriptor = UnityYaml.ParseFlatDocument($"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  isDefault: 0\n  animatorController: {{fileID: 91, guid: {controllerGuid}}}\n");
@@ -78,6 +79,13 @@ AnimationClip:
         var blinkBind = model.Expressions.Single(e => e.Preset == "blink").Binds.Single();
         Check(model.MeshTargetNames[blinkBind.MeshIndex][blinkBind.MorphIndex] == "blink",
             "Blink index does not alias the first synthetic viseme on Body");
+        face.HumanBones["leftEye"] = "HumanoidEye";
+        face.LeftEyeBoneName = "DescriptorEye.L";
+        face.RightEyeBoneName = "DescriptorEye.R";
+        var eyes = VrchatModelAdapter.ToVrmModel(face);
+        Check(eyes.GetNodeName(eyes.HumanBones["leftEye"]) == "DescriptorEye.L" &&
+              eyes.GetNodeName(eyes.HumanBones["rightEye"]) == "DescriptorEye.R",
+            "Descriptor eye references override and supplement humanoid eye mappings");
         var ordinary = new VrchatAvatar();
         VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument($"lipSync: 3\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {controllerGuid}}}\n"), ordinary);
         Check(ordinary.Visemes.Count == 0, "Animator inference preserves descriptor-driven lip sync");
@@ -251,6 +259,97 @@ AnimationClip:
         File.WriteAllText(path + ".meta", "fileFormatVersion: 2\nguid: " + guid + "\n");
         return path;
     }
+}
+
+static void CheckAnimatorBlink(Func<string, string, string, string> asset, string selected)
+{
+    const string controllerGuid = "aabbccddeeff00112233445566778899";
+    const string clipGuid = "ffeeddccbbaa99887766554433221100";
+    asset("Assets/Blink.anim", clipGuid, """
+--- !u!74 &7400000
+AnimationClip:
+  m_AnimationClipSettings:
+    m_LoopTime: 1
+  m_FloatCurves:
+  - curve:
+      m_Curve:
+      - value: 0
+      - value: 100
+      - value: 0
+    attribute: blendShape.blink
+    path: Body
+    classID: 137
+""");
+    string controller = $$"""
+--- !u!91 &91
+AnimatorController:
+  m_AnimatorParameters:
+  - m_Name: BlinkEnabled
+    m_Type: 4
+    m_DefaultBool: 0
+  - m_Name: ForceDisable
+    m_Type: 4
+    m_DefaultBool: 0
+  m_AnimatorLayers:
+  - m_StateMachine: {fileID: 10}
+  - m_StateMachine: {fileID: 20}
+    m_DefaultWeight: 0
+  - m_StateMachine: {fileID: 30}
+    m_DefaultWeight: 1
+--- !u!1107 &10
+AnimatorStateMachine:
+  m_DefaultState: {fileID: 0}
+--- !u!1107 &20
+AnimatorStateMachine:
+  m_DefaultState: {fileID: -21}
+--- !u!1102 &-21
+AnimatorState:
+  m_StateMachineBehaviours:
+  - {fileID: -22}
+--- !u!114 &-22
+MonoBehaviour:
+  m_Enabled: 1
+  m_Script: {fileID: -706344726, guid: 67cc4cb7839cd3741b63733d5adf0442}
+  parameters:
+  - type: 0
+    name: BlinkEnabled
+    value: 1
+--- !u!1107 &30
+AnimatorStateMachine:
+  m_DefaultState: {fileID: -31}
+--- !u!1102 &-31
+AnimatorState:
+  m_Transitions:
+  - {fileID: -32}
+--- !u!1101 &-32
+AnimatorStateTransition:
+  m_HasExitTime: 0
+  m_DstState: {fileID: -33}
+  m_Conditions:
+  - m_ConditionMode: 1
+    m_ConditionEvent: BlinkEnabled
+  - m_ConditionMode: 2
+    m_ConditionEvent: ForceDisable
+--- !u!1102 &-33
+AnimatorState:
+  m_Motion: {fileID: 7400000, guid: {{clipGuid}}}
+""";
+    var descriptor = UnityYaml.ParseFlatDocument($"baseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {controllerGuid}}}\n");
+    VrchatAvatar Read(string yaml)
+    {
+        asset("Assets/Blink.controller", controllerGuid, yaml);
+        using var package = UnityPackage.Open(selected);
+        var avatar = new VrchatAvatar();
+        VrchatAnimatorFaceParser.Apply(package, descriptor, avatar);
+        return avatar;
+    }
+    Check(Read(controller).Blink?.BlendShapeName == "blink", "Startup parameter driver enables Body blink across layers");
+    Check(Read(controller.Replace("m_DefaultBool: 0", "m_DefaultBool: 1")).Blink == null,
+        "Explicit blink disable is respected");
+    Check(Read(controller.Replace("m_HasExitTime: 0", "m_HasExitTime: 1")).Blink == null,
+        "Timed transitions are not treated as startup blink settings");
+    Check(Read(controller.Replace("    value: 1", "    value: 0")).Blink == null,
+        "Inactive blink animation is not imported as an always-on driver");
 }
 
 static VrchatAvatar ReadFilter(string path)

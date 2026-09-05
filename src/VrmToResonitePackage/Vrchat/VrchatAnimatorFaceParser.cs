@@ -33,6 +33,7 @@ public static class VrchatAnimatorFaceParser
                     _ => parameter["m_DefaultFloat"]?.AsFloat() ?? 0,
                 };
             }
+            var initialStates = VrchatAnimatorDefaults.Resolve(controller, settings, defaults);
             int layerIndex = 0;
             foreach (YamlNode animatorLayer in settings?["m_AnimatorLayers"]?.Seq ?? new())
             {
@@ -82,7 +83,7 @@ public static class VrchatAnimatorFaceParser
                 }
                 if (avatar.Blink == null)
                 {
-                    YamlNode state = InitialState(animatorLayer["m_StateMachine"]?.FileID ?? 0, new HashSet<long>());
+                    initialStates.TryGetValue(animatorLayer["m_StateMachine"]?.FileID ?? 0, out YamlNode state);
                     YamlNode clip = Clip(state?["m_Motion"]);
                     var shapes = ActiveShapes(clip);
                     if (clip?["m_AnimationClipSettings"]?["m_LoopTime"]?.AsBool() == true &&
@@ -100,32 +101,7 @@ public static class VrchatAnimatorFaceParser
                         foreach (YamlNode transition in node?[key]?.Seq ?? new()) Gather(transition.FileID ?? 0);
                 }
 
-                YamlNode InitialState(long id, HashSet<long> visited)
-                {
-                    if (id == 0 || !visited.Add(id)) return null;
-                    YamlNode machine = controller.Doc(id)?.Root;
-                    foreach (YamlNode entry in machine?["m_EntryTransitions"]?.Seq ?? new())
-                    {
-                        YamlNode transition = controller.Doc(entry.FileID ?? 0)?.Root;
-                        if (transition == null || transition["m_Mute"]?.AsBool() == true ||
-                            !(transition["m_Conditions"]?.Seq ?? new()).All(MatchesDefault)) continue;
-                        long state = transition["m_DstState"]?.FileID ?? 0;
-                        if (state != 0) return controller.Doc(state)?.Root;
-                        return InitialState(transition["m_DstStateMachine"]?.FileID ?? 0, visited);
-                    }
-                    return controller.Doc(machine?["m_DefaultState"]?.FileID ?? 0)?.Root;
-                }
 
-                bool MatchesDefault(YamlNode condition)
-                {
-                    if (!defaults.TryGetValue(condition["m_ConditionEvent"]?.AsString() ?? "", out float value)) return false;
-                    float threshold = condition["m_EventTreshold"]?.AsFloat() ?? 0;
-                    return condition["m_ConditionMode"]?.AsInt() switch
-                    {
-                        1 => value != 0, 2 => value == 0, 3 => value > threshold,
-                        4 => value < threshold, 6 => value == threshold, 7 => value != threshold, _ => false,
-                    };
-                }
             }
         }
         foreach ((string preset, int index) in VrchatConstants.VisemeToVrcSlot())

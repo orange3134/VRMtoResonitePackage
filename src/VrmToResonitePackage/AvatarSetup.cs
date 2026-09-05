@@ -524,7 +524,7 @@ internal static class AvatarSetup
             EyeRotationDriver rotationDriver = managerSlot.AttachComponent<EyeRotationDriver>();
             rotationDriver.EyeManager.Target = eyeManager;
             // The default (15) lets eyes swing far enough to clip through VRM face meshes.
-            rotationDriver.MaxSwing.Value = 4f;
+            rotationDriver.MaxSwing.Value = vrm.Source == ModelSource.VrchatFbx ? 15f : 4f;
             EyeRotationDriver.Eye left = rotationDriver.Eyes.Add();
             EyeRotationDriver.Eye right = rotationDriver.Eyes.Add();
             left.Root.Target = leftPivot;
@@ -533,6 +533,7 @@ internal static class AvatarSetup
             right.Root.Target = rightPivot;
             right.Side.Value = EyeSide.Right;
             right.SetupFromRoot();
+            UniLog.Log($"EyeRotationDriver: {leftEye.Name}, {rightEye.Name}; swing={rotationDriver.MaxSwing.Value}; linked={left.IsValidEye && right.IsValidEye}");
         }
 
         EyeLinearDriver linearDriver = managerSlot.AttachComponent<EyeLinearDriver>();
@@ -552,6 +553,7 @@ internal static class AvatarSetup
         {
             AddBlinkEyes(linearDriver, blinkBoth, EyeSide.Combined);
         }
+        UniLog.Log($"EyeLinearDriver: {linearDriver.Eyes.Count} blink binding(s)");
 
         if (linearDriver.Eyes.Count == 0 && rotationDriverMissing(managerSlot))
         {

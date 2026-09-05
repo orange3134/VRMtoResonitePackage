@@ -42,6 +42,11 @@ public static class VrchatModelAdapter
                 model.HumanBones[vrmBone] = node;
             }
         }
+        // The descriptor may reference eye bones absent from, or different to, the humanoid map.
+        if (!string.IsNullOrEmpty(avatar.LeftEyeBoneName))
+            model.HumanBones["leftEye"] = NodeFor(avatar.LeftEyeBoneName);
+        if (!string.IsNullOrEmpty(avatar.RightEyeBoneName))
+            model.HumanBones["rightEye"] = NodeFor(avatar.RightEyeBoneName);
 
         // One synthetic mesh per face/eyelid GameObject that owns blendshapes.
         var meshIndexByGameObject = new Dictionary<string, int>(StringComparer.Ordinal);
