@@ -48,6 +48,7 @@ internal sealed class MainWindow : Window
     private readonly TextBlock _message;
     private readonly TextBlock _detail;
     private readonly Button _settingsButton;
+    private readonly Button _openLogsButton;
     private readonly DispatcherTimer _spinnerTimer;
     private readonly Grid _loadingArea;
     private readonly RotateTransform _spinnerRotation = new();
@@ -147,6 +148,15 @@ internal sealed class MainWindow : Window
             TextWrapping = TextWrapping.Wrap
         };
 
+        _openLogsButton = new Button
+        {
+            Content = AppLocalization.Get("OpenLogFolder"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 16, 0, 0),
+            Visibility = Visibility.Collapsed
+        };
+        _openLogsButton.Click += (_, _) => OpenLogFolder();
+
         _dropZone = BuildDropZone();
 
         _packageIcon = BuildPackageIcon();
@@ -161,6 +171,7 @@ internal sealed class MainWindow : Window
         center.Children.Add(_dropZone);
         center.Children.Add(_message);
         center.Children.Add(_detail);
+        center.Children.Add(_openLogsButton);
         _root.Children.Add(center);
         _root.Children.Add(_settingsButton);
 
@@ -265,6 +276,7 @@ internal sealed class MainWindow : Window
 
     private void ShowIdle()
     {
+        _openLogsButton.Visibility = Visibility.Collapsed;
         _lastResult = null;
         _isConverting = false;
         _spinnerTimer.Stop();
@@ -283,6 +295,7 @@ internal sealed class MainWindow : Window
 
     private void ShowConverting(string fileName)
     {
+        _openLogsButton.Visibility = Visibility.Collapsed;
         _isConverting = true;
         _logo.Visibility = Visibility.Collapsed;
         _dropZone.Visibility = Visibility.Collapsed;
@@ -299,6 +312,7 @@ internal sealed class MainWindow : Window
 
     private void ShowComplete(ConversionRunResult result)
     {
+        _openLogsButton.Visibility = result.ExitCode == 0 ? Visibility.Collapsed : Visibility.Visible;
         _lastResult = result;
         _isConverting = false;
         _spinnerTimer.Stop();
@@ -378,6 +392,8 @@ internal sealed class MainWindow : Window
         catch (Exception ex)
         {
             _isConverting = false;
+            _lastResult = null;
+            _openLogsButton.Visibility = Visibility.Visible;
             _spinnerTimer.Stop();
             _logo.Visibility = Visibility.Collapsed;
             _dropZone.Visibility = Visibility.Collapsed;
@@ -797,8 +813,26 @@ internal sealed class MainWindow : Window
         }
     }
 
+    private void OpenLogFolder()
+    {
+        try
+        {
+            string logsDirectory = Path.Combine(AppContext.BaseDirectory, "Logs");
+            Directory.CreateDirectory(logsDirectory);
+            Process.Start(new ProcessStartInfo(logsDirectory) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this,
+                AppLocalization.Format("OpenLogFolderFailedMessage", ex.Message),
+                AppLocalization.Get("OpenLogFolderFailedTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private void ApplyLocalization()
     {
+        _openLogsButton.Content = AppLocalization.Get("OpenLogFolder");
         _settingsButton.ToolTip = AppLocalization.Get("Settings");
         _loadingCaption.Text = AppLocalization.Get("Converting");
         _dropPrompt.Text = AppLocalization.Get("DropPrompt");
