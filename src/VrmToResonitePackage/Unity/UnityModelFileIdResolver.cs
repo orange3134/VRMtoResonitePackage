@@ -163,6 +163,7 @@ public sealed class UnityModelFileIdResolver
                 if (node.MeshCount > 0)
                 {
                     _rendererNames.Add(node.Name);
+                    AddPathVariants("Mesh", nodePath, node.Name);
                     // Unity's FBX importer can classify a mesh differently from Assimp when skin
                     // data is optimized or stripped. Stable fileID resolution is exact, so include
                     // both possible renderer component types as candidates.

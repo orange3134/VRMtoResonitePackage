@@ -444,6 +444,7 @@ internal static class Converter
                 // Capture model identity before wrappers are collapsed or moved. Instance names
                 // are not unique (different clothing models may both be named "armature.1").
                 var importedMeshSources = Vrchat.VrchatSceneSetup.CaptureImportedObjects(importedFbxRoots);
+                Vrchat.VrchatSceneSetup.CreateMeshCopies(avatar, importedMeshSources);
 
                 ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots);
                 AlignVrchatImportUp(importRoot, model);

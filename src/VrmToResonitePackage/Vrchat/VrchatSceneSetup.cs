@@ -10,6 +10,28 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static class VrchatSceneSetup
 {
+    public static void CreateMeshCopies(VrchatAvatar avatar, Dictionary<Slot, string> sources)
+    {
+        foreach (VrchatMeshCopy copy in avatar.MeshCopies)
+        {
+            Slot source = sources.Keys.FirstOrDefault(s => !s.IsDestroyed && sources[s] == copy.FbxGuid &&
+                s.Name == copy.SourceName && s.GetComponent<SkinnedMeshRenderer>() != null);
+            if (source == null)
+            {
+                UniLog.Warning($"Prefab mesh copy source missing: {copy.Name} <- {copy.SourceName}");
+                continue;
+            }
+            if (sources.Keys.Any(s => !s.IsDestroyed && sources[s] == copy.FbxGuid && s.Name == copy.Name)) continue;
+            // Duplicate the renderer slot, retaining external mesh, material and skeleton references.
+            Slot duplicate = source.Duplicate(source.Parent);
+            duplicate.Name = copy.Name;
+            duplicate.ActiveSelf = copy.Active;
+            duplicate.GetComponent<SkinnedMeshRenderer>().Enabled = copy.Enabled;
+            foreach (Slot slot in EnumerateSlots(duplicate)) sources[slot] = copy.FbxGuid;
+            UniLog.Log($"Prefab mesh copy: {copy.Name} <- {copy.SourceName} (fbx={copy.FbxGuid})");
+        }
+    }
+
     public static Dictionary<Slot, string> CaptureImportedObjects(IReadOnlyDictionary<string, Slot> roots)
     {
         var sources = new Dictionary<Slot, string>();

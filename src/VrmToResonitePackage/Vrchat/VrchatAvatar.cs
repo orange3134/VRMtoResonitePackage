@@ -37,6 +37,7 @@ public sealed class VrchatAvatar
 
     /// <summary>Additional FBXs composed into the selected prefab, such as separate hair/accessory models.</summary>
     public List<VrchatFbxAsset> AdditionalFbxs { get; } = new();
+    public List<VrchatMeshCopy> MeshCopies { get; } = new();
 
     /// <summary>VRM-style humanoid bone name (camelCase) -> bone GameObject/transform name.</summary>
     public Dictionary<string, string> HumanBones { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -135,6 +136,8 @@ public sealed class VrchatPrefabTransform
 }
 
 public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
+
+public sealed record VrchatMeshCopy(string FbxGuid, string SourceName, string Name, bool Active, bool Enabled);
 
 public sealed class VrchatModularMergeArmature
 {

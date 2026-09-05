@@ -142,6 +142,26 @@ AnimationClip:
     string bodyPrefab = new('3', 32);
     string clothingPrefab = new('4', 32);
     Asset("Assets/Body.fbx", bodyModel, "");
+    string copySource = Asset("Assets/CopySource.fbx", "88000000000000000000000000000001", "");
+    File.AppendAllText(copySource + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: -1079801745714767569\n    second: Body_Base\n");
+    string copyPrefab = Asset("Assets/Copy.prefab", "99000000000000000000000000000001",
+        RendererPrefab("88000000000000000000000000000001", "Untagged").Replace("m_Name: Body", "m_Name: Body_Base_pants")
+            .Replace("4300000", "-1079801745714767569"));
+    using (UnityPackage package = UnityPackage.Open(copyPrefab))
+    {
+        var avatar = ReadFilter(copyPrefab);
+        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
+        Check(avatar.MeshCopies.Single().SourceName == "Body_Base" && avatar.MeshCopies.Single().Name == "Body_Base_pants",
+            "Prefab renderer copy resolves its mesh reference independently of its GameObject name");
+        avatar.MeshCopies.Clear();
+        avatar.PrefabRendererStates[new VrchatGameObjectReference("88000000000000000000000000000001", "Body_Base_pants")] = false;
+        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
+        Check(avatar.MeshCopies.Count == 0, "Excluded renderer copies are not recreated");
+    }
     Asset("Assets/Clothing.fbx", clothingModel, "");
     Asset("Assets/Body.prefab", bodyPrefab, RendererPrefab(bodyModel, "Untagged"));
     Asset("Assets/Clothing.prefab", clothingPrefab, RendererPrefab(clothingModel, "EditorOnly"));

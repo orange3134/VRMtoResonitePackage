@@ -1769,6 +1769,22 @@ public static class VrchatAvatarParser
             {
                 string rendererName = scene.ResolveGameObjectName(smr.FileId);
                 string fbxGuid = smr.Root?["m_Mesh"]?.Guid;
+                // An authored renderer can reuse an FBX mesh under a new GameObject name.
+                // Keep the source mesh identity separately from the instance's display name.
+                if (!string.IsNullOrEmpty(rendererName) && package.ByGuid(fbxGuid)?.Extension == ".fbx")
+                {
+                    string sourceName = ResolveReferenceGameObjectName(package, scene, smr.Root["m_Mesh"], modelResolvers);
+                    if (!string.IsNullOrEmpty(sourceName) && sourceName != rendererName &&
+                        avatar.ShouldKeepRenderer(fbxGuid, rendererName))
+                    {
+                        avatar.MeshCopies.RemoveAll(c => c.FbxGuid == fbxGuid && c.Name == rendererName);
+                        avatar.MeshCopies.Add(new VrchatMeshCopy(fbxGuid, sourceName, rendererName,
+                            scene.OwnerGameObject(smr)?.Root["m_IsActive"]?.AsBool(true) ?? true,
+                            smr.Root["m_Enabled"]?.AsBool(true) ?? true));
+                        if (modelResolvers[fbxGuid].BlendShapeNames.TryGetValue(sourceName, out var shapeNames))
+                            avatar.FbxBlendShapeNames[rendererName] = shapeNames.ToList();
+                    }
+                }
                 YamlNode materials = smr.Root?["m_Materials"];
                 YamlNode weights = smr.Root?["m_BlendShapeWeights"];
                 if (string.IsNullOrEmpty(rendererName) ||
