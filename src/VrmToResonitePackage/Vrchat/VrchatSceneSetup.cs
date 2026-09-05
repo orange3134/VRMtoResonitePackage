@@ -10,7 +10,8 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static class VrchatSceneSetup
 {
-    public static void CreateMeshCopies(VrchatAvatar avatar, Dictionary<Slot, string> sources)
+    public static void CreateMeshCopies(VrchatAvatar avatar, Dictionary<Slot, string> sources,
+        Func<VrchatMeshCopy, Slot> resolveParent)
     {
         foreach (VrchatMeshCopy copy in avatar.MeshCopies)
         {
@@ -23,10 +24,36 @@ internal static class VrchatSceneSetup
             }
             if (sources.Keys.Any(s => !s.IsDestroyed && sources[s] == copy.FbxGuid && s.Name == copy.Name)) continue;
             // Duplicate the renderer slot, retaining external mesh, material and skeleton references.
-            Slot duplicate = source.Duplicate(source.Parent);
+            Slot duplicate = source.Duplicate(source.Parent, settings: new DuplicationSettings
+            {
+                SlotFilter = slot => slot == source,
+            });
+            if (copy.Transform is {} transform)
+            {
+                duplicate.Parent = resolveParent(copy);
+                duplicate.LocalPosition = new float3(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z);
+                duplicate.LocalRotation = new floatQ(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W);
+                duplicate.LocalScale = new float3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z);
+            }
             duplicate.Name = copy.Name;
             duplicate.ActiveSelf = copy.Active;
             duplicate.GetComponent<SkinnedMeshRenderer>().Enabled = copy.Enabled;
+            var renderer = duplicate.GetComponent<SkinnedMeshRenderer>();
+            for (int i = 0; i < renderer.Bones.Count; i++)
+            {
+                Slot original = renderer.Bones[i];
+                if (original == null || !copy.BoneTargets.TryGetValue(original.Name, out var target)) continue;
+                if (target.Name == null)
+                {
+                    renderer.Bones[i] = null;
+                    continue;
+                }
+                var matches = sources.Keys.Where(s => !s.IsDestroyed && s.Name == target.Name &&
+                    (target.FbxGuid == null || sources[s] == target.FbxGuid)).ToList();
+                if (matches.Count != 1)
+                    throw new InvalidDataException($"複製メッシュのボーン参照を特定できません: {copy.Name} / {target.Name}");
+                renderer.Bones[i] = matches[0];
+            }
             foreach (Slot slot in EnumerateSlots(duplicate)) sources[slot] = copy.FbxGuid;
             UniLog.Log($"Prefab mesh copy: {copy.Name} <- {copy.SourceName} (fbx={copy.FbxGuid})");
         }

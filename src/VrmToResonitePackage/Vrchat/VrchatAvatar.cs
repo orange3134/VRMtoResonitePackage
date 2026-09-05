@@ -137,7 +137,14 @@ public sealed class VrchatPrefabTransform
 
 public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
 
-public sealed record VrchatMeshCopy(string FbxGuid, string SourceName, string Name, bool Active, bool Enabled);
+public sealed record VrchatMeshCopy(string FbxGuid, string SourceName, string Name, bool Active, bool Enabled)
+{
+    public VrchatPrefabTransform Transform { get; set; }
+    public string ParentFbxGuid { get; set; }
+    public string ParentName { get; set; }
+    public List<VrchatPrefabTransform> ParentTransforms { get; } = new();
+    public Dictionary<string, VrchatGameObjectReference> BoneTargets { get; } = new();
+}
 
 public sealed class VrchatModularMergeArmature
 {

@@ -444,9 +444,8 @@ internal static class Converter
                 // Capture model identity before wrappers are collapsed or moved. Instance names
                 // are not unique (different clothing models may both be named "armature.1").
                 var importedMeshSources = Vrchat.VrchatSceneSetup.CaptureImportedObjects(importedFbxRoots);
-                Vrchat.VrchatSceneSetup.CreateMeshCopies(avatar, importedMeshSources);
 
-                ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots);
+                ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots, importedMeshSources);
                 AlignVrchatImportUp(importRoot, model);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots);
                 RemoveImportAlignment(importRoot, root);
@@ -542,7 +541,7 @@ internal static class Converter
     }
 
     private static void ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
-        Dictionary<string, Slot> importedFbxRoots)
+        Dictionary<string, Slot> importedFbxRoots, Dictionary<Slot, string> importedMeshSources)
     {
         var prefabSlots = new Dictionary<string, Slot>(StringComparer.Ordinal);
         ApplyPrimaryFbxPlacement(importRoot, avatar, importedFbxRoots, prefabSlots);
@@ -602,6 +601,9 @@ internal static class Converter
             }
             UniLog.Log($"prefab階層を適用: {instanceRoot.Name} -> {parent.Name}");
         }
+        Vrchat.VrchatSceneSetup.CreateMeshCopies(avatar, importedMeshSources, copy =>
+            ResolvePrefabParent(importRoot, copy.ParentFbxGuid, copy.ParentName, copy.ParentTransforms,
+                importedFbxRoots, prefabSlots));
     }
 
     private static bool IsUnityRootNode(string nodeName)

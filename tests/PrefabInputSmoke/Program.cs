@@ -146,7 +146,24 @@ AnimationClip:
     File.AppendAllText(copySource + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: -1079801745714767569\n    second: Body_Base\n");
     string copyPrefab = Asset("Assets/Copy.prefab", "99000000000000000000000000000001",
         RendererPrefab("88000000000000000000000000000001", "Untagged").Replace("m_Name: Body", "m_Name: Body_Base_pants")
-            .Replace("4300000", "-1079801745714767569"));
+            .Replace("4300000", "-1079801745714767569") + """
+
+--- !u!4 &31
+Transform:
+  m_GameObject: {fileID: 1}
+  m_Father: {fileID: 33}
+  m_LocalPosition: {x: 1, y: 2, z: 3}
+  m_LocalRotation: {x: 0, y: 0, z: 1, w: 0}
+  m_LocalScale: {x: 2, y: 3, z: 4}
+--- !u!1 &32
+GameObject:
+  m_Name: CopyParent
+--- !u!4 &33
+Transform:
+  m_GameObject: {fileID: 32}
+  m_Father: {fileID: 0}
+  m_LocalPosition: {x: 4, y: 5, z: 6}
+""");
     using (UnityPackage package = UnityPackage.Open(copyPrefab))
     {
         var avatar = ReadFilter(copyPrefab);
@@ -155,6 +172,10 @@ AnimationClip:
             .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
         Check(avatar.MeshCopies.Single().SourceName == "Body_Base" && avatar.MeshCopies.Single().Name == "Body_Base_pants",
             "Prefab renderer copy resolves its mesh reference independently of its GameObject name");
+        var copy = avatar.MeshCopies.Single();
+        Check(copy.Transform.LocalPosition.X == 1 && copy.Transform.LocalScale.Z == 4 && copy.Transform.LocalRotation.Z == 1 &&
+            copy.ParentTransforms.Single().Name == "CopyParent" && copy.ParentTransforms.Single().LocalPosition.X == 4,
+            "Copied renderer retains authored parent, position, rotation and scale");
         avatar.MeshCopies.Clear();
         avatar.PrefabRendererStates[new VrchatGameObjectReference("88000000000000000000000000000001", "Body_Base_pants")] = false;
         typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides",
@@ -266,6 +287,17 @@ AnimationClip:
     Check(!ReadFilter(childTaggedPath).ShouldKeepRenderer(bodyModel, "Body"),
         "Child tag override cannot escape an EditorOnly ancestor");
 
+    Asset("Library/PackageCache/com.example.materials@old/Surface.mat", materialGuid, "OLD");
+    string lockFile = Path.Combine(root, "Packages", "packages-lock.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(lockFile)!);
+    File.WriteAllText(lockFile, """{"dependencies":{"com.example.materials":{"version":"123","source":"registry"}}}""");
+    using (var package = UnityPackage.Open(selected))
+        Check(package.ByGuid(materialGuid).DiskPath.Contains("@123"), "Lock file selects active version over stale cache");
+    File.WriteAllText(lockFile, """{"dependencies":{"com.example.materials":{"version":"missing","source":"registry"}}}""");
+    ExpectInvalid(() => UnityPackage.Open(selected));
+    File.WriteAllText(lockFile, """{"dependencies":{}}""");
+    using (var package = UnityPackage.Open(selected))
+        Check(package.ByGuid(materialGuid) == null, "Unused cached packages are ignored");
     Asset("Assets/Duplicate.mat", materialGuid, "Material:\n");
     Asset("Assets/Duplicate2.mat", materialGuid, "Material:\n");
     ExpectInvalid(() => UnityPackage.Open(selected));

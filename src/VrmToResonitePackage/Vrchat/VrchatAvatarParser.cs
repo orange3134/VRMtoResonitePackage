@@ -1760,10 +1760,10 @@ public static class VrchatAvatarParser
         int materialAssignments = 0;
         int activeAssignments = 0;
 
-        var inheritedScenes = new List<UnityScene>();
-        CollectVariantPrefabScenes(package, sourceGuid, inheritedScenes,
+        var inheritedScenes = new List<(string Guid, UnityScene Scene)>();
+        CollectVariantPrefabSceneEntries(package, sourceGuid, inheritedScenes,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-        foreach (UnityScene scene in inheritedScenes)
+        foreach ((string sceneGuid, UnityScene scene) in inheritedScenes)
         {
             foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
             {
@@ -1778,9 +1778,39 @@ public static class VrchatAvatarParser
                         avatar.ShouldKeepRenderer(fbxGuid, rendererName))
                     {
                         avatar.MeshCopies.RemoveAll(c => c.FbxGuid == fbxGuid && c.Name == rendererName);
-                        avatar.MeshCopies.Add(new VrchatMeshCopy(fbxGuid, sourceName, rendererName,
+                        var copy = new VrchatMeshCopy(fbxGuid, sourceName, rendererName,
                             scene.OwnerGameObject(smr)?.Root["m_IsActive"]?.AsBool(true) ?? true,
-                            smr.Root["m_Enabled"]?.AsBool(true) ?? true));
+                            smr.Root["m_Enabled"]?.AsBool(true) ?? true);
+                        var transform = scene.TransformOfGameObject(smr.Root["m_GameObject"]?.FileID ?? 0)?.Root;
+                        if (transform != null)
+                        {
+                            copy.Transform = new VrchatPrefabTransform
+                            {
+                                LocalPosition = new Vec3(transform["m_LocalPosition"]?.Vec("x") ?? 0, transform["m_LocalPosition"]?.Vec("y") ?? 0, transform["m_LocalPosition"]?.Vec("z") ?? 0),
+                                LocalRotation = new Quat(transform["m_LocalRotation"]?.Vec("x") ?? 0, transform["m_LocalRotation"]?.Vec("y") ?? 0, transform["m_LocalRotation"]?.Vec("z") ?? 0, transform["m_LocalRotation"]?.Vec("w", 1) ?? 1),
+                                LocalScale = new Vec3(transform["m_LocalScale"]?.Vec("x", 1) ?? 1, transform["m_LocalScale"]?.Vec("y", 1) ?? 1, transform["m_LocalScale"]?.Vec("z", 1) ?? 1),
+                            };
+                            var placement = new FbxPlacement();
+                            CaptureLocalPlacementParents(package, scene, sceneGuid, transform["m_Father"]?.FileID ?? 0, placement);
+                            copy.ParentFbxGuid = placement.ParentFbxGuid;
+                            copy.ParentName = placement.ParentNodeName;
+                            copy.ParentTransforms.AddRange(placement.ParentTransforms);
+                        }
+                        var bones = smr.Root["m_Bones"]?.Seq;
+                        if (bones != null && modelResolvers[fbxGuid].MeshBoneNames.TryGetValue(sourceName, out var originalBones))
+                        {
+                            if (bones.Count != originalBones.Length)
+                                throw new InvalidDataException($"複製メッシュのボーン数が一致しません: {rendererName}");
+                            for (int i = 0; i < bones.Count; i++)
+                            {
+                                var bone = ResolveVariantObjectReference(package, bones[i].Guid ?? sceneGuid,
+                                    bones[i].FileID ?? 0, modelResolvers, prefabScenes);
+                                if ((bones[i].FileID ?? 0) != 0 && bone.Name == null)
+                                    throw new InvalidDataException($"複製メッシュのボーン参照を解決できません: {rendererName} / {i}");
+                                copy.BoneTargets[originalBones[i]] = new VrchatGameObjectReference(bone.FbxGuid, bone.Name);
+                            }
+                        }
+                        avatar.MeshCopies.Add(copy);
                         if (modelResolvers[fbxGuid].BlendShapeNames.TryGetValue(sourceName, out var shapeNames))
                             avatar.FbxBlendShapeNames[rendererName] = shapeNames.ToList();
                     }

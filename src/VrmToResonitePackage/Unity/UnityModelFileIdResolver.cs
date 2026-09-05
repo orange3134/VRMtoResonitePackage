@@ -11,6 +11,7 @@ namespace VrmToResonitePackage.Unity;
 public sealed class UnityModelFileIdResolver
 {
     private readonly Dictionary<long, string> _names = new();
+    public Dictionary<string, string[]> MeshBoneNames { get; } = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNames =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<float>> _blendShapeDefaultWeights =
@@ -163,6 +164,8 @@ public sealed class UnityModelFileIdResolver
                 if (node.MeshCount > 0)
                 {
                     _rendererNames.Add(node.Name);
+                    MeshBoneNames[node.Name] = node.MeshIndices.SelectMany(i => scene.Meshes[i].Bones)
+                        .Select(b => b.Name).Distinct().ToArray();
                     AddPathVariants("Mesh", nodePath, node.Name);
                     // Unity's FBX importer can classify a mesh differently from Assimp when skin
                     // data is optimized or stripped. Stable fileID resolution is exact, so include

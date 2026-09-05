@@ -66,6 +66,7 @@ public sealed class UnityPackage : IDisposable
             throw new InvalidDataException("Unityプロジェクト内のPrefabを指定してください（AssetsとProjectSettingsが必要です）。");
 
         var assets = new Dictionary<string, UnityAsset>(StringComparer.OrdinalIgnoreCase);
+        var cacheDirectories = UnityPackageCache.Select(project.FullName);
         var enumeration = new EnumerationOptions
         {
             RecurseSubdirectories = true,
@@ -78,7 +79,9 @@ public sealed class UnityPackage : IDisposable
         {
             string directory = Path.Combine(project.FullName, folder);
             if (!Directory.Exists(directory)) continue;
-            foreach (string meta in Directory.EnumerateFiles(directory, "*.meta", enumeration))
+            var directories = folder == "Library/PackageCache"
+                ? cacheDirectories.Select(name => Path.Combine(directory, name)) : new[] { directory };
+            foreach (string meta in directories.SelectMany(d => Directory.EnumerateFiles(d, "*.meta", enumeration)))
             {
                 string diskPath = meta[..^5];
                 if (!File.Exists(diskPath)) continue;
@@ -95,7 +98,7 @@ public sealed class UnityPackage : IDisposable
                     logicalPath = "Packages/" + packageName + (slash < 0 ? "" : relative[slash..]);
                 }
                 var asset = new UnityAsset { Guid = guid, LogicalPath = logicalPath, DiskPath = diskPath, MetaPath = meta };
-                if (!assets.TryAdd(guid, asset) && folder != "Library/PackageCache")
+                if (!assets.TryAdd(guid, asset))
                     throw new InvalidDataException($"GUIDが重複しています: {assets[guid].LogicalPath}, {logicalPath}");
             }
         }
