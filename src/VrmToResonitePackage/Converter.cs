@@ -947,6 +947,10 @@ internal static class Converter
 
     private static async Task ExportPackage(World world, Slot root, string outputPath)
     {
+        var avatarRootVariable = root.GetComponents<DynamicReferenceVariable<Slot>>()
+            .FirstOrDefault(v => v.VariableName.Value == "modular_avatar/AvatarRoot");
+        if (avatarRootVariable != null)
+            UniLog.Log($"Export AvatarRoot reference: linked={avatarRootVariable.Reference.Target == root}");
         SavedGraph graph = root.SaveObject(DependencyHandling.CollectAssets);
         string ownerId = world.LocalUser.UserID ?? world.LocalUser.MachineID;
         SkyFrost.Base.Record record = RecordHelper.CreateForObject<SkyFrost.Base.Record>(root.Name, ownerId, null);

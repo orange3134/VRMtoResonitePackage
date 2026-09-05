@@ -1146,6 +1146,21 @@ internal static class AvatarSetup
 
     private static void ImportAvatarRootIdentification(Slot root)
     {
+        // The imported identification graph consumes this reference to determine whether
+        // the avatar is worn. Keep its value driven so dynamic-variable linking cannot clear it.
+        const string variableName = ModularAvatarNamespace + "/AvatarRoot";
+        var variable = root.GetComponents<DynamicReferenceVariable<Slot>>()
+            .FirstOrDefault(v => v.VariableName.Value == variableName)
+            ?? root.AttachComponent<DynamicReferenceVariable<Slot>>();
+        variable.VariableName.Value = variableName;
+        if (variable.Reference.Target != root)
+        {
+            var reference = root.AttachComponent<ReferenceField<Slot>>();
+            reference.Reference.Target = root;
+            variable.Reference.Target = root;
+            variable.Reference.DriveFrom(reference.Reference);
+        }
+        UniLog.Log($"DynamicReferenceVariable: {variableName} -> avatar root (linked={variable.Reference.Target == root})");
         if (root.FindChild("Avatar Root Identification") != null)
         {
             return;
