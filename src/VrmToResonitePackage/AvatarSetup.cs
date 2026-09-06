@@ -942,7 +942,8 @@ internal static class AvatarSetup
             AddVisibility(renderer, VrmFirstPersonFlag.ThirdPersonOnly, invisibleMaterial);
             return true;
         }
-        source.ClearBlendShapes();
+        // Triangle removal preserves vertex indices, so retain morph data and follow the
+        // source weights instead of reverting the first-person body to its undeformed mesh.
 
         Uri uri = await renderer.Engine.LocalDB.SaveAssetAsync(source).ConfigureAwait(false);
         await default(ToWorld);
@@ -957,6 +958,13 @@ internal static class AvatarSetup
         headless.BoundsComputeMethod.Value = renderer.BoundsComputeMethod.Value;
         headless.ExplicitLocalBounds.Value = renderer.ExplicitLocalBounds.Value;
         headless.ProxyBoundsSource.Target = renderer.ProxyBoundsSource.Target;
+        for (int i = 0; i < source.BlendShapeCount; i++)
+        {
+            while (renderer.BlendShapeWeights.Count <= i) renderer.BlendShapeWeights.Add();
+            var weight = headless.BlendShapeWeights.Add();
+            weight.Value = renderer.BlendShapeWeights[i];
+            weight.DriveFrom(renderer.BlendShapeWeights.GetElement(i));
+        }
         foreach (Slot bone in renderer.Bones)
         {
             headless.Bones.Add().Target = bone;

@@ -183,6 +183,38 @@ Transform:
             .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
         Check(avatar.MeshCopies.Count == 0, "Excluded renderer copies are not recreated");
     }
+    string movedCopy = Asset("Assets/MovedCopy.prefab", "99112233445566778899001122334455", """
+--- !u!1001 &99
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: 99000000000000000000000000000001}
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: 31, guid: 99000000000000000000000000000001}
+      propertyPath: m_LocalPosition.x
+      value: 7
+    - target: {fileID: 31, guid: 99000000000000000000000000000001}
+      propertyPath: m_LocalPosition.x
+      value: 9
+    - target: {fileID: 31, guid: 99000000000000000000000000000001}
+      propertyPath: m_LocalScale.z
+      value: 2
+    - target: {fileID: 31, guid: 99000000000000000000000000000001}
+      propertyPath: m_LocalRotation.w
+      value: 0.5
+    - target: {fileID: 33, guid: 99000000000000000000000000000001}
+      propertyPath: m_LocalPosition.y
+      value: 8
+""");
+    using (var package = UnityPackage.Open(movedCopy))
+    {
+        var avatar = ReadFilter(movedCopy);
+        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
+        Check(avatar.MeshCopies.Single().Transform.LocalPosition.X == 9, "Variant overrides copied renderer position");
+        var copy = avatar.MeshCopies.Single();
+        Check(copy.Transform.LocalPosition.Y == 2 && copy.Transform.LocalScale.Z == 2 &&
+              copy.Transform.LocalRotation.W == 0.5f && copy.ParentTransforms.Single().LocalPosition.Y == 8,
+            "Variant overrides rotation, scale and authored parents without changing unrelated axes");
+    }
     Asset("Assets/Clothing.fbx", clothingModel, "");
     Asset("Assets/Body.prefab", bodyPrefab, RendererPrefab(bodyModel, "Untagged"));
     Asset("Assets/Clothing.prefab", clothingPrefab, RendererPrefab(clothingModel, "EditorOnly"));
@@ -395,6 +427,10 @@ AnimatorState:
         VrchatAnimatorFaceParser.Apply(package, descriptor, avatar);
         return avatar;
     }
+    string anyStateDisabled = controller.Replace("m_DefaultBool: 0", "m_DefaultBool: 1")
+        .Replace("m_DefaultState: {fileID: -31}", "m_DefaultState: {fileID: -33}\n  m_AnyStateTransitions:\n  - {fileID: -34}")
+        + "\n--- !u!1101 &-34\nAnimatorStateTransition:\n  m_HasExitTime: 0\n  m_DstState: {fileID: -31}\n  m_Conditions:\n  - m_ConditionMode: 1\n    m_ConditionEvent: ForceDisable\n";
+    Check(Read(anyStateDisabled).Blink == null, "Any State disable takes precedence over default blink state");
     Check(Read(controller).Blink?.BlendShapeName == "blink", "Startup parameter driver enables Body blink across layers");
     Check(Read(controller.Replace("m_DefaultBool: 0", "m_DefaultBool: 1")).Blink == null,
         "Explicit blink disable is respected");

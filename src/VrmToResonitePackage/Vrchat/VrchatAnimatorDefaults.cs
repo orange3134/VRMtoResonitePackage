@@ -41,13 +41,17 @@ internal static class VrchatAnimatorDefaults
             foreach (long machine in states.Keys.ToArray())
             {
                 YamlNode state = states[machine];
-                foreach (YamlNode reference in state?["m_Transitions"]?.Seq ?? new())
+                if (state == null) continue;
+                var anyState = controller.Doc(machine)?.Root?["m_AnyStateTransitions"]?.Seq ?? new();
+                foreach (YamlNode reference in anyState.Concat(state["m_Transitions"]?.Seq ?? new()))
                 {
                     YamlNode transition = controller.Doc(reference.FileID ?? 0)?.Root;
                     if (transition == null || transition["m_HasExitTime"]?.AsBool() == true ||
                         !Enabled(transition)) continue;
                     YamlNode next = controller.Doc(transition["m_DstState"]?.FileID ?? 0)?.Root;
                     if (next == null) continue;
+                    if (next == state && anyState.Contains(reference) &&
+                        transition["m_CanTransitionToSelf"]?.AsBool() != true) continue;
                     // A cycle cannot be reduced to one permanent startup expression.
                     states[machine] = entered.Contains(next) ? null : next;
                     changed = true;

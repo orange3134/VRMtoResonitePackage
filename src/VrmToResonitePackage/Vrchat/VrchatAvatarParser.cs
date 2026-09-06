@@ -1744,6 +1744,40 @@ public static class VrchatAvatarParser
         return null;
     }
 
+    private static void ApplyCopyTransformOverride(VrchatPrefabTransform transform, string path, float value)
+    {
+        string[] parts = path.Split('.');
+        if (parts.Length != 2) return;
+        string axis = parts[1];
+        if (parts[0] == "m_LocalRotation")
+        {
+            var rotation = transform.LocalRotation;
+            switch (axis)
+            {
+                case "x": rotation.X = value; break;
+                case "y": rotation.Y = value; break;
+                case "z": rotation.Z = value; break;
+                case "w": rotation.W = value; break;
+                default: return;
+            }
+            transform.LocalRotation = rotation;
+        }
+        else if (parts[0] is "m_LocalPosition" or "m_LocalScale")
+        {
+            bool position = parts[0] == "m_LocalPosition";
+            var vector = position ? transform.LocalPosition : transform.LocalScale;
+            switch (axis)
+            {
+                case "x": vector.X = value; break;
+                case "y": vector.Y = value; break;
+                case "z": vector.Z = value; break;
+                default: return;
+            }
+            if (position) transform.LocalPosition = vector;
+            else transform.LocalScale = vector;
+        }
+    }
+
     private static void ParseVariantRendererOverrides(
         UnityPackage package, string sourceGuid, VrchatAvatar avatar)
     {
@@ -1786,6 +1820,7 @@ public static class VrchatAvatarParser
                         {
                             copy.Transform = new VrchatPrefabTransform
                             {
+                                Key = $"{sceneGuid}:{scene.TransformOfGameObject(smr.Root["m_GameObject"]?.FileID ?? 0).FileId}",
                                 LocalPosition = new Vec3(transform["m_LocalPosition"]?.Vec("x") ?? 0, transform["m_LocalPosition"]?.Vec("y") ?? 0, transform["m_LocalPosition"]?.Vec("z") ?? 0),
                                 LocalRotation = new Quat(transform["m_LocalRotation"]?.Vec("x") ?? 0, transform["m_LocalRotation"]?.Vec("y") ?? 0, transform["m_LocalRotation"]?.Vec("z") ?? 0, transform["m_LocalRotation"]?.Vec("w", 1) ?? 1),
                                 LocalScale = new Vec3(transform["m_LocalScale"]?.Vec("x", 1) ?? 1, transform["m_LocalScale"]?.Vec("y", 1) ?? 1, transform["m_LocalScale"]?.Vec("z", 1) ?? 1),
@@ -1865,6 +1900,14 @@ public static class VrchatAvatarParser
             foreach (YamlNode modification in modifications.Seq)
             {
                 string propertyPath = modification?["propertyPath"]?.AsString();
+                if (propertyPath?.StartsWith("m_Local", StringComparison.Ordinal) == true)
+                {
+                    YamlNode transformTarget = modification["target"];
+                    string key = $"{transformTarget?.Guid}:{transformTarget?.FileID}";
+                    foreach (var transform in avatar.MeshCopies.SelectMany(copy =>
+                        copy.ParentTransforms.Append(copy.Transform)).Where(t => t != null && t.Key == key).Distinct())
+                        ApplyCopyTransformOverride(transform, propertyPath, modification["value"]?.AsFloat() ?? 0);
+                }
                 if (string.Equals(propertyPath, "m_IsActive", StringComparison.Ordinal))
                 {
                     YamlNode activeTarget = modification["target"];
