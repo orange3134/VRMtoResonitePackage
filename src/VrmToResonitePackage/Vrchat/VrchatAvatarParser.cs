@@ -1908,6 +1908,25 @@ public static class VrchatAvatarParser
                         copy.ParentTransforms.Append(copy.Transform)).Where(t => t != null && t.Key == key).Distinct())
                         ApplyCopyTransformOverride(transform, propertyPath, modification["value"]?.AsFloat() ?? 0);
                 }
+                if (propertyPath is "m_IsActive" or "m_Enabled")
+                {
+                    YamlNode stateTarget = modification["target"];
+                    var reference = ResolveVariantObjectReference(package, stateTarget?.Guid,
+                        stateTarget?.FileID ?? 0, modelResolvers, prefabScenes);
+                    // Other components on the same GameObject also expose m_Enabled.
+                    if (propertyPath == "m_Enabled" && stateTarget?.Guid != null &&
+                        prefabScenes.TryGetValue(stateTarget.Guid, out var targetScene) &&
+                        targetScene.Doc(stateTarget.FileID ?? 0) is { ClassId: not 137 }) continue;
+                    bool value = modification["value"]?.AsBool(true) ?? true;
+                    for (int i = 0; i < avatar.MeshCopies.Count; i++)
+                    {
+                        var copy = avatar.MeshCopies[i];
+                        if (reference.FbxGuid != copy.FbxGuid || reference.Name != copy.Name) continue;
+                        avatar.MeshCopies[i] = propertyPath == "m_IsActive"
+                            ? copy with { Active = value }
+                            : copy with { Enabled = value };
+                    }
+                }
                 if (string.Equals(propertyPath, "m_IsActive", StringComparison.Ordinal))
                 {
                     YamlNode activeTarget = modification["target"];

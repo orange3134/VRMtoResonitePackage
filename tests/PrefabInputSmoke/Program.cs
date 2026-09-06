@@ -215,6 +215,42 @@ PrefabInstance:
               copy.Transform.LocalRotation.W == 0.5f && copy.ParentTransforms.Single().LocalPosition.Y == 8,
             "Variant overrides rotation, scale and authored parents without changing unrelated axes");
     }
+    string originalCopy = File.ReadAllText(copyPrefab);
+    foreach (bool initial in new[] { false, true })
+    {
+        int initialValue = initial ? 1 : 0;
+        int overrideValue = initial ? 0 : 1;
+        File.WriteAllText(copyPrefab, originalCopy
+            .Replace("m_Name: Body_Base_pants", $"m_Name: Body_Base_pants\n  m_IsActive: {initialValue}")
+            .Replace("SkinnedMeshRenderer:", $"SkinnedMeshRenderer:\n  m_Enabled: {initialValue}")
+            + "\n--- !u!114 &45\nMonoBehaviour:\n  m_GameObject: {fileID: 1}\n  m_Enabled: 1\n");
+        string stateCopy = Asset("Assets/StateCopy.prefab", "99112233445566778899001122334466", $$"""
+--- !u!1001 &99
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: 99000000000000000000000000000001}
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: 1, guid: 99000000000000000000000000000001}
+      propertyPath: m_IsActive
+      value: {{overrideValue}}
+    - target: {fileID: 2, guid: 99000000000000000000000000000001}
+      propertyPath: m_Enabled
+      value: {{overrideValue}}
+    - target: {fileID: 45, guid: 99000000000000000000000000000001}
+      propertyPath: m_Enabled
+      value: {{initialValue}}
+""");
+        using var package = UnityPackage.Open(stateCopy);
+        var avatar = ReadFilter(stateCopy);
+        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
+        var copy = avatar.MeshCopies.Single();
+        Check(copy.Active == !initial, $"Variant overrides copied GameObject active state {initial} -> {!initial}");
+        Check(copy.Enabled == !initial, $"Variant overrides copied renderer enabled state {initial} -> {!initial}");
+        Check(copy.Transform.LocalPosition.X == 1 && copy.ParentTransforms.Single().Name == "CopyParent",
+            "State overrides preserve copied mesh placement");
+    }
+    File.WriteAllText(copyPrefab, originalCopy);
     Asset("Assets/Clothing.fbx", clothingModel, "");
     Asset("Assets/Body.prefab", bodyPrefab, RendererPrefab(bodyModel, "Untagged"));
     Asset("Assets/Clothing.prefab", clothingPrefab, RendererPrefab(clothingModel, "EditorOnly"));
