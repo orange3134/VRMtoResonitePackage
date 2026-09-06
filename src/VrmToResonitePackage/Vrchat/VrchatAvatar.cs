@@ -143,6 +143,10 @@ public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
 
 public sealed record VrchatMeshCopy(string FbxGuid, string SourceName, string Name, bool Active, bool Enabled)
 {
+    public string PrefabGuid { get; init; }
+    public long RendererFileId { get; init; }
+    public long GameObjectFileId { get; init; }
+    public bool ReplaceSourceRenderer { get; init; }
     public VrchatPrefabTransform Transform { get; set; }
     public string ParentFbxGuid { get; set; }
     public string ParentName { get; set; }

@@ -61,10 +61,10 @@ internal static class VrchatAnimatorDefaults
                 {
                     YamlNode transition = controller.Doc(reference.FileID ?? 0)?.Root;
                     if (!Enabled(transition)) continue;
-                    // An enabled timed departure means this expression will not settle here.
-                    // Do not install its source motion as a permanent blink, including when
-                    // the destination is Exit rather than another state in this machine.
-                    if (transition["m_HasExitTime"]?.AsBool() == true)
+                    // A timed departure or Exit means this expression will not settle here.
+                    // Parent exit routing is not evaluated, so neither source motion is safe
+                    // to install as a permanent blink.
+                    if (transition["m_HasExitTime"]?.AsBool() == true || transition["m_IsExit"]?.AsBool() == true)
                     {
                         states[machine] = null;
                         changed = true;

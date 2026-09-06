@@ -207,6 +207,12 @@ public static class VrchatAvatarParser
         VrchatAnimatorFaceParser.Apply(package, selected.Descriptor.Root, avatar);
         ParsePhysBones(selected.Scene, includedSubtree, avatar);
         ParseRendererMaterials(package, selected.Scene, includedSubtree, avatar);
+        var copyResolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);
+        var copyScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
+        foreach (var smr in selected.Scene.SkinnedMeshRenderers.Where(smr =>
+                     includedSubtree.Contains(smr.Root["m_GameObject"]?.FileID ?? 0)))
+            CollectAuthoredMeshCopy(package, selected.Source.Guid, selected.Scene, smr, avatar,
+                copyResolvers, copyScenes, replaceSourceRenderer: true);
         ParseInactiveGameObjects(selected.Scene, includedSubtree, avatar);
         ParseModularAvatar(package, selected.Scene, includedSubtree, avatar);
         ApplyFbxDefaultBlendShapeWeights(avatar);
@@ -1788,6 +1794,68 @@ public static class VrchatAvatarParser
         }
     }
 
+    private static void CollectAuthoredMeshCopy(UnityPackage package, string sceneGuid, UnityScene scene,
+        YamlDocument smr, VrchatAvatar avatar, Dictionary<string, UnityModelFileIdResolver> modelResolvers,
+        Dictionary<string, UnityScene> prefabScenes, bool replaceSourceRenderer = false)
+    {
+        string rendererName = scene.ResolveGameObjectName(smr.FileId);
+        string fbxGuid = smr.Root?["m_Mesh"]?.Guid;
+        if (avatar.EditorOnlyPrefabObjects.TryGetValue(sceneGuid, out var excluded) &&
+            excluded.Contains(smr.Root["m_GameObject"]?.FileID ?? 0)) return;
+        // Authored components are distinct from imported renderers even when their names
+        // match. Preserve prefab/component identity for collection and state overrides.
+        if (!string.IsNullOrEmpty(rendererName) && package.ByGuid(fbxGuid)?.Extension == ".fbx")
+        {
+            string sourceName = ResolveReferenceGameObjectName(package, scene, smr.Root["m_Mesh"], modelResolvers);
+            if (!string.IsNullOrEmpty(sourceName) && (smr.Root["m_CorrespondingSourceObject"]?.FileID ?? 0) == 0 &&
+                avatar.ShouldKeepRenderer(fbxGuid, rendererName))
+            {
+                avatar.MeshCopies.RemoveAll(c => c.PrefabGuid == sceneGuid && c.RendererFileId == smr.FileId);
+                var copy = new VrchatMeshCopy(fbxGuid, sourceName, rendererName,
+                    scene.OwnerGameObject(smr)?.Root["m_IsActive"]?.AsBool(true) ?? true,
+                    smr.Root["m_Enabled"]?.AsBool(true) ?? true)
+                {
+                    PrefabGuid = sceneGuid, RendererFileId = smr.FileId,
+                    GameObjectFileId = smr.Root["m_GameObject"]?.FileID ?? 0,
+                    ReplaceSourceRenderer = replaceSourceRenderer,
+                };
+                var transform = scene.TransformOfGameObject(smr.Root["m_GameObject"]?.FileID ?? 0)?.Root;
+                if (transform != null)
+                {
+                    copy.Transform = new VrchatPrefabTransform
+                    {
+                        Key = $"{sceneGuid}:{scene.TransformOfGameObject(smr.Root["m_GameObject"]?.FileID ?? 0).FileId}",
+                        LocalPosition = new Vec3(transform["m_LocalPosition"]?.Vec("x") ?? 0, transform["m_LocalPosition"]?.Vec("y") ?? 0, transform["m_LocalPosition"]?.Vec("z") ?? 0),
+                        LocalRotation = new Quat(transform["m_LocalRotation"]?.Vec("x") ?? 0, transform["m_LocalRotation"]?.Vec("y") ?? 0, transform["m_LocalRotation"]?.Vec("z") ?? 0, transform["m_LocalRotation"]?.Vec("w", 1) ?? 1),
+                        LocalScale = new Vec3(transform["m_LocalScale"]?.Vec("x", 1) ?? 1, transform["m_LocalScale"]?.Vec("y", 1) ?? 1, transform["m_LocalScale"]?.Vec("z", 1) ?? 1),
+                    };
+                    var placement = new FbxPlacement();
+                    CaptureLocalPlacementParents(package, scene, sceneGuid, transform["m_Father"]?.FileID ?? 0, placement);
+                    copy.ParentFbxGuid = placement.ParentFbxGuid;
+                    copy.ParentName = placement.ParentNodeName;
+                    copy.ParentTransforms.AddRange(placement.ParentTransforms);
+                }
+                var bones = smr.Root["m_Bones"]?.Seq;
+                if (bones != null && modelResolvers[fbxGuid].MeshBoneNames.TryGetValue(sourceName, out var originalBones))
+                {
+                    if (bones.Count != originalBones.Length)
+                        throw new InvalidDataException($"複製メッシュのボーン数が一致しません: {rendererName}");
+                    for (int i = 0; i < bones.Count; i++)
+                    {
+                        var bone = ResolveVariantObjectReference(package, bones[i].Guid ?? sceneGuid,
+                            bones[i].FileID ?? 0, modelResolvers, prefabScenes);
+                        if ((bones[i].FileID ?? 0) != 0 && bone.Name == null)
+                            throw new InvalidDataException($"複製メッシュのボーン参照を解決できません: {rendererName} / {i}");
+                        copy.BoneTargets[originalBones[i]] = new VrchatGameObjectReference(bone.FbxGuid, bone.Name);
+                    }
+                }
+                avatar.MeshCopies.Add(copy);
+                if (modelResolvers[fbxGuid].BlendShapeNames.TryGetValue(sourceName, out var shapeNames))
+                    avatar.FbxBlendShapeNames[rendererName] = shapeNames.ToList();
+            }
+        }
+    }
+
     private static void ParseVariantRendererOverrides(
         UnityPackage package, string sourceGuid, VrchatAvatar avatar)
     {
@@ -1813,53 +1881,7 @@ public static class VrchatAvatarParser
             {
                 string rendererName = scene.ResolveGameObjectName(smr.FileId);
                 string fbxGuid = smr.Root?["m_Mesh"]?.Guid;
-                // An authored renderer can reuse an FBX mesh under a new GameObject name.
-                // Keep the source mesh identity separately from the instance's display name.
-                if (!string.IsNullOrEmpty(rendererName) && package.ByGuid(fbxGuid)?.Extension == ".fbx")
-                {
-                    string sourceName = ResolveReferenceGameObjectName(package, scene, smr.Root["m_Mesh"], modelResolvers);
-                    if (!string.IsNullOrEmpty(sourceName) && sourceName != rendererName &&
-                        avatar.ShouldKeepRenderer(fbxGuid, rendererName))
-                    {
-                        avatar.MeshCopies.RemoveAll(c => c.FbxGuid == fbxGuid && c.Name == rendererName);
-                        var copy = new VrchatMeshCopy(fbxGuid, sourceName, rendererName,
-                            scene.OwnerGameObject(smr)?.Root["m_IsActive"]?.AsBool(true) ?? true,
-                            smr.Root["m_Enabled"]?.AsBool(true) ?? true);
-                        var transform = scene.TransformOfGameObject(smr.Root["m_GameObject"]?.FileID ?? 0)?.Root;
-                        if (transform != null)
-                        {
-                            copy.Transform = new VrchatPrefabTransform
-                            {
-                                Key = $"{sceneGuid}:{scene.TransformOfGameObject(smr.Root["m_GameObject"]?.FileID ?? 0).FileId}",
-                                LocalPosition = new Vec3(transform["m_LocalPosition"]?.Vec("x") ?? 0, transform["m_LocalPosition"]?.Vec("y") ?? 0, transform["m_LocalPosition"]?.Vec("z") ?? 0),
-                                LocalRotation = new Quat(transform["m_LocalRotation"]?.Vec("x") ?? 0, transform["m_LocalRotation"]?.Vec("y") ?? 0, transform["m_LocalRotation"]?.Vec("z") ?? 0, transform["m_LocalRotation"]?.Vec("w", 1) ?? 1),
-                                LocalScale = new Vec3(transform["m_LocalScale"]?.Vec("x", 1) ?? 1, transform["m_LocalScale"]?.Vec("y", 1) ?? 1, transform["m_LocalScale"]?.Vec("z", 1) ?? 1),
-                            };
-                            var placement = new FbxPlacement();
-                            CaptureLocalPlacementParents(package, scene, sceneGuid, transform["m_Father"]?.FileID ?? 0, placement);
-                            copy.ParentFbxGuid = placement.ParentFbxGuid;
-                            copy.ParentName = placement.ParentNodeName;
-                            copy.ParentTransforms.AddRange(placement.ParentTransforms);
-                        }
-                        var bones = smr.Root["m_Bones"]?.Seq;
-                        if (bones != null && modelResolvers[fbxGuid].MeshBoneNames.TryGetValue(sourceName, out var originalBones))
-                        {
-                            if (bones.Count != originalBones.Length)
-                                throw new InvalidDataException($"複製メッシュのボーン数が一致しません: {rendererName}");
-                            for (int i = 0; i < bones.Count; i++)
-                            {
-                                var bone = ResolveVariantObjectReference(package, bones[i].Guid ?? sceneGuid,
-                                    bones[i].FileID ?? 0, modelResolvers, prefabScenes);
-                                if ((bones[i].FileID ?? 0) != 0 && bone.Name == null)
-                                    throw new InvalidDataException($"複製メッシュのボーン参照を解決できません: {rendererName} / {i}");
-                                copy.BoneTargets[originalBones[i]] = new VrchatGameObjectReference(bone.FbxGuid, bone.Name);
-                            }
-                        }
-                        avatar.MeshCopies.Add(copy);
-                        if (modelResolvers[fbxGuid].BlendShapeNames.TryGetValue(sourceName, out var shapeNames))
-                            avatar.FbxBlendShapeNames[rendererName] = shapeNames.ToList();
-                    }
-                }
+                CollectAuthoredMeshCopy(package, sceneGuid, scene, smr, avatar, modelResolvers, prefabScenes);
                 YamlNode materials = smr.Root?["m_Materials"];
                 YamlNode weights = smr.Root?["m_BlendShapeWeights"];
                 if (string.IsNullOrEmpty(rendererName) ||
@@ -1934,7 +1956,8 @@ public static class VrchatAvatarParser
                     for (int i = 0; i < avatar.MeshCopies.Count; i++)
                     {
                         var copy = avatar.MeshCopies[i];
-                        if (reference.FbxGuid != copy.FbxGuid || reference.Name != copy.Name) continue;
+                        if (stateTarget?.Guid != copy.PrefabGuid || stateTarget.FileID !=
+                            (propertyPath == "m_IsActive" ? copy.GameObjectFileId : copy.RendererFileId)) continue;
                         avatar.MeshCopies[i] = propertyPath == "m_IsActive"
                             ? copy with { Active = value }
                             : copy with { Enabled = value };

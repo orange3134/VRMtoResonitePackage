@@ -13,16 +13,18 @@ internal static class VrchatSceneSetup
     public static void CreateMeshCopies(VrchatAvatar avatar, Dictionary<Slot, string> sources,
         Func<VrchatMeshCopy, Slot> resolveParent)
     {
+        var importedSources = sources.ToArray();
+        var replacedRenderers = new HashSet<SkinnedMeshRenderer>();
         foreach (VrchatMeshCopy copy in avatar.MeshCopies)
         {
-            Slot source = sources.Keys.FirstOrDefault(s => !s.IsDestroyed && sources[s] == copy.FbxGuid &&
-                s.Name == copy.SourceName && s.GetComponent<SkinnedMeshRenderer>() != null);
+            Slot source = importedSources.FirstOrDefault(entry => !entry.Key.IsDestroyed && entry.Value == copy.FbxGuid &&
+                entry.Key.Name == copy.SourceName && entry.Key.GetComponent<SkinnedMeshRenderer>() != null).Key;
             if (source == null)
             {
                 UniLog.Warning($"Prefab mesh copy source missing: {copy.Name} <- {copy.SourceName}");
                 continue;
             }
-            if (sources.Keys.Any(s => !s.IsDestroyed && sources[s] == copy.FbxGuid && s.Name == copy.Name)) continue;
+            if (copy.ReplaceSourceRenderer) replacedRenderers.Add(source.GetComponent<SkinnedMeshRenderer>());
             // Duplicate the renderer slot, retaining external mesh, material and skeleton references.
             Slot duplicate = source.Duplicate(source.Parent, settings: new DuplicationSettings
             {
@@ -57,6 +59,9 @@ internal static class VrchatSceneSetup
             foreach (Slot slot in EnumerateSlots(duplicate)) sources[slot] = copy.FbxGuid;
             UniLog.Log($"Prefab mesh copy: {copy.Name} <- {copy.SourceName} (fbx={copy.FbxGuid})");
         }
+        // Unpacked prefabs explicitly describe their renderers. Keep imported bones and
+        // slots as references, but do not also render the FBX template at its old location.
+        foreach (var renderer in replacedRenderers) renderer.Destroy();
     }
 
     public static Dictionary<Slot, string> CaptureImportedObjects(IReadOnlyDictionary<string, Slot> roots)

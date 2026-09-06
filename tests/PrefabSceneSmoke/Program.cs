@@ -116,6 +116,30 @@ static async Task Run(string fbxPath, string rendererName)
         avatar.InactiveGameObjects.Add(new VrchatGameObjectReference("additional", "ExplicitCopy"));
         Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "Apply", root, avatar, sources);
         Check(!copy.Slot.ActiveSelf && unrelated.Slot.ActiveSelf, "Inactive override retains model identity after reparenting");
+        var sameNameAvatar = new VrchatAvatar();
+        Slot parentA = primary.AddSlot("Copy parent A"), parentB = primary.AddSlot("Copy parent B");
+        for (int i = 0; i < 2; i++)
+        {
+            var authored = new VrchatMeshCopy("additional", rendererName, rendererName, true, true)
+            {
+                PrefabGuid = "regular", RendererFileId = i + 1, ReplaceSourceRenderer = true,
+                Transform = new VrchatPrefabTransform { LocalPosition = new System.Numerics.Vector3(i + 1, 2, 3) },
+            };
+            if (original.Bones.Count > 0 && original.Bones[0] != null)
+                authored.BoneTargets[original.Bones[0].Name] = new VrchatGameObjectReference(null, null);
+            sameNameAvatar.MeshCopies.Add(authored);
+        }
+        Slot originalSlot = original.Slot;
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", sameNameAvatar, sources,
+            (Func<VrchatMeshCopy, Slot>)(c => c.RendererFileId == 1 ? parentA : parentB));
+        var sameA = parentA.FindChild(rendererName).GetComponent<SkinnedMeshRenderer>();
+        var sameB = parentB.FindChild(rendererName).GetComponent<SkinnedMeshRenderer>();
+        Check(sameA != null && sameB != null && sameA.Slot.LocalPosition.x == 1 && sameB.Slot.LocalPosition.x == 2,
+            "Two same-named authored renderers retain separate parents and transforms");
+        Check(sameA.Bones.Count > 0 && sameA.Bones[0] == null && sameB.Bones[0] == null,
+            "Same-named renderer copies apply authored bone overrides");
+        Check(originalSlot.GetComponent<SkinnedMeshRenderer>() == null && !originalSlot.IsDestroyed,
+            "Regular prefab replaces the imported renderer while retaining its referenced slot");
     });
 }
 

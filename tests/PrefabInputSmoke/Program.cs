@@ -317,6 +317,29 @@ Transform:
             .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
         Check(avatar.MeshCopies.Count == 0, "Excluded renderer copies are not recreated");
     }
+    string sameNameText = File.ReadAllText(copyPrefab).Replace("Body_Base_pants", "Body_Base");
+    string sameNameCopy = Asset("Assets/SameNameCopy.prefab", "12340000000000000000000000000001", sameNameText);
+    using (var package = UnityPackage.Open(sameNameCopy))
+    {
+        var avatar = ReadFilter(sameNameCopy);
+        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
+        Check(avatar.MeshCopies.Single().Name == "Body_Base" && avatar.MeshCopies.Single().RendererFileId == 2,
+            "An authored renderer with the source mesh name is still collected by component ID");
+    }
+    string regularCopy = Asset("Assets/RegularCopy.prefab", "12340000000000000000000000000002",
+        sameNameText.Replace("m_Name: CopyParent", "m_Name: CopyParent\n  m_Component:\n  - component: {fileID: 34}")
+            .Replace("m_GameObject: {fileID: 32}", "m_GameObject: {fileID: 32}\n  m_Children:\n  - {fileID: 31}")
+        + "\n--- !u!114 &34\nMonoBehaviour:\n  m_GameObject: {fileID: 32}\n  m_Script: {fileID: 11500000, guid: 67cc4cb7839cd3741b63733d5adf0442}\n");
+    using (var package = UnityPackage.Open(regularCopy))
+    {
+        var avatar = VrchatAvatarParser.Parse(package);
+        var copy = avatar.MeshCopies.Single();
+        Check(copy.Name == "Body_Base" && copy.Transform.LocalPosition.X == 1 && copy.Transform.LocalScale.Z == 4 &&
+              copy.ParentTransforms.Single().Name == "CopyParent" && copy.ReplaceSourceRenderer,
+            "Regular descriptor prefab collects authored renderer placement and replaces the imported template");
+    }
     string movedCopy = Asset("Assets/MovedCopy.prefab", "99112233445566778899001122334455", """
 --- !u!1001 &99
 PrefabInstance:
@@ -637,6 +660,10 @@ AnimatorState:
     Check(Read(timedExit).Blink == null, "Timed exit from blink cannot become a permanent blink binding");
     Check(Read(timedExit.Replace("m_DstState: {fileID: -35}", "m_IsExit: 1")).Blink == null,
         "Timed exit from the state machine also makes blink indeterminate");
+    string immediateExit = timedExit.Replace("m_DstState: {fileID: -35}", "m_IsExit: 1")
+        .Replace("m_HasExitTime: 1", "m_HasExitTime: 0")
+        .Replace("m_DefaultState: {fileID: -33}", "m_EntryTransitions:\n  - {fileID: -41}\n--- !u!1109 &-41\nAnimatorTransition:\n  m_Conditions: []\n  m_DstStateMachine: {fileID: -40}\n--- !u!1107 &-40\nAnimatorStateMachine:\n  m_DefaultState: {fileID: -33}");
+    Check(Read(immediateExit).Blink == null, "Unconditional nested state machine Exit cannot become permanent blink");
     Check(Read(timedExit.Replace("m_HasExitTime: 1", "m_HasExitTime: 1\n  m_Mute: 1")).Blink?.BlendShapeName == "blink",
         "Muted timed exit does not suppress a stable blink binding");
     Check(Read(timedExit.Replace("  m_Conditions: []", "  m_Conditions:\n  - m_ConditionMode: 1\n    m_ConditionEvent: ForceDisable")).Blink?.BlendShapeName == "blink",
