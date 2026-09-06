@@ -11,14 +11,21 @@ namespace VrmToResonitePackage.Vrchat;
 internal static class VrchatSceneSetup
 {
     public static void CreateMeshCopies(VrchatAvatar avatar, Dictionary<Slot, string> sources,
-        Func<VrchatMeshCopy, Slot> resolveParent)
+        Func<VrchatMeshCopy, Slot> resolveParent, IReadOnlyDictionary<Slot, string> importedPaths)
     {
         var importedSources = sources.ToArray();
         var replacedRenderers = new HashSet<SkinnedMeshRenderer>();
         foreach (VrchatMeshCopy copy in avatar.MeshCopies)
         {
-            Slot source = importedSources.FirstOrDefault(entry => !entry.Key.IsDestroyed && entry.Value == copy.FbxGuid &&
-                entry.Key.Name == copy.SourceName && entry.Key.GetComponent<SkinnedMeshRenderer>() != null).Key;
+            var matchesBySource = importedSources.Where(entry => !entry.Key.IsDestroyed && entry.Value == copy.FbxGuid &&
+                entry.Key.GetComponent<SkinnedMeshRenderer>() != null &&
+                (copy.SourcePath != null
+                    ? importedPaths.TryGetValue(entry.Key, out string path) &&
+                      (copy.SourcePath == path || copy.SourcePath.EndsWith("/" + path, StringComparison.Ordinal))
+                    : entry.Key.Name == copy.SourceName)).Select(entry => entry.Key).ToArray();
+            if (matchesBySource.Length > 1)
+                throw new InvalidDataException($"Ambiguous prefab mesh copy source: {copy.Name} <- {copy.SourcePath ?? copy.SourceName}");
+            Slot source = matchesBySource.SingleOrDefault();
             if (source == null)
             {
                 UniLog.Warning($"Prefab mesh copy source missing: {copy.Name} <- {copy.SourceName}");

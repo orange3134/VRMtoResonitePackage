@@ -216,6 +216,18 @@ Connections: {
             "Renderer subtree lookup retains the full path of a same-named mesh");
         Check(!resolver.IsUniqueNodeName("Body") && !resolver.IsUniqueNodeName("Shared"),
             "Duplicate names cannot become model-wide exclusions");
+        long meshId = (long)typeof(UnityModelFileIdResolver).GetMethod("Compute",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { "Mesh", "//RootNode/Right/Shared/Body/Mesh", 0 })!;
+        string pathCopy = Asset("Assets/PathCopy.prefab", "12340000000000000000000000000003",
+            RendererPrefab(branchesGuid, "Untagged").Replace("4300000", meshId.ToString()));
+        using var copyPackage = UnityPackage.Open(pathCopy);
+        var copyAvatar = ReadFilter(pathCopy);
+        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object[] { copyPackage, copyPackage.InputPrefab.Guid, copyAvatar });
+        Check(copyAvatar.MeshCopies.Single().SourcePath.EndsWith("/Right/Shared/Body"),
+            "Copied renderer retains the source path resolved from its mesh file ID");
     }
     string regular = Asset("Assets/Regular.prefab", "abcdefabcdefabcdefabcdefabcdefab",
         Avatar("Regular").Replace("m_Father: {fileID: 0}",
@@ -339,6 +351,29 @@ Transform:
         Check(copy.Name == "Body_Base" && copy.Transform.LocalPosition.X == 1 && copy.Transform.LocalScale.Z == 4 &&
               copy.ParentTransforms.Single().Name == "CopyParent" && copy.ReplaceSourceRenderer,
             "Regular descriptor prefab collects authored renderer placement and replaces the imported template");
+    }
+    string extraGuid = "12340000000000000000000000000004";
+    string extraFbx = Asset("Assets/Extra.fbx", extraGuid, "");
+    File.AppendAllText(extraFbx + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: 4300000\n    second: Body\n");
+    string multiCopy = Asset("Assets/MultiCopy.prefab", "12340000000000000000000000000005",
+        File.ReadAllText(regularCopy).Replace("  - {fileID: 31}", "  - {fileID: 31}\n  - {fileID: 103}") +
+        "\n" + RendererPrefab(extraGuid, "Untagged").Replace("&1", "&101").Replace("&2", "&102")
+            .Replace("fileID: 1}", "fileID: 101}").Replace("fileID: 2}", "fileID: 102}") +
+        "\n--- !u!4 &103\nTransform:\n  m_GameObject: {fileID: 101}\n  m_Father: {fileID: 33}\n");
+    using (var package = UnityPackage.Open(multiCopy))
+    {
+        var avatar = VrchatAvatarParser.Parse(package);
+        Check(avatar.MeshCopies.Count == 2 && avatar.AdditionalFbxs.Single().Guid == extraGuid &&
+              Path.GetFullPath(avatar.AdditionalFbxs.Single().Path) == Path.GetFullPath(extraFbx),
+            "Regular prefab schedules the secondary mesh source FBX for import");
+    }
+    File.WriteAllText(multiCopy, File.ReadAllText(multiCopy).Replace("m_Name: Body\n  m_TagString: Untagged",
+        "m_Name: Body\n  m_TagString: EditorOnly"));
+    using (var package = UnityPackage.Open(multiCopy))
+    {
+        var avatar = VrchatAvatarParser.Parse(package);
+        Check(avatar.AdditionalFbxs.Count == 0 && avatar.MeshCopies.Count == 1,
+            "EditorOnly renderer does not schedule an unused secondary FBX");
     }
     string movedCopy = Asset("Assets/MovedCopy.prefab", "99112233445566778899001122334455", """
 --- !u!1001 &99

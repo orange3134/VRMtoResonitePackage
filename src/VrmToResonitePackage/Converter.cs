@@ -446,7 +446,7 @@ internal static class Converter
                 var importedMeshSources = Vrchat.VrchatSceneSetup.CaptureImportedObjects(importedFbxRoots);
                 var importedNodePaths = Vrchat.VrchatSceneSetup.CaptureImportedPaths(importedFbxRoots);
 
-                ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots, importedMeshSources);
+                ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
                 AlignVrchatImportUp(importRoot, model);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots);
                 RemoveImportAlignment(importRoot, root);
@@ -543,7 +543,8 @@ internal static class Converter
     }
 
     private static void ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
-        Dictionary<string, Slot> importedFbxRoots, Dictionary<Slot, string> importedMeshSources)
+        Dictionary<string, Slot> importedFbxRoots, Dictionary<Slot, string> importedMeshSources,
+        IReadOnlyDictionary<Slot, string> importedNodePaths)
     {
         var prefabSlots = new Dictionary<string, Slot>(StringComparer.Ordinal);
         ApplyPrimaryFbxPlacement(importRoot, avatar, importedFbxRoots, prefabSlots);
@@ -605,7 +606,7 @@ internal static class Converter
         }
         Vrchat.VrchatSceneSetup.CreateMeshCopies(avatar, importedMeshSources, copy =>
             ResolvePrefabParent(importRoot, copy.ParentFbxGuid, copy.ParentName, copy.ParentTransforms,
-                importedFbxRoots, prefabSlots));
+                importedFbxRoots, prefabSlots), importedNodePaths);
     }
 
     private static bool IsUnityRootNode(string nodeName)

@@ -1342,6 +1342,12 @@ public static class VrchatAvatarParser
         }
         avatar.FbxGuid = fbxGuid;
         avatar.FbxPath = fbx.DiskPath;
+        foreach (string guid in scene.SkinnedMeshRenderers.Where(smr => InSubtree(scene, subtree, smr))
+                     .Select(smr => smr.Root?["m_Mesh"]?.Guid)
+                     .Where(guid => !string.Equals(guid, fbxGuid, StringComparison.OrdinalIgnoreCase) &&
+                                    package.ByGuid(guid)?.Extension == ".fbx")
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+            AddAdditionalFbx(package, avatar, guid, null);
     }
 
     private static void ParseHumanoid(UnityPackage package, VrchatAvatar avatar)
@@ -1818,6 +1824,7 @@ public static class VrchatAvatarParser
                     PrefabGuid = sceneGuid, RendererFileId = smr.FileId,
                     GameObjectFileId = smr.Root["m_GameObject"]?.FileID ?? 0,
                     ReplaceSourceRenderer = replaceSourceRenderer,
+                    SourcePath = modelResolvers[fbxGuid].ResolveNodePath(smr.Root["m_Mesh"].FileID ?? 0),
                 };
                 var transform = scene.TransformOfGameObject(smr.Root["m_GameObject"]?.FileID ?? 0)?.Root;
                 if (transform != null)
@@ -1836,7 +1843,11 @@ public static class VrchatAvatarParser
                     copy.ParentTransforms.AddRange(placement.ParentTransforms);
                 }
                 var bones = smr.Root["m_Bones"]?.Seq;
-                if (bones != null && modelResolvers[fbxGuid].MeshBoneNames.TryGetValue(sourceName, out var originalBones))
+                var resolver = modelResolvers[fbxGuid];
+                string[] originalBones = copy.SourcePath != null
+                    ? resolver.MeshBoneNamesByPath.GetValueOrDefault(copy.SourcePath)
+                    : resolver.MeshBoneNames.GetValueOrDefault(sourceName);
+                if (bones != null && originalBones != null)
                 {
                     if (bones.Count != originalBones.Length)
                         throw new InvalidDataException($"複製メッシュのボーン数が一致しません: {rendererName}");

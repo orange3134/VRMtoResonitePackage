@@ -97,7 +97,7 @@ static async Task Run(string fbxPath, string rendererName)
             avatar.MeshCopies.Add(new VrchatMeshCopy("additional", rendererName, name, true, true)
                 { Transform = new VrchatPrefabTransform() });
         Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", avatar, sources,
-            (Func<VrchatMeshCopy, Slot>)(_ => primary));
+            (Func<VrchatMeshCopy, Slot>)(_ => primary), new Dictionary<Slot, string>());
         var copy = primary.FindChild("ExplicitCopy").GetComponent<SkinnedMeshRenderer>();
         var defaultCopy = primary.FindChild("DefaultCopy").GetComponent<SkinnedMeshRenderer>();
         // A primary-model renderer with the same name must not receive the additional model's overrides.
@@ -131,7 +131,7 @@ static async Task Run(string fbxPath, string rendererName)
         }
         Slot originalSlot = original.Slot;
         Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", sameNameAvatar, sources,
-            (Func<VrchatMeshCopy, Slot>)(c => c.RendererFileId == 1 ? parentA : parentB));
+            (Func<VrchatMeshCopy, Slot>)(c => c.RendererFileId == 1 ? parentA : parentB), new Dictionary<Slot, string>());
         var sameA = parentA.FindChild(rendererName).GetComponent<SkinnedMeshRenderer>();
         var sameB = parentB.FindChild(rendererName).GetComponent<SkinnedMeshRenderer>();
         Check(sameA != null && sameB != null && sameA.Slot.LocalPosition.x == 1 && sameB.Slot.LocalPosition.x == 2,
@@ -140,6 +140,22 @@ static async Task Run(string fbxPath, string rendererName)
             "Same-named renderer copies apply authored bone overrides");
         Check(originalSlot.GetComponent<SkinnedMeshRenderer>() == null && !originalSlot.IsDestroyed,
             "Regular prefab replaces the imported renderer while retaining its referenced slot");
+        Slot modelRoot = root.AddSlot("Duplicate source model");
+        Slot leftSource = sameA.Slot.Duplicate(modelRoot.AddSlot("Left"));
+        Slot rightSource = sameB.Slot.Duplicate(modelRoot.AddSlot("Right"));
+        leftSource.GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] = 0.12f;
+        rightSource.GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] = 0.89f;
+        var pathSources = new Dictionary<Slot, string> { [leftSource] = "model", [rightSource] = "model" };
+        var sourcePaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths",
+            new Dictionary<string, Slot> { ["model"] = modelRoot });
+        rightSource.SetParent(primary, false);
+        var pathAvatar = new VrchatAvatar();
+        pathAvatar.MeshCopies.Add(new VrchatMeshCopy("model", rendererName, "RightCopy", true, true)
+            { SourcePath = "RootNode/Right/" + rendererName, Transform = new VrchatPrefabTransform() });
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", pathAvatar, pathSources,
+            (Func<VrchatMeshCopy, Slot>)(_ => primary), sourcePaths);
+        Check(Math.Abs(primary.FindChild("RightCopy").GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] - 0.89f) < 0.001f,
+            "Captured source path selects the second same-named renderer after reparenting");
     });
 }
 
