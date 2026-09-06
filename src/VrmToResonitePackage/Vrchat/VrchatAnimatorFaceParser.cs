@@ -12,6 +12,7 @@ public static class VrchatAnimatorFaceParser
     {
         var clips = new Dictionary<string, YamlNode>(StringComparer.OrdinalIgnoreCase);
         var visemes = new Dictionary<int, HashSet<Shape>>();
+        var unsupportedVisemes = new HashSet<int>();
         var blinks = new HashSet<Shape>();
         foreach (YamlNode layer in descriptor?["baseAnimationLayers"]?.Seq ?? new())
         {
@@ -55,10 +56,7 @@ public static class VrchatAnimatorFaceParser
                         if (threshold < 0 || threshold > 14 || threshold != MathF.Truncate(threshold)) continue;
                         YamlNode state = controller.Doc(transition["m_DstState"]?.FileID ?? 0)?.Root;
                         var shapes = ActiveShapes(Clip(state?["m_Motion"]));
-                        if (!visemes.TryGetValue((int)threshold, out var candidates))
-                            visemes[(int)threshold] = candidates = new HashSet<Shape>();
-                        if (shapes.Count == 1 && MathF.Abs(shapes[0].Peak - 100) < 0.01f)
-                            candidates.Add(shapes[0]);
+                        RecordViseme((int)threshold, shapes);
                     }
                     // Some controllers use an unconditional entry fallback for silence,
                     // after explicit entries for all fourteen spoken phonemes.
@@ -74,11 +72,7 @@ public static class VrchatAnimatorFaceParser
                         fallback?["m_Conditions"]?.Seq?.Count == 0 && fallback["m_Mute"]?.AsBool() != true)
                     {
                         var shapes = ActiveShapes(Clip(controller.Doc(fallback["m_DstState"]?.FileID ?? 0)?.Root?["m_Motion"]));
-                        if (shapes.Count == 1 && MathF.Abs(shapes[0].Peak - 100) < 0.01f)
-                        {
-                            if (!visemes.TryGetValue(0, out var candidates)) visemes[0] = candidates = new();
-                            candidates.Add(shapes[0]);
-                        }
+                        RecordViseme(0, shapes);
                     }
                 }
                 if (avatar.Blink == null)
@@ -106,7 +100,7 @@ public static class VrchatAnimatorFaceParser
         }
         foreach ((string preset, int index) in VrchatConstants.VisemeToVrcSlot())
         {
-            if (!visemes.TryGetValue(index, out var candidates) || candidates.Count != 1) continue;
+            if (unsupportedVisemes.Contains(index) || !visemes.TryGetValue(index, out var candidates) || candidates.Count != 1) continue;
             Shape shape = candidates.Single();
             avatar.Visemes.Add(new VrchatViseme { ResonitePreset = preset, MeshGameObjectName = shape.Renderer, BlendShapeName = shape.Name });
         }
@@ -116,6 +110,19 @@ public static class VrchatAnimatorFaceParser
             avatar.Blink = new VrchatBlink { MeshGameObjectName = shape.Renderer, BlendShapeName = shape.Name, BlendShapeIndex = -1 };
         }
         UniLog.Log($"Animator face bindings: {avatar.Visemes.Count} viseme(s), blink={avatar.Blink?.BlendShapeName ?? "(descriptor/none)"}");
+
+        void RecordViseme(int index, List<Shape> shapes)
+        {
+            // Do not let an unsupported competing motion disappear from the ambiguity check.
+            // A DirectVisemeDriver can represent only one full-weight shape per phoneme.
+            if (shapes.Count != 1 || MathF.Abs(shapes[0].Peak - 100) >= 0.01f)
+            {
+                unsupportedVisemes.Add(index);
+                return;
+            }
+            if (!visemes.TryGetValue(index, out var candidates)) visemes[index] = candidates = new();
+            candidates.Add(shapes[0]);
+        }
 
         YamlNode Clip(YamlNode motion)
         {

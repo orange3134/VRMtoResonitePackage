@@ -90,6 +90,34 @@ AnimationClip:
         VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument($"lipSync: 3\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {controllerGuid}}}\n"), ordinary);
         Check(ordinary.Visemes.Count == 0, "Animator inference preserves descriptor-driven lip sync");
     }
+    // A supported binding must not hide a conflicting binding that cannot be represented.
+    string conflictGuid = "aa001122334455667788990011223344";
+    string conflictClip = File.ReadAllText(Path.Combine(root, "Assets/Face1.anim"))
+        .Replace("blendShape.reset", "blendShape.second").Replace("      - value: 0", "      - value: 100");
+    Asset("Assets/Conflict.anim", conflictGuid, conflictClip);
+    string conflictingController = controller.ToString().Replace("  m_EntryTransitions:\n",
+        "  m_EntryTransitions:\n  - {fileID: -501}\n") + $$"""
+
+--- !u!1109 &-501
+AnimatorTransition:
+  m_Conditions:
+  - m_ConditionMode: 6
+    m_ConditionEvent: Viseme
+    m_EventTreshold: 1
+  m_DstState: {fileID: -502}
+--- !u!1102 &-502
+AnimatorState:
+  m_Motion: {fileID: 7400000, guid: {{conflictGuid}}}
+""";
+    Asset("Assets/Face.controller", controllerGuid, conflictingController);
+    using (UnityPackage package = UnityPackage.Open(selected))
+    {
+        var face = new VrchatAvatar();
+        VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument($"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {controllerGuid}}}\n"), face);
+        Check(face.Visemes.All(v => v.ResonitePreset != "PP"), "Unsupported competing viseme binding does not select a misleading single shape");
+        Check(face.Visemes.Count == 14, "Conflicting viseme does not discard unrelated phonemes");
+    }
+    Asset("Assets/Face.controller", controllerGuid, controller.ToString());
     using (UnityPackage package = UnityPackage.Open(selected))
     {
         Check(package.InputPrefab.Guid == selectedGuid, "Selected prefab GUID");
