@@ -57,6 +57,24 @@ static async Task Run(string fbxPath, string rendererName)
         await default(ToWorld);
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
         Slot primary = root.AddSlot("Primary"), additional = root.AddSlot("Additional");
+        Slot branches = root.AddSlot("Branches");
+        Slot left = branches.AddSlot("Left").AddSlot("Shared");
+        Slot right = branches.AddSlot("Right").AddSlot("Shared");
+        left.AddSlot("Body");
+        Slot survivingBody = right.AddSlot("Body");
+        var branchRoots = new Dictionary<string, Slot> { ["branches"] = branches };
+        var branchSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup",
+            "CaptureImportedObjects", branchRoots);
+        var branchPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup",
+            "CaptureImportedPaths", branchRoots);
+        var excludedBranch = new VrchatAvatar();
+        excludedBranch.EditorOnlyModelPaths["branches"] = new HashSet<string>
+            { "RootNode/Left/Shared", "RootNode/Left/Shared/Body" };
+        left.SetParent(primary, false);
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "RemoveEditorOnlyObjects",
+            excludedBranch, branchSources, branchPaths);
+        Check(left.IsDestroyed && !right.IsDestroyed && !survivingBody.IsDestroyed,
+            "EditorOnly removal follows captured paths after reparenting and preserves the other same-named branch");
         var settings = ModelImportSettings.XiexeToon(false, true, false);
         settings.SetupIK = false;
         settings.ForceTpose = false;

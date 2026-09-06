@@ -11,6 +11,8 @@ namespace VrmToResonitePackage.Unity;
 public sealed class UnityModelFileIdResolver
 {
     private readonly Dictionary<long, string> _names = new();
+    private readonly Dictionary<long, HashSet<string>> _nodePathsById = new();
+    private readonly Dictionary<string, HashSet<string>> _pathsByName = new(StringComparer.Ordinal);
     public Dictionary<string, string[]> MeshBoneNames { get; } = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNames =
         new(StringComparer.Ordinal);
@@ -47,15 +49,15 @@ public sealed class UnityModelFileIdResolver
         _blendShapeDefaultWeights;
     public IReadOnlyCollection<string> RendererNames => _rendererNames;
     public IEnumerable<string> RendererNamesUnder(string nodeName)
-        => nodeName != null && _subtreeRenderers.TryGetValue(nodeName, out var names)
-            ? names : Array.Empty<string>();
+        => UniquePath(nodeName) is string path && _subtreeRenderers.TryGetValue(path, out var paths)
+            ? paths.Select(NodeName) : Array.Empty<string>();
     public IEnumerable<string> RendererNamesUnder(long fileId)
     {
         // Unity can fold the model into a synthetic root which Assimp names after a child
         // armature. Identify that root by its ID, not the heuristic display-name mapping.
         if (IsRootFileId(fileId))
             return RendererNames;
-        return RendererNamesUnder(ResolveName(fileId));
+        return RendererPathsUnder(fileId).Select(NodeName);
     }
     public static bool IsRootFileId(long fileId)
         => fileId == 0 || fileId == Compute("GameObject", "//RootNode", 0) ||
@@ -64,9 +66,23 @@ public sealed class UnityModelFileIdResolver
            fileId == Compute("Transform", "//RootNode/root/Transform", 0);
 
     public IEnumerable<string> NodeNamesUnder(long fileId)
+        => NodePathsUnder(fileId).Select(NodeName);
+    public IEnumerable<string> NodePathsUnder(long fileId)
         => IsRootFileId(fileId) ? _subtreeNodes.Keys :
-           ResolveName(fileId) is string name && _subtreeNodes.TryGetValue(name, out var nodes)
+           ResolveNodePath(fileId) is string path && _subtreeNodes.TryGetValue(path, out var nodes)
                ? nodes : Array.Empty<string>();
+    public IEnumerable<string> RendererPathsUnder(long fileId)
+        => IsRootFileId(fileId) ? _subtreeRenderers.Values.SelectMany(paths => paths).Distinct() :
+           ResolveNodePath(fileId) is string path && _subtreeRenderers.TryGetValue(path, out var nodes)
+               ? nodes : Array.Empty<string>();
+    public string ResolveNodePath(long fileId)
+        => _nodePathsById.TryGetValue(fileId, out var paths)
+            ? paths.Count == 1 ? paths.Single() : null
+            : UniquePath(ResolveName(fileId));
+    public bool IsUniqueNodeName(string name) => UniquePath(name) != null;
+    private string UniquePath(string name)
+        => name != null && _pathsByName.TryGetValue(name, out var paths) && paths.Count == 1 ? paths.Single() : null;
+    private static string NodeName(string path) => path[(path.LastIndexOf('/') + 1)..];
     public IReadOnlyList<ModelMaterial> Materials => _materials;
 
     public readonly record struct ModelMaterial(string Name, string MainTexturePath);
@@ -138,20 +154,27 @@ public sealed class UnityModelFileIdResolver
             CollectNodes(scene.RootNode, new List<string>(), roots);
             foreach ((Node node, List<string> nodePath) in roots)
             {
-                foreach (string ancestor in nodePath.Select(NormalizeName))
+                string pathKey = string.Join("/", nodePath.Select(NormalizeName));
+                string nodeName = NormalizeName(node.Name);
+                if (!_pathsByName.TryGetValue(nodeName, out var namedPaths))
+                    _pathsByName[nodeName] = namedPaths = new HashSet<string>(StringComparer.Ordinal);
+                namedPaths.Add(pathKey);
+                for (int depth = 1; depth <= nodePath.Count; depth++)
                 {
+                    string ancestor = string.Join("/", nodePath.Take(depth).Select(NormalizeName));
                     if (!_subtreeNodes.TryGetValue(ancestor, out var names))
                         _subtreeNodes[ancestor] = names = new HashSet<string>(StringComparer.Ordinal);
-                    names.Add(node.Name);
+                    names.Add(pathKey);
                 }
             }
             foreach ((Node node, List<string> nodePath) in roots.Where(entry => entry.Node.MeshCount > 0))
             {
-                foreach (string ancestor in nodePath.Select(NormalizeName))
+                for (int depth = 1; depth <= nodePath.Count; depth++)
                 {
+                    string ancestor = string.Join("/", nodePath.Take(depth).Select(NormalizeName));
                     if (!_subtreeRenderers.TryGetValue(ancestor, out var names))
                         _subtreeRenderers[ancestor] = names = new HashSet<string>(StringComparer.Ordinal);
-                    names.Add(node.Name);
+                    names.Add(string.Join("/", nodePath.Select(NormalizeName)));
                 }
             }
             foreach ((Node node, List<string> nodePath) in roots)
@@ -269,7 +292,7 @@ public sealed class UnityModelFileIdResolver
         for (int duplicateIndex = 0; duplicateIndex < 16; duplicateIndex++)
         {
             AddHashCandidate(type, name, duplicateIndex.ToString(
-                System.Globalization.CultureInfo.InvariantCulture), name, Encoding.UTF8);
+                System.Globalization.CultureInfo.InvariantCulture), name, Encoding.UTF8, rawPath);
         }
 
         // Assimp can expose an artificial FBX root, while Unity always starts the imported path at
@@ -301,17 +324,20 @@ public sealed class UnityModelFileIdResolver
                 for (int duplicateIndex = 0; duplicateIndex < 16; duplicateIndex++)
                 {
                     AddHashCandidate(type, objectPath, duplicateIndex.ToString(
-                        System.Globalization.CultureInfo.InvariantCulture), name, Encoding.UTF8);
+                        System.Globalization.CultureInfo.InvariantCulture), name, Encoding.UTF8, rawPath);
                 }
             }
         }
     }
 
-    private void AddHashCandidate(string type, string objectPath, string suffix, string name, Encoding encoding)
+    private void AddHashCandidate(string type, string objectPath, string suffix, string name, Encoding encoding, List<string> rawPath)
     {
         byte[] bytes = encoding.GetBytes($"Type:{type}->{objectPath}{suffix}");
         long fileId = unchecked((long)XxHash64(bytes));
         _names.TryAdd(fileId, NormalizeName(name));
+        if (!_nodePathsById.TryGetValue(fileId, out var paths))
+            _nodePathsById[fileId] = paths = new HashSet<string>(StringComparer.Ordinal);
+        paths.Add(string.Join("/", rawPath.Select(NormalizeName)));
     }
 
     private static string NormalizeName(string name)

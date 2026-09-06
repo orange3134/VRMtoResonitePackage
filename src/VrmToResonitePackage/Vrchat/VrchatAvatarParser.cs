@@ -182,8 +182,16 @@ public static class VrchatAvatarParser
             return avatar;
         }
 
-        // Record every GameObject the prefab keeps, so the importer's extra (deleted) meshes can be dropped.
-        foreach (long goId in selected.Subtree)
+        CollectVariantPrefabGameObjectNames(package, selected.Source.Guid, avatar);
+        avatar.EditorOnlyPrefabObjects.TryGetValue(selected.Source.Guid, out var excludedObjects);
+        var includedSubtree = selected.Subtree.Where(id => excludedObjects?.Contains(id) != true).ToHashSet();
+        if (!includedSubtree.Contains(selected.Root.FileId))
+            throw new InvalidDataException("アバター本体のルートがEditorOnlyのため変換対象がありません。");
+        // The source may contain other avatar candidates. Limit regular-prefab imports to
+        // the selected descriptor's hierarchy, after applying EditorOnly exclusions.
+        avatar.PrefabGameObjectNames.Clear();
+        avatar.PrefabRendererStates.Clear();
+        foreach (long goId in includedSubtree)
         {
             string name = selected.Scene.GameObjectName(goId);
             if (!string.IsNullOrEmpty(name))
@@ -192,15 +200,15 @@ public static class VrchatAvatarParser
             }
         }
 
-        ResolveFbx(package, selected.Scene, selected.Root, selected.Subtree, avatar);
+        ResolveFbx(package, selected.Scene, selected.Root, includedSubtree, avatar);
         ParseFbxBlendShapeNames(package, avatar);
         ParseHumanoid(package, avatar);
         ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
         VrchatAnimatorFaceParser.Apply(package, selected.Descriptor.Root, avatar);
-        ParsePhysBones(selected.Scene, selected.Subtree, avatar);
-        ParseRendererMaterials(package, selected.Scene, selected.Subtree, avatar);
-        ParseInactiveGameObjects(selected.Scene, selected.Subtree, avatar);
-        ParseModularAvatar(package, selected.Scene, selected.Subtree, avatar);
+        ParsePhysBones(selected.Scene, includedSubtree, avatar);
+        ParseRendererMaterials(package, selected.Scene, includedSubtree, avatar);
+        ParseInactiveGameObjects(selected.Scene, includedSubtree, avatar);
+        ParseModularAvatar(package, selected.Scene, includedSubtree, avatar);
         ApplyFbxDefaultBlendShapeWeights(avatar);
         return avatar;
     }
@@ -2250,12 +2258,15 @@ public static class VrchatAvatarParser
                 modelResolvers[guid] = resolver = new UnityModelFileIdResolver(asset);
             string name = resolver.ResolveName(fileId);
             IEnumerable<string> names = resolver.RendererNamesUnder(fileId);
-            foreach (string rendererName in names)
+            foreach (string rendererName in names.Where(resolver.IsUniqueNodeName))
                 keep[new VrchatGameObjectReference(guid, rendererName)] = false;
-            foreach (string nodeName in resolver.NodeNamesUnder(fileId))
+            if (!avatar.EditorOnlyModelPaths.TryGetValue(guid, out var paths))
+                avatar.EditorOnlyModelPaths[guid] = paths = new HashSet<string>(StringComparer.Ordinal);
+            paths.UnionWith(resolver.NodePathsUnder(fileId));
+            foreach (string nodeName in resolver.NodeNamesUnder(fileId).Where(resolver.IsUniqueNodeName))
                 avatar.EditorOnlyModelObjects.Add(new VrchatGameObjectReference(guid, nodeName));
             if (UnityModelFileIdResolver.IsRootFileId(fileId)) avatar.EditorOnlyFbxGuids.Add(guid);
-            if (name != null) keep[new VrchatGameObjectReference(guid, name)] = false;
+            if (name != null && resolver.IsUniqueNodeName(name)) keep[new VrchatGameObjectReference(guid, name)] = false;
             return;
         }
         if (asset?.Extension != ".prefab") return;

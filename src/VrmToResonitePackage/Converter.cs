@@ -444,6 +444,7 @@ internal static class Converter
                 // Capture model identity before wrappers are collapsed or moved. Instance names
                 // are not unique (different clothing models may both be named "armature.1").
                 var importedMeshSources = Vrchat.VrchatSceneSetup.CaptureImportedObjects(importedFbxRoots);
+                var importedNodePaths = Vrchat.VrchatSceneSetup.CaptureImportedPaths(importedFbxRoots);
 
                 ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots, importedMeshSources);
                 AlignVrchatImportUp(importRoot, model);
@@ -463,7 +464,7 @@ internal static class Converter
 
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
                 // Finish asset reloads first: deleting their last renderer can unload providers.
-                Vrchat.VrchatSceneSetup.RemoveEditorOnlyObjects(avatar, importedMeshSources);
+                Vrchat.VrchatSceneSetup.RemoveEditorOnlyObjects(avatar, importedMeshSources, importedNodePaths);
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources);
                 Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar);
 

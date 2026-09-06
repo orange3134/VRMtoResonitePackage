@@ -92,6 +92,8 @@ public sealed class VrchatAvatar
     public HashSet<string> EditorOnlyFbxGuids { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Excluded model nodes, including bones and non-rendering objects.</summary>
     public HashSet<VrchatGameObjectReference> EditorOnlyModelObjects { get; } = new();
+    /// <summary>Excluded model paths, preserving identity when different branches share node names.</summary>
+    public Dictionary<string, HashSet<string>> EditorOnlyModelPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Excluded authored/stripped GameObject IDs for filtering component conversion.</summary>
     public Dictionary<string, HashSet<long>> EditorOnlyPrefabObjects { get; } = new(StringComparer.OrdinalIgnoreCase);
 

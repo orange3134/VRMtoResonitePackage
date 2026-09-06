@@ -17,6 +17,9 @@ Run();
 [MethodImpl(MethodImplOptions.NoInlining)]
 static void Run()
 {
+    System.Runtime.InteropServices.NativeLibrary.Load(Path.Combine(
+        Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite",
+        "runtimes", "win-x64", "native", "assimp.dll"));
     var rootResolver = new UnityModelFileIdResolver(null);
     Check(rootResolver.ResolveName(919132149155446097L) == "RootNode" &&
           rootResolver.ResolveName(-8679921383154817045L) == "RootNode",
@@ -170,6 +173,106 @@ AnimatorState:
     string bodyPrefab = new('3', 32);
     string clothingPrefab = new('4', 32);
     Asset("Assets/Body.fbx", bodyModel, "");
+    string branchesGuid = "1234567890abcdef1234567890abcdef";
+    Asset("Assets/Branches.fbx", branchesGuid, """
+; FBX 7.4.0 project file
+FBXHeaderExtension: {
+    FBXHeaderVersion: 1003
+    FBXVersion: 7400
+}
+Objects: {
+    Model: 1, "Model::Left", "Null" { }
+    Model: 2, "Model::Right", "Null" { }
+    Model: 3, "Model::Shared", "Null" { }
+    Model: 4, "Model::Shared", "Null" { }
+    Model: 5, "Model::Body", "Mesh" { }
+    Model: 6, "Model::Body", "Mesh" { }
+    Geometry: 7, "Geometry::Triangle", "Mesh" {
+        Vertices: *9 { a: 0,0,0,1,0,0,0,1,0 }
+        PolygonVertexIndex: *3 { a: 0,1,-3 }
+    }
+}
+Connections: {
+    C: "OO",1,0
+    C: "OO",2,0
+    C: "OO",3,1
+    C: "OO",4,2
+    C: "OO",5,3
+    C: "OO",6,4
+    C: "OO",7,5
+    C: "OO",7,6
+}
+""");
+    using (var package = UnityPackage.Open(selected))
+    {
+        var resolver = new UnityModelFileIdResolver(package.ByGuid(branchesGuid));
+        long leftId = (long)typeof(UnityModelFileIdResolver).GetMethod("Compute",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { "GameObject", "//RootNode/Left/Shared", 0 })!;
+        var paths = resolver.NodePathsUnder(leftId).ToArray();
+        Check(paths.Length == 2 && paths.All(p => p.Contains("/Left/Shared")),
+            "File ID subtree lookup isolates one of two same-named branches");
+        Check(resolver.RendererPathsUnder(leftId).Single().EndsWith("/Left/Shared/Body"),
+            "Renderer subtree lookup retains the full path of a same-named mesh");
+        Check(!resolver.IsUniqueNodeName("Body") && !resolver.IsUniqueNodeName("Shared"),
+            "Duplicate names cannot become model-wide exclusions");
+    }
+    string regular = Asset("Assets/Regular.prefab", "abcdefabcdefabcdefabcdefabcdefab",
+        Avatar("Regular").Replace("m_Father: {fileID: 0}",
+            "m_Father: {fileID: 0}\n  m_Children:\n  - {fileID: 11}\n  - {fileID: 21}") + $$"""
+
+--- !u!1 &10
+GameObject:
+  m_Name: Body
+  m_Component:
+  - component: {fileID: 12}
+--- !u!4 &11
+Transform:
+  m_GameObject: {fileID: 10}
+  m_Father: {fileID: 2}
+--- !u!137 &12
+SkinnedMeshRenderer:
+  m_GameObject: {fileID: 10}
+  m_Mesh: {fileID: 4300000, guid: {{bodyModel}}}
+--- !u!1 &20
+GameObject:
+  m_Name: EditorParent
+  m_TagString: EditorOnly
+--- !u!4 &21
+Transform:
+  m_GameObject: {fileID: 20}
+  m_Father: {fileID: 2}
+  m_Children:
+  - {fileID: 31}
+--- !u!1 &30
+GameObject:
+  m_Name: Preview
+  m_Component:
+  - component: {fileID: 32}
+--- !u!4 &31
+Transform:
+  m_GameObject: {fileID: 30}
+  m_Father: {fileID: 21}
+--- !u!137 &32
+SkinnedMeshRenderer:
+  m_GameObject: {fileID: 30}
+  m_Mesh: {fileID: 4300000, guid: {{bodyModel}}}
+  m_Materials:
+  - {fileID: 2100000, guid: {{materialGuid}}}
+--- !u!114 &33
+MonoBehaviour:
+  m_GameObject: {fileID: 30}
+  m_Script: {fileID: 1661641543, guid: 2a2c05204084d904aa4945ccff20d8e5}
+  rootTransform: {fileID: 31}
+""");
+    using (var package = UnityPackage.Open(regular))
+    {
+        var avatar = VrchatAvatarParser.Parse(package);
+        Check(avatar.ShouldKeepRenderer(bodyModel, "Body") && !avatar.ShouldKeepRenderer(bodyModel, "Preview"),
+            "Regular prefab excludes an EditorOnly descendant while retaining Body");
+        Check(avatar.RendererMaterials.All(r => r.RendererGameObjectName != "Preview") && avatar.PhysBones.Count == 0,
+            "Regular prefab excludes EditorOnly renderer materials and PhysBones");
+    }
     string copySource = Asset("Assets/CopySource.fbx", "88000000000000000000000000000001", "");
     File.AppendAllText(copySource + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: -1079801745714767569\n    second: Body_Base\n");
     string copyPrefab = Asset("Assets/Copy.prefab", "99000000000000000000000000000001",

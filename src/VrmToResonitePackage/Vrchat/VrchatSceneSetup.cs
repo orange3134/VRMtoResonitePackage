@@ -67,12 +67,30 @@ internal static class VrchatSceneSetup
         return sources;
     }
 
-    public static void RemoveEditorOnlyObjects(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources)
+    public static Dictionary<Slot, string> CaptureImportedPaths(IReadOnlyDictionary<string, Slot> roots)
+    {
+        var paths = new Dictionary<Slot, string>();
+        foreach (Slot root in roots.Values)
+            foreach (Slot child in root.Children) Visit(child, child.Name);
+        return paths;
+
+        void Visit(Slot slot, string path)
+        {
+            paths[slot] = path;
+            foreach (Slot child in slot.Children) Visit(child, path + "/" + child.Name);
+        }
+    }
+
+    public static void RemoveEditorOnlyObjects(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<Slot, string> importedPaths)
     {
         foreach ((Slot slot, string guid) in sources)
         {
-            if (slot.IsDestroyed || !avatar.EditorOnlyModelObjects.Contains(new VrchatGameObjectReference(guid, slot.Name)))
-                continue;
+            if (slot.IsDestroyed) continue;
+            bool excluded = avatar.EditorOnlyModelObjects.Contains(new VrchatGameObjectReference(guid, slot.Name));
+            if (importedPaths.TryGetValue(slot, out string path) && avatar.EditorOnlyModelPaths.TryGetValue(guid, out var excludedPaths))
+                excluded |= excludedPaths.Any(p => p == path || p.EndsWith("/" + path, StringComparison.Ordinal));
+            if (!excluded) continue;
             UniLog.Log($"Removing EditorOnly object subtree: {slot.Name} (fbx={guid})");
             slot.Destroy();
         }
