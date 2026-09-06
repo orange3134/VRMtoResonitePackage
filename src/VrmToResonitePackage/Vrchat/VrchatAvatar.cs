@@ -129,7 +129,9 @@ public sealed class VrchatFbxAsset
 public sealed class VrchatPrefabTransform
 {
     public string Key { get; set; }
+    public string GameObjectKey { get; set; }
     public string Name { get; set; }
+    public bool Active { get; set; } = true;
     public Vec3 LocalPosition { get; set; }
     public System.Numerics.Quaternion LocalRotation { get; set; } = System.Numerics.Quaternion.Identity;
     public Vec3 LocalScale { get; set; } = Vec3.One;

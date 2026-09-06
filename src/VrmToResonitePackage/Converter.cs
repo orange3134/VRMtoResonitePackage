@@ -632,6 +632,7 @@ internal static class Converter
                 continue;
             }
             Slot slot = parent.AddSlot(transform.Name ?? "GameObject");
+            slot.ActiveSelf = transform.Active;
             slot.LocalPosition = new float3(
                 transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z);
             slot.LocalRotation = new floatQ(

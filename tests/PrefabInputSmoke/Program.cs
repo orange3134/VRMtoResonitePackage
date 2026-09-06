@@ -186,6 +186,7 @@ Transform:
 --- !u!1 &32
 GameObject:
   m_Name: CopyParent
+  m_IsActive: 0
 --- !u!4 &33
 Transform:
   m_GameObject: {fileID: 32}
@@ -201,6 +202,8 @@ Transform:
         Check(avatar.MeshCopies.Single().SourceName == "Body_Base" && avatar.MeshCopies.Single().Name == "Body_Base_pants",
             "Prefab renderer copy resolves its mesh reference independently of its GameObject name");
         var copy = avatar.MeshCopies.Single();
+        Check(!copy.ParentTransforms.Single().Active,
+            "Copied mesh retains its inactive prefab-authored parent");
         Check(copy.Transform.LocalPosition.X == 1 && copy.Transform.LocalScale.Z == 4 && copy.Transform.LocalRotation.Z == 1 &&
             copy.ParentTransforms.Single().Name == "CopyParent" && copy.ParentTransforms.Single().LocalPosition.X == 4,
             "Copied renderer retains authored parent, position, rotation and scale");
@@ -250,6 +253,7 @@ PrefabInstance:
         int overrideValue = initial ? 0 : 1;
         File.WriteAllText(copyPrefab, originalCopy
             .Replace("m_Name: Body_Base_pants", $"m_Name: Body_Base_pants\n  m_IsActive: {initialValue}")
+            .Replace("m_Name: CopyParent\n  m_IsActive: 0", $"m_Name: CopyParent\n  m_IsActive: {initialValue}")
             .Replace("SkinnedMeshRenderer:", $"SkinnedMeshRenderer:\n  m_Enabled: {initialValue}")
             + "\n--- !u!114 &45\nMonoBehaviour:\n  m_GameObject: {fileID: 1}\n  m_Enabled: 1\n");
         string stateCopy = Asset("Assets/StateCopy.prefab", "99112233445566778899001122334466", $$"""
@@ -267,6 +271,9 @@ PrefabInstance:
     - target: {fileID: 45, guid: 99000000000000000000000000000001}
       propertyPath: m_Enabled
       value: {{initialValue}}
+    - target: {fileID: 32, guid: 99000000000000000000000000000001}
+      propertyPath: m_IsActive
+      value: {{overrideValue}}
 """);
         using var package = UnityPackage.Open(stateCopy);
         var avatar = ReadFilter(stateCopy);
@@ -275,6 +282,8 @@ PrefabInstance:
         var copy = avatar.MeshCopies.Single();
         Check(copy.Active == !initial, $"Variant overrides copied GameObject active state {initial} -> {!initial}");
         Check(copy.Enabled == !initial, $"Variant overrides copied renderer enabled state {initial} -> {!initial}");
+        Check(copy.ParentTransforms.Single().Active == !initial,
+            $"Variant overrides authored parent active state {initial} -> {!initial}");
         Check(copy.Transform.LocalPosition.X == 1 && copy.ParentTransforms.Single().Name == "CopyParent",
             "State overrides preserve copied mesh placement");
     }

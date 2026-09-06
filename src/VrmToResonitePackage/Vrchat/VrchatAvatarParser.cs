@@ -872,7 +872,9 @@ public static class VrchatAvatarParser
             placement.ParentTransforms.Insert(0, new VrchatPrefabTransform
             {
                 Key = $"{sceneGuid}:{current}",
+                GameObjectKey = $"{sceneGuid}:{root["m_GameObject"]?.FileID}",
                 Name = scene.ResolveGameObjectName(current) ?? "GameObject",
+                Active = scene.OwnerGameObject(transform)?.Root?["m_IsActive"]?.AsBool(true) ?? true,
                 LocalPosition = parentPosition,
                 LocalRotation = parentRotation,
                 LocalScale = parentScale,
@@ -1895,6 +1897,10 @@ public static class VrchatAvatarParser
             }
         }
 
+        var authoredTransforms = avatar.FbxParentTransforms
+            .Concat(avatar.AdditionalFbxs.SelectMany(fbx => fbx.ParentTransforms))
+            .Concat(avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms.Append(copy.Transform)))
+            .Where(transform => transform != null).Distinct().ToList();
         foreach (YamlNode modifications in modificationBlocks)
         {
             foreach (YamlNode modification in modifications.Seq)
@@ -1904,8 +1910,7 @@ public static class VrchatAvatarParser
                 {
                     YamlNode transformTarget = modification["target"];
                     string key = $"{transformTarget?.Guid}:{transformTarget?.FileID}";
-                    foreach (var transform in avatar.MeshCopies.SelectMany(copy =>
-                        copy.ParentTransforms.Append(copy.Transform)).Where(t => t != null && t.Key == key).Distinct())
+                    foreach (var transform in authoredTransforms.Where(t => t.Key == key))
                         ApplyCopyTransformOverride(transform, propertyPath, modification["value"]?.AsFloat() ?? 0);
                 }
                 if (propertyPath is "m_IsActive" or "m_Enabled")
@@ -1930,6 +1935,9 @@ public static class VrchatAvatarParser
                 if (string.Equals(propertyPath, "m_IsActive", StringComparison.Ordinal))
                 {
                     YamlNode activeTarget = modification["target"];
+                    string key = $"{activeTarget?.Guid}:{activeTarget?.FileID}";
+                    foreach (var transform in authoredTransforms.Where(t => t.GameObjectKey == key))
+                        transform.Active = modification["value"]?.AsBool(true) ?? true;
                     VariantObjectReference gameObject = ResolveVariantObjectReference(
                         package, activeTarget?.Guid, activeTarget?.FileID ?? 0,
                         modelResolvers, prefabScenes);
