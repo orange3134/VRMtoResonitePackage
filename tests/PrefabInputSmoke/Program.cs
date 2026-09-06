@@ -629,6 +629,18 @@ AnimatorState:
         "Explicit blink disable is respected");
     Check(Read(controller.Replace("m_HasExitTime: 0", "m_HasExitTime: 1")).Blink == null,
         "Timed transitions are not treated as startup blink settings");
+    string timedExit = controller.Replace("m_DefaultState: {fileID: -31}", "m_DefaultState: {fileID: -33}")
+        .Replace("  m_Motion: {fileID: 7400000, guid: " + clipGuid + "}",
+            "  m_Motion: {fileID: 7400000, guid: " + clipGuid + "}\n  m_Transitions:\n  - {fileID: -34}")
+        + "\n--- !u!1101 &-34\nAnimatorStateTransition:\n  m_HasExitTime: 1\n  m_DstState: {fileID: -35}\n  m_Conditions: []\n"
+        + "--- !u!1102 &-35\nAnimatorState:\n  m_Motion: {fileID: 0}\n";
+    Check(Read(timedExit).Blink == null, "Timed exit from blink cannot become a permanent blink binding");
+    Check(Read(timedExit.Replace("m_DstState: {fileID: -35}", "m_IsExit: 1")).Blink == null,
+        "Timed exit from the state machine also makes blink indeterminate");
+    Check(Read(timedExit.Replace("m_HasExitTime: 1", "m_HasExitTime: 1\n  m_Mute: 1")).Blink?.BlendShapeName == "blink",
+        "Muted timed exit does not suppress a stable blink binding");
+    Check(Read(timedExit.Replace("  m_Conditions: []", "  m_Conditions:\n  - m_ConditionMode: 1\n    m_ConditionEvent: ForceDisable")).Blink?.BlendShapeName == "blink",
+        "Timed exit with an unmet condition does not suppress a stable blink binding");
     Check(Read(controller.Replace("    value: 1", "    value: 0")).Blink == null,
         "Inactive blink animation is not imported as an always-on driver");
 }

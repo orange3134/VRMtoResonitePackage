@@ -60,8 +60,16 @@ internal static class VrchatAnimatorDefaults
                 foreach (YamlNode reference in anyState.Concat(state["m_Transitions"]?.Seq ?? new()))
                 {
                     YamlNode transition = controller.Doc(reference.FileID ?? 0)?.Root;
-                    if (transition == null || transition["m_HasExitTime"]?.AsBool() == true ||
-                        !Enabled(transition)) continue;
+                    if (!Enabled(transition)) continue;
+                    // An enabled timed departure means this expression will not settle here.
+                    // Do not install its source motion as a permanent blink, including when
+                    // the destination is Exit rather than another state in this machine.
+                    if (transition["m_HasExitTime"]?.AsBool() == true)
+                    {
+                        states[machine] = null;
+                        changed = true;
+                        break;
+                    }
                     YamlNode next = controller.Doc(transition["m_DstState"]?.FileID ?? 0)?.Root;
                     if (next == null && (transition["m_DstStateMachine"]?.FileID ?? 0) != 0)
                         next = Entry(transition["m_DstStateMachine"].FileID.Value, new());
