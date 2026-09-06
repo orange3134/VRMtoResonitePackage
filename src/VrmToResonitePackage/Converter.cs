@@ -459,7 +459,7 @@ internal static class Converter
                 {
                     await WaitForAssets(assetsSlot);
                 }
-                Vrchat.VrchatSceneSetup.ApplyInitialBlendShapes(root, avatar);
+                Vrchat.VrchatSceneSetup.ApplyInitialBlendShapes(root, avatar, importedMeshSources);
 
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
                 // Finish asset reloads first: deleting their last renderer can unload providers.
@@ -469,7 +469,7 @@ internal static class Converter
 
                 if (options.NoAvatar)
                 {
-                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package);
+                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources);
                     SpringBoneSetup.Apply(root, model);
                 }
                 else
@@ -490,13 +490,13 @@ internal static class Converter
                         setupOptions.NearClip = options.NearClip.Value;
                     }
                     AvatarSetup.Build(root, model, setupOptions);
-                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package);
+                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources);
                     await AvatarSetup.ApplyFirstPersonAutoAsync(root, model);
                     SpringBoneSetup.Apply(root, model);
                 }
 
                 // Reflect prefab-authored scene state (inactive GameObjects, initial blendshape weights).
-                Vrchat.VrchatSceneSetup.Apply(root, avatar);
+                Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources);
 
                 await MeshLoadingSetup.Apply(root);
 

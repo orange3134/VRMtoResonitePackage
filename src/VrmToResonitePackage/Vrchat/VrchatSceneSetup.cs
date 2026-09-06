@@ -78,10 +78,10 @@ internal static class VrchatSceneSetup
         }
     }
 
-    public static void Apply(Slot root, VrchatAvatar avatar)
+    public static void Apply(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources)
     {
-        ApplyInactiveStates(root, avatar);
-        ApplyInitialBlendShapes(root, avatar);
+        ApplyInactiveStates(root, avatar, sources);
+        ApplyInitialBlendShapes(root, avatar, sources);
     }
 
     /// <summary>
@@ -97,8 +97,7 @@ internal static class VrchatSceneSetup
         {
             return;
         }
-        string SourceGuid(Slot slot) => importedMeshSources.TryGetValue(slot, out string guid)
-            ? guid : FbxGuidForSlot(root, slot, avatar);
+        string SourceGuid(Slot slot) => FbxGuidForSlot(root, slot, avatar, importedMeshSources);
         bool Keep(Slot slot) => avatar.ShouldKeepRenderer(SourceGuid(slot), slot.Name);
 
         // Renderer slots whose GameObject name the prefab does not contain.
@@ -397,7 +396,7 @@ internal static class VrchatSceneSetup
     private static bool HasRendererInSubtree(Slot slot)
         => slot.GetComponentsInChildren<MeshRenderer>().Any();
 
-    private static void ApplyInactiveStates(Slot root, VrchatAvatar avatar)
+    private static void ApplyInactiveStates(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources)
     {
         if (avatar.InactiveGameObjects.Count == 0)
         {
@@ -411,7 +410,7 @@ internal static class VrchatSceneSetup
             {
                 continue;
             }
-            string fbxGuid = FbxGuidForSlot(root, slot, avatar);
+            string fbxGuid = FbxGuidForSlot(root, slot, avatar, sources);
             if (inactive.Contains(new VrchatGameObjectReference(fbxGuid, slot.Name)) ||
                 inactive.Contains(new VrchatGameObjectReference(null, slot.Name)))
             {
@@ -422,8 +421,10 @@ internal static class VrchatSceneSetup
         UniLog.Log($"非アクティブ状態を {applied} スロットに反映しました。");
     }
 
-    internal static string FbxGuidForSlot(Slot root, Slot slot, VrchatAvatar avatar)
+    internal static string FbxGuidForSlot(Slot root, Slot slot, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources)
     {
+        // Prefab placement and Modular Avatar can move objects into another model's hierarchy.
+        if (sources.TryGetValue(slot, out string sourceGuid)) return sourceGuid;
         for (Slot current = slot; current != null && current != root; current = current.Parent)
         {
             VrchatFbxAsset additional = avatar.AdditionalFbxs.FirstOrDefault(candidate =>
@@ -436,7 +437,7 @@ internal static class VrchatSceneSetup
         return avatar.FbxGuid;
     }
 
-    public static void ApplyInitialBlendShapes(Slot root, VrchatAvatar avatar)
+    public static void ApplyInitialBlendShapes(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources)
     {
         List<SkinnedMeshRenderer> renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>().ToList();
         var assignedRendererSlots = new HashSet<Slot>();
@@ -448,7 +449,7 @@ internal static class VrchatSceneSetup
                 !assignedRendererSlots.Contains(candidate.Slot) &&
                 string.Equals(candidate.Slot.Name, rm.RendererGameObjectName, StringComparison.Ordinal) &&
                 (string.IsNullOrEmpty(rm.FbxGuid) || string.Equals(
-                    FbxGuidForSlot(root, candidate.Slot, avatar), rm.FbxGuid,
+                    FbxGuidForSlot(root, candidate.Slot, avatar, sources), rm.FbxGuid,
                     StringComparison.OrdinalIgnoreCase)));
             if (renderer == null)
             {

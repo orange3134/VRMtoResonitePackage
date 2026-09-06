@@ -20,7 +20,8 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static class VrchatMaterialBuilder
 {
-    public static async Task Apply(Slot root, Slot assetsSlot, VrchatAvatar avatar, UnityPackage package)
+    public static async Task Apply(Slot root, Slot assetsSlot, VrchatAvatar avatar, UnityPackage package,
+        IReadOnlyDictionary<Slot, string> sources)
     {
         var textureCache = new Dictionary<string, StaticTexture2D>(StringComparer.OrdinalIgnoreCase);
         var metallicGlossCache = new Dictionary<string, MetallicGlossResult>(
@@ -58,7 +59,7 @@ internal static class VrchatMaterialBuilder
         int assigned = 0;
         foreach (MeshRenderer renderer in root.GetComponentsInChildren<MeshRenderer>())
         {
-            Dictionary<string, string> fbxMaterialGuids = FbxMaterialGuidsForRenderer(root, renderer, avatar);
+            Dictionary<string, string> fbxMaterialGuids = FbxMaterialGuidsForRenderer(root, renderer, avatar, sources);
             for (int i = 0; i < renderer.Materials.Count; i++)
             {
                 IAssetProvider<FrooxEngine.Material> placeholder = renderer.Materials[i];
@@ -84,7 +85,7 @@ internal static class VrchatMaterialBuilder
                 !assignedRendererSlots.Contains(candidate.Slot) &&
                 string.Equals(candidate.Slot.Name, rm.RendererGameObjectName, StringComparison.Ordinal) &&
                 (string.IsNullOrEmpty(rm.FbxGuid) || string.Equals(
-                    VrchatSceneSetup.FbxGuidForSlot(root, candidate.Slot, avatar), rm.FbxGuid,
+                    VrchatSceneSetup.FbxGuidForSlot(root, candidate.Slot, avatar, sources), rm.FbxGuid,
                     StringComparison.OrdinalIgnoreCase)));
             if (renderer == null)
             {
@@ -145,25 +146,12 @@ internal static class VrchatMaterialBuilder
     }
 
     private static Dictionary<string, string> FbxMaterialGuidsForRenderer(Slot root, MeshRenderer renderer,
-        VrchatAvatar avatar)
+        VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources)
     {
-        VrchatFbxAsset additional = AdditionalFbxForSlot(root, renderer.Slot, avatar);
+        string guid = VrchatSceneSetup.FbxGuidForSlot(root, renderer.Slot, avatar, sources);
+        VrchatFbxAsset additional = avatar.AdditionalFbxs.FirstOrDefault(model =>
+            string.Equals(model.Guid, guid, StringComparison.OrdinalIgnoreCase));
         return additional?.MaterialGuids ?? avatar.FbxMaterialGuids;
-    }
-
-    private static VrchatFbxAsset AdditionalFbxForSlot(Slot root, Slot slot, VrchatAvatar avatar)
-    {
-        for (Slot current = slot; current != null && current != root; current = current.Parent)
-        {
-            foreach (VrchatFbxAsset additional in avatar.AdditionalFbxs)
-            {
-                if (string.Equals(current.Name, additional.InstanceName, StringComparison.Ordinal))
-                {
-                    return additional;
-                }
-            }
-        }
-        return null;
     }
 
     private static async Task<IAssetProvider<FrooxEngine.Material>> BuildMaterial(
