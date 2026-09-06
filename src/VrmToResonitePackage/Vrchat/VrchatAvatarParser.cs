@@ -2207,6 +2207,24 @@ public static class VrchatAvatarParser
         VariantObjectReference reference = ResolveVariantObjectReference(package, guid, fileId, modelResolvers, prefabScenes);
         var key = new VariantObjectReference(reference.FbxGuid ?? guid,
             reference.Name ?? fileId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (reference.FbxGuid == null)
+        {
+            // Prefab-authored helpers may share a display name. Follow stripped aliases,
+            // then key the tag by the authored object identity, not its name.
+            string ownerGuid = guid;
+            long ownerId = fileId;
+            var visited = new HashSet<(string, long)>();
+            while (visited.Add((ownerGuid, ownerId)))
+            {
+                if (!prefabScenes.TryGetValue(ownerGuid, out var scene)) break;
+                var source = scene.Doc(ownerId)?.Root?["m_CorrespondingSourceObject"];
+                if (source?.Guid == null || (source.FileID ?? 0) == 0) break;
+                ownerGuid = source.Guid;
+                ownerId = source.FileID.Value;
+            }
+            key = new VariantObjectReference(ownerGuid,
+                "fileID:" + ownerId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
         if (editorOnly) roots[key] = (guid, fileId);
         else roots.Remove(key);
     }

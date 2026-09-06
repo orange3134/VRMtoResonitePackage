@@ -343,6 +343,14 @@ PrefabInstance:
           m_SourcePrefab: {fileID: 100100000, guid: {{nestedGuid}}, type: 3}
           m_Modification:
             m_TransformParent: {fileID: 20}
+        --- !u!1 &50
+        GameObject:
+          m_Name: ClothingRoot
+          m_TagString: Untagged
+        --- !u!4 &51
+        Transform:
+          m_GameObject: {fileID: 50}
+          m_Father: {fileID: 0}
         """);
     VrchatAvatar excluded = ReadFilter(parentPath);
     Check(!excluded.ShouldKeepRenderer(bodyModel, "Body"), "EditorOnly parent excludes an Untagged child");
@@ -351,6 +359,8 @@ PrefabInstance:
         "Entire EditorOnly models are omitted before importing their armatures");
     Check(excluded.EditorOnlyPrefabObjects[parentGuid].IsSupersetOf(new long[] { 1, 2 }),
         "EditorOnly subtree includes parent and child objects, not only renderers");
+    Check(!excluded.EditorOnlyPrefabObjects[parentGuid].Contains(50),
+        "Same-named Untagged helper neither clears EditorOnly nor becomes excluded");
 
     string restoredPath = Asset("Assets/Restored.prefab", new string('8', 32), $$"""
         %YAML 1.1
