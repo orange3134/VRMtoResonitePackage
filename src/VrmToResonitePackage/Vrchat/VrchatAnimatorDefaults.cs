@@ -10,9 +10,12 @@ internal static class VrchatAnimatorDefaults
     {
         var states = new Dictionary<long, YamlNode>();
         var entered = new HashSet<YamlNode>();
+        var owners = new Dictionary<YamlNode, long>();
+        var parents = new Dictionary<long, long>();
         foreach (YamlNode layer in settings?["m_AnimatorLayers"]?.Seq ?? new())
         {
             long machine = layer["m_StateMachine"]?.FileID ?? 0;
+            IndexMachine(machine, 0);
             states[machine] = Entry(machine, new());
         }
         // Parameter drivers also run on zero-weight control layers. Only Set is deterministic.
@@ -42,13 +45,26 @@ internal static class VrchatAnimatorDefaults
             {
                 YamlNode state = states[machine];
                 if (state == null) continue;
-                var anyState = controller.Doc(machine)?.Root?["m_AnyStateTransitions"]?.Seq ?? new();
+                // Only the active state machine and its ancestors contribute Any State
+                // transitions. Sibling machines must not affect the current expression.
+                var path = new List<long>();
+                long current = owners.GetValueOrDefault(state, machine);
+                while (current != 0 && !path.Contains(current))
+                {
+                    path.Add(current);
+                    current = parents.GetValueOrDefault(current);
+                }
+                path.Reverse();
+                var anyState = path.SelectMany(id =>
+                    controller.Doc(id)?.Root?["m_AnyStateTransitions"]?.Seq ?? new()).ToList();
                 foreach (YamlNode reference in anyState.Concat(state["m_Transitions"]?.Seq ?? new()))
                 {
                     YamlNode transition = controller.Doc(reference.FileID ?? 0)?.Root;
                     if (transition == null || transition["m_HasExitTime"]?.AsBool() == true ||
                         !Enabled(transition)) continue;
                     YamlNode next = controller.Doc(transition["m_DstState"]?.FileID ?? 0)?.Root;
+                    if (next == null && (transition["m_DstStateMachine"]?.FileID ?? 0) != 0)
+                        next = Entry(transition["m_DstStateMachine"].FileID.Value, new());
                     if (next == null) continue;
                     if (next == state && anyState.Contains(reference) &&
                         transition["m_CanTransitionToSelf"]?.AsBool() != true) continue;
@@ -63,6 +79,19 @@ internal static class VrchatAnimatorDefaults
         // A startup graph that fails to settle is not safe to turn into a permanent face driver.
         return new();
 
+        void IndexMachine(long id, long parent)
+        {
+            if (id == 0 || !parents.TryAdd(id, parent)) return;
+            var node = controller.Doc(id)?.Root;
+            foreach (var child in node?["m_ChildStates"]?.Seq ?? new())
+            {
+                var state = controller.Doc(child["m_State"]?.FileID ?? 0)?.Root;
+                if (state != null) owners[state] = id;
+            }
+            foreach (var child in node?["m_ChildStateMachines"]?.Seq ?? new())
+                IndexMachine(child["m_StateMachine"]?.FileID ?? 0, id);
+        }
+
         YamlNode Entry(long machine, HashSet<long> visited)
         {
             if (machine == 0 || !visited.Add(machine)) return null;
@@ -72,9 +101,19 @@ internal static class VrchatAnimatorDefaults
                 YamlNode transition = controller.Doc(reference.FileID ?? 0)?.Root;
                 if (!Enabled(transition)) continue;
                 long state = transition["m_DstState"]?.FileID ?? 0;
-                return state != 0 ? controller.Doc(state)?.Root : Entry(transition["m_DstStateMachine"]?.FileID ?? 0, visited);
+                if (state != 0) return OwnedState(state, machine);
+                long child = transition["m_DstStateMachine"]?.FileID ?? 0;
+                IndexMachine(child, machine);
+                return Entry(child, visited);
             }
-            return controller.Doc(node?["m_DefaultState"]?.FileID ?? 0)?.Root;
+            return OwnedState(node?["m_DefaultState"]?.FileID ?? 0, machine);
+        }
+
+        YamlNode OwnedState(long id, long machine)
+        {
+            var state = controller.Doc(id)?.Root;
+            if (state != null) owners.TryAdd(state, machine);
+            return state;
         }
 
         bool Enabled(YamlNode transition) => transition != null && transition["m_Mute"]?.AsBool() != true &&

@@ -954,6 +954,8 @@ internal static class AvatarSetup
 
         Slot headlessSlot = renderer.Slot.AddSlot("_headless_" + renderer.Slot.Name);
         SkinnedMeshRenderer headless = headlessSlot.AttachComponent<SkinnedMeshRenderer>();
+        headless.Enabled = renderer.Enabled;
+        headless.EnabledField.DriveFrom(renderer.EnabledField);
         headless.Mesh.Target = meshAssetSlot.AttachStaticMesh(uri, getExisting: false);
         headless.BoundsComputeMethod.Value = renderer.BoundsComputeMethod.Value;
         headless.ExplicitLocalBounds.Value = renderer.ExplicitLocalBounds.Value;

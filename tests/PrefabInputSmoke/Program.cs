@@ -430,6 +430,13 @@ AnimatorState:
     string anyStateDisabled = controller.Replace("m_DefaultBool: 0", "m_DefaultBool: 1")
         .Replace("m_DefaultState: {fileID: -31}", "m_DefaultState: {fileID: -33}\n  m_AnyStateTransitions:\n  - {fileID: -34}")
         + "\n--- !u!1101 &-34\nAnimatorStateTransition:\n  m_HasExitTime: 0\n  m_DstState: {fileID: -31}\n  m_Conditions:\n  - m_ConditionMode: 1\n    m_ConditionEvent: ForceDisable\n";
+    string nestedAnyState = anyStateDisabled.Replace("m_DefaultState: {fileID: -33}\n  m_AnyStateTransitions:", "m_EntryTransitions:\n  - {fileID: -41}\n--- !u!1109 &-41\nAnimatorTransition:\n  m_Conditions: []\n  m_DstStateMachine: {fileID: -40}\n--- !u!1107 &-40\nAnimatorStateMachine:\n  m_DefaultState: {fileID: -33}\n  m_AnyStateTransitions:");
+    Check(Read(nestedAnyState).Blink == null, "Active nested machine honors its Any State disable");
+    string inactiveSibling = controller.Replace("m_DefaultState: {fileID: -31}",
+        "m_DefaultState: {fileID: -31}\n  m_ChildStateMachines:\n  - m_StateMachine: {fileID: -50}")
+        + "\n--- !u!1107 &-50\nAnimatorStateMachine:\n  m_AnyStateTransitions:\n  - {fileID: -51}\n"
+        + "--- !u!1101 &-51\nAnimatorStateTransition:\n  m_Conditions: []\n  m_HasExitTime: 0\n  m_DstState: {fileID: -31}\n";
+    Check(Read(inactiveSibling).Blink?.BlendShapeName == "blink", "Inactive sibling Any State cannot disable blink");
     Check(Read(anyStateDisabled).Blink == null, "Any State disable takes precedence over default blink state");
     Check(Read(controller).Blink?.BlendShapeName == "blink", "Startup parameter driver enables Body blink across layers");
     Check(Read(controller.Replace("m_DefaultBool: 0", "m_DefaultBool: 1")).Blink == null,
