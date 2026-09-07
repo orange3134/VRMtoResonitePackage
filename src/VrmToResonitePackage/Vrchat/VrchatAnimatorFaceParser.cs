@@ -61,7 +61,7 @@ public static class VrchatAnimatorFaceParser
                     // Some controllers use an unconditional entry fallback for silence,
                     // after explicit entries for all fourteen spoken phonemes.
                     YamlNode machine = controller.Doc(animatorLayer["m_StateMachine"]?.FileID ?? 0)?.Root;
-                    var entries = (machine?["m_EntryTransitions"]?.Seq ?? new())
+                    var entries = VrchatAnimatorDefaults.ActiveTransitions(controller, machine?["m_EntryTransitions"]?.Seq)
                         .Select(e => controller.Doc(e.FileID ?? 0)?.Root).ToList();
                     var spoken = entries.Take(Math.Max(0, entries.Count - 1)).Select(e => e?["m_Conditions"]?.Seq)
                         .Where(c => c?.Count == 1 && c[0]["m_ConditionEvent"]?.AsString() == "Viseme" &&
@@ -93,7 +93,8 @@ public static class VrchatAnimatorFaceParser
                     foreach (YamlNode state in node?["m_ChildStates"]?.Seq ?? new()) Gather(state["m_State"]?.FileID ?? 0);
                     foreach (YamlNode machine in node?["m_ChildStateMachines"]?.Seq ?? new()) Gather(machine["m_StateMachine"]?.FileID ?? 0);
                     foreach (string key in new[] { "m_Transitions", "m_EntryTransitions", "m_AnyStateTransitions" })
-                        foreach (YamlNode transition in node?[key]?.Seq ?? new()) Gather(transition.FileID ?? 0);
+                        foreach (YamlNode transition in VrchatAnimatorDefaults.ActiveTransitions(controller, node?[key]?.Seq))
+                            Gather(transition.FileID ?? 0);
                 }
 
 

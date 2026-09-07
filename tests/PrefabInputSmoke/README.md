@@ -25,3 +25,7 @@ Nested-component checks cover regular-prefab PhysBones, colliders, Modular Avata
 operations, selected-subtree isolation, EditorOnly exclusion, external root
 references and null overrides. Cache checks include stale versions without a lock
 file and continued access to embedded packages.
+
+Animator checks cover Solo/Mute filtering of State, Entry and Any State transition
+lists, condition-independent Solo suppression, priority among multiple Solo
+transitions, list isolation, and viseme/silence inference from eligible entries.

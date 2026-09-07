@@ -78,6 +78,25 @@ AnimationClip:
     }
     Asset("Assets/Face.controller", controllerGuid, controller.ToString());
     CheckAnimatorBlink(Asset, selected);
+    string soloViseme = controller.ToString().Replace("--- !u!1109 &-101\nAnimatorTransition:\n",
+        "--- !u!1109 &-101\nAnimatorTransition:\n  m_Solo: 1\n");
+    Asset("Assets/Face.controller", controllerGuid, soloViseme);
+    using (var package = UnityPackage.Open(selected))
+    {
+        var face = new VrchatAvatar();
+        VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument($"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {controllerGuid}}}\n"), face);
+        Check(face.Visemes.Count == 1 && face.Visemes.Single().ResonitePreset == "PP",
+            "Solo viseme entry suppresses non-solo phonemes and the silence fallback");
+    }
+    Asset("Assets/Face.controller", controllerGuid, soloViseme.Replace("m_Solo: 1", "m_Solo: 1\n  m_Mute: 1"));
+    using (var package = UnityPackage.Open(selected))
+    {
+        var face = new VrchatAvatar();
+        VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument($"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {controllerGuid}}}\n"), face);
+        Check(face.Visemes.Count == 13 && face.Visemes.All(v => v.ResonitePreset != "PP" && v.ResonitePreset != "sil"),
+            "Muted solo does not suppress other visemes or count toward the complete silence fallback");
+    }
+    Asset("Assets/Face.controller", controllerGuid, controller.ToString());
     using (UnityPackage package = UnityPackage.Open(selected))
     {
         var descriptor = UnityYaml.ParseFlatDocument($"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  isDefault: 0\n  animatorController: {{fileID: 91, guid: {controllerGuid}}}\n");
@@ -1002,6 +1021,61 @@ AnimatorState:
         "Timed exit with an unmet condition does not suppress a stable blink binding");
     Check(Read(controller.Replace("    value: 1", "    value: 0")).Blink == null,
         "Inactive blink animation is not imported as an always-on driver");
+    string soloGraph = $$"""
+--- !u!91 &91
+AnimatorController:
+  m_AnimatorParameters:
+  - m_Name: Disabled
+    m_Type: 4
+    m_DefaultBool: 0
+  m_AnimatorLayers:
+  - m_StateMachine: {fileID: 10}
+--- !u!1107 &10
+AnimatorStateMachine:
+  m_DefaultState: {fileID: 11}
+--- !u!1102 &11
+AnimatorState:
+  m_Transitions:
+  - {fileID: 20}
+  - {fileID: 21}
+--- !u!1101 &20
+AnimatorStateTransition:
+  m_DstState: {fileID: 12}
+  m_Conditions: []
+--- !u!1101 &21
+AnimatorStateTransition:
+  m_Solo: 1
+  m_DstState: {fileID: 13}
+  m_Conditions: []
+--- !u!1102 &12
+AnimatorState:
+  m_Motion: {fileID: 7400000, guid: {{clipGuid}}}
+--- !u!1102 &13
+AnimatorState:
+  m_Motion: {fileID: 0}
+""";
+    const string refs = "  m_Transitions:\n  - {fileID: 20}\n  - {fileID: 21}";
+    foreach (string kind in new[] { "State", "Entry", "AnyState" })
+    {
+        string graph = kind == "State" ? soloGraph : soloGraph.Replace(refs, "")
+            .Replace("  m_DefaultState: {fileID: 11}", "  m_DefaultState: {fileID: 11}\n" +
+                refs.Replace("m_Transitions", kind == "Entry" ? "m_EntryTransitions" : "m_AnyStateTransitions"));
+        Check(Read(graph).Blink == null, kind + " Solo transition suppresses an earlier non-solo blink transition");
+        if (kind != "AnyState") // Any State is reevaluated after entry and can then take its other transition.
+            Check(Read(graph.Replace("  m_DstState: {fileID: 12}", "  m_Solo: 1\n  m_DstState: {fileID: 12}")).Blink?.BlendShapeName == "blink",
+                kind + " multiple Solo transitions preserve their serialized priority");
+        Check(Read(graph.Replace("m_Solo: 1", "m_Solo: 1\n  m_Mute: 1")).Blink?.BlendShapeName == "blink",
+            kind + " muted Solo transition does not suppress the non-solo blink transition");
+        Check(Read(graph.Replace("m_Solo: 1", "m_Solo: 1\n  m_Mute: 0")
+            .Replace("m_DstState: {fileID: 13}\n  m_Conditions: []",
+                "m_DstState: {fileID: 13}\n  m_Conditions:\n  - m_ConditionEvent: Disabled\n    m_ConditionMode: 1")).Blink == null,
+            kind + " Solo suppression applies even when the solo condition is false");
+    }
+    string independent = soloGraph.Replace("  - {fileID: 21}", "")
+        .Replace("  m_DefaultState: {fileID: 11}", "  m_DefaultState: {fileID: 11}\n  m_AnyStateTransitions:\n  - {fileID: 21}")
+        .Replace("m_DstState: {fileID: 13}\n  m_Conditions: []",
+            "m_DstState: {fileID: 13}\n  m_Conditions:\n  - m_ConditionEvent: Disabled\n    m_ConditionMode: 1");
+    Check(Read(independent).Blink?.BlendShapeName == "blink", "Solo Any State transition does not suppress a separate state transition list");
     asset("Assets/Blink.anim", clipGuid, """
 --- !u!74 &7400000
 AnimationClip:

@@ -5,6 +5,15 @@ namespace VrmToResonitePackage.Vrchat;
 /// <summary>Resolves deterministic startup states; does not emulate timed animations or user input.</summary>
 internal static class VrchatAnimatorDefaults
 {
+    /// <summary>Solo applies to siblings in one transition list, before testing conditions.</summary>
+    internal static IEnumerable<YamlNode> ActiveTransitions(UnityScene controller, IEnumerable<YamlNode> references)
+    {
+        var unmuted = (references ?? Enumerable.Empty<YamlNode>()).Where(reference =>
+            controller.Doc(reference.FileID ?? 0)?.Root is {} node && node["m_Mute"]?.AsBool() != true).ToArray();
+        bool solo = unmuted.Any(reference => controller.Doc(reference.FileID ?? 0).Root["m_Solo"]?.AsBool() == true);
+        return solo ? unmuted.Where(reference => controller.Doc(reference.FileID ?? 0).Root["m_Solo"]?.AsBool() == true) : unmuted;
+    }
+
     public static Dictionary<long, YamlNode> Resolve(UnityScene controller, YamlNode settings,
         Dictionary<string, float> parameters)
     {
@@ -56,8 +65,8 @@ internal static class VrchatAnimatorDefaults
                 }
                 path.Reverse();
                 var anyState = path.SelectMany(id =>
-                    controller.Doc(id)?.Root?["m_AnyStateTransitions"]?.Seq ?? new()).ToList();
-                foreach (YamlNode reference in anyState.Concat(state["m_Transitions"]?.Seq ?? new()))
+                    ActiveTransitions(controller, controller.Doc(id)?.Root?["m_AnyStateTransitions"]?.Seq)).ToList();
+                foreach (YamlNode reference in anyState.Concat(ActiveTransitions(controller, state["m_Transitions"]?.Seq)))
                 {
                     YamlNode transition = controller.Doc(reference.FileID ?? 0)?.Root;
                     if (!Enabled(transition)) continue;
@@ -104,7 +113,7 @@ internal static class VrchatAnimatorDefaults
         {
             if (machine == 0 || !visited.Add(machine)) return null;
             YamlNode node = controller.Doc(machine)?.Root;
-            foreach (YamlNode reference in node?["m_EntryTransitions"]?.Seq ?? new())
+            foreach (YamlNode reference in ActiveTransitions(controller, node?["m_EntryTransitions"]?.Seq))
             {
                 YamlNode transition = controller.Doc(reference.FileID ?? 0)?.Root;
                 if (!Enabled(transition)) continue;
