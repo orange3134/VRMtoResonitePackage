@@ -36,6 +36,17 @@ static void Run()
     string selected = Asset("Assets/Selected.prefab", selectedGuid, Avatar("Selected"));
     Asset("Assets/Other.prefab", otherGuid, Avatar("Other"));
     Asset("Library/PackageCache/com.example.materials@123/Surface.mat", materialGuid, "Material:\n  m_Name: Surface\n");
+    Asset("Library/PackageCache/com.example.materials@stale/Surface.mat", materialGuid, "STALE");
+    string embeddedGuid = "abababababababababababababababab";
+    Asset("Packages/com.example.embedded/Embedded.mat", embeddedGuid, "Material:\n");
+    using (var package = UnityPackage.Open(selected))
+    {
+        Check(package.ByGuid(materialGuid) == null && VrchatAvatarParser.ListAvatars(package).Single().Name == "Selected",
+            "Missing package lock ignores all stale cache versions and preserves Assets-only prefab input");
+        Check(package.ByGuid(embeddedGuid)?.HasContent == true, "Embedded packages remain available without a lock");
+    }
+    string lockFile = Path.Combine(root, "Packages", "packages-lock.json");
+    File.WriteAllText(lockFile, """{"dependencies":{"com.example.materials":{"version":"123","source":"registry"}}}""");
     string controllerGuid = new('e', 32);
     var controller = new System.Text.StringBuilder("--- !u!91 &91\nAnimatorController:\n  m_AnimatorLayers:\n  - m_StateMachine: {fileID: -100}\n--- !u!1107 &-100\nAnimatorStateMachine:\n  m_EntryTransitions:\n");
     for (int i = 1; i <= 15; i++) controller.Append($"  - {{fileID: {-100 - i}}}\n");
@@ -367,6 +378,7 @@ Transform:
             "Regular descriptor prefab collects authored renderer placement and replaces the imported template");
     }
     CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);
+    CheckNestedComponents(Asset, regularCopy);
     string staticGuid = "14141414141414141414141414141414";
     string staticText = File.ReadAllText(regularCopy)
         .Replace("--- !u!137 &2\nSkinnedMeshRenderer:", "--- !u!23 &2\nMeshRenderer:")
@@ -638,8 +650,6 @@ PrefabInstance:
         "Child tag override cannot escape an EditorOnly ancestor");
 
     Asset("Library/PackageCache/com.example.materials@old/Surface.mat", materialGuid, "OLD");
-    string lockFile = Path.Combine(root, "Packages", "packages-lock.json");
-    Directory.CreateDirectory(Path.GetDirectoryName(lockFile)!);
     File.WriteAllText(lockFile, """{"dependencies":{"com.example.materials":{"version":"123","source":"registry"}}}""");
     using (var package = UnityPackage.Open(selected))
         Check(package.ByGuid(materialGuid).DiskPath.Contains("@123"), "Lock file selects active version over stale cache");
@@ -660,6 +670,116 @@ PrefabInstance:
         File.WriteAllText(path, contents);
         File.WriteAllText(path + ".meta", "fileFormatVersion: 2\nguid: " + guid + "\n");
         return path;
+    }
+}
+
+static void CheckNestedComponents(Func<string, string, string, string> asset, string regularCopy)
+{
+    const string leafGuid = "17171717171717171717171717171717";
+    const string wrapperGuid = "18181818181818181818181818181818";
+    const string excludedGuid = "19191919191919191919191919191919";
+    const string outsideGuid = "20202020202020202020202020202020";
+    string leaf = """
+--- !u!1 &1
+GameObject:
+  m_Name: HairRoot
+--- !u!4 &2
+Transform:
+  m_GameObject: {fileID: 1}
+  m_Father: {fileID: 0}
+--- !u!114 &3
+MonoBehaviour:
+  m_GameObject: {fileID: 1}
+  m_Script: {fileID: 1661641543, guid: 2a2c05204084d904aa4945ccff20d8e5}
+  rootTransform: {fileID: 2}
+  pull: 0.7
+  colliders:
+  - {fileID: 8}
+--- !u!1 &7
+GameObject:
+  m_Name: Collider
+--- !u!4 &9
+Transform:
+  m_GameObject: {fileID: 7}
+  m_Father: {fileID: 2}
+  m_LocalPosition: {x: 1, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+--- !u!114 &8
+MonoBehaviour:
+  m_GameObject: {fileID: 7}
+  rootTransform: {fileID: 11}
+  radius: 0.1
+--- !u!1 &10
+GameObject:
+  m_Name: OverrideBone
+--- !u!4 &11
+Transform:
+  m_GameObject: {fileID: 10}
+  m_Father: {fileID: 2}
+--- !u!114 &12
+MonoBehaviour:
+  m_GameObject: {fileID: 1}
+  m_Script: {fileID: 11500000, guid: 42581d8044b64899834d3d515ab3a144}
+  subPath: Head
+""";
+    asset("Assets/PhysicsLeaf.prefab", leafGuid, leaf);
+    asset("Assets/PhysicsExcluded.prefab", excludedGuid, leaf.Replace("HairRoot", "ExcludedRoot"));
+    asset("Assets/PhysicsOutside.prefab", outsideGuid, leaf.Replace("HairRoot", "OutsideRoot"));
+    string Instance(long id, string guid, long parent) => $"\n--- !u!1001 &{id}\nPrefabInstance:\n  m_SourcePrefab: {{fileID: 100100000, guid: {guid}}}\n  m_Modification:\n    m_TransformParent: {{fileID: {parent}}}\n";
+    asset("Assets/PhysicsWrapper.prefab", wrapperGuid, Instance(20, leafGuid, 0));
+    string rootText = File.ReadAllText(regularCopy).Replace("  - {fileID: 31}", "  - {fileID: 31}\n  - {fileID: 401}") + """
+
+--- !u!114 &300
+MonoBehaviour:
+  m_GameObject: {fileID: 32}
+  m_Script: {fileID: 1661641543, guid: 2a2c05204084d904aa4945ccff20d8e5}
+  rootTransform: {fileID: 33}
+--- !u!1 &400
+GameObject:
+  m_Name: EditorOnlyParent
+  m_TagString: EditorOnly
+--- !u!4 &401
+Transform:
+  m_GameObject: {fileID: 400}
+  m_Father: {fileID: 33}
+""" + Instance(100, wrapperGuid, 33) + Instance(500, excludedGuid, 401) + Instance(600, outsideGuid, 0);
+    string input = asset("Assets/NestedPhysics.prefab", "21212121212121212121212121212121", rootText);
+    VrchatAvatar Read()
+    {
+        using var package = UnityPackage.Open(input);
+        return VrchatAvatarParser.Parse(package);
+    }
+    var parsed = Read();
+    Check(parsed.PhysBones.Count == 2 && parsed.PhysBones.Single(p => p.RootBoneName == "HairRoot").Pull == 0.7f &&
+          parsed.PhysBones.Count(p => p.RootBoneName == "CopyParent") == 1,
+        "Regular prefab imports nested PhysBones and local PhysBones exactly once within the selected subtree");
+    Check(parsed.ModularBoneProxies.Count == 1 && parsed.ModularBoneProxies[0].SourceName == "HairRoot",
+        "Nested Modular Avatar operations are included while EditorOnly and unrelated prefab instances are excluded");
+    string modifications = $$"""
+    m_Modifications:
+    - target: {fileID: 3, guid: {{leafGuid}}}
+      propertyPath: rootTransform
+      objectReference: {fileID: 11, guid: {{leafGuid}}}
+    - target: {fileID: 8, guid: {{leafGuid}}}
+      propertyPath: rootTransform
+      objectReference: {fileID: 0}
+""";
+    File.WriteAllText(input, rootText.Replace("    m_TransformParent: {fileID: 33}\n",
+        "    m_TransformParent: {fileID: 33}\n" + modifications + "\n"));
+    parsed = Read();
+    var physics = parsed.PhysBones.Single(p => p.RootBoneName == "OverrideBone");
+    Check(physics.Colliders.Single().AttachBoneName == "HairRoot" && physics.Colliders.Single().Offset.X == 1,
+        "Nested PhysBone root override honors external GUID and null collider override restores its local attachment");
+    const string sceneGuid = "22222222222222222222222222222223";
+    asset("Assets/PhysicsScene.unity", sceneGuid, leaf);
+    using (var package = UnityPackage.Open(input))
+    {
+        var sceneAvatar = new VrchatAvatar();
+        foreach (string method in new[] { "ParseVariantPhysBones", "ParseVariantModularAvatar" })
+            typeof(VrchatAvatarParser).GetMethod(method, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+                .Invoke(null, new object?[] { package, sceneGuid, sceneAvatar, null });
+        Check(sceneAvatar.PhysBones.Single().RootBoneName == "HairRoot" && sceneAvatar.ModularBoneProxies.Count == 1,
+            "Shared component traversal preserves existing Unity scene source support");
     }
 }
 

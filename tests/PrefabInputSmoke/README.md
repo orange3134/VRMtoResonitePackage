@@ -20,3 +20,8 @@ Variant bone overrides (local references, external references, and null).
 Static-renderer checks cover MeshFilter pairing, regular-prefab placement and
 materials, Variant enabled/transform overrides, additional FBX discovery, and
 EditorOnly exclusion without changing primary skinned-model selection.
+
+Nested-component checks cover regular-prefab PhysBones, colliders, Modular Avatar
+operations, selected-subtree isolation, EditorOnly exclusion, external root
+references and null overrides. Cache checks include stale versions without a lock
+file and continued access to embedded packages.

@@ -56,6 +56,7 @@ ResoPon.exe "D:\MyUnityProject\Assets\Avatar\Avatar.prefab" -o "D:\ConvertedAvat
 所属プロジェクトの `Assets`、`Packages`、`Library/PackageCache` の `.meta` を使って
 関連アセットを解決します。Prefabだけをプロジェクト外へコピーしたものは使用できません。
 キャッシュは `Packages/packages-lock.json` の使用バージョンに絞ります。
+ロックファイルがない場合は `PackageCache` を読み込まず、`Assets` と埋め込み `Packages` のみを使用します。
 一致するキャッシュがない、または複数候補から特定できない場合は、Unityでパッケージを解決してください。
 外部フォルダのローカルパッケージやシンボリックリンク先は走査対象外です。
 入力アセットは変更せず、出力先の既定値はPrefabと同じフォルダです。

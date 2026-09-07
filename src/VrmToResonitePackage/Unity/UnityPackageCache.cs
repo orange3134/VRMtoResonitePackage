@@ -10,6 +10,8 @@ internal static class UnityPackageCache
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!Directory.Exists(cache)) return result;
         string lockPath = Path.Combine(project, "Packages", "packages-lock.json");
+        // Without a lock there is no evidence that any cached version is active.
+        if (!File.Exists(lockPath)) return result;
         using var locked = File.Exists(lockPath) ? JsonDocument.Parse(File.ReadAllText(lockPath)) : null;
         var dependencies = locked?.RootElement.GetProperty("dependencies");
         var folders = Directory.EnumerateDirectories(cache).Where(p =>
