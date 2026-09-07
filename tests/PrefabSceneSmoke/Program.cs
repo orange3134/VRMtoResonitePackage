@@ -138,6 +138,37 @@ static async Task Run(string fbxPath, string rendererName)
         Check(((Component)copy.Materials[0]).Slot.Name == "Material: ReviewMaterial", "Reparented copy receives explicit material");
         Check(((Component)defaultCopy.Materials[0]).Slot.Name == "Material: ReviewDefault", "Reparented copy uses source model's default material mapping");
         Check(unrelated.Materials.Count == 0, "Same-named primary renderer remains untouched");
+        Slot staticSource = additional.AddSlot("StaticSource");
+        var staticRenderer = staticSource.AttachComponent<MeshRenderer>();
+        staticRenderer.Mesh.Target = original.Mesh.Target;
+        var staticMesh = staticRenderer.Mesh.Target;
+        foreach (var material in original.Materials) staticRenderer.Materials.Add().Target = material;
+        sources[staticSource] = "additional";
+        var staticAvatar = new VrchatAvatar { FbxGuid = "primary" };
+        staticAvatar.AdditionalFbxs.Add(model);
+        staticAvatar.MeshCopies.Add(new VrchatMeshCopy("additional", "StaticSource", "StaticCopy", false, false)
+        {
+            IsSkinned = false, ReplaceSourceRenderer = true,
+            Transform = new VrchatPrefabTransform { LocalPosition = new System.Numerics.Vector3(3, 4, 5) },
+        });
+        staticAvatar.MeshCopies.Add(new VrchatMeshCopy("additional", rendererName, "StaticFromSkin", true, true)
+            { IsSkinned = false, Transform = new VrchatPrefabTransform() });
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", staticAvatar, sources,
+            (Func<VrchatMeshCopy, Slot>)(_ => primary), new Dictionary<Slot, string>());
+        var staticCopy = primary.FindChild("StaticCopy").GetComponent<MeshRenderer>();
+        Check(staticCopy != null && staticCopy is not SkinnedMeshRenderer && !staticCopy.Enabled &&
+              !staticCopy.Slot.ActiveSelf && staticCopy.Slot.LocalPosition.x == 3 && staticCopy.Mesh.Target == staticMesh,
+            "Static mesh copy retains mesh, authored placement, active state and enabled state");
+        Check(staticSource.GetComponent<MeshRenderer>() == null && !staticSource.IsDestroyed,
+            "Regular static prefab removes the imported template renderer while keeping its slot");
+        Check(primary.FindChild("StaticFromSkin").GetComponent<MeshRenderer>() is not SkinnedMeshRenderer,
+            "A skinned FBX mesh used by a static prefab becomes a static renderer");
+        var staticMaterials = new VrchatRendererMaterials { FbxGuid = "additional", RendererGameObjectName = "StaticCopy" };
+        staticMaterials.MaterialGuids.Add(materialGuid);
+        staticAvatar.RendererMaterials.Add(staticMaterials);
+        await (Task)Call("VrmToResonitePackage.Vrchat.VrchatMaterialBuilder", "Apply", root, assets, staticAvatar, package, sources);
+        Check(((Component)staticCopy.Materials[0]).Slot.Name == "Material: ReviewMaterial",
+            "Reparented static mesh copy receives its prefab material assignment");
         avatar.InactiveGameObjects.Add(new VrchatGameObjectReference("additional", "ExplicitCopy"));
         Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "Apply", root, avatar, sources);
         Check(!copy.Slot.ActiveSelf && unrelated.Slot.ActiveSelf, "Inactive override retains model identity after reparenting");

@@ -367,6 +367,46 @@ Transform:
             "Regular descriptor prefab collects authored renderer placement and replaces the imported template");
     }
     CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);
+    string staticGuid = "14141414141414141414141414141414";
+    string staticText = File.ReadAllText(regularCopy)
+        .Replace("--- !u!137 &2\nSkinnedMeshRenderer:", "--- !u!23 &2\nMeshRenderer:")
+        .Replace("  m_Mesh: {fileID: -1079801745714767569, guid: 88000000000000000000000000000001, type: 3}",
+            "  m_Enabled: 0\n  m_Materials:\n  - {fileID: 2100000, guid: " + materialGuid + "}")
+        + "\n--- !u!33 &35\nMeshFilter:\n  m_GameObject: {fileID: 1}\n  m_Mesh: {fileID: -1079801745714767569, guid: 88000000000000000000000000000001, type: 3}\n";
+    string staticPrefab = Asset("Assets/Static.prefab", staticGuid, staticText);
+    using (var package = UnityPackage.Open(staticPrefab))
+    {
+        var avatar = VrchatAvatarParser.Parse(package);
+        var copy = avatar.MeshCopies.Single();
+        Check(!copy.IsSkinned && !copy.Enabled && copy.ReplaceSourceRenderer && copy.SourceName == "Body_Base" &&
+              copy.Transform.LocalPosition.X == 1 && copy.ParentTransforms.Single().Name == "CopyParent",
+            "Regular static renderer uses its own MeshFilter and preserves authored placement and enabled state");
+        Check(avatar.RendererMaterials.Single().MaterialGuids.Single() == materialGuid,
+            "Regular static renderer retains its material assignment");
+    }
+    string staticVariant = Asset("Assets/StaticVariant.prefab", "15151515151515151515151515151515", $$"""
+--- !u!1001 &99
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: {{staticGuid}}}
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: 2, guid: {{staticGuid}}}
+      propertyPath: m_Enabled
+      value: 1
+    - target: {fileID: 31, guid: {{staticGuid}}}
+      propertyPath: m_LocalPosition.x
+      value: 9
+""");
+    using (var package = UnityPackage.Open(staticVariant))
+    {
+        var avatar = ReadFilter(staticVariant);
+        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
+        Check(!avatar.MeshCopies.Single().IsSkinned && avatar.MeshCopies.Single().Enabled &&
+              avatar.MeshCopies.Single().Transform.LocalPosition.X == 9,
+            "Variant static renderer applies enabled and transform overrides");
+    }
     string extraGuid = "12340000000000000000000000000004";
     string extraFbx = Asset("Assets/Extra.fbx", extraGuid, "");
     File.AppendAllText(extraFbx + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: 4300000\n    second: Body\n");
@@ -381,6 +421,25 @@ Transform:
         Check(avatar.MeshCopies.Count == 2 && avatar.AdditionalFbxs.Single().Guid == extraGuid &&
               Path.GetFullPath(avatar.AdditionalFbxs.Single().Path) == Path.GetFullPath(extraFbx),
             "Regular prefab schedules the secondary mesh source FBX for import");
+    }
+    string staticMulti = Asset("Assets/StaticMulti.prefab", "16161616161616161616161616161616",
+        File.ReadAllText(multiCopy).Replace("--- !u!137 &102\nSkinnedMeshRenderer:", "--- !u!23 &102\nMeshRenderer:")
+        .Replace("  m_Mesh: {fileID: 4300000, guid: " + extraGuid + ", type: 3}", "")
+        + "\n--- !u!33 &104\nMeshFilter:\n  m_GameObject: {fileID: 101}\n  m_Mesh: {fileID: 4300000, guid: " + extraGuid + "}\n");
+    using (var package = UnityPackage.Open(staticMulti))
+    {
+        var avatar = VrchatAvatarParser.Parse(package);
+        Check(avatar.AdditionalFbxs.Single().Guid == extraGuid && avatar.MeshCopies.Any(c => !c.IsSkinned && c.FbxGuid == extraGuid),
+            "Static accessories schedule their secondary FBX without replacing the primary skinned model");
+    }
+    File.WriteAllText(staticMulti, File.ReadAllText(staticMulti).Replace("m_Name: Body\n  m_TagString: Untagged",
+        "m_Name: Body\n  m_TagString: EditorOnly"));
+    using (var package = UnityPackage.Open(staticMulti))
+    {
+        var avatar = VrchatAvatarParser.Parse(package);
+        Check(avatar.AdditionalFbxs.Count == 0 && avatar.MeshCopies.All(c => c.IsSkinned) &&
+              avatar.RendererMaterials.All(r => r.RendererGameObjectName != "Body"),
+            "EditorOnly static renderer is excluded from source imports, mesh copies and material assignments");
     }
     File.WriteAllText(multiCopy, File.ReadAllText(multiCopy).Replace("m_Name: Body\n  m_TagString: Untagged",
         "m_Name: Body\n  m_TagString: EditorOnly"));

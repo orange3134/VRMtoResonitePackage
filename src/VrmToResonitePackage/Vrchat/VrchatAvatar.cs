@@ -143,6 +143,7 @@ public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
 
 public sealed record VrchatMeshCopy(string FbxGuid, string SourceName, string Name, bool Active, bool Enabled)
 {
+    public bool IsSkinned { get; init; } = true;
     public string SourcePath { get; init; }
     public string PrefabGuid { get; init; }
     public long RendererFileId { get; init; }

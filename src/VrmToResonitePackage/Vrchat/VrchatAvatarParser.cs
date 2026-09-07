@@ -209,7 +209,7 @@ public static class VrchatAvatarParser
         ParseRendererMaterials(package, selected.Scene, includedSubtree, avatar);
         var copyResolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);
         var copyScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
-        foreach (var smr in selected.Scene.SkinnedMeshRenderers.Where(smr =>
+        foreach (var smr in selected.Scene.MeshRenderers.Where(smr =>
                      includedSubtree.Contains(smr.Root["m_GameObject"]?.FileID ?? 0)))
             CollectAuthoredMeshCopy(package, selected.Source.Guid, selected.Scene, smr, avatar,
                 copyResolvers, copyScenes, replaceSourceRenderer: true);
@@ -711,9 +711,9 @@ public static class VrchatAvatarParser
             CollectFbxGuidsFromSource(package, prefabInstance.Root?["m_SourcePrefab"]?.Guid, depth + 1,
                 result, visited);
         }
-        foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+        foreach (YamlDocument smr in scene.MeshRenderers)
         {
-            string meshGuid = smr.Root?["m_Mesh"]?.Guid;
+            string meshGuid = scene.RendererMesh(smr)?.Guid;
             UnityAsset meshAsset = package.ByGuid(meshGuid);
             if (meshAsset?.Extension == ".fbx")
             {
@@ -786,9 +786,9 @@ public static class VrchatAvatarParser
         // Some authored prefabs unpack the model hierarchy and reference FBX meshes directly
         // instead of retaining an FBX PrefabInstance. The FBX discovery pass already finds those
         // mesh GUIDs; carry the placement inherited through the enclosing prefab chain to them too.
-        foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+        foreach (YamlDocument smr in scene.MeshRenderers)
         {
-            string meshGuid = smr.Root?["m_Mesh"]?.Guid;
+            string meshGuid = scene.RendererMesh(smr)?.Guid;
             UnityAsset meshAsset = package.ByGuid(meshGuid);
             if (meshAsset?.Extension == ".fbx")
             {
@@ -1279,19 +1279,26 @@ public static class VrchatAvatarParser
     private static string FindMostReferencedFbxGuid(UnityScene scene, HashSet<long> subtree)
     {
         var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+        foreach (YamlDocument smr in PrimaryMeshRenderers(scene, subtree))
         {
             if (!InSubtree(scene, subtree, smr))
             {
                 continue;
             }
-            string guid = smr.Root?["m_Mesh"]?.Guid;
+            string guid = scene.RendererMesh(smr)?.Guid;
             if (!string.IsNullOrEmpty(guid))
             {
                 counts[guid] = counts.GetValueOrDefault(guid) + 1;
             }
         }
         return counts.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).FirstOrDefault();
+    }
+
+    private static IEnumerable<YamlDocument> PrimaryMeshRenderers(UnityScene scene, HashSet<long> subtree)
+    {
+        var skinned = scene.SkinnedMeshRenderers.Where(r => InSubtree(scene, subtree, r)).ToArray();
+        // Static accessories must not outweigh the avatar's existing skinned body model.
+        return skinned.Length > 0 ? skinned : scene.MeshRenderers;
     }
 
     private static void ResolveFbx(UnityPackage package, UnityScene scene, YamlDocument avatarRoot,
@@ -1315,13 +1322,13 @@ public static class VrchatAvatarParser
         if (fbxGuid == null)
         {
             var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+            foreach (YamlDocument smr in PrimaryMeshRenderers(scene, subtree))
             {
                 if (!InSubtree(scene, subtree, smr))
                 {
                     continue;
                 }
-                string guid = smr.Root?["m_Mesh"]?.Guid;
+                string guid = scene.RendererMesh(smr)?.Guid;
                 UnityAsset meshAsset = package.ByGuid(guid);
                 if (!string.IsNullOrEmpty(guid) &&
                     !string.Equals(meshAsset?.Extension, ".asset", StringComparison.OrdinalIgnoreCase))
@@ -1342,8 +1349,8 @@ public static class VrchatAvatarParser
         }
         avatar.FbxGuid = fbxGuid;
         avatar.FbxPath = fbx.DiskPath;
-        foreach (string guid in scene.SkinnedMeshRenderers.Where(smr => InSubtree(scene, subtree, smr))
-                     .Select(smr => smr.Root?["m_Mesh"]?.Guid)
+        foreach (string guid in scene.MeshRenderers.Where(smr => InSubtree(scene, subtree, smr))
+                     .Select(smr => scene.RendererMesh(smr)?.Guid)
                      .Where(guid => !string.Equals(guid, fbxGuid, StringComparison.OrdinalIgnoreCase) &&
                                     package.ByGuid(guid)?.Extension == ".fbx")
                      .Distinct(StringComparer.OrdinalIgnoreCase))
@@ -1805,14 +1812,14 @@ public static class VrchatAvatarParser
         Dictionary<string, UnityScene> prefabScenes, bool replaceSourceRenderer = false)
     {
         string rendererName = scene.ResolveGameObjectName(smr.FileId);
-        string fbxGuid = smr.Root?["m_Mesh"]?.Guid;
+        string fbxGuid = scene.RendererMesh(smr)?.Guid;
         if (avatar.EditorOnlyPrefabObjects.TryGetValue(sceneGuid, out var excluded) &&
             excluded.Contains(smr.Root["m_GameObject"]?.FileID ?? 0)) return;
         // Authored components are distinct from imported renderers even when their names
         // match. Preserve prefab/component identity for collection and state overrides.
         if (!string.IsNullOrEmpty(rendererName) && package.ByGuid(fbxGuid)?.Extension == ".fbx")
         {
-            string sourceName = ResolveReferenceGameObjectName(package, scene, smr.Root["m_Mesh"], modelResolvers);
+            string sourceName = ResolveReferenceGameObjectName(package, scene, scene.RendererMesh(smr), modelResolvers);
             if (!string.IsNullOrEmpty(sourceName) && (smr.Root["m_CorrespondingSourceObject"]?.FileID ?? 0) == 0 &&
                 avatar.ShouldKeepRenderer(fbxGuid, rendererName))
             {
@@ -1822,9 +1829,10 @@ public static class VrchatAvatarParser
                     smr.Root["m_Enabled"]?.AsBool(true) ?? true)
                 {
                     PrefabGuid = sceneGuid, RendererFileId = smr.FileId,
+                    IsSkinned = smr.ClassId == 137,
                     GameObjectFileId = smr.Root["m_GameObject"]?.FileID ?? 0,
                     ReplaceSourceRenderer = replaceSourceRenderer,
-                    SourcePath = modelResolvers[fbxGuid].ResolveNodePath(smr.Root["m_Mesh"].FileID ?? 0),
+                    SourcePath = modelResolvers[fbxGuid].ResolveNodePath(scene.RendererMesh(smr).FileID ?? 0),
                 };
                 var transform = scene.TransformOfGameObject(smr.Root["m_GameObject"]?.FileID ?? 0)?.Root;
                 if (transform != null)
@@ -1968,10 +1976,10 @@ public static class VrchatAvatarParser
             new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         foreach ((string sceneGuid, UnityScene scene) in inheritedScenes)
         {
-            foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+            foreach (YamlDocument smr in scene.MeshRenderers)
             {
                 string rendererName = scene.ResolveGameObjectName(smr.FileId);
-                string fbxGuid = smr.Root?["m_Mesh"]?.Guid;
+                string fbxGuid = scene.RendererMesh(smr)?.Guid;
                 CollectAuthoredMeshCopy(package, sceneGuid, scene, smr, avatar, modelResolvers, prefabScenes);
                 YamlNode materials = smr.Root?["m_Materials"];
                 YamlNode weights = smr.Root?["m_BlendShapeWeights"];
@@ -2050,7 +2058,7 @@ public static class VrchatAvatarParser
                     // Other components on the same GameObject also expose m_Enabled.
                     if (propertyPath == "m_Enabled" && stateTarget?.Guid != null &&
                         prefabScenes.TryGetValue(stateTarget.Guid, out var targetScene) &&
-                        targetScene.Doc(stateTarget.FileID ?? 0) is { ClassId: not 137 }) continue;
+                        targetScene.Doc(stateTarget.FileID ?? 0) is { ClassId: not (137 or 23) }) continue;
                     bool value = modification["value"]?.AsBool(true) ?? true;
                     for (int i = 0; i < avatar.MeshCopies.Count; i++)
                     {
@@ -2257,7 +2265,7 @@ public static class VrchatAvatarParser
                 modelResolvers, prefabScenes, editorOnlyRoots);
         }
 
-        foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+        foreach (YamlDocument smr in scene.MeshRenderers)
         {
             YamlDocument owner = scene.OwnerGameObject(smr);
             string name = owner != null ? scene.GameObjectName(owner.FileId) : null;
@@ -2478,7 +2486,7 @@ public static class VrchatAvatarParser
             if (source?.Guid != null)
                 ExcludeEditorOnlySubtree(package, source.Guid, source.FileID ?? 0, keep, modelResolvers, prefabScenes, visited, avatar);
         }
-        foreach (YamlDocument renderer in scene.SkinnedMeshRenderers)
+        foreach (YamlDocument renderer in scene.MeshRenderers)
         {
             if (!gameObjects.Contains(renderer.Root?["m_GameObject"]?.FileID ?? 0)) continue;
             string name = scene.ResolveGameObjectName(renderer.FileId);
@@ -2601,7 +2609,7 @@ public static class VrchatAvatarParser
             : new[] { document };
         foreach (YamlDocument candidate in candidates)
         {
-            string meshGuid = candidate?.Root?["m_Mesh"]?.Guid;
+            string meshGuid = scene.RendererMesh(candidate)?.Guid ?? candidate?.Root?["m_Mesh"]?.Guid;
             if (package.ByGuid(meshGuid)?.Extension != ".fbx")
             {
                 continue;
@@ -3214,7 +3222,7 @@ public static class VrchatAvatarParser
     private static void ParseRendererMaterials(UnityPackage package, UnityScene scene,
         HashSet<long> subtree, VrchatAvatar avatar)
     {
-        foreach (YamlDocument smr in scene.SkinnedMeshRenderers)
+        foreach (YamlDocument smr in scene.MeshRenderers)
         {
             if (!InSubtree(scene, subtree, smr))
             {
@@ -3225,7 +3233,7 @@ public static class VrchatAvatarParser
             {
                 continue;
             }
-            string meshGuid = smr.Root?["m_Mesh"]?.Guid;
+            string meshGuid = scene.RendererMesh(smr)?.Guid;
             UnityAsset meshAsset = package.ByGuid(meshGuid);
             var entry = new VrchatRendererMaterials
             {

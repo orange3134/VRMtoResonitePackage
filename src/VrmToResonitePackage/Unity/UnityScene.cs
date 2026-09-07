@@ -49,6 +49,20 @@ public sealed class UnityScene
     public IEnumerable<YamlDocument> SkinnedMeshRenderers =>
         _byFileId.Values.Where(d => d.ClassId == ClassSkinnedMeshRenderer);
 
+    public IEnumerable<YamlDocument> MeshRenderers =>
+        _byFileId.Values.Where(d => d.ClassId is ClassSkinnedMeshRenderer or 23);
+
+    /// <summary>Static renderers store their mesh on the MeshFilter of the same GameObject.</summary>
+    public YamlNode RendererMesh(YamlDocument renderer)
+    {
+        if (renderer?.ClassId == ClassSkinnedMeshRenderer) return renderer.Root?["m_Mesh"];
+        if (renderer?.ClassId != 23) return null;
+        long owner = renderer.Root?["m_GameObject"]?.FileID ?? 0;
+        if (owner == 0) return null;
+        return _byFileId.Values.FirstOrDefault(d => d.ClassId == 33 &&
+            d.Root?["m_GameObject"]?.FileID == owner)?.Root?["m_Mesh"];
+    }
+
     public IEnumerable<YamlDocument> MonoBehaviours =>
         _byFileId.Values.Where(d => d.ClassId == ClassMonoBehaviour);
 

@@ -16,3 +16,7 @@ inspection. This does not verify an end-to-end avatar conversion.
 Copied-bone checks cover local transform paths and primary skeleton scope,
 explicit/omitted stripped references, FBX paths with duplicate node names, and
 Variant bone overrides (local references, external references, and null).
+
+Static-renderer checks cover MeshFilter pairing, regular-prefab placement and
+materials, Variant enabled/transform overrides, additional FBX discovery, and
+EditorOnly exclusion without changing primary skinned-model selection.

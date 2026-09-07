@@ -14,11 +14,12 @@ internal static class VrchatSceneSetup
         Func<VrchatMeshCopy, Slot> resolveParent, IReadOnlyDictionary<Slot, string> importedPaths)
     {
         var importedSources = sources.ToArray();
-        var replacedRenderers = new HashSet<SkinnedMeshRenderer>();
+        var replacedRenderers = new HashSet<MeshRenderer>();
         foreach (VrchatMeshCopy copy in avatar.MeshCopies)
         {
             var matchesBySource = importedSources.Where(entry => !entry.Key.IsDestroyed && entry.Value == copy.FbxGuid &&
-                entry.Key.GetComponent<SkinnedMeshRenderer>() != null &&
+                entry.Key.GetComponent<MeshRenderer>() != null &&
+                (!copy.IsSkinned || entry.Key.GetComponent<SkinnedMeshRenderer>() != null) &&
                 (copy.SourcePath != null
                     ? importedPaths.TryGetValue(entry.Key, out string path) &&
                       (copy.SourcePath == path || copy.SourcePath.EndsWith("/" + path, StringComparison.Ordinal))
@@ -31,7 +32,7 @@ internal static class VrchatSceneSetup
                 UniLog.Warning($"Prefab mesh copy source missing: {copy.Name} <- {copy.SourceName}");
                 continue;
             }
-            if (copy.ReplaceSourceRenderer) replacedRenderers.Add(source.GetComponent<SkinnedMeshRenderer>());
+            if (copy.ReplaceSourceRenderer) replacedRenderers.Add(source.GetComponent<MeshRenderer>());
             // Duplicate the renderer slot, retaining external mesh, material and skeleton references.
             Slot duplicate = source.Duplicate(source.Parent, settings: new DuplicationSettings
             {
@@ -46,9 +47,21 @@ internal static class VrchatSceneSetup
             }
             duplicate.Name = copy.Name;
             duplicate.ActiveSelf = copy.Active;
-            duplicate.GetComponent<SkinnedMeshRenderer>().Enabled = copy.Enabled;
-            var renderer = duplicate.GetComponent<SkinnedMeshRenderer>();
-            for (int i = 0; i < renderer.Bones.Count; i++)
+            var meshRenderer = duplicate.GetComponent<MeshRenderer>();
+            if (!copy.IsSkinned && meshRenderer is SkinnedMeshRenderer)
+            {
+                // Unity can use an imported skinned mesh as a static mesh.
+                // Reproduce the authored component type while preserving its asset references.
+                var mesh = meshRenderer.Mesh.Target;
+                var materials = meshRenderer.Materials.ToArray();
+                meshRenderer.Destroy();
+                meshRenderer = duplicate.AttachComponent<MeshRenderer>();
+                meshRenderer.Mesh.Target = mesh;
+                foreach (var material in materials) meshRenderer.Materials.Add().Target = material;
+            }
+            meshRenderer.Enabled = copy.Enabled;
+            var renderer = meshRenderer as SkinnedMeshRenderer;
+            for (int i = 0; i < (renderer?.Bones.Count ?? 0); i++)
             {
                 Slot original = renderer.Bones[i];
                 if (original == null || !copy.BoneTargets.TryGetValue(original.Name, out var target)) continue;
