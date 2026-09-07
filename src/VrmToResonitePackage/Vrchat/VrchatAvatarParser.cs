@@ -125,6 +125,7 @@ public static class VrchatAvatarParser
         }
 
         Candidate selected = SelectPrimary(candidates, avatarOverride);
+        YamlDocument effectiveDescriptor = VrchatDescriptorOverrides.Resolve(package, selected.Source.Guid, selected.Descriptor);
         foreach (Candidate c in OrderByPrimary(candidates))
         {
             string mark = c == selected ? "=> 選択" : "   スキップ";
@@ -170,8 +171,8 @@ public static class VrchatAvatarParser
                 throw new InvalidDataException("アバター本体のルートがEditorOnlyのため変換対象がありません。");
             avatar.AdditionalFbxs.RemoveAll(model => avatar.EditorOnlyFbxGuids.Contains(model.Guid));
             ParseFbxBlendShapeNames(package, avatar);
-            ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
-            VrchatAnimatorFaceParser.Apply(package, selected.Descriptor.Root, avatar);
+            ParseDescriptor(package, selected.Scene, effectiveDescriptor, avatar);
+            VrchatAnimatorFaceParser.Apply(package, effectiveDescriptor.Root, avatar);
             ParseVariantRendererOverrides(package, selected.Source.Guid, avatar);
             avatar.RendererMaterials.RemoveAll(renderer => avatar.EditorOnlyFbxGuids.Contains(renderer.FbxGuid ?? ""));
             foreach (string excluded in avatar.EditorOnlyFbxGuids)
@@ -203,8 +204,8 @@ public static class VrchatAvatarParser
         ResolveFbx(package, selected.Scene, selected.Root, includedSubtree, avatar);
         ParseFbxBlendShapeNames(package, avatar);
         ParseHumanoid(package, avatar);
-        ParseDescriptor(package, selected.Scene, selected.Descriptor, avatar);
-        VrchatAnimatorFaceParser.Apply(package, selected.Descriptor.Root, avatar);
+        ParseDescriptor(package, selected.Scene, effectiveDescriptor, avatar);
+        VrchatAnimatorFaceParser.Apply(package, effectiveDescriptor.Root, avatar);
         ParseVariantPhysBones(package, selected.Source.Guid, avatar, includedSubtree);
         ParseRendererMaterials(package, selected.Scene, includedSubtree, avatar);
         var copyResolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);

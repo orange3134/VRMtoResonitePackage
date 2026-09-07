@@ -398,6 +398,7 @@ Transform:
     }
     CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);
     CheckNestedComponents(Asset, regularCopy);
+    CheckDescriptorOverrides(Asset, regularCopy, controllerGuid);
     string staticGuid = "14141414141414141414141414141414";
     string staticText = File.ReadAllText(regularCopy)
         .Replace("--- !u!137 &2\nSkinnedMeshRenderer:", "--- !u!23 &2\nMeshRenderer:")
@@ -690,6 +691,103 @@ PrefabInstance:
         File.WriteAllText(path + ".meta", "fileFormatVersion: 2\nguid: " + guid + "\n");
         return path;
     }
+}
+
+static void CheckDescriptorOverrides(Func<string, string, string, string> asset, string regularCopy, string baseController)
+{
+    const string baseGuid = "23232323232323232323232323232323";
+    const string variantGuid = "24242424242424242424242424242424";
+    const string blinkController = "25252525252525252525252525252525";
+    const string blinkClip = "26262626262626262626262626262626";
+    asset("Assets/DescriptorBase.prefab", baseGuid, File.ReadAllText(regularCopy) +
+        $"\n  lipSync: 4\n  baseAnimationLayers:\n  - type: 5\n    isDefault: 0\n    animatorController: {{fileID: 91, guid: {baseController}}}\n");
+    asset("Assets/OverrideBlink.anim", blinkClip, """
+--- !u!74 &7400000
+AnimationClip:
+  m_AnimationClipSettings:
+    m_LoopTime: 1
+  m_FloatCurves:
+  - curve:
+      m_Curve:
+      - value: 0
+      - value: 100
+    attribute: blendShape.blink
+    path: Face/Body
+    classID: 137
+""");
+    asset("Assets/OverrideBlink.controller", blinkController, $$"""
+--- !u!91 &91
+AnimatorController:
+  m_AnimatorLayers:
+  - m_StateMachine: {fileID: 10}
+--- !u!1107 &10
+AnimatorStateMachine:
+  m_DefaultState: {fileID: 11}
+--- !u!1102 &11
+AnimatorState:
+  m_Motion: {fileID: 7400000, guid: {{blinkClip}}}
+""");
+    string variant = $$"""
+--- !u!1001 &100
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: {{baseGuid}}}
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: 34, guid: {{baseGuid}}}
+      propertyPath: baseAnimationLayers.Array.data[0].animatorController
+      objectReference: {fileID: 91, guid: {{blinkController}}}
+    - target: {fileID: 34, guid: unrelated}
+      propertyPath: baseAnimationLayers.Array.data[0].animatorController
+      objectReference: {fileID: 0}
+""";
+    VrchatAvatar Read(string text)
+    {
+        string path = asset("Assets/DescriptorVariant.prefab", variantGuid, text);
+        using var package = UnityPackage.Open(path);
+        var result = VrchatAvatarParser.Parse(package);
+        Check(package.ReadScene(package.ByGuid(baseGuid)).Doc(34).Root["baseAnimationLayers"].Seq[0]["animatorController"].Guid == baseController,
+            "Effective descriptor does not mutate the cached base prefab");
+        return result;
+    }
+    var parsed = Read(variant);
+    Check(parsed.Visemes.Count == 0 && parsed.Blink?.BlendShapeName == "blink",
+        "Inherited descriptor uses the selected Variant FX controller and ignores unrelated component targets");
+    foreach (string change in new[] { "isDefault\n      value: 1", "type\n      value: 3" })
+        Check(Read(variant + $"\n    - target: {{fileID: 34, guid: {baseGuid}}}\n      propertyPath: baseAnimationLayers.Array.data[0]." + change + "\n").Blink == null,
+            "Descriptor layer override disables FX inference: " + change.Split('\n')[0]);
+    Check(Read(variant.Replace($"fileID: 91, guid: {blinkController}", "fileID: 0")).Blink == null,
+        "Explicit null FX override does not resurrect the base controller");
+    Check(Read(variant + $"\n    - target: {{fileID: 34, guid: {baseGuid}}}\n      propertyPath: baseAnimationLayers.Array.size\n      value: 0\n").Blink == null,
+        "Shrinking the descriptor layer array removes inherited FX bindings");
+    Read(variant);
+    string derived = asset("Assets/DescriptorDerived.prefab", "27272727272727272727272727272727", $$"""
+--- !u!1001 &200
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: {{variantGuid}}}
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: {{34 ^ 100}}, guid: {{variantGuid}}}
+      propertyPath: baseAnimationLayers.Array.data[0].animatorController
+      objectReference: {fileID: 91, guid: {{baseController}}}
+""");
+    using (var package = UnityPackage.Open(derived))
+        Check(VrchatAvatarParser.Parse(package).Visemes.Count == 15,
+            "Outer Variant override wins through an omitted stripped descriptor alias");
+    asset("Assets/DescriptorVariant.prefab", variantGuid, variant + $$"""
+
+--- !u!114 &99 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 34, guid: {{baseGuid}}}
+  m_PrefabInstance: {fileID: 100}
+""");
+    File.WriteAllText(derived, File.ReadAllText(derived).Replace($"fileID: {34 ^ 100}, guid: {variantGuid}", $"fileID: 99, guid: {variantGuid}"));
+    using (var package = UnityPackage.Open(derived))
+        Check(VrchatAvatarParser.Parse(package).Visemes.Count == 15,
+            "Outer Variant override follows an explicitly serialized stripped descriptor alias");
+    File.AppendAllText(derived, $"\n    - target: {{fileID: 34, guid: {baseGuid}}}\n      propertyPath: lipSync\n      value: 0\n");
+    using (var package = UnityPackage.Open(derived))
+        Check(VrchatAvatarParser.Parse(package).Visemes.Count == 0,
+            "Effective lipSync override controls Animator viseme inference");
 }
 
 static void CheckNestedComponents(Func<string, string, string, string> asset, string regularCopy)

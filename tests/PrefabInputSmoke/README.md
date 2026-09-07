@@ -29,3 +29,7 @@ file and continued access to embedded packages.
 Animator checks cover Solo/Mute filtering of State, Entry and Any State transition
 lists, condition-independent Solo suppression, priority among multiple Solo
 transitions, list isolation, and viseme/silence inference from eligible entries.
+
+Descriptor inheritance checks cover FX controller replacement/null, layer type and
+default flags, layer-array shrinking, lip-sync mode, explicit/omitted stripped
+aliases across multiple variants, unrelated targets, and base-cache preservation.
