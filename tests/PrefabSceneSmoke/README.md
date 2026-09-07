@@ -2,6 +2,9 @@
 
 Also checks that EditorOnly removal follows captured model paths after reparenting and preserves a separate branch containing identically named nodes.
 
+Copied-bone checks distinguish same-named bones in two branches of the primary
+model and in an additional model, including targets moved after path capture.
+
 This integration check boots Resonite's headless engine and imports a local FBX containing a skinned mesh with at least one blendshape. It copies the renderer from an additional model under a primary model, then checks explicit material overrides, FBX default material mappings, initial blendshape weights, inactive state, and isolation from an identically named primary-model renderer.
 
 ```powershell

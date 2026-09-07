@@ -152,8 +152,13 @@ public sealed record VrchatMeshCopy(string FbxGuid, string SourceName, string Na
     public string ParentFbxGuid { get; set; }
     public string ParentName { get; set; }
     public List<VrchatPrefabTransform> ParentTransforms { get; } = new();
-    public Dictionary<string, VrchatGameObjectReference> BoneTargets { get; } = new();
+    public Dictionary<string, VrchatBoneTarget> BoneTargets { get; } = new();
+    public List<string> SourceBoneNames { get; } = new();
 }
+
+/// <summary>A serialized bone reference, scoped to its model and complete transform path.</summary>
+public sealed record VrchatBoneTarget(string FbxGuid, string Name, string Path = null,
+    string PrefabGuid = null, long TransformFileId = 0);
 
 public sealed class VrchatModularMergeArmature
 {

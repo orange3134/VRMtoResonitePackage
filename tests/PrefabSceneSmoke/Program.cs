@@ -88,6 +88,31 @@ static async Task Run(string fbxPath, string rendererName)
             new Dictionary<string, Slot> { ["primary"] = primary, ["additional"] = additional });
         var original = additional.GetComponentsInChildren<SkinnedMeshRenderer>().Single(r => r.Slot.Name == rendererName);
         Check(original.MeshBlendshapeCount > 0, "Fixture has morph data");
+        Check(original.Bones.Count > 0 && original.Bones[0] != null, "Fixture has a source skeleton");
+        Slot primaryLeft = primary.AddSlot("Left").AddSlot("Hips");
+        Slot primaryRight = primary.AddSlot("Right").AddSlot("Hips");
+        Slot clothingRight = additional.AddSlot("Right").AddSlot("Hips");
+        var boneRoots = new Dictionary<string, Slot> { ["primary"] = primary, ["additional"] = additional };
+        var boneSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", boneRoots);
+        var bonePaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", boneRoots);
+        primaryRight.SetParent(primaryLeft, false);
+        var reboundAvatar = new VrchatAvatar { FbxGuid = "primary" };
+        var rebound = new VrchatMeshCopy("additional", rendererName, "ReboundCopy", true, true)
+            { Transform = new VrchatPrefabTransform() };
+        rebound.BoneTargets[original.Bones[0].Name] = new VrchatBoneTarget("primary", "Hips", "Right/Hips", "prefab", 10);
+        reboundAvatar.MeshCopies.Add(rebound);
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", reboundAvatar, boneSources,
+            (Func<VrchatMeshCopy, Slot>)(_ => primary), bonePaths);
+        Check(primary.FindChild("ReboundCopy").GetComponent<SkinnedMeshRenderer>().Bones[0] == primaryRight,
+            "Copied bone selects the exact primary branch despite same-named clothing bones and reparenting");
+        var modelRebound = rebound with { Name = "ModelReboundCopy" };
+        modelRebound.BoneTargets[original.Bones[0].Name] = new VrchatBoneTarget("additional", "Hips", "RootNode/Right/Hips");
+        reboundAvatar.MeshCopies.Clear();
+        reboundAvatar.MeshCopies.Add(modelRebound);
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", reboundAvatar, boneSources,
+            (Func<VrchatMeshCopy, Slot>)(_ => primary), bonePaths);
+        Check(primary.FindChild("ModelReboundCopy").GetComponent<SkinnedMeshRenderer>().Bones[0] == clothingRight,
+            "Explicit FBX bone references retain their additional model scope and normalize the synthetic root");
         foreach (var material in original.Materials)
         {
             string name = ((Component)material).Slot.Name;
@@ -126,7 +151,7 @@ static async Task Run(string fbxPath, string rendererName)
                 Transform = new VrchatPrefabTransform { LocalPosition = new System.Numerics.Vector3(i + 1, 2, 3) },
             };
             if (original.Bones.Count > 0 && original.Bones[0] != null)
-                authored.BoneTargets[original.Bones[0].Name] = new VrchatGameObjectReference(null, null);
+                authored.BoneTargets[original.Bones[0].Name] = new VrchatBoneTarget(null, null);
             sameNameAvatar.MeshCopies.Add(authored);
         }
         Slot originalSlot = original.Slot;

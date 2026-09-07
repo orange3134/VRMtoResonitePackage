@@ -366,6 +366,7 @@ Transform:
               copy.ParentTransforms.Single().Name == "CopyParent" && copy.ReplaceSourceRenderer,
             "Regular descriptor prefab collects authored renderer placement and replaces the imported template");
     }
+    CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);
     string extraGuid = "12340000000000000000000000000004";
     string extraFbx = Asset("Assets/Extra.fbx", extraGuid, "");
     File.AppendAllText(extraFbx + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: 4300000\n    second: Body\n");
@@ -600,6 +601,106 @@ PrefabInstance:
         File.WriteAllText(path, contents);
         File.WriteAllText(path + ".meta", "fileFormatVersion: 2\nguid: " + guid + "\n");
         return path;
+    }
+}
+
+static void CheckCopiedBoneReferences(Func<string, string, string, string> asset, string modelGuid, string primaryGuid)
+{
+    const string prefabGuid = "12121212121212121212121212121212";
+    string prefab = asset("Assets/BoneReferences.prefab", prefabGuid, """
+--- !u!1 &1
+GameObject:
+  m_Name: Avatar
+--- !u!4 &2
+Transform:
+  m_GameObject: {fileID: 1}
+  m_Father: {fileID: 0}
+--- !u!1 &3
+GameObject:
+  m_Name: Left
+--- !u!4 &4
+Transform:
+  m_GameObject: {fileID: 3}
+  m_Father: {fileID: 2}
+--- !u!1 &5
+GameObject:
+  m_Name: Hips
+--- !u!4 &6
+Transform:
+  m_GameObject: {fileID: 5}
+  m_Father: {fileID: 4}
+--- !u!1 &7
+GameObject:
+  m_Name: Right
+--- !u!4 &8
+Transform:
+  m_GameObject: {fileID: 7}
+  m_Father: {fileID: 2}
+--- !u!1 &9
+GameObject:
+  m_Name: Hips
+--- !u!4 &10
+Transform:
+  m_GameObject: {fileID: 9}
+  m_Father: {fileID: 8}
+""");
+    var method = typeof(VrchatAvatarParser).GetMethod("ResolveCopiedBoneTarget",
+        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    VrchatBoneTarget? Resolve(UnityPackage package, string guid, long id) => (VrchatBoneTarget?)method.Invoke(null,
+        new object[] { package, guid, id, primaryGuid, new Dictionary<string, UnityModelFileIdResolver>(), new HashSet<(string, long)>() });
+    using (var package = UnityPackage.Open(prefab))
+    {
+        var left = Resolve(package, prefabGuid, 6)!;
+        var right = Resolve(package, prefabGuid, 10)!;
+        Check(left.FbxGuid == primaryGuid && right.FbxGuid == primaryGuid && left.Path == "Left/Hips" && right.Path == "Right/Hips",
+            "Local bone references preserve full paths and primary skeleton scope despite duplicate names");
+        Check(right.PrefabGuid == prefabGuid && right.TransformFileId == 10,
+            "Copied bone retains serialized prefab and transform identity");
+        Check(Resolve(package, prefabGuid, 0)?.Name == null, "Explicit null copied bone remains null");
+        Check(Resolve(package, prefabGuid, 9) == null, "A GameObject cannot masquerade as a bone transform");
+    }
+    const string variantGuid = "13131313131313131313131313131313";
+    long modelId = (long)typeof(UnityModelFileIdResolver).GetMethod("Compute",
+        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+        .Invoke(null, new object[] { "Transform", "//RootNode/Right/Shared/Transform", 0 })!;
+    string variant = asset("Assets/BoneVariant.prefab", variantGuid, $$"""
+--- !u!1001 &100
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: {{prefabGuid}}}
+--- !u!4 &20 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 10, guid: {{prefabGuid}}}
+--- !u!4 &21 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: {{modelId}}, guid: {{modelGuid}}}
+""");
+    using (var package = UnityPackage.Open(variant))
+    {
+        Check(Resolve(package, variantGuid, 20)?.Path == "Right/Hips" &&
+              Resolve(package, variantGuid, 10 ^ 100)?.Path == "Right/Hips",
+            "Explicit and omitted stripped bone references retain the original transform path");
+        var target = Resolve(package, variantGuid, 21)!;
+        Check(target.FbxGuid == modelGuid && target.Path!.EndsWith("/Right/Shared"),
+            "FBX bone aliases retain source model and full path for duplicate node names");
+        var copy = new VrchatMeshCopy(modelGuid, "Body", "Copy", true, true);
+        copy.SourceBoneNames.Add("SourceHips");
+        var apply = typeof(VrchatAvatarParser).GetMethod("ApplyCopiedBoneOverride",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        void Override(long id, string? referenceGuid = null)
+        {
+            var modification = UnityYaml.ParseFlatDocument("propertyPath: m_Bones.Array.data[0]\nobjectReference: {fileID: " + id +
+                (referenceGuid == null ? "" : ", guid: " + referenceGuid) + "}\n");
+            apply.Invoke(null, new object[] { package, copy, variantGuid, modification, primaryGuid,
+                new Dictionary<string, UnityModelFileIdResolver>() });
+        }
+        Override(20);
+        Check(copy.BoneTargets["SourceHips"].Path == "Right/Hips" && copy.BoneTargets["SourceHips"].FbxGuid == primaryGuid,
+            "Variant bone override resolves local objectReference in the overriding scene");
+        Override(modelId, modelGuid);
+        Check(copy.BoneTargets["SourceHips"].FbxGuid == modelGuid && copy.BoneTargets["SourceHips"].Path!.EndsWith("/Right/Shared"),
+            "Variant bone override preserves explicit external model identity");
+        Override(0);
+        Check(copy.BoneTargets["SourceHips"].Name == null, "Variant bone override can explicitly clear a binding");
     }
 }
 

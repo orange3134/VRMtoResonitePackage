@@ -1847,17 +1847,18 @@ public static class VrchatAvatarParser
                 string[] originalBones = copy.SourcePath != null
                     ? resolver.MeshBoneNamesByPath.GetValueOrDefault(copy.SourcePath)
                     : resolver.MeshBoneNames.GetValueOrDefault(sourceName);
+                if (originalBones != null) copy.SourceBoneNames.AddRange(originalBones);
                 if (bones != null && originalBones != null)
                 {
                     if (bones.Count != originalBones.Length)
                         throw new InvalidDataException($"複製メッシュのボーン数が一致しません: {rendererName}");
                     for (int i = 0; i < bones.Count; i++)
                     {
-                        var bone = ResolveVariantObjectReference(package, bones[i].Guid ?? sceneGuid,
-                            bones[i].FileID ?? 0, modelResolvers, prefabScenes);
-                        if ((bones[i].FileID ?? 0) != 0 && bone.Name == null)
+                        var bone = ResolveCopiedBoneTarget(package, bones[i].Guid ?? sceneGuid,
+                            bones[i].FileID ?? 0, avatar.FbxGuid, modelResolvers, new());
+                        if ((bones[i].FileID ?? 0) != 0 && bone?.Name == null)
                             throw new InvalidDataException($"複製メッシュのボーン参照を解決できません: {rendererName} / {i}");
-                        copy.BoneTargets[originalBones[i]] = new VrchatGameObjectReference(bone.FbxGuid, bone.Name);
+                        copy.BoneTargets[originalBones[i]] = bone;
                     }
                 }
                 avatar.MeshCopies.Add(copy);
@@ -1867,10 +1868,89 @@ public static class VrchatAvatarParser
         }
     }
 
+    private static void ApplyCopiedBoneOverride(UnityPackage package, VrchatMeshCopy copy, string sceneGuid,
+        YamlNode modification, string primaryFbxGuid, Dictionary<string, UnityModelFileIdResolver> resolvers)
+    {
+        string path = modification["propertyPath"]?.AsString();
+        if (path == "m_Bones.Array.size")
+        {
+            if (modification["value"]?.AsInt() != copy.SourceBoneNames.Count)
+                throw new InvalidDataException($"複製メッシュのボーン数が一致しません: {copy.Name}");
+            return;
+        }
+        const string prefix = "m_Bones.Array.data[";
+        if (path?.StartsWith(prefix, StringComparison.Ordinal) != true || !path.EndsWith(']') ||
+            !int.TryParse(path[prefix.Length..^1], out int index)) return;
+        if (index < 0 || index >= copy.SourceBoneNames.Count)
+            throw new InvalidDataException($"複製メッシュのボーン番号が範囲外です: {copy.Name} / {index}");
+        var reference = modification["objectReference"];
+        if (reference?.FileID == null)
+            throw new InvalidDataException($"複製メッシュのボーン参照を解決できません: {copy.Name} / {index}");
+        var bone = ResolveCopiedBoneTarget(package, reference.Guid ?? sceneGuid, reference.FileID.Value,
+            primaryFbxGuid, resolvers, new());
+        if (reference.FileID != 0 && bone?.Name == null)
+            throw new InvalidDataException($"複製メッシュのボーン参照を解決できません: {copy.Name} / {index}");
+        copy.BoneTargets[copy.SourceBoneNames[index]] = bone;
+    }
+
+    private static VrchatBoneTarget ResolveCopiedBoneTarget(UnityPackage package, string guid, long fileId,
+        string primaryFbxGuid, Dictionary<string, UnityModelFileIdResolver> resolvers,
+        HashSet<(string, long)> visited)
+    {
+        if (fileId == 0) return new VrchatBoneTarget(null, null);
+        if (guid == null || !visited.Add((guid, fileId))) return null;
+        var asset = package.ByGuid(guid);
+        if (asset?.Extension == ".fbx")
+        {
+            if (!resolvers.TryGetValue(guid, out var resolver))
+                resolvers[guid] = resolver = new UnityModelFileIdResolver(asset);
+            return new VrchatBoneTarget(guid, resolver.ResolveName(fileId),
+                UnityModelFileIdResolver.IsRootFileId(fileId) ? "" : resolver.ResolveNodePath(fileId));
+        }
+        if (asset?.Extension != ".prefab") return null;
+        var scene = package.ReadScene(asset);
+        var document = scene.Doc(fileId);
+        var source = document?.Root?["m_CorrespondingSourceObject"];
+        if (source?.Guid != null && (source.FileID ?? 0) != 0)
+            return ResolveCopiedBoneTarget(package, source.Guid, source.FileID.Value,
+                primaryFbxGuid, resolvers, visited);
+        if (document?.ClassId == 4)
+        {
+            string name = scene.ResolveGameObjectName(fileId);
+            if (name == null) return null;
+            long parentId = document.Root["m_Father"]?.FileID ?? 0;
+            if (parentId == 0)
+                return new VrchatBoneTarget(primaryFbxGuid, name, "", guid, fileId);
+            var parent = ResolveCopiedBoneTarget(package, guid, parentId, primaryFbxGuid, resolvers, visited);
+            if (parent?.Path == null) return null;
+            // A regular prefab's locally authored skeleton belongs to the primary model,
+            // unless an explicit source ancestor identifies another FBX. Exclude the
+            // prefab root name; FBX import wrappers can have different display names.
+            string path = parent.Path.Length == 0 ? name : parent.Path + "/" + name;
+            return new VrchatBoneTarget(parent.FbxGuid, name, path, guid, fileId);
+        }
+        if (document != null) return null; // Bone references must identify transforms.
+
+        // Omitted stripped documents use the same XOR identity as other prefab references.
+        var candidates = new List<VrchatBoneTarget>();
+        foreach (var instance in scene.Documents.Values.Where(d => d.ClassId == ClassPrefabInstance))
+        {
+            string childGuid = instance.Root?["m_SourcePrefab"]?.Guid;
+            foreach (long childId in ReversePrefabInstanceFileId(fileId, instance.FileId))
+            {
+                var candidate = ResolveCopiedBoneTarget(package, childGuid, childId, primaryFbxGuid,
+                    resolvers, new HashSet<(string, long)>(visited));
+                if (candidate?.Name != null) candidates.Add(candidate);
+            }
+        }
+        var distinct = candidates.Distinct().ToArray();
+        return distinct.Length == 1 ? distinct[0] : null;
+    }
+
     private static void ParseVariantRendererOverrides(
         UnityPackage package, string sourceGuid, VrchatAvatar avatar)
     {
-        var modificationBlocks = new List<YamlNode>();
+        var modificationBlocks = new List<(string Guid, YamlNode Modifications)>();
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         // Fold the complete selected prefab graph, not just the PrefabInstance that owns the
         // Avatar Descriptor. Compositions can keep body and clothing in sibling instances, each
@@ -1942,11 +2022,19 @@ public static class VrchatAvatarParser
             .Concat(avatar.AdditionalFbxs.SelectMany(fbx => fbx.ParentTransforms))
             .Concat(avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms.Append(copy.Transform)))
             .Where(transform => transform != null).Distinct().ToList();
-        foreach (YamlNode modifications in modificationBlocks)
+        foreach ((string modificationGuid, YamlNode modifications) in modificationBlocks)
         {
             foreach (YamlNode modification in modifications.Seq)
             {
                 string propertyPath = modification?["propertyPath"]?.AsString();
+                if (propertyPath?.StartsWith("m_Bones.Array.", StringComparison.Ordinal) == true)
+                {
+                    var boneTarget = modification["target"];
+                    foreach (var copy in avatar.MeshCopies.Where(c => c.PrefabGuid == boneTarget?.Guid &&
+                                 c.RendererFileId == boneTarget.FileID))
+                        ApplyCopiedBoneOverride(package, copy, modificationGuid, modification, avatar.FbxGuid, modelResolvers);
+                    continue;
+                }
                 if (propertyPath?.StartsWith("m_Local", StringComparison.Ordinal) == true)
                 {
                     YamlNode transformTarget = modification["target"];
@@ -2540,7 +2628,7 @@ public static class VrchatAvatarParser
     }
 
     private static void CollectVariantModificationBlocks(UnityPackage package, string guid,
-        List<YamlNode> result, HashSet<string> visited)
+        List<(string Guid, YamlNode Modifications)> result, HashSet<string> visited)
     {
         if (string.IsNullOrEmpty(guid) || !visited.Add(guid))
         {
@@ -2571,7 +2659,7 @@ public static class VrchatAvatarParser
             YamlNode modifications = instance.Root?["m_Modification"]?["m_Modifications"];
             if (modifications?.Seq != null)
             {
-                result.Add(modifications);
+                result.Add((guid, modifications));
             }
         }
     }

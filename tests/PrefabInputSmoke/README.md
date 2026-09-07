@@ -12,3 +12,7 @@ nested prefabs, tag overrides, regular-prefab component exclusion, same-named FB
 branches indexed by file ID/path, and exclusion of whole model/object hierarchies
 without starting the engine. Fixtures remain in the printed temp directory for
 inspection. This does not verify an end-to-end avatar conversion.
+
+Copied-bone checks cover local transform paths and primary skeleton scope,
+explicit/omitted stripped references, FBX paths with duplicate node names, and
+Variant bone overrides (local references, external references, and null).

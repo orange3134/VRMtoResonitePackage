@@ -57,8 +57,12 @@ internal static class VrchatSceneSetup
                     renderer.Bones[i] = null;
                     continue;
                 }
-                var matches = sources.Keys.Where(s => !s.IsDestroyed && s.Name == target.Name &&
-                    (target.FbxGuid == null || sources[s] == target.FbxGuid)).ToList();
+                // Resolve against the captured model hierarchy, never the copy's new
+                // ancestry or all models sharing a common bone name such as Hips.
+                var matches = importedSources.Where(entry => !entry.Key.IsDestroyed &&
+                    entry.Value == target.FbxGuid && (target.Path != null
+                        ? importedPaths.TryGetValue(entry.Key, out string path) && BonePathMatches(path, target.Path)
+                        : entry.Key.Name == target.Name)).Select(entry => entry.Key).ToList();
                 if (matches.Count != 1)
                     throw new InvalidDataException($"複製メッシュのボーン参照を特定できません: {copy.Name} / {target.Name}");
                 renderer.Bones[i] = matches[0];
@@ -69,6 +73,17 @@ internal static class VrchatSceneSetup
         // Unpacked prefabs explicitly describe their renderers. Keep imported bones and
         // slots as references, but do not also render the FBX template at its old location.
         foreach (var renderer in replacedRenderers) renderer.Destroy();
+    }
+
+    private static bool BonePathMatches(string importedPath, string targetPath)
+    {
+        // Assimp may retain its synthetic root in one representation but omit it in the other.
+        static string Normalize(string path)
+        {
+            path = path.TrimStart('/');
+            return path == "RootNode" ? "" : path.StartsWith("RootNode/", StringComparison.Ordinal) ? path[9..] : path;
+        }
+        return Normalize(importedPath) == Normalize(targetPath);
     }
 
     public static Dictionary<Slot, string> CaptureImportedObjects(IReadOnlyDictionary<string, Slot> roots)
@@ -83,7 +98,10 @@ internal static class VrchatSceneSetup
     {
         var paths = new Dictionary<Slot, string>();
         foreach (Slot root in roots.Values)
+        {
+            paths[root] = "";
             foreach (Slot child in root.Children) Visit(child, child.Name);
+        }
         return paths;
 
         void Visit(Slot slot, string path)
