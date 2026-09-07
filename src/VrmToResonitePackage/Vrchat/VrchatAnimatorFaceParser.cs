@@ -81,7 +81,8 @@ public static class VrchatAnimatorFaceParser
                     YamlNode clip = Clip(state?["m_Motion"]);
                     var shapes = ActiveShapes(clip);
                     if (clip?["m_AnimationClipSettings"]?["m_LoopTime"]?.AsBool() == true &&
-                        shapes.Count == 1 && string.Equals(shapes[0].Name, "blink", StringComparison.OrdinalIgnoreCase))
+                        shapes.Count == 1 && MathF.Abs(shapes[0].Peak - 100) < 0.01f &&
+                        string.Equals(shapes[0].Name, "blink", StringComparison.OrdinalIgnoreCase))
                         blinks.Add(shapes[0]);
                 }
 

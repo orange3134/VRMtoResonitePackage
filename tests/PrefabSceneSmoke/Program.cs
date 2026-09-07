@@ -146,6 +146,10 @@ static async Task Run(string fbxPath, string rendererName)
         object ResolveFace() => resolverType.GetMethod("Resolve")!.Invoke(resolver, new object[] { bind })!;
         Check(ReferenceEquals(ResolveFace(), sameB.BlendShapeWeights.GetElement(0)),
             "Animator binding selects the second same-named renderer using every hierarchy segment");
+        string shapeName = faceModel.MeshTargetNames[bind.MeshIndex][bind.MorphIndex];
+        faceModel.MeshTargetNames[bind.MeshIndex][bind.MorphIndex] = "MissingShape";
+        Check(ResolveFace() == null, "Missing Animator shape cannot use a synthetic index as an FBX shape index");
+        faceModel.MeshTargetNames[bind.MeshIndex][bind.MorphIndex] = shapeName;
         faceModel.MeshBindingPaths[bind.MeshIndex] = "Missing/" + rendererName;
         Check(ResolveFace() == null, "Missing Animator path cannot fall back to a namesake renderer");
         faceModel.MeshBindingPaths[bind.MeshIndex] = rendererName;

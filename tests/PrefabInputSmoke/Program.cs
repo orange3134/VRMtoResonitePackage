@@ -722,6 +722,21 @@ AnimatorState:
         "Timed exit with an unmet condition does not suppress a stable blink binding");
     Check(Read(controller.Replace("    value: 1", "    value: 0")).Blink == null,
         "Inactive blink animation is not imported as an always-on driver");
+    asset("Assets/Blink.anim", clipGuid, """
+--- !u!74 &7400000
+AnimationClip:
+  m_AnimationClipSettings:
+    m_LoopTime: 1
+  m_FloatCurves:
+  - curve:
+      m_Curve:
+      - value: 0
+      - value: 25
+    attribute: blendShape.blink
+    path: Face/Body
+    classID: 137
+""");
+    Check(Read(controller).Blink == null, "Partial-weight Animator blink cannot become a full-weight blink driver");
 }
 
 static VrchatAvatar ReadFilter(string path)

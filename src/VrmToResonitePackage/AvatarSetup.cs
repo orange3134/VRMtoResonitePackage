@@ -1356,6 +1356,9 @@ internal sealed class BlendshapeResolver
         }
         foreach (SkinnedMeshRenderer skin in EnumerateCandidates(bind))
         {
+            // Animator morph indices address the synthetic name table, not the FBX's
+            // shape order. A missing named shape cannot safely fall back to that index.
+            if (targetName != null && _vrm.MeshBindingPaths.ContainsKey(bind.MeshIndex)) break;
             if (bind.MorphIndex >= 0 && bind.MorphIndex < skin.MeshBlendshapeCount)
             {
                 return (skin, skin.BlendShapeWeights.GetElement(bind.MorphIndex));
