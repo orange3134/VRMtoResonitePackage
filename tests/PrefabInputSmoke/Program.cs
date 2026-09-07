@@ -51,7 +51,7 @@ AnimationClip:
       - value: 0
       - value: 100
     attribute: blendShape.face{{i}}
-    path: Body
+    path: Branch{{i}}/Body
     classID: 137
   - curve:
       m_Curve:
@@ -79,6 +79,9 @@ AnimationClip:
         face.Blink = new VrchatBlink { MeshGameObjectName = "Body", BlendShapeIndex = 0 };
         face.FbxBlendShapeNames["Body"] = new List<string> { "blink" };
         var model = VrchatModelAdapter.ToVrmModel(face);
+        Check(face.Visemes.Select(v => v.MeshGameObjectPath).Distinct().Count() == 15 &&
+              model.MeshBindingPaths.Values.ToHashSet().SetEquals(Enumerable.Range(0, 15).Select(i => $"Branch{i}/Body")),
+            "Same-named Animator renderers retain full distinct binding paths through adaptation");
         var blinkBind = model.Expressions.Single(e => e.Preset == "blink").Binds.Single();
         Check(model.MeshTargetNames[blinkBind.MeshIndex][blinkBind.MorphIndex] == "blink",
             "Blink index does not alias the first synthetic viseme on Body");
@@ -119,6 +122,17 @@ AnimatorState:
         VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument($"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {controllerGuid}}}\n"), face);
         Check(face.Visemes.All(v => v.ResonitePreset != "PP"), "Unsupported competing viseme binding does not select a misleading single shape");
         Check(face.Visemes.Count == 14, "Conflicting viseme does not discard unrelated phonemes");
+    }
+    Asset("Assets/Face.controller", controllerGuid, controller.ToString());
+    Asset("Assets/Conflict.anim", conflictGuid, File.ReadAllText(Path.Combine(root, "Assets/Face1.anim"))
+        .Replace("Branch1/Body", "Other/Body"));
+    Asset("Assets/Face.controller", controllerGuid, conflictingController);
+    using (UnityPackage package = UnityPackage.Open(selected))
+    {
+        var face = new VrchatAvatar();
+        VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument($"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {controllerGuid}}}\n"), face);
+        Check(face.Visemes.Count == 14 && face.Visemes.All(v => v.ResonitePreset != "PP"),
+            "Same-named shapes on different hierarchy paths cannot collapse into one viseme candidate");
     }
     Asset("Assets/Face.controller", controllerGuid, controller.ToString());
     using (UnityPackage package = UnityPackage.Open(selected))
@@ -605,7 +619,7 @@ AnimationClip:
       - value: 100
       - value: 0
     attribute: blendShape.blink
-    path: Body
+    path: Face/Body
     classID: 137
 """);
     string controller = $$"""
@@ -683,6 +697,9 @@ AnimatorState:
     Check(Read(inactiveSibling).Blink?.BlendShapeName == "blink", "Inactive sibling Any State cannot disable blink");
     Check(Read(anyStateDisabled).Blink == null, "Any State disable takes precedence over default blink state");
     Check(Read(controller).Blink?.BlendShapeName == "blink", "Startup parameter driver enables Body blink across layers");
+    var blinkModel = VrchatModelAdapter.ToVrmModel(Read(controller));
+    Check(blinkModel.MeshBindingPaths[blinkModel.Expressions.Single(e => e.Preset == "blink").Binds.Single().MeshIndex] == "Face/Body",
+        "Animator blink retains its full renderer path through adaptation");
     Check(Read(controller.Replace("m_DefaultBool: 0", "m_DefaultBool: 1")).Blink == null,
         "Explicit blink disable is respected");
     Check(Read(controller.Replace("m_HasExitTime: 0", "m_HasExitTime: 1")).Blink == null,

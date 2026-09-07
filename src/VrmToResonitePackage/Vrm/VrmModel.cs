@@ -55,6 +55,9 @@ public sealed class VrmModel
     /// <summary>glTF mesh index -> node indices that reference the mesh.</summary>
     public Dictionary<int, List<int>> MeshToNodes { get; } = new();
 
+    /// <summary>Unity animation binding paths for synthetic meshes; these must not fall back to other renderers.</summary>
+    public Dictionary<int, string> MeshBindingPaths { get; } = new();
+
     /// <summary>glTF texture index -> image index.</summary>
     public List<int> TextureToImage { get; } = new();
 

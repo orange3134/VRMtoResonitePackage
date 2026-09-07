@@ -49,16 +49,17 @@ public static class VrchatModelAdapter
             model.HumanBones["rightEye"] = NodeFor(avatar.RightEyeBoneName);
 
         // One synthetic mesh per face/eyelid GameObject that owns blendshapes.
-        var meshIndexByGameObject = new Dictionary<string, int>(StringComparer.Ordinal);
-        int MeshFor(string gameObjectName)
+        var meshIndexByGameObject = new Dictionary<(string Name, string Path), int>();
+        int MeshFor(string gameObjectName, string bindingPath = null)
         {
             // A null/empty name (variant-of-FBX stripped mesh) maps to a mesh with no node hint, so
             // the blendshape resolver falls back to matching by name across every imported renderer.
-            string key = gameObjectName ?? "";
+            var key = (gameObjectName ?? "", bindingPath);
             if (!meshIndexByGameObject.TryGetValue(key, out int meshIndex))
             {
                 meshIndex = model.MeshTargetNames.Count;
                 model.MeshTargetNames.Add(new List<string>());
+                if (bindingPath != null) model.MeshBindingPaths[meshIndex] = bindingPath;
                 model.MeshToNodes[meshIndex] = string.IsNullOrEmpty(gameObjectName)
                     ? new List<int>()
                     : new List<int> { NodeFor(gameObjectName) };
@@ -70,7 +71,7 @@ public static class VrchatModelAdapter
         // Visemes (resolved by blendshape name on the viseme mesh).
         foreach (VrchatViseme viseme in avatar.Visemes)
         {
-            int meshIndex = MeshFor(viseme.MeshGameObjectName);
+            int meshIndex = MeshFor(viseme.MeshGameObjectName, viseme.MeshGameObjectPath);
             List<string> targetNames = model.MeshTargetNames[meshIndex];
             int morphIndex = targetNames.Count;
             targetNames.Add(viseme.BlendShapeName);
@@ -91,7 +92,7 @@ public static class VrchatModelAdapter
             int morphIndex;
             if (shapeName != null)
             {
-                meshIndex = MeshFor(avatar.Blink.MeshGameObjectName);
+                meshIndex = MeshFor(avatar.Blink.MeshGameObjectName, avatar.Blink.MeshGameObjectPath);
                 morphIndex = model.MeshTargetNames[meshIndex].Count;
                 model.MeshTargetNames[meshIndex].Add(shapeName);
             }

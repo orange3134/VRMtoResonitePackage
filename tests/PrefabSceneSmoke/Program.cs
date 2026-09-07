@@ -136,6 +136,20 @@ static async Task Run(string fbxPath, string rendererName)
         var sameB = parentB.FindChild(rendererName).GetComponent<SkinnedMeshRenderer>();
         Check(sameA != null && sameB != null && sameA.Slot.LocalPosition.x == 1 && sameB.Slot.LocalPosition.x == 2,
             "Two same-named authored renderers retain separate parents and transforms");
+        var faceAvatar = new VrchatAvatar();
+        faceAvatar.Visemes.Add(new VrchatViseme { ResonitePreset = "aa", MeshGameObjectName = rendererName,
+            MeshGameObjectPath = "Copy parent B/" + rendererName, BlendShapeName = sameB.BlendShapeName(0) });
+        var faceModel = VrchatModelAdapter.ToVrmModel(faceAvatar);
+        var resolverType = typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.BlendshapeResolver")!;
+        var resolver = Activator.CreateInstance(resolverType, root, faceModel)!;
+        var bind = faceModel.Expressions.Single().Binds.Single();
+        object ResolveFace() => resolverType.GetMethod("Resolve")!.Invoke(resolver, new object[] { bind })!;
+        Check(ReferenceEquals(ResolveFace(), sameB.BlendShapeWeights.GetElement(0)),
+            "Animator binding selects the second same-named renderer using every hierarchy segment");
+        faceModel.MeshBindingPaths[bind.MeshIndex] = "Missing/" + rendererName;
+        Check(ResolveFace() == null, "Missing Animator path cannot fall back to a namesake renderer");
+        faceModel.MeshBindingPaths[bind.MeshIndex] = rendererName;
+        Check(ResolveFace() == null, "Ambiguous Animator path cannot select the first matching renderer");
         Check(sameA.Bones.Count > 0 && sameA.Bones[0] == null && sameB.Bones[0] == null,
             "Same-named renderer copies apply authored bone overrides");
         Check(originalSlot.GetComponent<SkinnedMeshRenderer>() == null && !originalSlot.IsDestroyed,

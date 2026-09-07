@@ -102,12 +102,14 @@ public static class VrchatAnimatorFaceParser
         {
             if (unsupportedVisemes.Contains(index) || !visemes.TryGetValue(index, out var candidates) || candidates.Count != 1) continue;
             Shape shape = candidates.Single();
-            avatar.Visemes.Add(new VrchatViseme { ResonitePreset = preset, MeshGameObjectName = shape.Renderer, BlendShapeName = shape.Name });
+            avatar.Visemes.Add(new VrchatViseme { ResonitePreset = preset, MeshGameObjectPath = shape.Renderer,
+                MeshGameObjectName = shape.Renderer.Split('/').Last(), BlendShapeName = shape.Name });
         }
         if (avatar.Blink == null && blinks.Count == 1)
         {
             Shape shape = blinks.Single();
-            avatar.Blink = new VrchatBlink { MeshGameObjectName = shape.Renderer, BlendShapeName = shape.Name, BlendShapeIndex = -1 };
+            avatar.Blink = new VrchatBlink { MeshGameObjectPath = shape.Renderer,
+                MeshGameObjectName = shape.Renderer.Split('/').Last(), BlendShapeName = shape.Name, BlendShapeIndex = -1 };
         }
         UniLog.Log($"Animator face bindings: {avatar.Visemes.Count} viseme(s), blink={avatar.Blink?.BlendShapeName ?? "(descriptor/none)"}");
 
@@ -149,7 +151,7 @@ public static class VrchatAnimatorFaceParser
             var keys = curve["curve"]?["m_Curve"]?.Seq;
             float peak = keys?.Select(key => key["value"]?.AsFloat() ?? 0).DefaultIfEmpty().Max() ?? 0;
             if (peak > 0.001f)
-                result.Add(new Shape(path.Split('/').Last(), attribute["blendShape.".Length..], peak));
+                result.Add(new Shape(path, attribute["blendShape.".Length..], peak));
         }
         return result;
     }

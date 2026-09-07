@@ -1309,12 +1309,21 @@ internal sealed class BlendshapeResolver
     private readonly VrmModel _vrm;
     private readonly List<SkinnedMeshRenderer> _renderers;
     private readonly Dictionary<string, Slot> _slotsByName;
+    private readonly Dictionary<SkinnedMeshRenderer, string> _rendererPaths;
 
     public BlendshapeResolver(Slot root, VrmModel vrm)
     {
         _vrm = vrm;
         _renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>();
         _slotsByName = SlotIndex.Build(root);
+        _rendererPaths = _renderers.ToDictionary(skin => skin, skin => RelativePath(skin.Slot));
+
+        string RelativePath(Slot slot)
+        {
+            var parts = new Stack<string>();
+            for (; slot != null && slot != root; slot = slot.Parent) parts.Push(slot.Name);
+            return string.Join("/", parts);
+        }
     }
 
     public IField<float> Resolve(VrmExpressionBind bind)
@@ -1358,6 +1367,15 @@ internal sealed class BlendshapeResolver
 
     private IEnumerable<SkinnedMeshRenderer> EnumerateCandidates(VrmExpressionBind bind)
     {
+        if (_vrm.MeshBindingPaths.TryGetValue(bind.MeshIndex, out string bindingPath))
+        {
+            // Import wrappers can add ancestors, but every segment of the authored path
+            // must match. Ambiguous or missing paths must never target a namesake mesh.
+            var matches = _renderers.Where(skin => _rendererPaths[skin] == bindingPath ||
+                _rendererPaths[skin].EndsWith("/" + bindingPath, StringComparison.Ordinal)).ToArray();
+            if (matches.Length == 1) yield return matches[0];
+            yield break;
+        }
         // Renderers under slots named like the glTF nodes that reference the mesh come first.
         if (_vrm.MeshToNodes.TryGetValue(bind.MeshIndex, out List<int> nodes))
         {
