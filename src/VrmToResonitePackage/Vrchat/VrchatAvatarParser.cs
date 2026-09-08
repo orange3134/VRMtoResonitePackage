@@ -342,14 +342,28 @@ public static class VrchatAvatarParser
                     // Use the composition pipeline so nested geometry, placement and overrides
                     // are imported together, even though the descriptor itself is local.
                     List<string> nestedModels = null;
-                    if (!scene.MeshRenderers.Any(renderer => InSubtree(scene, subtree, renderer)))
                     {
                         var models = new List<string>();
                         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                         foreach (var instance in scene.Documents.Values.Where(document =>
                                      document.ClassId == ClassPrefabInstance && PrefabInstanceInSubtree(scene, document, subtree)))
                             CollectFbxGuidsFromSource(package, instance.Root?["m_SourcePrefab"]?.Guid, 0, models, visited);
-                        if (models.Count > 0) nestedModels = models;
+                        if (models.Count > 0)
+                        {
+                            // Local accessories still need their source models imported.
+                            foreach (var renderer in scene.MeshRenderers.Where(renderer => InSubtree(scene, subtree, renderer)))
+                            {
+                                string meshGuid = scene.RendererMesh(renderer)?.Guid;
+                                if (package.ByGuid(meshGuid)?.Extension == ".fbx") AddFbxGuid(models, meshGuid);
+                            }
+                            foreach (var animator in scene.Documents.Values.Where(document =>
+                                         document.ClassId == 95 && InSubtree(scene, subtree, document)))
+                            {
+                                string avatarGuid = animator.Root?["m_Avatar"]?.Guid;
+                                if (IsHumanoidFbx(package, avatarGuid)) AddFbxGuid(models, avatarGuid);
+                            }
+                            nestedModels = models;
+                        }
                     }
                     // Regular avatar: the descriptor's GameObject is a real, named root in this file.
                     candidates.Add(new Candidate
@@ -1789,7 +1803,8 @@ public static class VrchatAvatarParser
             string text = package.ReadText(asset);
             if (text != null)
             {
-                return package.ReadScene(asset).ResolveGameObjectName(fileId);
+                return ResolveVariantObjectReference(package, guid, fileId, modelResolvers,
+                    new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase)).Name;
             }
         }
         return null;

@@ -37,3 +37,8 @@ aliases across multiple variants, unrelated targets, and base-cache preservation
 Descriptor-wrapper checks cover nested authored geometry, direct FBX instances,
 and outer renderer/transform overrides. Empty Animator binding paths are checked
 for both visemes and blink, including preservation through model adaptation.
+
+Mixed wrappers retain nested body geometry alongside local static/skinned
+accessories. Descriptor inheritance also covers viewpoint, viseme strings,
+eye/eyelid fields, packed eyelid arrays, null references, and local/stripped/external
+object references across multiple variants without mutating the base asset.

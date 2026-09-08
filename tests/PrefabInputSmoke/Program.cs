@@ -803,6 +803,78 @@ MonoBehaviour:
     using (var package = UnityPackage.Open(derived))
         Check(VrchatAvatarParser.Parse(package).Visemes.Count == 0,
             "Effective lipSync override controls Animator viseme inference");
+
+    string Change(string path, string value, bool reference = false) =>
+        $"\n    - target: {{fileID: 34, guid: {baseGuid}}}\n      propertyPath: {path}\n      {(reference ? "objectReference" : "value")}: {value}\n";
+    string settings = variant.Replace($"fileID: 91, guid: {blinkController}", "fileID: 0")
+        + Change("ViewPosition.x", "0.25") + Change("ViewPosition.y", "1.6") + Change("ViewPosition.z", "-0.1")
+        + Change("lipSync", "3") + Change("VisemeBlendShapes.Array.size", "2")
+        + Change("VisemeBlendShapes.Array.data[0]", "silence") + Change("VisemeBlendShapes.Array.data[1]", "mouth")
+        + Change("VisemeSkinnedMesh", "{fileID: 901}", true)
+        + Change("enableEyeLook", "1") + Change("customEyeLookSettings.leftEye", "{fileID: 903}", true)
+        + Change("customEyeLookSettings.rightEye", $"{{fileID: 33, guid: {baseGuid}}}", true)
+        + Change("customEyeLookSettings.eyelidType", "2")
+        + Change("customEyeLookSettings.eyelidsSkinnedMesh", "{fileID: 901}", true)
+        + Change("customEyeLookSettings.eyelidsBlendshapes", "000000000100000002000000")
+        + Change("customEyeLookSettings.eyelidsBlendshapes.Array.data[0]", "4");
+    const string localObjects = """
+
+--- !u!1 &900
+GameObject:
+  m_Name: VariantFace
+--- !u!137 &901
+SkinnedMeshRenderer:
+  m_GameObject: {fileID: 900}
+--- !u!1 &902
+GameObject:
+  m_Name: VariantEye
+--- !u!4 &903
+Transform:
+  m_GameObject: {fileID: 902}
+""";
+    var face = Read(settings + localObjects);
+    Check(face.ViewPosition?.X == 0.25f && face.ViewPosition?.Y == 1.6f && face.ViewPosition?.Z == -0.1f &&
+          face.Visemes.Count == 2 && face.Visemes.Single(v => v.ResonitePreset == "PP").BlendShapeName == "mouth" &&
+          face.Visemes.All(v => v.MeshGameObjectName == "VariantFace"),
+        "Descriptor overrides preserve viewpoint, viseme array and Variant-local mesh references");
+    Check(face.LeftEyeBoneName == "VariantEye" && face.RightEyeBoneName == "CopyParent" &&
+          face.Blink?.MeshGameObjectName == "VariantFace" && face.Blink.BlendShapeIndex == 4,
+        "Descriptor overrides preserve eye settings, external references and packed eyelid array edits");
+    var cleared = Read(settings + Change("VisemeBlendShapes.Array.size", "1")
+        + Change("VisemeSkinnedMesh", "{fileID: 0}", true)
+        + Change("customEyeLookSettings.eyelidsBlendshapes.Array.size", "0") + localObjects);
+    Check(cleared.Visemes.Count == 1 && cleared.Visemes[0].MeshGameObjectName == null && cleared.Blink == null,
+        "Descriptor arrays can shrink and object references can be explicitly cleared");
+    Check(Read(settings + Change("enableEyeLook", "0") + localObjects).LeftEyeBoneName == null,
+        "Variant can disable inherited eye settings");
+    var stripped = Read(settings + Change("VisemeSkinnedMesh", "{fileID: 904}", true) + localObjects + $$"""
+
+--- !u!137 &904 stripped
+SkinnedMeshRenderer:
+  m_CorrespondingSourceObject: {fileID: 2, guid: {{baseGuid}}}
+  m_PrefabInstance: {fileID: 100}
+""");
+    Check(stripped.Visemes.All(viseme => viseme.MeshGameObjectName == "Body_Base"),
+        "Descriptor object overrides follow Variant-local stripped renderer references");
+    Read(settings + localObjects);
+    File.WriteAllText(derived, $$"""
+--- !u!1001 &200
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: {{variantGuid}}}
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: {{34 ^ 100}}, guid: {{variantGuid}}}
+      propertyPath: ViewPosition.y
+      value: 2
+""");
+    using (var package = UnityPackage.Open(derived))
+    {
+        var outer = VrchatAvatarParser.Parse(package);
+        Check(outer.ViewPosition?.Y == 2 && outer.LeftEyeBoneName == "VariantEye" && outer.Visemes[0].MeshGameObjectName == "VariantFace",
+            "Outer variants retain reference ownership while overriding inherited descriptor scalars");
+        Check(package.ReadScene(package.ByGuid(baseGuid)).Doc(34).Root["ViewPosition"] == null,
+            "New descriptor field overrides never mutate the base asset");
+    }
 }
 
 static void CheckNestedComponents(Func<string, string, string, string> asset, string regularCopy)
@@ -1056,6 +1128,36 @@ PrefabInstance:
     using (var package = UnityPackage.Open(input))
         Check(VrchatAvatarParser.Parse(package).FbxGuid == modelGuid,
             "Named descriptor wrapper also imports a direct nested FBX instance");
+    const string accessoryGuid = "53535353535353535353535353535353";
+    string accessory = asset("Assets/WrapperBadge.fbx", accessoryGuid, "");
+    File.AppendAllText(accessory + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: 4300000\n    second: Badge\n");
+    foreach (bool skinned in new[] { false, true })
+    {
+        string local = $$"""
+
+--- !u!1 &10
+GameObject:
+  m_Name: Badge
+--- !u!4 &11
+Transform:
+  m_GameObject: {fileID: 10}
+  m_Father: {fileID: 2}
+--- !u!{{(skinned ? 137 : 23)}} &12
+{{(skinned ? "SkinnedMeshRenderer" : "MeshRenderer")}}:
+  m_GameObject: {fileID: 10}
+  m_Mesh: {fileID: 4300000, guid: {{accessoryGuid}}}
+--- !u!33 &13
+MeshFilter:
+  m_GameObject: {fileID: 10}
+  m_Mesh: {fileID: 4300000, guid: {{accessoryGuid}}}
+""";
+        File.WriteAllText(input, wrapper.Replace("m_Father: {fileID: 0}", "m_Father: {fileID: 0}\n  m_Children:\n  - {fileID: 11}") + local);
+        using var package = UnityPackage.Open(input);
+        var mixed = VrchatAvatarParser.Parse(package);
+        Check(mixed.FbxGuid == modelGuid && mixed.AdditionalFbxs.Single().Guid == accessoryGuid &&
+              mixed.MeshCopies.Any(copy => copy.Name == "Body_Base") && mixed.MeshCopies.Any(copy => copy.Name == "Badge"),
+            "Descriptor wrapper imports nested body alongside a local " + (skinned ? "skinned" : "static") + " accessory");
+    }
     File.WriteAllText(input, wrapper.Replace("m_Modifications: []", $$"""
 m_Modifications:
     - target: {fileID: 2, guid: {{nestedGuid}}}
