@@ -210,6 +210,12 @@ static async Task Run(string fbxPath, string rendererName)
         Check(ResolveFace() == null, "Missing Animator path cannot fall back to a namesake renderer");
         faceModel.MeshBindingPaths[bind.MeshIndex] = rendererName;
         Check(ResolveFace() == null, "Ambiguous Animator path cannot select the first matching renderer");
+        faceModel.MeshBindingPaths[bind.MeshIndex] = "";
+        Check(ResolveFace() == null, "Root Animator path cannot fall back to a child renderer");
+        var rootResolver = Activator.CreateInstance(resolverType, sameB.Slot, faceModel)!;
+        Check(ReferenceEquals(resolverType.GetMethod("Resolve")!.Invoke(rootResolver, new object[] { bind }),
+                sameB.BlendShapeWeights.GetElement(0)),
+            "Empty Animator path resolves the renderer on the root itself");
         Check(sameA.Bones.Count > 0 && sameA.Bones[0] == null && sameB.Bones[0] == null,
             "Same-named renderer copies apply authored bone overrides");
         Check(originalSlot.GetComponent<SkinnedMeshRenderer>() == null && !originalSlot.IsDestroyed,

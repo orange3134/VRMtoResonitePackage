@@ -149,7 +149,7 @@ public static class VrchatAnimatorFaceParser
             string attribute = curve["attribute"]?.AsString();
             string path = curve["path"]?.AsString();
             if (curve["classID"]?.AsInt() != 137 || attribute?.StartsWith("blendShape.", StringComparison.Ordinal) != true ||
-                string.IsNullOrEmpty(path)) continue;
+                path == null) continue;
             var keys = curve["curve"]?["m_Curve"]?.Seq;
             float peak = keys?.Select(key => key["value"]?.AsFloat() ?? 0).DefaultIfEmpty().Max() ?? 0;
             if (peak > 0.001f)

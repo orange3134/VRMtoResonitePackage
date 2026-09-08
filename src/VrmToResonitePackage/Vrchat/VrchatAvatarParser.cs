@@ -337,6 +337,20 @@ public static class VrchatAvatarParser
                 string rootName = root != null ? scene.GameObjectName(root.FileId) : null;
                 if (root != null && !string.IsNullOrEmpty(rootName))
                 {
+                    var subtree = scene.SubtreeGameObjectIds(root.FileId);
+                    // A named descriptor root can wrap an intact model/prefab hierarchy.
+                    // Use the composition pipeline so nested geometry, placement and overrides
+                    // are imported together, even though the descriptor itself is local.
+                    List<string> nestedModels = null;
+                    if (!scene.MeshRenderers.Any(renderer => InSubtree(scene, subtree, renderer)))
+                    {
+                        var models = new List<string>();
+                        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var instance in scene.Documents.Values.Where(document =>
+                                     document.ClassId == ClassPrefabInstance && PrefabInstanceInSubtree(scene, document, subtree)))
+                            CollectFbxGuidsFromSource(package, instance.Root?["m_SourcePrefab"]?.Guid, 0, models, visited);
+                        if (models.Count > 0) nestedModels = models;
+                    }
                     // Regular avatar: the descriptor's GameObject is a real, named root in this file.
                     candidates.Add(new Candidate
                     {
@@ -344,7 +358,9 @@ public static class VrchatAvatarParser
                         Scene = scene,
                         Root = root,
                         Descriptor = descriptor,
-                        Subtree = scene.SubtreeGameObjectIds(root.FileId),
+                        Subtree = subtree,
+                        FbxGuidOverrides = nestedModels,
+                        IsComposedPrefab = nestedModels != null,
                         Name = rootName,
                         HasOwnDescriptor = true,
                     });
@@ -720,6 +736,11 @@ public static class VrchatAvatarParser
             {
                 AddFbxGuid(result, meshGuid);
             }
+        }
+        foreach (var animator in scene.Documents.Values.Where(document => document.ClassId == 95))
+        {
+            string avatarGuid = animator.Root?["m_Avatar"]?.Guid;
+            if (IsHumanoidFbx(package, avatarGuid)) AddFbxGuid(result, avatarGuid);
         }
     }
 

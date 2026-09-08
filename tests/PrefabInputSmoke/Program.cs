@@ -127,6 +127,20 @@ AnimationClip:
         Check(ordinary.Visemes.Count == 0, "Animator inference preserves descriptor-driven lip sync");
     }
     // A supported binding must not hide a conflicting binding that cannot be represented.
+    string rootClipPath = Path.Combine(root, "Assets/Face1.anim");
+    string rootClip = File.ReadAllText(rootClipPath);
+    foreach (string rootPath in new[] { "", "\"\"" })
+    {
+        File.WriteAllText(rootClipPath, rootClip.Replace("path: Branch1/Body", "path: " + rootPath));
+        using var package = UnityPackage.Open(selected);
+        var face = new VrchatAvatar();
+        VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument($"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {controllerGuid}}}\n"), face);
+        var model = VrchatModelAdapter.ToVrmModel(face);
+        Check(face.Visemes.Single(v => v.ResonitePreset == "PP").MeshGameObjectPath == "" &&
+              model.MeshBindingPaths[model.Expressions.Single(e => e.Preset == "PP").Binds.Single().MeshIndex] == "",
+            "Empty Animator curve path preserves the root viseme through adaptation");
+    }
+    File.WriteAllText(rootClipPath, rootClip);
     string conflictGuid = "aa001122334455667788990011223344";
     string conflictClip = File.ReadAllText(Path.Combine(root, "Assets/Face1.anim"))
         .Replace("blendShape.reset", "blendShape.second").Replace("      - value: 0", "      - value: 100");
@@ -398,6 +412,7 @@ Transform:
     }
     CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);
     CheckNestedComponents(Asset, regularCopy);
+    CheckDescriptorWrapper(Asset, regularCopy, "88000000000000000000000000000001");
     CheckDescriptorOverrides(Asset, regularCopy, controllerGuid);
     string staticGuid = "14141414141414141414141414141414";
     string staticText = File.ReadAllText(regularCopy)
@@ -1000,11 +1015,69 @@ Transform:
     }
 }
 
+static void CheckDescriptorWrapper(Func<string, string, string, string> asset, string regularCopy, string modelGuid)
+{
+    const string nestedGuid = "51515151515151515151515151515151";
+    string nested = File.ReadAllText(regularCopy);
+    asset("Assets/WrapperGeometry.prefab", nestedGuid, nested[..nested.IndexOf("--- !u!114 &34", StringComparison.Ordinal)]);
+    string wrapper = $$"""
+--- !u!1 &1
+GameObject:
+  m_Name: WrapperAvatar
+  m_Component:
+  - component: {fileID: 2}
+  - component: {fileID: 3}
+--- !u!4 &2
+Transform:
+  m_GameObject: {fileID: 1}
+  m_Father: {fileID: 0}
+--- !u!114 &3
+MonoBehaviour:
+  m_GameObject: {fileID: 1}
+  m_Script: {fileID: 11500000, guid: 67cc4cb7839cd3741b63733d5adf0442}
+--- !u!1001 &4
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: {{nestedGuid}}}
+  m_Modification:
+    m_TransformParent: {fileID: 2}
+    m_Modifications: []
+""";
+    string input = asset("Assets/DescriptorWrapper.prefab", "52525252525252525252525252525252", wrapper);
+    using (var package = UnityPackage.Open(input))
+    {
+        Check(VrchatAvatarParser.ListAvatars(package).Single().Name == "WrapperAvatar",
+            "Descriptor wrapper remains a single candidate with its authored name");
+        var parsed = VrchatAvatarParser.Parse(package);
+        Check(parsed.FbxGuid == modelGuid && parsed.MeshCopies.Single().Name == "Body_Base" &&
+              parsed.PrefabGameObjectNames.Contains("Body_Base"),
+            "Named descriptor wrapper imports nested authored geometry and retains its renderer");
+    }
+    File.WriteAllText(input, wrapper.Replace(nestedGuid, modelGuid));
+    using (var package = UnityPackage.Open(input))
+        Check(VrchatAvatarParser.Parse(package).FbxGuid == modelGuid,
+            "Named descriptor wrapper also imports a direct nested FBX instance");
+    File.WriteAllText(input, wrapper.Replace("m_Modifications: []", $$"""
+m_Modifications:
+    - target: {fileID: 2, guid: {{nestedGuid}}}
+      propertyPath: m_Enabled
+      value: 0
+    - target: {fileID: 31, guid: {{nestedGuid}}}
+      propertyPath: m_LocalPosition.x
+      value: 9
+"""));
+    using (var package = UnityPackage.Open(input))
+    {
+        var copy = VrchatAvatarParser.Parse(package).MeshCopies.Single();
+        Check(!copy.Enabled && copy.Transform.LocalPosition.X == 9,
+            "Descriptor wrapper applies its overrides to nested geometry");
+    }
+}
+
 static void CheckAnimatorBlink(Func<string, string, string, string> asset, string selected)
 {
     const string controllerGuid = "aabbccddeeff00112233445566778899";
     const string clipGuid = "ffeeddccbbaa99887766554433221100";
-    asset("Assets/Blink.anim", clipGuid, """
+    string blinkPath = asset("Assets/Blink.anim", clipGuid, """
 --- !u!74 &7400000
 AnimationClip:
   m_AnimationClipSettings:
@@ -1097,6 +1170,12 @@ AnimatorState:
     var blinkModel = VrchatModelAdapter.ToVrmModel(Read(controller));
     Check(blinkModel.MeshBindingPaths[blinkModel.Expressions.Single(e => e.Preset == "blink").Binds.Single().MeshIndex] == "Face/Body",
         "Animator blink retains its full renderer path through adaptation");
+    string blinkClip = File.ReadAllText(blinkPath);
+    File.WriteAllText(blinkPath, blinkClip.Replace("path: Face/Body", "path:"));
+    var rootBlink = VrchatModelAdapter.ToVrmModel(Read(controller));
+    Check(rootBlink.MeshBindingPaths[rootBlink.Expressions.Single(e => e.Preset == "blink").Binds.Single().MeshIndex] == "",
+        "Empty Animator curve path preserves the root blink through adaptation");
+    File.WriteAllText(blinkPath, blinkClip);
     Check(Read(controller.Replace("m_DefaultBool: 0", "m_DefaultBool: 1")).Blink == null,
         "Explicit blink disable is respected");
     Check(Read(controller.Replace("m_HasExitTime: 0", "m_HasExitTime: 1")).Blink == null,

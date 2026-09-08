@@ -33,3 +33,7 @@ transitions, list isolation, and viseme/silence inference from eligible entries.
 Descriptor inheritance checks cover FX controller replacement/null, layer type and
 default flags, layer-array shrinking, lip-sync mode, explicit/omitted stripped
 aliases across multiple variants, unrelated targets, and base-cache preservation.
+
+Descriptor-wrapper checks cover nested authored geometry, direct FBX instances,
+and outer renderer/transform overrides. Empty Animator binding paths are checked
+for both visemes and blink, including preservation through model adaptation.

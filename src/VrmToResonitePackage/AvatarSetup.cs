@@ -1375,7 +1375,7 @@ internal sealed class BlendshapeResolver
             // Import wrappers can add ancestors, but every segment of the authored path
             // must match. Ambiguous or missing paths must never target a namesake mesh.
             var matches = _renderers.Where(skin => _rendererPaths[skin] == bindingPath ||
-                _rendererPaths[skin].EndsWith("/" + bindingPath, StringComparison.Ordinal)).ToArray();
+                (bindingPath.Length > 0 && _rendererPaths[skin].EndsWith("/" + bindingPath, StringComparison.Ordinal))).ToArray();
             if (matches.Length == 1) yield return matches[0];
             yield break;
         }

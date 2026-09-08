@@ -9,6 +9,9 @@ Static-renderer checks cover copying an imported MeshRenderer, retaining its
 placement and disabled/inactive states, replacing its template, applying prefab
 materials after reparenting, and using a skinned FBX mesh as a static renderer.
 
+Animator binding checks include empty paths resolving the root renderer without
+falling back to child renderers.
+
 This integration check boots Resonite's headless engine and imports a local FBX containing a skinned mesh with at least one blendshape. It copies the renderer from an additional model under a primary model, then checks explicit material overrides, FBX default material mappings, initial blendshape weights, inactive state, and isolation from an identically named primary-model renderer.
 
 ```powershell
