@@ -153,7 +153,7 @@ public sealed record VrchatMeshCopy(string FbxGuid, string SourceName, string Na
     public string ParentFbxGuid { get; set; }
     public string ParentName { get; set; }
     public List<VrchatPrefabTransform> ParentTransforms { get; } = new();
-    public Dictionary<string, VrchatBoneTarget> BoneTargets { get; } = new();
+    public Dictionary<int, VrchatBoneTarget> BoneTargets { get; } = new();
     public List<string> SourceBoneNames { get; } = new();
 }
 

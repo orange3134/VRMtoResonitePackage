@@ -63,8 +63,7 @@ internal static class VrchatSceneSetup
             var renderer = meshRenderer as SkinnedMeshRenderer;
             for (int i = 0; i < (renderer?.Bones.Count ?? 0); i++)
             {
-                Slot original = renderer.Bones[i];
-                if (original == null || !copy.BoneTargets.TryGetValue(original.Name, out var target)) continue;
+                if (!copy.BoneTargets.TryGetValue(i, out var target)) continue;
                 if (target.Name == null)
                 {
                     renderer.Bones[i] = null;

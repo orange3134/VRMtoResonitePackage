@@ -4,6 +4,8 @@ Also checks that EditorOnly removal follows captured model paths after reparenti
 
 Copied-bone checks distinguish same-named bones in two branches of the primary
 model and in an additional model, including targets moved after path capture.
+Index-based overrides also distinguish identical source bone names and restore a
+binding whose imported source entry is null.
 
 Static-renderer checks cover copying an imported MeshRenderer, retaining its
 placement and disabled/inactive states, replacing its template, applying prefab

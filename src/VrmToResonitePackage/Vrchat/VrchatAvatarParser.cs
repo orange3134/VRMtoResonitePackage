@@ -1903,7 +1903,7 @@ public static class VrchatAvatarParser
                             bones[i].FileID ?? 0, avatar.FbxGuid, modelResolvers, new());
                         if ((bones[i].FileID ?? 0) != 0 && bone?.Name == null)
                             throw new InvalidDataException($"複製メッシュのボーン参照を解決できません: {rendererName} / {i}");
-                        copy.BoneTargets[originalBones[i]] = bone;
+                        copy.BoneTargets[i] = bone;
                     }
                 }
                 avatar.MeshCopies.Add(copy);
@@ -1935,7 +1935,7 @@ public static class VrchatAvatarParser
             primaryFbxGuid, resolvers, new());
         if (reference.FileID != 0 && bone?.Name == null)
             throw new InvalidDataException($"複製メッシュのボーン参照を解決できません: {copy.Name} / {index}");
-        copy.BoneTargets[copy.SourceBoneNames[index]] = bone;
+        copy.BoneTargets[index] = bone;
     }
 
     private static VrchatBoneTarget ResolveCopiedBoneTarget(UnityPackage package, string guid, long fileId,
@@ -2946,17 +2946,72 @@ public static class VrchatAvatarParser
         CollectVariantRootTransformOverrides(package, sourceGuid, rootOverrides,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase), sourceSubtree);
 
-        var scenes = new List<(string Guid, UnityScene Scene)>();
-        CollectVariantPrefabSceneEntries(package, sourceGuid, scenes,
+        var scenes = CollectPhysBoneSceneEntries(package, sourceGuid,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase), sourceSubtree);
         var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);
         var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
-        foreach ((string guid, UnityScene scene) in scenes)
+        foreach (var entry in scenes)
         {
+            string guid = entry.Guid;
+            UnityScene scene = entry.Scene;
             var included = IncludedPrefabObjects(package, guid, scene, avatar, modelResolvers, prefabScenes);
             if (guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
-            ParsePhysBones(scene, included, avatar, guid, rootOverrides, package);
+            ParsePhysBones(scene, included, avatar, guid, rootOverrides, package, entry.Removed);
         }
+    }
+
+    private sealed class PhysBoneSceneEntry
+    {
+        public string Guid;
+        public UnityScene Scene;
+        public HashSet<long> Removed = new();
+        public Dictionary<(string Guid, long Id), long> Aliases = new();
+    }
+
+    private static List<PhysBoneSceneEntry> CollectPhysBoneSceneEntries(UnityPackage package,
+        string guid, HashSet<string> ancestors, HashSet<long> subtree = null)
+    {
+        var result = new List<PhysBoneSceneEntry>();
+        if (string.IsNullOrEmpty(guid) || !ancestors.Add(guid)) return result;
+        try
+        {
+            var asset = package.ByGuid(guid);
+            if (asset?.Extension is not (".prefab" or ".unity")) return result;
+            var scene = package.ReadScene(asset);
+            foreach (var instance in scene.Documents.Values.Where(document =>
+                         document.ClassId == ClassPrefabInstance && PrefabInstanceInSubtree(scene, document, subtree)))
+            {
+                string childGuid = instance.Root?["m_SourcePrefab"]?.Guid;
+                var children = CollectPhysBoneSceneEntries(package, childGuid, ancestors);
+                var removals = instance.Root?["m_Modification"]?["m_RemovedComponents"]?.Seq;
+                foreach (var child in children)
+                {
+                    foreach (var removal in removals ?? Enumerable.Empty<YamlNode>())
+                        if (child.Aliases.TryGetValue((removal.Guid ?? childGuid, removal.FileID ?? 0), out long id))
+                            child.Removed.Add(id);
+
+                    // Retain aliases at each level so outer variants can remove a component
+                    // through an explicit stripped document or an omitted Unity local ID.
+                    foreach (var alias in child.Aliases.ToArray())
+                        if (alias.Key.Guid == childGuid)
+                            child.Aliases[(guid, (alias.Key.Id ^ instance.FileId) & long.MaxValue)] = alias.Value;
+                    foreach (var document in scene.Documents.Values.Where(document =>
+                                 document.Root?["m_PrefabInstance"]?.FileID == instance.FileId))
+                    {
+                        var source = document.Root?["m_CorrespondingSourceObject"];
+                        if (source != null && child.Aliases.TryGetValue((source.Guid ?? childGuid, source.FileID ?? 0), out long id))
+                            child.Aliases[(guid, document.FileId)] = id;
+                    }
+                }
+                result.AddRange(children);
+            }
+            var own = new PhysBoneSceneEntry { Guid = guid, Scene = scene };
+            foreach (var document in scene.MonoBehaviours)
+                own.Aliases[(guid, document.FileId)] = document.FileId;
+            result.Add(own);
+            return result;
+        }
+        finally { ancestors.Remove(guid); }
     }
 
     /// <summary>
@@ -3082,7 +3137,7 @@ public static class VrchatAvatarParser
 
     private static void ParsePhysBones(UnityScene scene, HashSet<long> subtree, VrchatAvatar avatar,
         string sceneGuid = null, Dictionary<string, string> rootOverrides = null,
-        UnityPackage package = null)
+        UnityPackage package = null, HashSet<long> removedComponents = null)
     {
         int initialCount = avatar.PhysBones.Count;
         var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(
@@ -3091,7 +3146,8 @@ public static class VrchatAvatarParser
         foreach (YamlDocument pb in scene.MonoBehavioursByScript(
                      VrchatConstants.PhysBoneDllGuid, VrchatConstants.PhysBoneScriptFileId))
         {
-            if (subtree != null && !InSubtree(scene, subtree, pb))
+            if (removedComponents?.Contains(pb.FileId) == true ||
+                (subtree != null && !InSubtree(scene, subtree, pb)))
             {
                 continue;
             }
@@ -3150,6 +3206,7 @@ public static class VrchatAvatarParser
             {
                 foreach (YamlNode c in colliders.Seq)
                 {
+                    if (removedComponents?.Contains(c?.FileID ?? 0) == true) continue;
                     VrchatPhysBoneCollider collider = ParseCollider(
                         scene, c?.FileID ?? 0, sceneGuid, rootOverrides, package,
                         modelResolvers, prefabScenes);

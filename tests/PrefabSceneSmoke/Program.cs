@@ -99,20 +99,41 @@ static async Task Run(string fbxPath, string rendererName)
         var reboundAvatar = new VrchatAvatar { FbxGuid = "primary" };
         var rebound = new VrchatMeshCopy("additional", rendererName, "ReboundCopy", true, true)
             { Transform = new VrchatPrefabTransform() };
-        rebound.BoneTargets[original.Bones[0].Name] = new VrchatBoneTarget("primary", "Hips", "Right/Hips", "prefab", 10);
+        rebound.BoneTargets[0] = new VrchatBoneTarget("primary", "Hips", "Right/Hips", "prefab", 10);
         reboundAvatar.MeshCopies.Add(rebound);
         Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", reboundAvatar, boneSources,
             (Func<VrchatMeshCopy, Slot>)(_ => primary), bonePaths);
         Check(primary.FindChild("ReboundCopy").GetComponent<SkinnedMeshRenderer>().Bones[0] == primaryRight,
             "Copied bone selects the exact primary branch despite same-named clothing bones and reparenting");
         var modelRebound = rebound with { Name = "ModelReboundCopy" };
-        modelRebound.BoneTargets[original.Bones[0].Name] = new VrchatBoneTarget("additional", "Hips", "RootNode/Right/Hips");
+        modelRebound.BoneTargets[0] = new VrchatBoneTarget("additional", "Hips", "RootNode/Right/Hips");
         reboundAvatar.MeshCopies.Clear();
         reboundAvatar.MeshCopies.Add(modelRebound);
         Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", reboundAvatar, boneSources,
             (Func<VrchatMeshCopy, Slot>)(_ => primary), bonePaths);
         Check(primary.FindChild("ModelReboundCopy").GetComponent<SkinnedMeshRenderer>().Bones[0] == clothingRight,
             "Explicit FBX bone references retain their additional model scope and normalize the synthetic root");
+        Slot indexedSource = additional.AddSlot("IndexedSource");
+        var indexedRenderer = indexedSource.AttachComponent<SkinnedMeshRenderer>();
+        indexedRenderer.Bones.Add(primaryLeft);
+        indexedRenderer.Bones.Add(primaryRight);
+        indexedRenderer.Bones.Add(null);
+        var indexedSources = new Dictionary<Slot, string>(boneSources) { [indexedSource] = "additional" };
+        var indexedCopy = new VrchatMeshCopy("additional", "IndexedSource", "IndexedCopy", true, true)
+            { Transform = new VrchatPrefabTransform() };
+        indexedCopy.BoneTargets[0] = new VrchatBoneTarget("primary", "Hips", "Right/Hips");
+        indexedCopy.BoneTargets[1] = new VrchatBoneTarget("primary", "Hips", "Left/Hips");
+        indexedCopy.BoneTargets[2] = new VrchatBoneTarget("additional", "Hips", "Right/Hips");
+        reboundAvatar.MeshCopies.Clear();
+        reboundAvatar.MeshCopies.Add(indexedCopy);
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", reboundAvatar, indexedSources,
+            (Func<VrchatMeshCopy, Slot>)(_ => primary), bonePaths);
+        var indexedResult = primary.FindChild("IndexedCopy").GetComponent<SkinnedMeshRenderer>();
+        Check(indexedResult.Bones[0] == primaryRight && indexedResult.Bones[1] == primaryLeft &&
+              indexedResult.Bones[2] == clothingRight,
+            "Bone overrides retain separate indices for identical source names and restore null source bindings");
+        indexedResult.Slot.Destroy();
+        indexedSource.Destroy();
         foreach (var material in original.Materials)
         {
             string name = ((Component)material).Slot.Name;
@@ -182,7 +203,7 @@ static async Task Run(string fbxPath, string rendererName)
                 Transform = new VrchatPrefabTransform { LocalPosition = new System.Numerics.Vector3(i + 1, 2, 3) },
             };
             if (original.Bones.Count > 0 && original.Bones[0] != null)
-                authored.BoneTargets[original.Bones[0].Name] = new VrchatBoneTarget(null, null);
+                authored.BoneTargets[0] = new VrchatBoneTarget(null, null);
             sameNameAvatar.MeshCopies.Add(authored);
         }
         Slot originalSlot = original.Slot;

@@ -189,7 +189,7 @@ public sealed class UnityModelFileIdResolver
                 {
                     _rendererNames.Add(node.Name);
                     MeshBoneNames[node.Name] = node.MeshIndices.SelectMany(i => scene.Meshes[i].Bones)
-                        .Select(b => b.Name).Distinct().ToArray();
+                        .Select(b => b.Name).ToArray();
                     MeshBoneNamesByPath[string.Join("/", nodePath.Select(NormalizeName))] = MeshBoneNames[node.Name];
                     AddPathVariants("Mesh", nodePath, node.Name);
                     // Unity's FBX importer can classify a mesh differently from Assimp when skin

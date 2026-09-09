@@ -16,6 +16,8 @@ inspection. This does not verify an end-to-end avatar conversion.
 Copied-bone checks cover local transform paths and primary skeleton scope,
 explicit/omitted stripped references, FBX paths with duplicate node names, and
 Variant bone overrides (local references, external references, and null).
+Duplicate source bone names retain their individual indices through FBX lookup,
+authored renderer parsing, and Variant overrides.
 
 Static-renderer checks cover MeshFilter pairing, regular-prefab placement and
 materials, Variant enabled/transform overrides, additional FBX discovery, and
@@ -25,6 +27,8 @@ Nested-component checks cover regular-prefab PhysBones, colliders, Modular Avata
 operations, selected-subtree isolation, EditorOnly exclusion, external root
 references and null overrides. Cache checks include stale versions without a lock
 file and continued access to embedded packages.
+Removed PhysBones and colliders are excluded per instance, including explicit and
+omitted stripped aliases in outer variants; sibling instances retain their components.
 
 Animator checks cover Solo/Mute filtering of State, Entry and Any State transition
 lists, condition-independent Solo suppression, priority among multiple Solo

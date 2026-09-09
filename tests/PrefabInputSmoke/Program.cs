@@ -411,6 +411,7 @@ Transform:
             "Regular descriptor prefab collects authored renderer placement and replaces the imported template");
     }
     CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);
+    CheckDuplicateSourceBones(Asset);
     CheckNestedComponents(Asset, regularCopy);
     CheckDescriptorWrapper(Asset, regularCopy, "88000000000000000000000000000001");
     CheckDescriptorOverrides(Asset, regularCopy, controllerGuid);
@@ -974,6 +975,38 @@ Transform:
     var physics = parsed.PhysBones.Single(p => p.RootBoneName == "OverrideBone");
     Check(physics.Colliders.Single().AttachBoneName == "HairRoot" && physics.Colliders.Single().Offset.X == 1,
         "Nested PhysBone root override honors external GUID and null collider override restores its local attachment");
+    string Removal(string guid, long id) => $"    m_RemovedComponents:\n    - {{fileID: {id}, guid: {guid}}}\n";
+    void RemoveFromWrapper(string removal)
+    {
+        File.WriteAllText(input, rootText.Replace("    m_TransformParent: {fileID: 33}\n",
+            "    m_TransformParent: {fileID: 33}\n" + removal));
+    }
+    RemoveFromWrapper(Removal(leafGuid, 3));
+    Check(Read().PhysBones.Single().RootBoneName == "CopyParent",
+        "Removed nested PhysBone stays deleted while local PhysBone is retained");
+    RemoveFromWrapper(Removal(leafGuid, 8));
+    Check(Read().PhysBones.Single(p => p.RootBoneName == "HairRoot").Colliders.Count == 0,
+        "Removed nested collider is not recreated by a surviving PhysBone reference");
+    RemoveFromWrapper(Removal(wrapperGuid, 3 ^ 20));
+    Check(Read().PhysBones.Single().RootBoneName == "CopyParent",
+        "Outer component removal follows an omitted stripped alias through a wrapper");
+    asset("Assets/PhysicsWrapper.prefab", wrapperGuid, Instance(20, leafGuid, 0) + $$"""
+
+--- !u!114 &99 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 3, guid: {{leafGuid}}}
+  m_PrefabInstance: {fileID: 20}
+""");
+    RemoveFromWrapper(Removal(wrapperGuid, 99));
+    Check(Read().PhysBones.Single().RootBoneName == "CopyParent",
+        "Outer component removal follows an explicit stripped component alias");
+    asset("Assets/PhysicsWrapper.prefab", wrapperGuid,
+        Instance(20, leafGuid, 0) + Removal(leafGuid, 3) + Instance(21, leafGuid, 0));
+    File.WriteAllText(input, rootText);
+    Check(Read().PhysBones.Count(p => p.RootBoneName == "HairRoot") == 1,
+        "Removing a component from one instance preserves another instance of the same prefab");
+    asset("Assets/PhysicsWrapper.prefab", wrapperGuid, Instance(20, leafGuid, 0));
+    Check(Read().PhysBones.Count == 2, "Component removal never mutates the reusable source scene");
     const string sceneGuid = "22222222222222222222222222222223";
     asset("Assets/PhysicsScene.unity", sceneGuid, leaf);
     using (var package = UnityPackage.Open(input))
@@ -1077,14 +1110,84 @@ Transform:
                 new Dictionary<string, UnityModelFileIdResolver>() });
         }
         Override(20);
-        Check(copy.BoneTargets["SourceHips"].Path == "Right/Hips" && copy.BoneTargets["SourceHips"].FbxGuid == primaryGuid,
+        Check(copy.BoneTargets[0].Path == "Right/Hips" && copy.BoneTargets[0].FbxGuid == primaryGuid,
             "Variant bone override resolves local objectReference in the overriding scene");
         Override(modelId, modelGuid);
-        Check(copy.BoneTargets["SourceHips"].FbxGuid == modelGuid && copy.BoneTargets["SourceHips"].Path!.EndsWith("/Right/Shared"),
+        Check(copy.BoneTargets[0].FbxGuid == modelGuid && copy.BoneTargets[0].Path!.EndsWith("/Right/Shared"),
             "Variant bone override preserves explicit external model identity");
         Override(0);
-        Check(copy.BoneTargets["SourceHips"].Name == null, "Variant bone override can explicitly clear a binding");
+        Check(copy.BoneTargets[0].Name == null, "Variant bone override can explicitly clear a binding");
+        copy.SourceBoneNames.Add("SourceHips");
+        copy.BoneTargets[1] = target;
+        Override(20);
+        Check(copy.BoneTargets[0].Path == "Right/Hips" && copy.BoneTargets[1] == target,
+            "An indexed Variant override leaves another same-named source bone untouched");
     }
+}
+
+static void CheckDuplicateSourceBones(Func<string, string, string, string> asset)
+{
+    const string guid = "73737373737373737373737373737373";
+    string model = asset("Assets/DuplicateBones.fbx", guid, """
+; FBX 7.4.0 project file
+FBXHeaderExtension: {
+    FBXHeaderVersion: 1003
+    FBXVersion: 7400
+}
+Objects: {
+    Model: 1, "Model::Left", "Null" { }
+    Model: 2, "Model::Right", "Null" { }
+    Model: 3, "Model::Shared", "LimbNode" { }
+    Model: 4, "Model::Shared", "LimbNode" { }
+    Model: 5, "Model::Body", "Mesh" { }
+    Geometry: 7, "Geometry::Triangle", "Mesh" {
+        Vertices: *9 { a: 0,0,0,1,0,0,0,1,0 }
+        PolygonVertexIndex: *3 { a: 0,1,-3 }
+    }
+    Deformer: 10, "Deformer::Skin", "Skin" { }
+    Deformer: 11, "SubDeformer::Left", "Cluster" {
+        Indexes: *2 { a: 0,1 }
+        Weights: *2 { a: 1,1 }
+        Transform: *16 { a: 1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1 }
+        TransformLink: *16 { a: 1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1 }
+    }
+    Deformer: 12, "SubDeformer::Right", "Cluster" {
+        Indexes: *1 { a: 2 }
+        Weights: *1 { a: 1 }
+        Transform: *16 { a: 1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1 }
+        TransformLink: *16 { a: 1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1 }
+    }
+}
+Connections: {
+    C: "OO",1,0
+    C: "OO",2,0
+    C: "OO",3,1
+    C: "OO",4,2
+    C: "OO",5,0
+    C: "OO",7,5
+    C: "OO",10,7
+    C: "OO",11,10
+    C: "OO",12,10
+    C: "OO",3,11
+    C: "OO",4,12
+}
+""");
+    File.AppendAllText(model + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: 4300000\n    second: Body\n");
+    string prefab = asset("Assets/DuplicateBones.prefab", "74747474747474747474747474747474",
+        RendererPrefab(guid, "Untagged") + "\n  m_Bones:\n  - {fileID: 0}\n  - {fileID: 0}\n");
+    using var package = UnityPackage.Open(prefab);
+    var resolver = new UnityModelFileIdResolver(package.ByGuid(guid));
+    Check(resolver.MeshBoneNames["Body"].SequenceEqual(new[] { "Shared", "Shared" }) &&
+          resolver.MeshBoneNamesByPath.Values.Single().Length == 2,
+        "FBX source bones retain duplicate names in bone-index order");
+    var avatar = new VrchatAvatar { FbxGuid = guid };
+    var scene = package.ReadScene(package.InputPrefab);
+    typeof(VrchatAvatarParser).GetMethod("CollectAuthoredMeshCopy",
+        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+        .Invoke(null, new object[] { package, package.InputPrefab.Guid, scene, scene.Doc(2), avatar,
+            new Dictionary<string, UnityModelFileIdResolver> { [guid] = resolver }, new Dictionary<string, UnityScene>(), false });
+    Check(avatar.MeshCopies.Single().BoneTargets.Count == 2,
+        "Authored copied renderer accepts the full bone array without collapsing identical source names");
 }
 
 static void CheckDescriptorWrapper(Func<string, string, string, string> asset, string regularCopy, string modelGuid)
