@@ -2018,15 +2018,16 @@ public static class VrchatAvatarParser
             string name = scene.ResolveGameObjectName(fileId);
             if (name == null) return null;
             long parentId = document.Root["m_Father"]?.FileID ?? 0;
+            // A prefab root is an authored object, not evidence of an imported FBX root.
             if (parentId == 0)
-                return new VrchatBoneTarget(primaryFbxGuid, name, "", guid, fileId);
+                return new VrchatBoneTarget(null, name, "", guid, fileId);
             var parent = ResolveCopiedBoneTarget(package, guid, parentId, primaryFbxGuid, resolvers, visited);
             if (parent?.Path == null) return null;
             // A regular prefab's locally authored skeleton belongs to the primary model,
             // unless an explicit source ancestor identifies another FBX. Exclude the
             // prefab root name; FBX import wrappers can have different display names.
             string path = parent.Path.Length == 0 ? name : parent.Path + "/" + name;
-            return new VrchatBoneTarget(parent.FbxGuid, name, path, guid, fileId);
+            return new VrchatBoneTarget(parent.FbxGuid ?? primaryFbxGuid, name, path, guid, fileId);
         }
         if (document != null) return null; // Bone references must identify transforms.
 
@@ -3089,6 +3090,67 @@ public static class VrchatAvatarParser
             if (guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
             ParsePhysBones(scene, included, avatar, guid, rootOverrides, package, entry.Removed);
         }
+        // Materialize local physics hierarchies even when no renderer requires their parents.
+        var modifications = new List<(string Guid, YamlNode Modifications)>();
+        CollectVariantModificationBlocks(package, sourceGuid, modifications, new(StringComparer.OrdinalIgnoreCase));
+        var targets = avatar.PhysBones.SelectMany(b => b.IgnoreBoneTargets
+            .Concat(b.Colliders.Select(c => c.AttachBoneTarget)).Append(b.RootBoneTarget));
+        var captured = new HashSet<(string, long)>();
+        foreach (var target in targets.Where(t => t?.PrefabGuid != null && t.FbxGuid == null))
+        {
+            var entry = scenes.FirstOrDefault(e => e.Guid == target.PrefabGuid);
+            if (entry == null) continue;
+            var included = IncludedPrefabObjects(package, entry.Guid, entry.Scene, avatar, modelResolvers, prefabScenes);
+            if (entry.Guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
+            var localModels = entry.Scene.MeshRenderers.Select(r => entry.Scene.RendererMesh(r)?.Guid)
+                .Where(g => package.ByGuid(g)?.Extension == ".fbx").Distinct().ToArray();
+            var subtree = entry.Scene.SubtreeGameObjectIds(
+                entry.Scene.Doc(target.TransformFileId)?.Root?["m_GameObject"]?.FileID ?? 0);
+            foreach (var transform in entry.Scene.Documents.Values.Where(d => d.ClassId == 4 &&
+                         included.Contains(d.Root?["m_GameObject"]?.FileID ?? 0) &&
+                         subtree.Contains(d.Root?["m_GameObject"]?.FileID ?? 0)))
+            {
+                if (!captured.Add((entry.Guid, transform.FileId))) continue;
+                var placement = new FbxPlacement();
+                CaptureLocalPlacementParents(package, entry.Scene, entry.Guid, transform.FileId, placement,
+                    localModels.Length == 1 ? localModels[0] : null, modelResolvers);
+                string childGuid = entry.Guid;
+                var ancestors = new HashSet<string>();
+                while (placement.ParentFbxGuid == null && ancestors.Add(childGuid))
+                {
+                    var parents = scenes.SelectMany(e => e.Scene.Documents.Values
+                        .Where(d => d.ClassId == ClassPrefabInstance && d.Root?["m_SourcePrefab"]?.Guid == childGuid)
+                        .Select(d => (Entry: e, Instance: d))).ToArray();
+                    if (parents.Length != 1) break;
+                    var parent = parents[0];
+                    var outer = new FbxPlacement();
+                    CaptureLocalPlacementParents(package, parent.Entry.Scene, parent.Entry.Guid,
+                        parent.Instance.Root?["m_Modification"]?["m_TransformParent"]?.FileID ?? 0, outer);
+                    placement.ParentTransforms.InsertRange(0, outer.ParentTransforms);
+                    placement.ParentFbxGuid = outer.ParentFbxGuid;
+                    placement.ParentNodeName = outer.ParentNodeName;
+                    childGuid = parent.Entry.Guid;
+                }
+                foreach (var block in modifications)
+                    foreach (var modification in block.Modifications.Seq)
+                    {
+                        var identity = ResolveObjectIdentity(package, modification?["target"]?.Guid,
+                            modification?["target"]?.FileID ?? 0);
+                        foreach (var local in placement.ParentTransforms.Where(t => t.Key == $"{identity.Guid}:{identity.Id}" ||
+                                     t.GameObjectKey == $"{identity.Guid}:{identity.Id}"))
+                        {
+                            string path = modification?["propertyPath"]?.AsString();
+                            if (path?.StartsWith("m_Local", StringComparison.Ordinal) == true)
+                                ApplyCopyTransformOverride(local, path, modification["value"]?.AsFloat() ?? 0);
+                            if (path == "m_IsActive") local.Active = modification["value"]?.AsBool(true) ?? true;
+                        }
+                    }
+                var result = new VrchatPhysicsPlacement { ParentFbxGuid = placement.ParentFbxGuid,
+                    ParentName = placement.ParentNodeName };
+                result.Transforms.AddRange(placement.ParentTransforms);
+                avatar.PhysicsPlacements.Add(result);
+            }
+        }
     }
 
     private sealed class PrefabComponentSceneEntry
@@ -3259,7 +3321,7 @@ public static class VrchatAvatarParser
             if (scene.Doc(id)?.ClassId == 1) id = scene.TransformOfGameObject(id)?.FileId ?? 0;
             var models = scene.MeshRenderers.Select(r => scene.RendererMesh(r)?.Guid)
                 .Where(g => package.ByGuid(g)?.Extension == ".fbx").Distinct().ToArray();
-            if (models.Length == 1) primaryGuid = models[0];
+            primaryGuid = models.Length == 1 ? models[0] : null;
         }
         var target = ResolveCopiedBoneTarget(package, guid, id, primaryGuid, new(), new());
         if (target?.Name != null) return target;

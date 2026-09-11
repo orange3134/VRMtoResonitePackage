@@ -10,6 +10,7 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 public sealed class VrchatAvatar
 {
+    public List<VrchatPhysicsPlacement> PhysicsPlacements { get; } = new();
     /// <summary>Root prefab GameObject name (also the avatar/display name).</summary>
     public string Name { get; set; }
 
@@ -140,6 +141,13 @@ public sealed class VrchatPrefabTransform
     public Vec3 LocalPosition { get; set; }
     public System.Numerics.Quaternion LocalRotation { get; set; } = System.Numerics.Quaternion.Identity;
     public Vec3 LocalScale { get; set; } = Vec3.One;
+}
+
+public sealed class VrchatPhysicsPlacement
+{
+    public string ParentFbxGuid { get; set; }
+    public string ParentName { get; set; }
+    public List<VrchatPrefabTransform> Transforms { get; } = new();
 }
 
 public sealed record VrchatGameObjectReference(string FbxGuid, string Name);

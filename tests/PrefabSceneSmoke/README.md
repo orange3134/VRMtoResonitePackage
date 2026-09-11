@@ -5,6 +5,9 @@ bindings below the export root, and separate DynamicBoneChains on same-named bon
 in repeated model instances.
 Merge Armature checks reproduce the destroyed-source lookup and verify that physics
 targets follow successive bone replacements while another instance remains intact.
+References on the source armature itself also follow successive replacements.
+Physics-only hierarchies are created without mesh copies and resolve independently
+of the exported avatar root.
 
 Also checks that EditorOnly removal follows captured model paths after reparenting and preserves a separate branch containing identically named nodes.
 

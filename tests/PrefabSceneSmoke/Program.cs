@@ -99,6 +99,25 @@ static async Task Run(string fbxPath, string rendererName)
             "Unpacked attachment shares the imported skin bone and preserves its local placement");
         Check(!localBone.ActiveSelf && !attachment.IsActive,
             "Reused imported bone applies authored inactive state to its attachment hierarchy");
+        var physicsOnlyAvatar = new VrchatAvatar { FbxGuid = "wrapped" };
+        var physicsPlacement = new VrchatPhysicsPlacement();
+        physicsPlacement.Transforms.Add(new VrchatPrefabTransform { Key = "physics:1", Name = "Physics only",
+            LocalPosition = new System.Numerics.Vector3(0, 2, 0) });
+        physicsPlacement.Transforms.Add(new VrchatPrefabTransform { Key = "physics:2", Name = "Tip",
+            LocalPosition = new System.Numerics.Vector3(0, 1, 0) });
+        physicsOnlyAvatar.PhysicsPlacements.Add(physicsPlacement);
+        object[] hierarchyArgs = { root, physicsOnlyAvatar, new Dictionary<string, Slot>(),
+            wrapperSources, wrapperPaths, null, null };
+        typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
+            .GetMethod("ApplyVrchatPrefabHierarchy", BindingFlags.NonPublic | BindingFlags.Static)!
+            .Invoke(null, hierarchyArgs);
+        var physicsOnlySlots = (Dictionary<string, Slot>)hierarchyArgs[6];
+        var physicsOnlyTarget = new VrchatBoneTarget(null, "Physics only", "", "physics", 1);
+        Check((Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
+                  physicsOnlyTarget, wrapperSources, wrapperPaths, physicsOnlySlots) == physicsOnlySlots["physics:1"] &&
+              physicsOnlySlots["physics:1"].Parent == root && physicsOnlySlots["physics:1"].LocalPosition.y == 2 &&
+              physicsOnlySlots["physics:2"].Parent == physicsOnlySlots["physics:1"],
+            "Physics-only hierarchy is created without meshes and resolves independently of the avatar root");
         var mergeRoot = root.AddSlot("Physics merge regression");
         var targetHips = mergeRoot.AddSlot("AvatarArmature").AddSlot("Hips");
         var sourceHips = mergeRoot.AddSlot("ClothingArmature").AddSlot("Hips");
@@ -109,7 +128,8 @@ static async Task Run(string fbxPath, string rendererName)
         mergeAvatar.ModularMergeArmatures.Add(new VrchatModularMergeArmature
             { SourceName = "ClothingArmature", TargetName = "AvatarArmature" });
         var mergeNodes = new Dictionary<int, Slot>
-            { [0] = sourceHips, [1] = sourceHips, [2] = untouchedHips };
+            { [0] = sourceHips, [1] = sourceHips, [2] = untouchedHips,
+              [3] = sourceHips.Parent, [4] = sourceHips.Parent };
         mergeNodes[0] = (Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
             new VrchatBoneTarget("clothing", "Hips", "Hips"), mergeSources, mergePaths);
         Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", mergeRoot, mergeAvatar, mergeNodes);
@@ -119,13 +139,15 @@ static async Task Run(string fbxPath, string rendererName)
         Check(sourceHips.IsDestroyed && mergeNodes[0] == targetHips && mergeNodes[1] == targetHips &&
               mergeNodes[2] == untouchedHips,
             "Merged physics root and collider retain the surviving bone");
+        Check(mergeNodes[3] == targetHips.Parent && mergeNodes[4] == targetHips.Parent,
+            "Physics root and collider on the source armature follow the target armature");
         var finalHips = mergeRoot.AddSlot("FinalArmature").AddSlot("Hips");
         var secondMerge = new VrchatAvatar();
         secondMerge.ModularMergeArmatures.Add(new VrchatModularMergeArmature
             { SourceName = "AvatarArmature", TargetName = "FinalArmature" });
         Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", mergeRoot, secondMerge, mergeNodes);
         Check(targetHips.IsDestroyed && mergeNodes[0] == finalHips && mergeNodes[1] == finalHips &&
-              mergeNodes[2] == untouchedHips,
+              mergeNodes[2] == untouchedHips && mergeNodes[3] == finalHips.Parent && mergeNodes[4] == finalHips.Parent,
             "Successive armature merges remap physics targets without changing another instance");
         Slot primary = root.AddSlot("Primary"), additional = root.AddSlot("Additional");
         Slot branches = root.AddSlot("Branches");

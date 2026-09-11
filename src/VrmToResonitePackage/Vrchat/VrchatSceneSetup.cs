@@ -366,7 +366,9 @@ internal static class VrchatSceneSetup
         // destinations that become sources of a later Merge Armature component.
         if (physicsNodes != null)
             foreach (int node in physicsNodes.Keys.ToArray())
-                if (physicsNodes[node] is {} slot && mappings.TryGetValue(slot, out Slot mapped))
+                if (physicsNodes[node] == source)
+                    physicsNodes[node] = target;
+                else if (physicsNodes[node] is {} slot && mappings.TryGetValue(slot, out Slot mapped))
                     physicsNodes[node] = mapped;
         foreach ((Slot src, Slot dst) in mappings.OrderByDescending(pair => Depth(pair.Key)))
         {

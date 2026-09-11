@@ -897,6 +897,10 @@ GameObject:
 Transform:
   m_GameObject: {fileID: 1}
   m_Father: {fileID: 0}
+  m_Children:
+  - {fileID: 9}
+  - {fileID: 11}
+  m_LocalPosition: {x: 0, y: 2, z: 0}
 --- !u!114 &3
 MonoBehaviour:
   m_GameObject: {fileID: 1}
@@ -963,6 +967,13 @@ Transform:
     Check(parsed.PhysBones.Count == 2 && parsed.PhysBones.Single(p => p.RootBoneName == "HairRoot").Pull == 0.7f &&
           parsed.PhysBones.Count(p => p.RootBoneName == "CopyParent") == 1,
         "Regular prefab imports nested PhysBones and local PhysBones exactly once within the selected subtree");
+    Check(parsed.PhysBones.Single(p => p.RootBoneName == "HairRoot").RootBoneTarget.FbxGuid == null,
+        "Physics-only prefab root must not alias the primary FBX root");
+    var hairPlacement = parsed.PhysicsPlacements.Single(p => p.Transforms.Last().Key == $"{leafGuid}:2");
+    Check(hairPlacement.Transforms.Last().LocalPosition.Y == 2 &&
+          hairPlacement.Transforms.Any(t => t.Name == "CopyParent") &&
+          parsed.PhysicsPlacements.Any(p => p.Transforms.Last().Key == $"{leafGuid}:11"),
+        "Physics-only prefab retains its enclosing placement, local transform and chain descendants");
     Check(parsed.ModularBoneProxies.Count == 1 && parsed.ModularBoneProxies[0].SourceName == "HairRoot",
         "Nested Modular Avatar operations are included while EditorOnly and unrelated prefab instances are excluded");
     string modifications = $$"""

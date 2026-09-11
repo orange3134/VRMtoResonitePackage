@@ -141,6 +141,12 @@ VRChatの15 visemeはResonite enumへ対応させ、Unityの0〜100をResonite�
 
 ## PhysBone
 
+- Physics-only prefab roots retain their prefab Transform identity without an inferred FBX-root identity.
+  Capture their local descendants and enclosing prefab placement even when no mesh needs those slots;
+  create them before resolving physics targets. Imported skeleton parents are reused when verified.
+- Merge Armature remaps physics references on the source armature itself to the target armature,
+  as well as remapping descendants. Apply this at every merge so later merges retain live references.
+
 - `insideBounds=1` とplane colliderはResoniteで正しく再現できないため変換しない。
 - `rootTransform` があればそのboneへ、なければ所有GameObjectの親boneへ局所変換を畳む。
 - node、offset、tail、radiusの署名でcolliderを共有する。

@@ -29,6 +29,8 @@ Nested-component checks cover regular-prefab PhysBones, colliders, Modular Avata
 operations, selected-subtree isolation, EditorOnly exclusion, external root
 references and null overrides. Cache checks include stale versions without a lock
 file and continued access to embedded packages.
+Physics-only prefab roots keep their authored identity, enclosing placement,
+local transforms and chain descendants without aliasing the primary FBX root.
 Removed PhysBones and colliders are excluded per instance, including explicit and
 omitted stripped aliases in outer variants; sibling instances retain their components.
 
