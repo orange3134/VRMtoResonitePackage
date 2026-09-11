@@ -82,11 +82,16 @@ user changes. Run the Release build and PrefabInputSmoke, correcting any failure
 is invalid, explain the concrete evidence in your final report instead of making a needless edit.
 Do not call GitHub, post comments, commit, push, invoke review-local.ps1 or launch another reviewer.
 The parent script will run a fresh review of the full PR after you finish.
+Return the requested JSON object. In commit_message, write a concise imperative subject that
+describes the concrete behavior fixed, followed by a blank line and explanatory body when useful.
+Name the affected behavior and outcome; do not use generic subjects such as "Fix review findings"
+or a review round number. Summarize verification and any invalid findings in summary.
 "@
         Write-Host "Round $round : apply fixes"
         $ErrorActionPreference = 'Continue'
         $fixPrompt | & $codexCommand.Source exec --ephemeral --approve-for-me --color never --json `
-            -o (Join-Path $run "$round-fixes.md") - *> (Join-Path $run "$round-fixes.log")
+            --output-schema (Join-Path $PSScriptRoot 'fix-schema.json') `
+            -o (Join-Path $run "$round-fixes.json") - *> (Join-Path $run "$round-fixes.log")
         $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { throw "Fix execution failed. See $run" }
         if ($CommitFixes) {
@@ -100,9 +105,16 @@ The parent script will run a fresh review of the full PR after you finish.
             $status = & git status --porcelain
             if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect changes for commit.' }
             if ($status) {
+                $fixResult = Get-Content -LiteralPath (Join-Path $run "$round-fixes.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+                $commitMessage = $fixResult.commit_message
+                if ($commitMessage -isnot [string] -or [string]::IsNullOrWhiteSpace($commitMessage)) {
+                    throw 'Fix execution did not provide a descriptive commit message.'
+                }
+                $messageFile = Join-Path $run "$round-commit-message.txt"
+                [IO.File]::WriteAllText($messageFile, $commitMessage.Trim() + "`n", (New-Object Text.UTF8Encoding($false)))
                 & git add --all
                 if ($LASTEXITCODE -ne 0) { throw 'Could not stage fixes.' }
-                & git commit -m "Fix findings from local branch review (round $round)"
+                & git commit --file $messageFile
                 if ($LASTEXITCODE -ne 0) { throw 'Could not commit fixes.' }
             }
         }

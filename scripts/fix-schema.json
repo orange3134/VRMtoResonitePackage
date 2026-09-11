@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "Describe the fixes, verification results, and any findings rejected with evidence."
+    },
+    "commit_message": {
+      "type": "string",
+      "description": "A concrete imperative commit subject describing the behavior fixed, with an optional explanatory body. Do not use generic review-fix or round-number subjects."
+    }
+  },
+  "required": ["summary", "commit_message"],
+  "additionalProperties": false
+}
