@@ -78,3 +78,7 @@ targets with and without FBX identities, and defaults bypassed by Entry routing.
 Imported bone parents retain model scale identity and authored inactive state.
 Viseme stability checks include owning and ancestor Any State departures, with
 muted and other-phoneme transitions retained as negative controls.
+Curve checks reject rising/falling viseme weights and equal keys with nonzero
+interpolation slopes while retaining constant visemes and animated blink inference.
+Unpacked physics helpers with inferred FBX identities retain their local roots,
+descendants and collider placements and reuse verified imported skeleton parents.

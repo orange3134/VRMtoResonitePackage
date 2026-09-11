@@ -82,6 +82,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   同じ Viseme 値のまま遷移先 state から離脱できる場合も、その phoneme の推論を除外する。
   無条件・exit time 付きの離脱と silence fallback にも適用し、Mute/Solo と Viseme 条件を尊重する。
   所属 state machine と祖先の Any State 遷移も離脱判定に含める。
+  Viseme motion must also keep each blendshape curve constant: changing key values or
+  nonzero interpolation slopes cannot become a permanent full-weight binding. Blink
+  inference still uses the peak of its animated curve.
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
   少数の名前一致だけでは推定しない。
@@ -144,6 +147,10 @@ VRChatの15 visemeはResonite enumへ対応させ、Unityの0〜100をResonite�
 - Physics-only prefab roots retain their prefab Transform identity without an inferred FBX-root identity.
   Capture their local descendants and enclosing prefab placement even when no mesh needs those slots;
   create them before resolving physics targets. Imported skeleton parents are reused when verified.
+- Local physics descendants may carry an inferred FBX GUID in unpacked prefabs. Capture
+  their authored hierarchy regardless of that GUID; only reuse imported skeleton bones
+  when skeleton membership and the full path match. The inferred GUID alone is not proof
+  that a helper chain or collider exists in the imported model.
 - Merge Armature remaps physics references on the source armature itself to the target armature,
   as well as remapping descendants. Apply this at every merge so later merges retain live references.
 

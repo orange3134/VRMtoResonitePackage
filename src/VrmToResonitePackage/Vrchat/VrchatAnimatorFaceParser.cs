@@ -134,7 +134,7 @@ public static class VrchatAnimatorFaceParser
                         }
                         current = machine;
                     }
-                    return ActiveShapes(Clip(state?["m_Motion"]));
+                    return ActiveShapes(Clip(state?["m_Motion"]), requireConstant: true);
                 }
 
                 void Gather(long id, bool followDestinations = false)
@@ -224,7 +224,7 @@ public static class VrchatAnimatorFaceParser
         };
     }
 
-    private static List<Shape> ActiveShapes(YamlNode clip)
+    private static List<Shape> ActiveShapes(YamlNode clip, bool requireConstant = false)
     {
         var result = new List<Shape>();
         foreach (YamlNode curve in clip?["m_FloatCurves"]?.Seq ?? new())
@@ -234,6 +234,18 @@ public static class VrchatAnimatorFaceParser
             if (curve["classID"]?.AsInt() != 137 || attribute?.StartsWith("blendShape.", StringComparison.Ordinal) != true ||
                 path == null) continue;
             var keys = curve["curve"]?["m_Curve"]?.Seq;
+            if (requireConstant)
+            {
+                // Peak weights describe a blink, but a permanent viseme must retain its
+                // value throughout the clip. Equal endpoints alone do not rule out a
+                // tangent-driven excursion between keys (including on neutral curves).
+                if (keys == null || keys.Count == 0) return new();
+                float value = keys[0]["value"]?.AsFloat() ?? 0;
+                if (!float.IsFinite(value) || keys.Any(key => (key["value"]?.AsFloat() ?? 0) != value)) return new();
+                for (int i = 0; i + 1 < keys.Count; i++)
+                    if ((keys[i]["outSlope"]?.AsFloat() ?? 0) != 0 ||
+                        (keys[i + 1]["inSlope"]?.AsFloat() ?? 0) != 0) return new();
+            }
             float peak = keys?.Select(key => key["value"]?.AsFloat() ?? 0).DefaultIfEmpty().Max() ?? 0;
             if (peak > 0.001f)
                 result.Add(new Shape(path, attribute["blendShape.".Length..], peak));

@@ -59,7 +59,7 @@ AnimationClip:
   m_FloatCurves:
   - curve:
       m_Curve:
-      - value: 0
+      - value: 100
       - value: 100
     attribute: blendShape.face{{i}}
     path: Branch{{i}}/Body
@@ -130,6 +130,21 @@ AnimationClip:
     // A supported binding must not hide a conflicting binding that cannot be represented.
     string rootClipPath = Path.Combine(root, "Assets/Face1.anim");
     string rootClip = File.ReadAllText(rootClipPath);
+    foreach (string keys in new[]
+    {
+        "- value: 100\n      - value: 0",
+        "- value: 0\n      - value: 100",
+        "- value: 100\n        outSlope: 10\n      - value: 100",
+    })
+    {
+        File.WriteAllText(rootClipPath, rootClip.Replace("- value: 100\n      - value: 100", keys));
+        using var package = UnityPackage.Open(selected);
+        var face = new VrchatAvatar();
+        VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument($"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {controllerGuid}}}\n"), face);
+        Check(face.Visemes.Count == 14 && face.Visemes.All(v => v.ResonitePreset != "PP"),
+            "Time-varying viseme curves cannot become permanent full-weight drivers: " + keys);
+    }
+    File.WriteAllText(rootClipPath, rootClip);
     foreach (string rootPath in new[] { "", "\"\"" })
     {
         File.WriteAllText(rootClipPath, rootClip.Replace("path: Branch1/Body", "path: " + rootPath));
@@ -1280,6 +1295,42 @@ MeshRenderer:
     Check((string)placementType.GetField("ParentFbxGuid")!.GetValue(placement)! == guid,
         "Imported bone parent carries its model identity for static import scale correction");
     Check(!parents[0].Active, "Imported bone parent preserves authored inactive state");
+    string physics = accessory;
+    foreach (var (id, name, parent) in new[] { (300, "PhysicsHelper", 121), (310, "Tip", 301), (320, "ColliderHelper", 101) })
+        physics += $"\n--- !u!1 &{id}\nGameObject:\n  m_Name: {name}\n--- !u!4 &{id + 1}\nTransform:\n  m_GameObject: {{fileID: {id}}}\n  m_Father: {{fileID: {parent}}}\n  m_LocalPosition: {{x: 0, y: 2, z: 0}}\n";
+    physics = physics.Replace("m_GameObject: {fileID: 300}\n  m_Father:",
+        "m_GameObject: {fileID: 300}\n  m_Children:\n  - {fileID: 311}\n  m_Father:");
+    physics += """
+
+--- !u!114 &302
+MonoBehaviour:
+  m_GameObject: {fileID: 300}
+  m_Script: {fileID: 1661641543, guid: 2a2c05204084d904aa4945ccff20d8e5}
+  rootTransform: {fileID: 301}
+  colliders:
+  - {fileID: 322}
+--- !u!114 &322
+MonoBehaviour:
+  m_GameObject: {fileID: 320}
+  rootTransform: {fileID: 321}
+  radius: 0.1
+""";
+    string physicsFile = asset("Assets/UnpackedPhysics.prefab", "74747474747474747474747474747477", physics);
+    using (var physicsPackage = UnityPackage.Open(physicsFile))
+    {
+        var physicsAvatar = new VrchatAvatar { FbxGuid = guid };
+        typeof(VrchatAvatarParser).GetMethod("ParseVariantPhysBones", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { physicsPackage, physicsPackage.InputPrefab.Guid, physicsAvatar, null });
+        var bone = physicsAvatar.PhysBones.Single();
+        Check(bone.RootBoneTarget.FbxGuid == guid && bone.Colliders.Single().AttachBoneTarget.FbxGuid == guid,
+            "Unpacked authored physics helpers reproduce inferred FBX identities");
+        var transforms = physicsAvatar.PhysicsPlacements.SelectMany(p => p.Transforms).ToList();
+        Check(new[] { 301, 311, 321 }.All(id => transforms.Any(t => t.Key == $"{physicsPackage.InputPrefab.Guid}:{id}" &&
+                  t.ImportedBone == null && t.LocalPosition.Y == 2)),
+            "Inferred FBX identities retain authored physics roots, descendants and colliders");
+        Check(transforms.Any(t => t.ImportedBone?.Path == "Left/Shared"),
+            "Authored physics helper reuses its verified imported skeleton parent");
+    }
     var collect = typeof(VrchatAvatarParser).GetMethod("CollectAuthoredMeshCopy",
         System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
     var accessoryAvatar = new VrchatAvatar { FbxGuid = guid };

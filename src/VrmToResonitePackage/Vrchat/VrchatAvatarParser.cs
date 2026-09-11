@@ -3096,7 +3096,9 @@ public static class VrchatAvatarParser
         var targets = avatar.PhysBones.SelectMany(b => b.IgnoreBoneTargets
             .Concat(b.Colliders.Select(c => c.AttachBoneTarget)).Append(b.RootBoneTarget));
         var captured = new HashSet<(string, long)>();
-        foreach (var target in targets.Where(t => t?.PrefabGuid != null && t.FbxGuid == null))
+        // Local targets can carry an inferred FBX GUID without existing in that model.
+        // Capture their hierarchy too; placement capture verifies imported bone matches.
+        foreach (var target in targets.Where(t => t?.PrefabGuid != null))
         {
             var entry = scenes.FirstOrDefault(e => e.Guid == target.PrefabGuid);
             if (entry == null) continue;
