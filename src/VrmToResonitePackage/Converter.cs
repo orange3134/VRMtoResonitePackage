@@ -552,7 +552,7 @@ internal static class Converter
 
     private static Slot ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
         Dictionary<string, Slot> importedFbxRoots, Dictionary<Slot, string> importedMeshSources,
-        IReadOnlyDictionary<Slot, string> importedNodePaths, out Dictionary<string, Slot> authoredObjects,
+        Dictionary<Slot, string> importedNodePaths, out Dictionary<string, Slot> authoredObjects,
         out Dictionary<string, Slot> prefabSlots)
     {
         var slots = new Dictionary<string, Slot>(StringComparer.Ordinal);
@@ -597,6 +597,9 @@ internal static class Converter
                 sourceRootNode.LocalPosition = position;
                 sourceRootNode.LocalRotation = rotation;
                 sourceRootNode.LocalScale = scale;
+                Vrchat.VrchatSceneSetup.RemapImportedRoot(instanceRoot, sourceRootNode,
+                    importedMeshSources, importedNodePaths);
+                importedFbxRoots[additional.Guid] = sourceRootNode;
                 CollapseAdditionalFbxWrapper(instanceRoot, sourceRootNode, parent, additional.InstanceName,
                     resetSinglePayloadTransform: true);
                 continue;
@@ -616,7 +619,7 @@ internal static class Converter
         }
         authoredObjects = Vrchat.VrchatSceneSetup.CreateMeshCopies(avatar, importedMeshSources, copy =>
             ResolvePrefabParent(importRoot, copy.ParentFbxGuid, copy.ParentName, copy.ParentTransforms,
-                importedFbxRoots, slots), importedNodePaths, slots);
+                importedFbxRoots, slots, importedMeshSources, importedNodePaths), importedNodePaths, slots);
         return authoredObjects.GetValueOrDefault(avatar.DescriptorRootKey ?? "") ??
             avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms).Where(t => t.GameObjectKey == avatar.DescriptorRootKey)
                 .Select(t => slots.GetValueOrDefault(t.Key)).FirstOrDefault(slot => slot != null) ??
@@ -629,7 +632,8 @@ internal static class Converter
 
     private static Slot ResolvePrefabParent(Slot importRoot, string parentFbxGuid,
         string parentNodeName, IReadOnlyList<Vrchat.VrchatPrefabTransform> parentTransforms,
-        Dictionary<string, Slot> importedFbxRoots, Dictionary<string, Slot> prefabSlots)
+        Dictionary<string, Slot> importedFbxRoots, Dictionary<string, Slot> prefabSlots,
+        IReadOnlyDictionary<Slot, string> importedSources = null, IReadOnlyDictionary<Slot, string> importedPaths = null)
     {
         Slot parent = importRoot;
         if (!string.IsNullOrEmpty(parentFbxGuid) &&
@@ -641,6 +645,14 @@ internal static class Converter
 
         foreach (Vrchat.VrchatPrefabTransform transform in parentTransforms)
         {
+            if (transform.ImportedBone != null && importedSources != null && importedPaths != null)
+            {
+                parent = Vrchat.VrchatSceneSetup.ResolveImportedTarget(transform.ImportedBone,
+                    importedSources, importedPaths) ?? throw new InvalidDataException(
+                        $"Cannot resolve unpacked skeleton parent: {transform.ImportedBone.Path}");
+                if (!string.IsNullOrEmpty(transform.Key)) prefabSlots[transform.Key] = parent;
+                continue;
+            }
             if (!string.IsNullOrEmpty(transform.Key) &&
                 prefabSlots.TryGetValue(transform.Key, out Slot existing))
             {

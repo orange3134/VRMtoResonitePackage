@@ -60,6 +60,7 @@ internal static class UnityPrefabInstances
                 (d.ClassId == 1001 ? instanceMaps.ContainsKey(d.FileId) :
                  included.Contains(d.ClassId == 1 ? d.FileId : d.Root?["m_GameObject"]?.FileID ?? 0) ||
                  instanceMaps.ContainsKey(d.Root?["m_PrefabInstance"]?.FileID ?? 0))).ToList();
+            var documentIds = documents.Select(d => d.FileId).ToHashSet();
             // Unpacked geometry has no model PrefabInstance. Claim one source model per scene,
             // shared by its local renderers, Animator and bone references.
             foreach (string model in documents.SelectMany(d => References(d.Root))
@@ -76,8 +77,16 @@ internal static class UnityPrefabInstances
                 var references = new Dictionary<string, string>(mapping, StringComparer.OrdinalIgnoreCase);
                 if (instanceMaps.TryGetValue(owner, out var owned))
                     foreach (var entry in owned) references[entry.Key] = entry.Value;
+                var root = Rewrite(d.Root, references);
+                // The selected descriptor becomes the parsing root. Its former ancestors
+                // are absent from this view, so local bone paths must stop here as well.
+                if (included != null && d.ClassId == 4 && root?["m_Father"]?.Guid == null &&
+                    root?["m_Father"]?.FileID is long parent && parent != 0 &&
+                    scene.Doc(parent) != null && !documentIds.Contains(parent))
+                    root.Map["m_Father"] = new YamlNode { Map = new()
+                        { ["fileID"] = new YamlNode { ScalarValue = "0" } } };
                 return new YamlDocument { ClassId = d.ClassId, FileId = d.FileId,
-                    TypeName = d.TypeName, Stripped = d.Stripped, Root = Rewrite(d.Root, references) };
+                    TypeName = d.TypeName, Stripped = d.Stripped, Root = root };
             })));
             return mapping;
         }

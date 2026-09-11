@@ -20,6 +20,32 @@ internal static class ReviewRegressionChecks
         string baseFile = asset("Assets/ReviewBase.prefab", baseGuid, baseText);
         string variantText = $"--- !u!1001 &99\nPrefabInstance:\n  m_SourcePrefab: {{guid: {baseGuid}}}\n";
         string variantFile = asset("Assets/ReviewVariant.prefab", variantGuid, variantText);
+        Case("selected subtree rebases local skeleton without mutating source", () =>
+        {
+            const string nestedGuid = "ab120000000000000000000000000007";
+            string nested = asset("Assets/ReviewNested.prefab", nestedGuid,
+                baseText.Replace("m_Father: {fileID: 0}", "m_Father: {fileID: 802}") +
+                "\n--- !u!1 &801\nGameObject:\n  m_Name: Container\n--- !u!4 &802\nTransform:\n  m_GameObject: {fileID: 801}\n  m_Father: {fileID: 0}\n");
+            using var source = UnityPackage.Open(nested);
+            var scene = source.ReadScene(source.InputPrefab);
+            using var view = (UnityPackage)typeof(UnityPackage).Assembly.GetType("VrmToResonitePackage.Unity.UnityPrefabInstances")!
+                .GetMethod("CreateView")!.Invoke(null, new object[] { source, nestedGuid,
+                    scene.GameObjects.Where(go => go.FileId != 801).Select(go => go.FileId).ToHashSet() })!;
+            var bone = (VrchatBoneTarget)Call("ResolveCopiedBoneTarget", view, nestedGuid, 31L,
+                branchesGuid, new Dictionary<string, UnityModelFileIdResolver>(), new HashSet<(string, long)>());
+            Require(bone?.Path == "Body_Base" && scene.Doc(33).Root["m_Father"].FileID == 802);
+        });
+        foreach (string modelGuid in new[] { branchesGuid, null })
+        Case("same-path authored physics identities " + modelGuid, () =>
+        {
+            var avatar = new VrchatAvatar();
+            foreach (long id in new[] { 31L, 41L })
+                avatar.PhysBones.Add(new VrchatPhysBone { RootBoneName = "Shared",
+                    RootBoneTarget = new VrchatBoneTarget(modelGuid, "Shared", "Shared", baseGuid, id) });
+            var model = VrchatModelAdapter.ToVrmModel(avatar);
+            Require(model.SpringChains.SelectMany(c => c.RootNodes).Distinct().Count() == 2 &&
+                model.NodeTargets.Values.Select(t => t.TransformFileId).ToHashSet().SetEquals(new[] { 31L, 41L }));
+        });
         VrchatAvatar Copies(string file)
         {
             using var package = UnityPackage.Open(file);

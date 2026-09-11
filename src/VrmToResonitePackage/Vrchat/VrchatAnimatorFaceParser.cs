@@ -99,7 +99,7 @@ public static class VrchatAnimatorFaceParser
                 {
                     if (id == 0 || !reachable.Add(id)) return;
                     YamlNode node = controller.Doc(id)?.Root;
-                    foreach (string key in new[] { "m_DefaultState", "m_DstState", "m_DstStateMachine" })
+                    foreach (string key in new[] { "m_DstState", "m_DstStateMachine" })
                         Gather(node?[key]?.FileID ?? 0, followDestinations);
                     if (!followDestinations)
                     {
@@ -122,6 +122,9 @@ public static class VrchatAnimatorFaceParser
                             }
                             Gather(transition.FileID ?? 0, followDestinations);
                         }
+                        // Default is the fallback only for values not routed by Entry.
+                        if (key == "m_EntryTransitions" && (!followDestinations || remaining.Count > 0))
+                            Gather(node?["m_DefaultState"]?.FileID ?? 0, followDestinations);
                     }
                 }
 

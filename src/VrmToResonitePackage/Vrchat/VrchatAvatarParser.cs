@@ -909,7 +909,8 @@ public static class VrchatAvatarParser
     /// attach the outermost one to the nearest FBX ancestor that exists after import.
     /// </summary>
     private static void CaptureLocalPlacementParents(UnityPackage package, UnityScene scene,
-        string sceneGuid, long parentId, FbxPlacement placement)
+        string sceneGuid, long parentId, FbxPlacement placement, string primaryFbxGuid = null,
+        Dictionary<string, UnityModelFileIdResolver> resolvers = null)
     {
         long current = parentId;
         var visited = new HashSet<long>();
@@ -928,6 +929,30 @@ public static class VrchatAvatarParser
             if (root == null || root["m_Father"] == null)
             {
                 return;
+            }
+
+            // An unpacked skeleton has local Transform identities. Only reuse an imported
+            // bone when both its skeleton membership and full path agree; arbitrary local
+            // attachments must still be recreated with their authored transforms.
+            var bone = primaryFbxGuid == null ? null : ResolveCopiedBoneTarget(package, sceneGuid,
+                current, primaryFbxGuid, resolvers, new());
+            if (bone?.FbxGuid != null && bone.Path?.Length > 0)
+            {
+                if (!resolvers.TryGetValue(bone.FbxGuid, out var resolver))
+                    resolvers[bone.FbxGuid] = resolver = new UnityModelFileIdResolver(package.ByGuid(bone.FbxGuid));
+                static string Normalize(string path) => path.TrimStart('/').StartsWith("RootNode/", StringComparison.Ordinal)
+                    ? path.TrimStart('/')[9..] : path.TrimStart('/');
+                if (resolver.MeshBoneNames.Values.SelectMany(names => names).Contains(bone.Name) &&
+                    resolver.NodePathsUnder(0).Count(path => Normalize(path) == Normalize(bone.Path)) == 1)
+                {
+                    placement.ParentTransforms.Insert(0, new VrchatPrefabTransform
+                    {
+                        Key = $"{sceneGuid}:{current}",
+                        GameObjectKey = $"{sceneGuid}:{root["m_GameObject"]?.FileID}",
+                        Name = bone.Name, ImportedBone = bone,
+                    });
+                    return;
+                }
             }
 
             YamlNode position = root["m_LocalPosition"];
@@ -1908,7 +1933,8 @@ public static class VrchatAvatarParser
                         LocalScale = new Vec3(transform["m_LocalScale"]?.Vec("x", 1) ?? 1, transform["m_LocalScale"]?.Vec("y", 1) ?? 1, transform["m_LocalScale"]?.Vec("z", 1) ?? 1),
                     };
                     var placement = new FbxPlacement();
-                    CaptureLocalPlacementParents(package, scene, sceneGuid, transform["m_Father"]?.FileID ?? 0, placement);
+                    CaptureLocalPlacementParents(package, scene, sceneGuid, transform["m_Father"]?.FileID ?? 0,
+                        placement, avatar.FbxGuid, modelResolvers);
                     copy.ParentFbxGuid = placement.ParentFbxGuid;
                     copy.ParentName = placement.ParentNodeName;
                     copy.ParentTransforms.AddRange(placement.ParentTransforms);

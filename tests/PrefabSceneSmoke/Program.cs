@@ -71,6 +71,32 @@ static async Task Run(string fbxPath, string rendererName)
         Check((Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
                 new VrchatBoneTarget("other", "RootNode", ""), wrapperSources, wrapperPaths) == otherWrapper &&
               rootChild.Parent == root, "Wrapper collapse retains other model identities and children");
+        var additionalWrapper = root.AddSlot("Additional wrapper");
+        var additionalNode = additionalWrapper.AddSlot("RootNode");
+        additionalNode.AddSlot("Payload");
+        var additionalAvatar = new VrchatAvatar { FbxGuid = "absent" };
+        additionalAvatar.AdditionalFbxs.Add(new VrchatFbxAsset { Guid = "additional",
+            TransformNodeName = "RootNode", InstanceName = "Accessory" });
+        var additionalRoots = new Dictionary<string, Slot> { ["additional"] = additionalWrapper };
+        var additionalSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", additionalRoots);
+        var additionalPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", additionalRoots);
+        Call("VrmToResonitePackage.Converter", "ApplyVrchatPrefabHierarchy", root, additionalAvatar,
+            additionalRoots, additionalSources, additionalPaths, null, null);
+        Check(additionalWrapper.IsDestroyed && additionalRoots["additional"] == additionalNode &&
+            (Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
+                new VrchatBoneTarget("additional", "RootNode", ""), additionalSources, additionalPaths) == additionalNode,
+            "Additional synthetic-root physics identity survives wrapper collapse");
+        var localBone = additionalNode.AddSlot("Head");
+        additionalSources[localBone] = "additional";
+        additionalPaths[localBone] = "Head";
+        var localParents = new List<VrchatPrefabTransform> {
+            new() { Key = "prefab:head", ImportedBone = new VrchatBoneTarget("additional", "Head", "Head") },
+            new() { Key = "prefab:attachment", Name = "Attachment", LocalPosition = new System.Numerics.Vector3(1, 0, 0) } };
+        var localSlots = new Dictionary<string, Slot>();
+        var attachment = (Slot)Call("VrmToResonitePackage.Converter", "ResolvePrefabParent", root,
+            null, null, localParents, additionalRoots, localSlots, additionalSources, additionalPaths);
+        Check(attachment.Parent == localBone && localSlots["prefab:head"] == localBone && attachment.LocalPosition.x == 1,
+            "Unpacked attachment shares the imported skin bone and preserves its local placement");
         var mergeRoot = root.AddSlot("Physics merge regression");
         var targetHips = mergeRoot.AddSlot("AvatarArmature").AddSlot("Hips");
         var sourceHips = mergeRoot.AddSlot("ClothingArmature").AddSlot("Hips");
@@ -324,15 +350,16 @@ static async Task Run(string fbxPath, string rendererName)
         rightJoint.AddSlot("Tip").LocalPosition = new float3(0, 0.1f, 0);
         var physicsAvatar = new VrchatAvatar();
         physicsAvatar.PhysBones.Add(new VrchatPhysBone { RootBoneName = "Joint",
-            RootBoneTarget = new VrchatBoneTarget("left", "Joint", "") });
+            RootBoneTarget = new VrchatBoneTarget("shared", "Joint", "Joint", "prefab", 1) });
         physicsAvatar.PhysBones.Add(new VrchatPhysBone { RootBoneName = "Joint",
-            RootBoneTarget = new VrchatBoneTarget("right", "Joint", "") });
+            RootBoneTarget = new VrchatBoneTarget("shared", "Joint", "Joint", "prefab", 2) });
         var physicsModel = VrchatModelAdapter.ToVrmModel(physicsAvatar);
         var physicsSources = new Dictionary<Slot, string> { [leftJoint] = "left", [rightJoint] = "right" };
         var physicsPaths = new Dictionary<Slot, string> { [leftJoint] = "", [rightJoint] = "" };
+        var authoredPhysicsSlots = new Dictionary<string, Slot> { ["prefab:1"] = leftJoint, ["prefab:2"] = rightJoint };
         var physicsNodes = physicsModel.NodeTargets.ToDictionary(entry => entry.Key, entry =>
             (Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
-                entry.Value, physicsSources, physicsPaths));
+                entry.Value, physicsSources, physicsPaths, authoredPhysicsSlots));
         typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.SpringBoneSetup")!
             .GetMethod("Apply")!.Invoke(null, new object[] { physicsRoot, physicsModel, physicsNodes });
         Check(leftJoint.GetComponents<DynamicBoneChain>().Count() == 1 &&

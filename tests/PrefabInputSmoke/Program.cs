@@ -1220,6 +1220,67 @@ PolygonVertexIndex: *6 { a: 0,1,-3,0,1,-3 }
             new Dictionary<string, UnityModelFileIdResolver> { [guid] = resolver }, new Dictionary<string, UnityScene>(), false });
     Check(avatar.MeshCopies.Single().BoneTargets.Count == 2,
         "Authored copied renderer accepts the full bone array without collapsing identical source names");
+    // Local unpacked bones must serve both skin bindings and accessory placement.
+    string local = "--- !u!1 &100\nGameObject:\n  m_Name: Avatar\n--- !u!4 &101\nTransform:\n  m_GameObject: {fileID: 100}\n  m_Father: {fileID: 0}\n";
+    foreach (var (id, name, parent) in new[] { (110, "Left", 101), (120, "Shared", 111),
+                 (130, "Right", 101), (140, "Shared", 131), (150, "Attachment", 121) })
+        local += $"--- !u!1 &{id}\nGameObject:\n  m_Name: {name}\n--- !u!4 &{id + 1}\nTransform:\n  m_GameObject: {{fileID: {id}}}\n  m_Father: {{fileID: {parent}}}\n";
+    string accessory = RendererPrefab(guid, "Untagged") + "\n  m_Bones:\n  - {fileID: 121}\n  - {fileID: 141}\n" + local;
+    accessory += $$"""
+
+--- !u!1 &200
+GameObject:
+  m_Name: StaticAccessory
+--- !u!4 &201
+Transform:
+  m_GameObject: {fileID: 200}
+  m_Father: {fileID: 151}
+--- !u!33 &202
+MeshFilter:
+  m_GameObject: {fileID: 200}
+  m_Mesh: {fileID: 4300000, guid: {{guid}}}
+--- !u!23 &203
+MeshRenderer:
+  m_GameObject: {fileID: 200}
+""";
+    string accessoryFile = asset("Assets/UnpackedAccessory.prefab", "74747474747474747474747474747475", accessory);
+    using var accessoryPackage = UnityPackage.Open(accessoryFile);
+    var accessoryScene = accessoryPackage.ReadScene(accessoryPackage.InputPrefab);
+    var placementType = typeof(VrchatAvatarParser).GetNestedType("FbxPlacement", System.Reflection.BindingFlags.NonPublic)!;
+    var placement = Activator.CreateInstance(placementType)!;
+    typeof(VrchatAvatarParser).GetMethod("CaptureLocalPlacementParents", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+        .Invoke(null, new object[] { accessoryPackage, accessoryScene, accessoryPackage.InputPrefab.Guid, 151L,
+            placement, guid, new Dictionary<string, UnityModelFileIdResolver> { [guid] = resolver } });
+    var parents = (List<VrchatPrefabTransform>)placementType.GetProperty("ParentTransforms")!.GetValue(placement)!;
+    Check(parents.Count == 2 && parents[0].ImportedBone?.Path == "Left/Shared" &&
+          parents[0].ImportedBone.TransformFileId == 121 && parents[1].Name == "Attachment",
+        "Unpacked accessory uses the imported bone path and retains only its authored attachment");
+    var collect = typeof(VrchatAvatarParser).GetMethod("CollectAuthoredMeshCopy",
+        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    var accessoryAvatar = new VrchatAvatar { FbxGuid = guid };
+    collect.Invoke(null, new object[] { accessoryPackage, accessoryPackage.InputPrefab.Guid, accessoryScene,
+        accessoryScene.Doc(203), accessoryAvatar, new Dictionary<string, UnityModelFileIdResolver> { [guid] = resolver },
+        new Dictionary<string, UnityScene>(), false });
+    var staticCopy = accessoryAvatar.MeshCopies.Single();
+    Check(!staticCopy.IsSkinned && staticCopy.ParentTransforms.Count == 2 &&
+          staticCopy.ParentTransforms[0].ImportedBone?.Path == "Left/Shared",
+        "Static accessory collector preserves the imported unpacked skeleton parent");
+    string nestedFile = asset("Assets/NestedUnpacked.prefab", "74747474747474747474747474747476",
+        accessory.Replace("m_Father: {fileID: 0}", "m_Father: {fileID: 901}") +
+        "\n--- !u!1 &900\nGameObject:\n  m_Name: Container\n--- !u!4 &901\nTransform:\n  m_GameObject: {fileID: 900}\n  m_Father: {fileID: 0}\n");
+    using var nestedPackage = UnityPackage.Open(nestedFile);
+    var nestedScene = nestedPackage.ReadScene(nestedPackage.InputPrefab);
+    using var nestedView = (UnityPackage)typeof(UnityPackage).Assembly.GetType("VrmToResonitePackage.Unity.UnityPrefabInstances")!
+        .GetMethod("CreateView")!.Invoke(null, new object[] { nestedPackage, nestedPackage.InputPrefab.Guid,
+            nestedScene.GameObjects.Where(go => go.FileId != 900).Select(go => go.FileId).ToHashSet() })!;
+    var nestedAvatar = new VrchatAvatar { FbxGuid = guid };
+    var nestedViewScene = nestedView.ReadScene(nestedView.ByGuid(nestedPackage.InputPrefab.Guid));
+    collect.Invoke(null, new object[] { nestedView, nestedPackage.InputPrefab.Guid, nestedViewScene,
+        nestedViewScene.Doc(2), nestedAvatar, new Dictionary<string, UnityModelFileIdResolver> { [guid] = resolver },
+        new Dictionary<string, UnityScene>(), false });
+    Check(nestedAvatar.MeshCopies.Single().BoneTargets.Values.Select(b => b.Path).SequenceEqual(new[] { "Left/Shared", "Right/Shared" }) &&
+          nestedScene.Doc(101).Root["m_Father"].FileID == 901,
+        "Selected nested skinned renderer resolves serialized bones without altering its source parent");
 }
 
 static void CheckDescriptorWrapper(Func<string, string, string, string> asset, string regularCopy, string modelGuid)

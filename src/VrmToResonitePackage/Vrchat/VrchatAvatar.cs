@@ -132,6 +132,7 @@ public sealed class VrchatFbxAsset
 /// <summary>An ordinary GameObject authored in a prefab between imported FBX hierarchies.</summary>
 public sealed class VrchatPrefabTransform
 {
+    public VrchatBoneTarget ImportedBone { get; set; }
     public string Key { get; set; }
     public string GameObjectKey { get; set; }
     public string Name { get; set; }

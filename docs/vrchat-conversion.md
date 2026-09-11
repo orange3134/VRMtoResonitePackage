@@ -36,12 +36,17 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 
 - 詳細解析は `UnityPrefabInstances` の非所有ビューで行う。選択した descriptor の subtree に
   含まれる document と PrefabInstance だけを残し、すべての collector に同じ範囲を見せる。
+  除外した祖先への root の `m_Father` はビュー内だけで 0 に戻し、ローカル骨の path を
+  descriptor 基準にする。元 scene の document は変更しない。
 - 同じ prefab/FBX の繰り返し配置は、配置経路から生成した内部 GUID で区別する。
   source file と `.meta` は共有して読み取り、instance の上書きと stripped 参照を同じ内部 GUID へ
   書き換える。元の package のアセット・キャッシュ・Unity プロジェクトは変更しない。
 - 循環参照は祖先経路で検出する。兄弟の同一アセットを循環として除外しない。
 - unpacked prefabのFBXはメッシュのテンプレートとして扱い、複製後に元rendererを除く。
   同じモデルがPrefabInstanceとしても配置されている場合は、そのrendererを残す。
+  コピーの親がローカル skeleton の骨で、FBX の skin bone と完全な path が一致するときは、
+  prefab Transform identity と imported bone target を保持して既存の骨 Slot を使う。
+  骨の下に追加された attachment だけを生成し、別の skeleton chain を作らない。
 - prefabの外側にあるattachmentも複製の親階層へ含める。上書きは表示名ではなく、
   explicit/omitted stripped参照を解決したobject identityへ適用する。EditorOnlyタグも同様。
 - authored rendererは全コピーを登録してから親を解決する。descriptor rootにrendererがある場合も、
@@ -51,15 +56,20 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - `.unity` のcompositionもprefabと同じcollectorで配置・上書き・ローカル参照を解決する。
 - PhysBoneのroot、ignore、collider参照はモデルのinstance identityとpathを保持し、
   prefab GUID/Transform fileIDに対応する生成済みSlotがあれば先に使用する。
+  共通モデルの physics node も prefab GUID/Transform fileID を優先して intern し、
+  同じ名前・FBX path の兄弟や FBX GUID のない authored object を混同しない。
   authored rendererのコピーはimport pathを持たないため、FBXテンプレートより優先する。
   import時に捕捉したSlotへ解決してから共通のSpringBoneSetupへ渡す。
   Merge Armature前にSlotを解決し、各mergeのskin用bone mappingでphysics参照も更新する。
   破棄後のsource identity検索や名前fallbackでは、移動先や別instanceを正しく区別できない。
   FBX rootを指す空pathも保持する。primary wrapperとimport alignmentを畳むときは、
   捕捉済みのGUID/pathを順に生存する親Slotへ移し、physics解決時の参照切れを防ぐ。
+  additional wrapper を畳む場合も、生存する source root へ GUID/空path と import root 表を移す。
 - Animatorのbinding pathはdescriptor root基準で解決する。追加layerの部分weightは、
   full-weightのdriverへ誤変換しないよう推論対象から除く。
   viseme推論はentry/defaultとtransitionの接続を辿り、未接続のchild state machineを含めない。
+  Entry が全 Viseme 値を処理する場合、default state を無条件に到達可能としない。
+  muted Entry や一部の値だけを処理する Entry では default fallback を残す。
   Solo/Mute適用後の同一transition listではViseme条件と順序を確認し、先行transitionが
   必ず成立する値について後続transitionを辿らない。exit time付きの先行transitionは遮断と見なさない。
   Viseme以外の条件を持つlayerは、toggleの初期値に関係なく保守的に推論対象から除く。

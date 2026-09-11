@@ -69,3 +69,7 @@ Renderer-removal checks cover MeshRenderer and MeshFilter removals through direc
 explicit stripped and omitted stripped references across nested instances. They
 retain surviving child/sibling renderers, discard removed material records and
 verify that the reusable source scenes remain intact.
+
+Review regressions also cover rebasing a selected subtree without changing its
+source, imported bone parents for unpacked attachments, distinct same-path physics
+targets with and without FBX identities, and defaults bypassed by Entry routing.

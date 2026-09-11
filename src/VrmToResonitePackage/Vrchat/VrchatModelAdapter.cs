@@ -23,14 +23,16 @@ public static class VrchatModelAdapter
             {
                 return -1;
             }
-            string key = target?.FbxGuid != null ? $"{target.FbxGuid}:{target.Path ?? name}" : name;
+            bool prefabIdentity = target?.PrefabGuid != null && target.TransformFileId != 0;
+            string key = prefabIdentity ? $"prefab:{target.PrefabGuid}:{target.TransformFileId}" :
+                target?.FbxGuid != null ? $"fbx:{target.FbxGuid}:{target.Path ?? name}" : name;
             if (!nodeIndexByName.TryGetValue(key, out int index))
             {
                 index = model.NodeNames.Count;
                 model.NodeNames.Add(name);
                 model.NodeMeshIndices.Add(-1);
                 nodeIndexByName[key] = index;
-                if (target?.FbxGuid != null) model.NodeTargets[index] = target;
+                if (prefabIdentity || target?.FbxGuid != null) model.NodeTargets[index] = target;
             }
             return index;
         }
