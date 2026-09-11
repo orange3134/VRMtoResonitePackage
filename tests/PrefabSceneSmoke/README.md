@@ -29,6 +29,8 @@ materials after reparenting, and using a skinned FBX mesh as a static renderer.
 
 Animator binding checks include empty paths resolving the root renderer without
 falling back to child renderers.
+Descriptor visemes and index-based blink select the second same-named renderer by
+object identity, retain it after reparenting, and reject missing identities.
 Captured empty and nonempty binding paths also retain the original renderer after
 reparenting and eye-pivot insertion, while a late capture reproduces the missing binding.
 Root-renderer replacement also covers a mesh source nested beneath the placeholder.

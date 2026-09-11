@@ -110,6 +110,11 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - Capture Animator renderer paths after prefab placement and mesh removal, before Merge Armature.
   Reuse that resolver for blink and visemes so moved renderers retain their identities through
   bone merging and eye-pivot insertion; missing or ambiguous paths still cannot select namesakes.
+- Descriptor blink and visemes retain the referenced prefab Transform identity or FBX
+  occurrence/path through adaptation. Capture the exact renderer before hierarchy changes;
+  missing identities must not fall back to other same-named renderers. An explicit
+  `VisemeSkinnedMesh: {fileID: 0}` suppresses descriptor viseme bindings even when inherited
+  shape names and `lipSync=3` remain.
 - Face inference rejects motions that also animate the target renderer's `m_Enabled`
   or `m_IsActive` on its GameObject or any ancestor (including the empty root path).
   Even constant visibility curves can differ from prefab defaults; face drivers cannot

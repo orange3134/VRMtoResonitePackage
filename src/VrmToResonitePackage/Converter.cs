@@ -478,7 +478,7 @@ internal static class Converter
                     model.MeshBindingRootPath = string.Join("/", parts);
                 }
                 // Retain authored paths before Merge Armature or eye pivots move renderers.
-                var faceResolver = new BlendshapeResolver(root, model);
+                var faceResolver = new BlendshapeResolver(root, model, physicsNodes);
                 Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes,
                     target => Vrchat.VrchatSceneSetup.ResolveImportedTarget(target, importedMeshSources,
                         importedNodePaths, prefabSlots), descriptorRoot is { IsDestroyed: false } ? descriptorRoot : root);

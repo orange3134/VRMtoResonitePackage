@@ -5,9 +5,8 @@ namespace VrmToResonitePackage.Vrchat;
 
 /// <summary>
 /// Adapts a parsed <see cref="VrchatAvatar"/> into the <see cref="VrmModel"/> shape the downstream
-/// avatar/rig/spring setup consumes. Everything resolves by bone/mesh GameObject name (the slot
-/// names after FBX import) and by blendshape name/index, so synthetic glTF-style node/mesh indices
-/// are just an indirection layer over those names.
+/// avatar/rig/spring setup consumes. Synthetic node/mesh indices retain prefab object and model
+/// identities where available, alongside GameObject names, Animator paths and shape names/indices.
 /// </summary>
 public static class VrchatModelAdapter
 {
@@ -53,12 +52,13 @@ public static class VrchatModelAdapter
             model.HumanBones["rightEye"] = NodeFor(avatar.RightEyeBoneName);
 
         // One synthetic mesh per face/eyelid GameObject that owns blendshapes.
-        var meshIndexByGameObject = new Dictionary<(string Name, string Path), int>();
-        int MeshFor(string gameObjectName, string bindingPath = null)
+        var meshIndexByGameObject = new Dictionary<(string Name, string Path, VrchatBoneTarget Target), int>();
+        int MeshFor(string gameObjectName, string bindingPath = null, VrchatBoneTarget target = null)
         {
+            gameObjectName ??= target?.Name;
             // A null/empty name (variant-of-FBX stripped mesh) maps to a mesh with no node hint, so
             // the blendshape resolver falls back to matching by name across every imported renderer.
-            var key = (gameObjectName ?? "", bindingPath);
+            var key = (gameObjectName ?? "", bindingPath, target);
             if (!meshIndexByGameObject.TryGetValue(key, out int meshIndex))
             {
                 meshIndex = model.MeshTargetNames.Count;
@@ -66,7 +66,7 @@ public static class VrchatModelAdapter
                 if (bindingPath != null) model.MeshBindingPaths[meshIndex] = bindingPath;
                 model.MeshToNodes[meshIndex] = string.IsNullOrEmpty(gameObjectName)
                     ? new List<int>()
-                    : new List<int> { NodeFor(gameObjectName) };
+                    : new List<int> { NodeFor(gameObjectName, target) };
                 meshIndexByGameObject[key] = meshIndex;
             }
             return meshIndex;
@@ -75,7 +75,7 @@ public static class VrchatModelAdapter
         // Visemes (resolved by blendshape name on the viseme mesh).
         foreach (VrchatViseme viseme in avatar.Visemes)
         {
-            int meshIndex = MeshFor(viseme.MeshGameObjectName, viseme.MeshGameObjectPath);
+            int meshIndex = MeshFor(viseme.MeshGameObjectName, viseme.MeshGameObjectPath, viseme.MeshTarget);
             List<string> targetNames = model.MeshTargetNames[meshIndex];
             int morphIndex = targetNames.Count;
             targetNames.Add(viseme.BlendShapeName);
@@ -96,7 +96,7 @@ public static class VrchatModelAdapter
             int morphIndex;
             if (shapeName != null)
             {
-                meshIndex = MeshFor(avatar.Blink.MeshGameObjectName, avatar.Blink.MeshGameObjectPath);
+                meshIndex = MeshFor(avatar.Blink.MeshGameObjectName, avatar.Blink.MeshGameObjectPath, avatar.Blink.MeshTarget);
                 morphIndex = model.MeshTargetNames[meshIndex].Count;
                 model.MeshTargetNames[meshIndex].Add(shapeName);
             }
@@ -105,7 +105,9 @@ public static class VrchatModelAdapter
                 // Raw Unity indices must not index the synthetic viseme-name table on this mesh.
                 meshIndex = model.MeshTargetNames.Count;
                 model.MeshTargetNames.Add(new List<string>());
-                int node = NodeFor(avatar.Blink.MeshGameObjectName);
+                if (avatar.Blink.MeshGameObjectPath != null)
+                    model.MeshBindingPaths[meshIndex] = avatar.Blink.MeshGameObjectPath;
+                int node = NodeFor(avatar.Blink.MeshGameObjectName, avatar.Blink.MeshTarget);
                 model.MeshToNodes[meshIndex] = node >= 0 ? new List<int> { node } : new List<int>();
                 morphIndex = avatar.Blink.BlendShapeIndex;
             }

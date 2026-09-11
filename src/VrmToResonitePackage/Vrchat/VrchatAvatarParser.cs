@@ -194,7 +194,7 @@ public static class VrchatAvatarParser
                 throw new InvalidDataException("アバター本体のルートがEditorOnlyのため変換対象がありません。");
             avatar.AdditionalFbxs.RemoveAll(model => avatar.EditorOnlyFbxGuids.Contains(model.Guid));
             ParseFbxBlendShapeNames(package, avatar);
-            ParseDescriptor(package, selected.Scene, effectiveDescriptor, avatar);
+            ParseDescriptor(package, selected.Scene, effectiveDescriptor, avatar, descriptorGuid);
             VrchatAnimatorFaceParser.Apply(package, effectiveDescriptor.Root, avatar);
             ParseVariantRendererOverrides(package, selected.Source.Guid, avatar);
             avatar.RendererMaterials.RemoveAll(renderer => avatar.EditorOnlyFbxGuids.Contains(renderer.FbxGuid ?? ""));
@@ -227,7 +227,7 @@ public static class VrchatAvatarParser
         ResolveFbx(package, selected.Scene, selected.Root, includedSubtree, avatar);
         ParseFbxBlendShapeNames(package, avatar);
         ParseHumanoid(package, avatar);
-        ParseDescriptor(package, selected.Scene, effectiveDescriptor, avatar);
+        ParseDescriptor(package, selected.Scene, effectiveDescriptor, avatar, descriptorGuid);
         VrchatAnimatorFaceParser.Apply(package, effectiveDescriptor.Root, avatar);
         ParseVariantPhysBones(package, selected.Source.Guid, avatar, includedSubtree);
         ParseRendererMaterials(package, selected.Scene, includedSubtree, avatar, selected.Source.Guid);
@@ -1765,7 +1765,7 @@ public static class VrchatAvatarParser
     // ---------------------------------------------------------------- descriptor (viseme/blink/view)
 
     private static void ParseDescriptor(UnityPackage package, UnityScene scene, YamlDocument descriptor,
-        VrchatAvatar avatar)
+        VrchatAvatar avatar, string descriptorGuid)
     {
         YamlNode d = descriptor.Root;
         var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);
@@ -1782,7 +1782,9 @@ public static class VrchatAvatarParser
         // Variant descriptors often reference a local stripped renderer; follow it to the source
         // FBX GUID/fileID so the imported renderer name is preserved.
         string visemeMesh = ResolveReferenceGameObjectName(package, scene, d?["VisemeSkinnedMesh"], modelResolvers);
-        if (lipSync == 3 && visemeShapes?.Seq != null)
+        var visemeTarget = ResolveDescriptorMeshTarget(package, descriptorGuid, d?["VisemeSkinnedMesh"]);
+        // Explicit null is authored intent, not a failed lookup eligible for global fallback.
+        if (lipSync == 3 && visemeShapes?.Seq != null && d?["VisemeSkinnedMesh"]?.FileID != 0)
         {
             foreach ((string preset, int idx) in VrchatConstants.VisemeToVrcSlot())
             {
@@ -1800,6 +1802,7 @@ public static class VrchatAvatarParser
                     ResonitePreset = preset,
                     BlendShapeName = shape,
                     MeshGameObjectName = visemeMesh,
+                    MeshTarget = visemeTarget,
                 });
             }
         }
@@ -1825,11 +1828,29 @@ public static class VrchatAvatarParser
                 if (eyelidMesh != null && blinkIndex >= 0)
                 {
                     avatar.Blink = new VrchatBlink { MeshGameObjectName = eyelidMesh, BlendShapeIndex = blinkIndex,
+                        MeshTarget = ResolveDescriptorMeshTarget(package, descriptorGuid, eye["eyelidsSkinnedMesh"]),
                         BlendShapeName = ResolveReferencedBlendShape(package, scene, eye["eyelidsSkinnedMesh"],
                             blinkIndex, modelResolvers, new()) };
                 }
             }
         }
+    }
+
+    private static VrchatBoneTarget ResolveDescriptorMeshTarget(UnityPackage package, string descriptorGuid,
+        YamlNode reference)
+    {
+        var identity = ResolveObjectIdentity(package, reference?.Guid ?? descriptorGuid, reference?.FileID ?? 0);
+        if (identity.Guid == null) return null;
+        var asset = package.ByGuid(identity.Guid);
+        if (asset?.Extension is ".prefab" or ".unity")
+        {
+            var scene = package.ReadScene(asset);
+            long go = scene.Doc(identity.Id)?.Root?["m_GameObject"]?.FileID ?? 0;
+            long transform = scene.TransformOfGameObject(go)?.FileId ?? 0;
+            if (transform == 0) return null;
+            return new VrchatBoneTarget(null, scene.GameObjectName(go), null, identity.Guid, transform);
+        }
+        return ResolveCopiedBoneTarget(package, identity.Guid, identity.Id, null, new(), new());
     }
 
     private static string ResolveReferencedBlendShape(UnityPackage package, UnityScene scene,

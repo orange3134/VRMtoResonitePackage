@@ -585,6 +585,24 @@ static async Task Run(string fbxPath, string rendererName)
             MeshGameObjectPath = "Copy parent B/" + rendererName, BlendShapeName = sameB.BlendShapeName(0) });
         var faceModel = VrchatModelAdapter.ToVrmModel(faceAvatar);
         var resolverType = typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.BlendshapeResolver")!;
+        var descriptorAvatar = new VrchatAvatar();
+        var descriptorTarget = new VrchatBoneTarget(null, rendererName, null, "descriptor-copy", 21);
+        descriptorAvatar.Visemes.Add(new VrchatViseme { ResonitePreset = "aa", MeshGameObjectName = rendererName,
+            MeshTarget = descriptorTarget, BlendShapeName = sameB.BlendShapeName(0) });
+        descriptorAvatar.Blink = new VrchatBlink { MeshGameObjectName = rendererName,
+            MeshTarget = descriptorTarget, BlendShapeIndex = 0 };
+        var descriptorModel = VrchatModelAdapter.ToVrmModel(descriptorAvatar);
+        var descriptorNodes = descriptorModel.NodeTargets.ToDictionary(pair => pair.Key, pair => sameB.Slot);
+        var descriptorResolver = Activator.CreateInstance(resolverType, root, descriptorModel, descriptorNodes)!;
+        foreach (var expression in descriptorModel.Expressions)
+            Check(ReferenceEquals(resolverType.GetMethod("Resolve")!.Invoke(descriptorResolver,
+                    new object[] { expression.Binds.Single() }), sameB.BlendShapeWeights.GetElement(0)),
+                "Descriptor " + expression.Preset + " selects the second namesake by object identity");
+        var missingDescriptorResolver = Activator.CreateInstance(resolverType, root, descriptorModel,
+            new Dictionary<int, Slot>())!;
+        Check(descriptorModel.Expressions.All(expression => resolverType.GetMethod("Resolve")!.Invoke(
+                missingDescriptorResolver, new object[] { expression.Binds.Single() }) == null),
+            "Missing descriptor identity cannot fall back to another renderer");
         var resolver = Activator.CreateInstance(resolverType, root, faceModel)!;
         var bind = faceModel.Expressions.Single().Binds.Single();
         object ResolveFace() => resolverType.GetMethod("Resolve")!.Invoke(resolver, new object[] { bind })!;
@@ -614,6 +632,9 @@ static async Task Run(string fbxPath, string rendererName)
         Slot originalFaceParent = sameB.Slot.Parent;
         Slot movedFaceParent = root.AddSlot("Merged face parent");
         sameB.Slot.Parent = movedFaceParent;
+        Check(descriptorModel.Expressions.All(expression => ReferenceEquals(resolverType.GetMethod("Resolve")!.Invoke(
+                descriptorResolver, new object[] { expression.Binds.Single() }), sameB.BlendShapeWeights.GetElement(0))),
+            "Descriptor renderer identity survives reparenting");
         var lateResolver = Activator.CreateInstance(resolverType, root, faceModel)!;
         Check(resolverType.GetMethod("Resolve")!.Invoke(lateResolver, new object[] { bind }) == null,
             "Reproduction: capturing Animator paths after reparenting loses the surviving face");

@@ -873,7 +873,8 @@ Transform:
     var cleared = Read(settings + Change("VisemeBlendShapes.Array.size", "1")
         + Change("VisemeSkinnedMesh", "{fileID: 0}", true)
         + Change("customEyeLookSettings.eyelidsBlendshapes.Array.size", "0") + localObjects);
-    Check(cleared.Visemes.Count == 1 && cleared.Visemes[0].MeshGameObjectName == null && cleared.Blink == null,
+    Check(cleared.Visemes.Count == 0 && cleared.Blink == null &&
+          VrchatModelAdapter.ToVrmModel(cleared).Expressions.Count == 0,
         "Descriptor arrays can shrink and object references can be explicitly cleared");
     Check(Read(settings + Change("enableEyeLook", "0") + localObjects).LeftEyeBoneName == null,
         "Variant can disable inherited eye settings");

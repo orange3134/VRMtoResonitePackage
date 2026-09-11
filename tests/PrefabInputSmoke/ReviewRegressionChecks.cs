@@ -20,6 +20,35 @@ internal static class ReviewRegressionChecks
         string baseFile = asset("Assets/ReviewBase.prefab", baseGuid, baseText);
         string variantText = $"--- !u!1001 &99\nPrefabInstance:\n  m_SourcePrefab: {{guid: {baseGuid}}}\n";
         string variantFile = asset("Assets/ReviewVariant.prefab", variantGuid, variantText);
+        Case("explicitly cleared descriptor visemes produce no adapted bindings", () =>
+        {
+            using var package = UnityPackage.Open(baseFile);
+            var descriptor = new YamlDocument { Root = UnityYaml.ParseFlatDocument("lipSync: 3\nVisemeSkinnedMesh: {fileID: 0}\nVisemeBlendShapes: [Blink]\n") };
+            var avatar = new VrchatAvatar();
+            Call("ParseDescriptor", package, package.ReadScene(package.InputPrefab), descriptor, avatar, baseGuid);
+            Require(VrchatModelAdapter.ToVrmModel(avatar).Expressions.Count == 0);
+        });
+        Case("descriptor face bindings retain the second same-named object identity", () =>
+        {
+            const string guid = "ab120000000000000000000000000009";
+            string text = "--- !u!1 &1\nGameObject:\n  m_Name: Root\n--- !u!4 &2\nTransform:\n  m_GameObject: {fileID: 1}\n  m_Father: {fileID: 0}\n";
+            foreach (int id in new[] { 10, 20 })
+                text += $"\n--- !u!1 &{id}\nGameObject:\n  m_Name: Body\n--- !u!4 &{id + 1}\nTransform:\n  m_GameObject: {{fileID: {id}}}\n  m_Father: {{fileID: 2}}\n--- !u!137 &{id + 2}\nSkinnedMeshRenderer:\n  m_GameObject: {{fileID: {id}}}\n";
+            string file = asset("Assets/RepeatedDescriptor.prefab", guid, text);
+            using var package = UnityPackage.Open(file);
+            var descriptor = new YamlDocument { Root = UnityYaml.ParseFlatDocument($"lipSync: 3\nVisemeSkinnedMesh: {{fileID: 22, guid: {guid}}}\nVisemeBlendShapes: [Blink]\nenableEyeLook: 1\ncustomEyeLookSettings:\n  eyelidType: 2\n  eyelidsSkinnedMesh: {{fileID: 22, guid: {guid}}}\n  eyelidsBlendshapes: 00000000\n") };
+            var avatar = new VrchatAvatar();
+            Call("ParseDescriptor", package, package.ReadScene(package.InputPrefab), descriptor, avatar, guid);
+            var model = VrchatModelAdapter.ToVrmModel(avatar);
+            Require(model.Expressions.Count == 2);
+            foreach (var expression in model.Expressions)
+            {
+                int mesh = expression.Binds.Single().MeshIndex;
+                int node = model.MeshToNodes[mesh].Single();
+                Require(model.NodeTargets.TryGetValue(node, out var target) &&
+                    target.PrefabGuid == guid && target.TransformFileId == 21);
+            }
+        });
         Case("same-named source renderers retain independent blendshape tables by path", () =>
         {
             var resolver = new UnityModelFileIdResolver(null);

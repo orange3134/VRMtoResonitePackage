@@ -1310,13 +1310,22 @@ internal sealed class BlendshapeResolver
     private readonly List<SkinnedMeshRenderer> _renderers;
     private readonly Dictionary<string, Slot> _slotsByName;
     private readonly Dictionary<SkinnedMeshRenderer, string> _rendererPaths;
+    private readonly Dictionary<int, SkinnedMeshRenderer[]> _identityRenderers = new();
 
-    public BlendshapeResolver(Slot root, VrmModel vrm)
+    public BlendshapeResolver(Slot root, VrmModel vrm) : this(root, vrm, null) { }
+
+    public BlendshapeResolver(Slot root, VrmModel vrm, IReadOnlyDictionary<int, Slot> resolvedNodes)
     {
         _vrm = vrm;
         _renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>();
         _slotsByName = SlotIndex.Build(root);
         _rendererPaths = _renderers.ToDictionary(skin => skin, skin => RelativePath(skin.Slot));
+        foreach (int node in vrm.NodeTargets.Keys)
+        {
+            Slot slot = null;
+            resolvedNodes?.TryGetValue(node, out slot);
+            _identityRenderers[node] = _renderers.Where(skin => skin.Slot == slot).ToArray();
+        }
 
         string RelativePath(Slot slot)
         {
@@ -1358,7 +1367,9 @@ internal sealed class BlendshapeResolver
         {
             // Animator morph indices address the synthetic name table, not the FBX's
             // shape order. A missing named shape cannot safely fall back to that index.
-            if (targetName != null && _vrm.MeshBindingPaths.ContainsKey(bind.MeshIndex)) break;
+            if (targetName != null && (_vrm.MeshBindingPaths.ContainsKey(bind.MeshIndex) ||
+                (_vrm.MeshToNodes.TryGetValue(bind.MeshIndex, out var targetNodes) &&
+                 targetNodes.Any(_vrm.NodeTargets.ContainsKey)))) break;
             if (bind.MorphIndex >= 0 && bind.MorphIndex < skin.MeshBlendshapeCount)
             {
                 return (skin, skin.BlendShapeWeights.GetElement(bind.MorphIndex));
@@ -1370,6 +1381,15 @@ internal sealed class BlendshapeResolver
 
     private IEnumerable<SkinnedMeshRenderer> EnumerateCandidates(VrmExpressionBind bind)
     {
+        if (_vrm.MeshToNodes.TryGetValue(bind.MeshIndex, out var identityNodes) &&
+            identityNodes.Any(_vrm.NodeTargets.ContainsKey))
+        {
+            foreach (int node in identityNodes)
+                if (_identityRenderers.TryGetValue(node, out var renderers))
+                    foreach (var skin in renderers)
+                        if (!skin.IsDestroyed) yield return skin;
+            yield break;
+        }
         if (_vrm.MeshBindingPaths.TryGetValue(bind.MeshIndex, out string bindingPath))
         {
             if (_vrm.MeshBindingRootPath != null)
