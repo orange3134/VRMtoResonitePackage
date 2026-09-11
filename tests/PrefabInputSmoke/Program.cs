@@ -1342,6 +1342,50 @@ MonoBehaviour:
             "Authored physics helper reuses its verified imported skeleton parent");
     }
     const string extraModelGuid = "73737373737373737373737373737374";
+    const string bakedMeshGuid = "73737373737373737373737373737375";
+    asset("Assets/BakedMesh.asset", bakedMeshGuid, "--- !u!43 &4300000\nMesh:\n  m_Name: Body\n");
+    File.AppendAllText(model + ".meta", "  humanDescription:\n    human:\n    - boneName: Shared\n      humanName: Hips\n");
+    string bakedFile = asset("Assets/BakedPhysics.prefab", "74747474747474747474747474747481",
+        physics.Replace($"guid: {guid}", $"guid: {bakedMeshGuid}")
+            .Replace("m_Name: Avatar\n", "m_Name: Avatar\n  m_Component:\n  - component: {fileID: 102}\n") +
+        $"\n--- !u!95 &102\nAnimator:\n  m_GameObject: {{fileID: 100}}\n  m_Avatar: {{fileID: 9000000, guid: {guid}}}\n" +
+        "--- !u!4 &3\nTransform:\n  m_GameObject: {fileID: 1}\n  m_Father: {fileID: 101}\n");
+    using (var bakedPackage = UnityPackage.Open(bakedFile))
+    {
+        var bakedScene = bakedPackage.ReadScene(bakedPackage.InputPrefab);
+        var bakedAvatar = new VrchatAvatar();
+        object InvokeParser(string method, params object[] args) => typeof(VrchatAvatarParser)
+            .GetMethod(method, System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, args);
+        InvokeParser("ResolveFbx", bakedPackage, bakedScene, bakedScene.Doc(100),
+            bakedScene.GameObjects.Select(go => go.FileId).ToHashSet(), bakedAvatar);
+        Check(bakedAvatar.FbxGuid == guid, "Baked mesh prefab selects its root Animator humanoid FBX");
+        InvokeParser("ParseVariantPhysBones", bakedPackage, bakedPackage.InputPrefab.Guid, bakedAvatar, null);
+        bool importedSkeleton = bakedAvatar.PhysicsPlacements.SelectMany(p => p.Transforms)
+            .Any(t => t.ImportedBone is { } bone && bone.FbxGuid == guid && bone.Path == "Left/Shared");
+        Console.WriteLine($"Baked physics retains imported skeleton: {importedSkeleton}");
+        var descriptor = new YamlDocument { Root = UnityYaml.ParseFlatDocument(
+            "lipSync: 3\nVisemeSkinnedMesh: {fileID: 2}\nVisemeBlendShapes: [Blink]\nenableEyeLook: 1\ncustomEyeLookSettings:\n  eyelidType: 2\n  eyelidsSkinnedMesh: {fileID: 2}\n  eyelidsBlendshapes: 00000000\n") };
+        InvokeParser("ParseDescriptor", bakedPackage, bakedScene, descriptor, bakedAvatar, bakedPackage.InputPrefab.Guid);
+        var adapted = VrchatModelAdapter.ToVrmModel(bakedAvatar);
+        bool importedFace = adapted.Expressions.Count == 2 && adapted.Expressions.All(e =>
+            adapted.NodeTargets[adapted.MeshToNodes[e.Binds.Single().MeshIndex].Single()] is { } target &&
+            target.FbxGuid == guid && target.Path.EndsWith("/Body"));
+        Console.WriteLine($"Baked descriptor face resolves imported renderer: {importedFace}");
+        Check(importedSkeleton && importedFace, "Standalone meshes retain Animator-selected face and physics identities");
+        Check(bakedAvatar.PhysicsPlacements.SelectMany(p => p.Transforms)
+                .Any(t => t.Name == "PhysicsHelper" && t.ImportedBone == null && t.LocalPosition.Y == 2),
+            "Baked physics preserves authored helpers absent from the selected FBX");
+        string missingFile = asset("Assets/BakedMissingFace.prefab", "74747474747474747474747474747482",
+            File.ReadAllText(bakedFile).Replace("m_Name: Body\n", "m_Name: MissingFace\n"));
+        using var missingPackage = UnityPackage.Open(missingFile);
+        var missingAvatar = new VrchatAvatar { FbxGuid = guid };
+        InvokeParser("ParseDescriptor", missingPackage, missingPackage.ReadScene(missingPackage.InputPrefab),
+            descriptor, missingAvatar, missingPackage.InputPrefab.Guid);
+        Check(missingAvatar.Visemes.Single().MeshTarget is { FbxGuid: null, PrefabGuid: not null } &&
+              missingAvatar.Blink.MeshTarget is { FbxGuid: null, PrefabGuid: not null },
+            "Missing baked face renderers retain strict identity instead of selecting another renderer");
+    }
     asset("Assets/PhysicsAccessory.fbx", extraModelGuid, File.ReadAllText(model));
     string mergeFixture = local
         .Replace("m_GameObject: {fileID: 110}\n", "m_GameObject: {fileID: 110}\n  m_Children:\n  - {fileID: 121}\n")

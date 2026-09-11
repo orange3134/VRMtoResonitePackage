@@ -195,6 +195,11 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - overrideはrenderer名だけでなくsource FBX GUIDでscopeする。同名rendererを持つ合成FBXを混同しない。
 - standalone `.asset` meshだけはFBX GUIDがないため名前照合を許可する。
   未解決GUIDを `.asset` と同一視してscopeを外してはいけない。
+  Descriptor face targets for baked standalone meshes use a unique matching renderer
+  path in the selected FBX. Missing or ambiguous matches retain strict prefab identity.
+  With no local FBX mesh references, physics placement retains the selected Animator
+  skeleton context, reusing bones only after skeleton membership and full-path checks;
+  helpers absent from that skeleton remain authored objects.
 - authored FBX meshのコピーはprefab GUIDとGameObject fileIDから実Slotを保持し、同名でも
   materialと初期blendshapeを個別に適用する。識別子を持たない従来のrendererは、空のoverrideも
   含めて出現順に1対1で消費する。

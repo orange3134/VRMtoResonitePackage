@@ -20,6 +20,24 @@ internal static class ReviewRegressionChecks
         string baseFile = asset("Assets/ReviewBase.prefab", baseGuid, baseText);
         string variantText = $"--- !u!1001 &99\nPrefabInstance:\n  m_SourcePrefab: {{guid: {baseGuid}}}\n";
         string variantFile = asset("Assets/ReviewVariant.prefab", variantGuid, variantText);
+        Case("ambiguous baked face renderers retain strict prefab identity", () =>
+        {
+            const string meshGuid = "ab120000000000000000000000000010";
+            const string prefabGuid = "ab120000000000000000000000000011";
+            asset("Assets/AmbiguousBakedMesh.asset", meshGuid, "Mesh:\n  m_Name: Body\n");
+            var scene = UnityScene.Parse(baseText);
+            string sourceGuid = scene.RendererMesh(scene.MeshRenderers.Single()).Guid;
+            string file = asset("Assets/AmbiguousBakedFace.prefab", prefabGuid,
+                baseText.Replace(sourceGuid, meshGuid).Replace("Body_Base", "Body"));
+            using var package = UnityPackage.Open(file);
+            Require(new UnityModelFileIdResolver(package.ByGuid(branchesGuid)).RendererPathsUnder(0)
+                .Count(path => path.EndsWith("/Body")) == 2);
+            var descriptor = new YamlDocument { Root = UnityYaml.ParseFlatDocument(
+                "lipSync: 3\nVisemeSkinnedMesh: {fileID: 2}\nVisemeBlendShapes: [Blink]\n") };
+            var avatar = new VrchatAvatar { FbxGuid = branchesGuid };
+            Call("ParseDescriptor", package, package.ReadScene(package.InputPrefab), descriptor, avatar, prefabGuid);
+            Require(avatar.Visemes.Single().MeshTarget is { FbxGuid: null, PrefabGuid: prefabGuid, TransformFileId: 31 });
+        });
         Case("explicitly cleared descriptor visemes produce no adapted bindings", () =>
         {
             using var package = UnityPackage.Open(baseFile);

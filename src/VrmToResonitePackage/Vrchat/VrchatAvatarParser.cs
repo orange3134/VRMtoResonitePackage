@@ -1782,7 +1782,7 @@ public static class VrchatAvatarParser
         // Variant descriptors often reference a local stripped renderer; follow it to the source
         // FBX GUID/fileID so the imported renderer name is preserved.
         string visemeMesh = ResolveReferenceGameObjectName(package, scene, d?["VisemeSkinnedMesh"], modelResolvers);
-        var visemeTarget = ResolveDescriptorMeshTarget(package, descriptorGuid, d?["VisemeSkinnedMesh"]);
+        var visemeTarget = ResolveDescriptorMeshTarget(package, descriptorGuid, d?["VisemeSkinnedMesh"], avatar.FbxGuid);
         // Explicit null is authored intent, not a failed lookup eligible for global fallback.
         if (lipSync == 3 && visemeShapes?.Seq != null && d?["VisemeSkinnedMesh"]?.FileID != 0)
         {
@@ -1828,7 +1828,7 @@ public static class VrchatAvatarParser
                 if (eyelidMesh != null && blinkIndex >= 0)
                 {
                     avatar.Blink = new VrchatBlink { MeshGameObjectName = eyelidMesh, BlendShapeIndex = blinkIndex,
-                        MeshTarget = ResolveDescriptorMeshTarget(package, descriptorGuid, eye["eyelidsSkinnedMesh"]),
+                        MeshTarget = ResolveDescriptorMeshTarget(package, descriptorGuid, eye["eyelidsSkinnedMesh"], avatar.FbxGuid),
                         BlendShapeName = ResolveReferencedBlendShape(package, scene, eye["eyelidsSkinnedMesh"],
                             blinkIndex, modelResolvers, new()) };
                 }
@@ -1837,7 +1837,7 @@ public static class VrchatAvatarParser
     }
 
     private static VrchatBoneTarget ResolveDescriptorMeshTarget(UnityPackage package, string descriptorGuid,
-        YamlNode reference)
+        YamlNode reference, string primaryFbxGuid)
     {
         var identity = ResolveObjectIdentity(package, reference?.Guid ?? descriptorGuid, reference?.FileID ?? 0);
         if (identity.Guid == null) return null;
@@ -1848,6 +1848,19 @@ public static class VrchatAvatarParser
             long go = scene.Doc(identity.Id)?.Root?["m_GameObject"]?.FileID ?? 0;
             long transform = scene.TransformOfGameObject(go)?.FileId ?? 0;
             if (transform == 0) return null;
+            // Baked standalone meshes retain the original imported FBX renderer rather
+            // than creating a mesh copy. Scope this fallback to the selected model and
+            // require a unique renderer path; unresolved references keep strict identity.
+            var mesh = scene.Doc(identity.Id)?.Root?["m_Mesh"];
+            if (package.ByGuid(mesh?.Guid)?.Extension == ".asset" && primaryFbxGuid != null)
+            {
+                var resolver = new UnityModelFileIdResolver(package.ByGuid(primaryFbxGuid));
+                string name = scene.GameObjectName(go);
+                var paths = resolver.RendererPathsUnder(0)
+                    .Where(path => path.Split('/')[^1] == name).ToArray();
+                if (paths.Length == 1)
+                    return new VrchatBoneTarget(primaryFbxGuid, name, paths[0]);
+            }
             return new VrchatBoneTarget(null, scene.GameObjectName(go), null, identity.Guid, transform);
         }
         return ResolveCopiedBoneTarget(package, identity.Guid, identity.Id, null, new(), new());
@@ -3241,7 +3254,7 @@ public static class VrchatAvatarParser
             // authored duplicate: humanoid setup still controls the imported body bones.
             // CaptureLocalPlacementParents verifies bone membership and the full path,
             // and explicit source ancestors retain their own model identity.
-            string skeletonModel = localModels.Contains(avatar.FbxGuid) ? avatar.FbxGuid :
+            string skeletonModel = localModels.Length == 0 || localModels.Contains(avatar.FbxGuid) ? avatar.FbxGuid :
                 localModels.Length == 1 ? localModels[0] : null;
             var subtree = entry.Scene.SubtreeGameObjectIds(
                 entry.Scene.Doc(target.TransformFileId)?.Root?["m_GameObject"]?.FileID ?? 0);
