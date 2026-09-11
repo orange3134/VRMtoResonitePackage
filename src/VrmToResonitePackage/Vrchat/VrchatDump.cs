@@ -39,6 +39,8 @@ internal static class VrchatDump
             VrchatAvatarParser.DiagnoseCandidates(package);
 
             VrchatAvatar avatar = VrchatAvatarParser.Parse(package, avatarOverride);
+            foreach (var merge in avatar.ModularMergeArmatures)
+                Console.WriteLine($"Merge Armature: {merge.SourceBoneTarget} -> {merge.TargetBoneTarget}, path={merge.TargetPath}");
 
             Console.WriteLine();
             Console.WriteLine($"アバター: {avatar.Name}");

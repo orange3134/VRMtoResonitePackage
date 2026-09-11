@@ -313,12 +313,13 @@ internal static class VrchatSceneSetup
         }
     }
 
-    public static void ApplyModularAvatar(Slot root, VrchatAvatar avatar, IDictionary<int, Slot> physicsNodes = null)
+    public static void ApplyModularAvatar(Slot root, VrchatAvatar avatar, IDictionary<int, Slot> physicsNodes = null,
+        Func<VrchatBoneTarget, Slot> resolveTarget = null, Slot descriptorRoot = null)
     {
         int merged = 0;
         foreach (VrchatModularMergeArmature merge in avatar.ModularMergeArmatures)
         {
-            int rewritten = ApplyMergeArmature(root, merge, physicsNodes);
+            int rewritten = ApplyMergeArmature(root, merge, physicsNodes, resolveTarget, descriptorRoot);
             merged += rewritten;
             UniLog.Log($"Modular Avatar Merge Armature: {merge.SourceName} -> {merge.TargetName}, " +
                        $"{rewritten} bone reference(s) rewritten.");
@@ -339,31 +340,43 @@ internal static class VrchatSceneSetup
         }
     }
 
-    private static int ApplyMergeArmature(Slot root, VrchatModularMergeArmature merge, IDictionary<int, Slot> physicsNodes)
+    private static int ApplyMergeArmature(Slot root, VrchatModularMergeArmature merge, IDictionary<int, Slot> physicsNodes,
+        Func<VrchatBoneTarget, Slot> resolveTarget, Slot descriptorRoot)
     {
-        Slot target = FindFirstSlot(root, merge.TargetName);
+        Slot target = merge.TargetBoneTarget != null ? resolveTarget?.Invoke(merge.TargetBoneTarget) :
+            descriptorRoot != null && merge.TargetPath != null ? ResolveAvatarPath(descriptorRoot, merge.TargetPath) :
+            FindFirstSlot(root, merge.TargetName);
         if (target == null)
         {
+            UniLog.Warning($"Merge Armature target missing: {merge.TargetBoneTarget} ({merge.TargetPath})");
             return 0;
         }
 
         Slot source = null;
         var mappings = new Dictionary<Slot, Slot>();
-        foreach (Slot candidate in FindMergeSourceCandidates(root, merge, target))
+        IEnumerable<Slot> candidates = merge.SourceBoneTarget != null
+            ? new[] { resolveTarget?.Invoke(merge.SourceBoneTarget) }.Where(slot => slot != null &&
+                slot != target && !IsDescendantOf(target, slot))
+            : FindMergeSourceCandidates(root, merge, target);
+        foreach (Slot candidate in candidates)
         {
             var candidateMappings = new Dictionary<Slot, Slot>();
             CollectBoneMappings(candidate, target, merge, candidateMappings);
-            if (candidateMappings.Count > mappings.Count)
+            if (merge.SourceBoneTarget != null || candidateMappings.Count > mappings.Count)
             {
                 source = candidate;
                 mappings = candidateMappings;
             }
         }
-        if (mappings.Count == 0)
+        if (source == null)
         {
+            UniLog.Warning($"Merge Armature source missing: {merge.SourceBoneTarget} ({merge.SourceName})");
             return 0;
         }
 
+        // The component also merges its owner, including bones bound directly to the
+        // armature root and unmatched helper branches immediately beneath it.
+        mappings[source] = target;
         int rewritten = RewriteSkinnedMeshBones(root, mappings);
         // Resolve identities before merging, then remap every physics role (root, ignore,
         // collider) with the same mapping as the skin. Updating each merge also handles
@@ -387,6 +400,18 @@ internal static class VrchatSceneSetup
             source.Destroy();
         }
         return rewritten;
+    }
+
+    private static Slot ResolveAvatarPath(Slot root, string path)
+    {
+        if (path == "$$AVATAR") return root;
+        foreach (string part in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var children = root.Children.Where(child => child.Name == part).ToArray();
+            if (children.Length != 1) return null;
+            root = children[0];
+        }
+        return root;
     }
 
     private static IEnumerable<Slot> FindMergeSourceCandidates(Slot root, VrchatModularMergeArmature merge,

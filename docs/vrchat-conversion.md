@@ -90,6 +90,7 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   additional wrapper を畳む場合も、生存する source root へ GUID/空path と import root 表を移す。
 - Animatorのbinding pathはdescriptor root基準で解決する。追加layerの部分weightは、
   full-weightのdriverへ誤変換しないよう推論対象から除く。
+  Additive layerも最終的な絶対weightを表さないため、viseme・blinkの推論対象から除く。
   viseme推論はentry/defaultとtransitionの接続を辿り、未接続のchild state machineを含めない。
   Entry が全 Viseme 値を処理する場合、default state を無条件に到達可能としない。
   muted Entry や一部の値だけを処理する Entry では default fallback を残す。
@@ -104,6 +105,7 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   Solo/Mute適用後の同一transition listではViseme条件と順序を確認し、先行transitionが
   必ず成立する値について後続transitionを辿らない。exit time付きの先行transitionは遮断と見なさない。
   Viseme以外の条件を持つlayerは、toggleの初期値に関係なく保守的に推論対象から除く。
+  この判定も実際に到達可能な遷移だけを対象にし、未接続stateの条件では口パクを除外しない。
   永続的なDirectVisemeDriverでは条件付きの有効化・無効化を保持できないため。
   同じ Viseme 値のまま遷移先 state から離脱できる場合も、その phoneme の推論を除外する。
   無条件・exit time 付きの離脱と silence fallback にも適用し、Mute/Solo と Viseme 条件を尊重する。
@@ -126,7 +128,11 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - 参照される追加FBXを再帰収集し、各FBXのmaterial mapを混ぜずに保持する。
 - `PrefabInstance.m_TransformParent` とsource objectを辿り、追加FBXを対応する親boneへ配置する。
 - Merge Armatureは同じsource/target名でもcomponentごとに適用する。
-  descendantに配置済みのsourceも候補から除外しない。
+  source GameObjectとtargetObjectをprefab instance・Transform・FBX pathの参照として保持し、
+  名前や一致する骨の数で別の衣装を選ばない。variantのtargetObject・prefix・suffix上書きと
+  component削除を反映する。targetObjectがない旧形式ではdescriptor rootからreferencePathを辿る。
+  descendantに配置済みのsourceも統合できる。Revan underwearを含む複数衣装では、
+  同名の別衣装に一致する骨が多くても指定された衣装だけを消費することを検証する。
 - semanticに同じbone間で子を移すときはglobalではなくlocal transformを保持する。
 - primaryを含むimport wrapperは最終階層に残さない。
 

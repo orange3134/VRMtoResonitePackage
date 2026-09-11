@@ -52,9 +52,10 @@ public static class VrchatAnimatorFaceParser
             int layerIndex = 0;
             foreach (YamlNode animatorLayer in settings?["m_AnimatorLayers"]?.Seq ?? new())
             {
-                // Inferred drivers emit full-weight expressions; partial layer contributions
+                // Inferred drivers emit full-weight expressions; partial or additive contributions
                 // cannot be represented without changing the deformation.
-                if (layerIndex++ > 0 && (animatorLayer["m_DefaultWeight"]?.AsFloat() ?? 0) != 1f) continue;
+                if (layerIndex++ > 0 && ((animatorLayer["m_DefaultWeight"]?.AsFloat() ?? 0) != 1f ||
+                    animatorLayer["m_BlendingMode"]?.AsInt() == 1)) continue;
                 var reachable = new HashSet<long>();
                 var reachedValues = new Dictionary<long, HashSet<int>>();
                 Gather(animatorLayer["m_StateMachine"]?.FileID ?? 0);
@@ -62,8 +63,6 @@ public static class VrchatAnimatorFaceParser
                 // its startup default is enabled. Reject such layers conservatively.
                 bool gated = reachable.Any(id => (controller.Doc(id)?.Root?["m_Conditions"]?.Seq ?? new())
                     .Any(condition => condition["m_ConditionEvent"]?.AsString() != "Viseme"));
-                reachable.Clear();
-                Gather(animatorLayer["m_StateMachine"]?.FileID ?? 0, followDestinations: true);
                 if (descriptor["lipSync"]?.AsInt() == 4 && !gated)
                 {
                     foreach (long id in reachable)
@@ -172,27 +171,18 @@ public static class VrchatAnimatorFaceParser
                     return shapes;
                 }
 
-                void Gather(long id, bool followDestinations = false, IEnumerable<int> eligibleValues = null)
+                void Gather(long id, IEnumerable<int> eligibleValues = null)
                 {
                     if (id == 0) return;
                     var incoming = (eligibleValues ?? Enumerable.Range(0, 15)).ToHashSet();
-                    if (followDestinations)
-                    {
-                        if (!reachedValues.TryGetValue(id, out var seen)) reachedValues[id] = seen = new();
-                        incoming.ExceptWith(seen);
-                        if (incoming.Count == 0) return;
-                        seen.UnionWith(incoming);
-                        reachable.Add(id);
-                    }
-                    else if (!reachable.Add(id)) return;
+                    if (!reachedValues.TryGetValue(id, out var seen)) reachedValues[id] = seen = new();
+                    incoming.ExceptWith(seen);
+                    if (incoming.Count == 0) return;
+                    seen.UnionWith(incoming);
+                    reachable.Add(id);
                     YamlNode node = controller.Doc(id)?.Root;
                     foreach (string key in new[] { "m_DstState", "m_DstStateMachine" })
-                        Gather(node?[key]?.FileID ?? 0, followDestinations, incoming);
-                    if (!followDestinations)
-                    {
-                        foreach (YamlNode state in node?["m_ChildStates"]?.Seq ?? new()) Gather(state["m_State"]?.FileID ?? 0);
-                        foreach (YamlNode machine in node?["m_ChildStateMachines"]?.Seq ?? new()) Gather(machine["m_StateMachine"]?.FileID ?? 0);
-                    }
+                        Gather(node?[key]?.FileID ?? 0, incoming);
                     foreach (string key in new[] { "m_Transitions", "m_EntryTransitions", "m_AnyStateTransitions" })
                     {
                         // Entry routing happens immediately with the incoming parameter value.
@@ -203,18 +193,18 @@ public static class VrchatAnimatorFaceParser
                             YamlNode candidate = controller.Doc(transition.FileID ?? 0)?.Root;
                             var conditions = candidate?["m_Conditions"]?.Seq ?? new();
                             IEnumerable<int> eligible = remaining.ToArray();
-                            if (followDestinations && conditions.All(c => c["m_ConditionEvent"]?.AsString() == "Viseme"))
+                            if (conditions.All(c => c["m_ConditionEvent"]?.AsString() == "Viseme"))
                             {
                                 eligible = remaining.Where(value => conditions.All(c => MatchesViseme(c, value))).ToArray();
                                 if (!eligible.Any()) continue;
                                 // Timed transitions do not always win before later siblings.
                                 if (candidate?["m_HasExitTime"]?.AsBool() != true) remaining.ExceptWith(eligible);
                             }
-                            Gather(transition.FileID ?? 0, followDestinations, eligible);
+                            Gather(transition.FileID ?? 0, eligible);
                         }
                         // Default is the fallback only for values not routed by Entry.
-                        if (key == "m_EntryTransitions" && (!followDestinations || remaining.Count > 0))
-                            Gather(node?["m_DefaultState"]?.FileID ?? 0, followDestinations, remaining);
+                        if (key == "m_EntryTransitions" && remaining.Count > 0)
+                            Gather(node?["m_DefaultState"]?.FileID ?? 0, remaining);
                     }
                 }
             }

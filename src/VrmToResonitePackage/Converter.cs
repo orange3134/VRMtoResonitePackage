@@ -469,7 +469,9 @@ internal static class Converter
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources);
                 var physicsNodes = model.NodeTargets.ToDictionary(entry => entry.Key, entry =>
                     Vrchat.VrchatSceneSetup.ResolveImportedTarget(entry.Value, importedMeshSources, importedNodePaths, prefabSlots));
-                Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes);
+                Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes,
+                    target => Vrchat.VrchatSceneSetup.ResolveImportedTarget(target, importedMeshSources,
+                        importedNodePaths, prefabSlots), descriptorRoot is { IsDestroyed: false } ? descriptorRoot : root);
                 if (descriptorRoot is { IsDestroyed: false })
                 {
                     var parts = new Stack<string>();

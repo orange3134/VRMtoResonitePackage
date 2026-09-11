@@ -178,6 +178,32 @@ static async Task Run(string fbxPath, string rendererName)
               mergeNodes[2] == untouchedHips && mergeNodes[3] == finalHips.Parent && mergeNodes[4] == finalHips.Parent,
             "Successive armature merges remap physics targets without changing another instance");
         Slot primary = root.AddSlot("Primary"), additional = root.AddSlot("Additional");
+        var scopedRoot = root.AddSlot("Scoped merge regression");
+        var bodyArmature = scopedRoot.AddSlot("armature");
+        var bodyHips = bodyArmature.AddSlot("Hips");
+        bodyHips.AddSlot("Spine");
+        var unrelatedArmature = scopedRoot.AddSlot("Other clothing").AddSlot("armature");
+        unrelatedArmature.AddSlot("Hips").AddSlot("Spine");
+        var underwearArmature = scopedRoot.AddSlot("Underwear").AddSlot("armature");
+        var underwearHips = underwearArmature.AddSlot("Hips");
+        var clothingHelper = underwearArmature.AddSlot("Clothing helper");
+        var clothingRenderer = scopedRoot.AddSlot("Underwear mesh").AttachComponent<SkinnedMeshRenderer>();
+        clothingRenderer.Bones.Add(underwearHips);
+        clothingRenderer.Bones.Add(underwearArmature);
+        var scopedAvatar = new VrchatAvatar();
+        var sourceIdentity = new VrchatBoneTarget("underwear", "armature", "armature");
+        var targetIdentity = new VrchatBoneTarget("body", "armature", "armature");
+        scopedAvatar.ModularMergeArmatures.Add(new VrchatModularMergeArmature
+            { SourceName = "armature", TargetName = "armature", SourceBoneTarget = sourceIdentity, TargetBoneTarget = targetIdentity });
+        var scopedPhysics = new Dictionary<int, Slot> { [0] = underwearHips };
+        Func<VrchatBoneTarget, Slot> resolveMerge = target => target == sourceIdentity ? underwearArmature : bodyArmature;
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", scopedRoot, scopedAvatar,
+            scopedPhysics, resolveMerge);
+        Check(underwearHips.IsDestroyed && underwearArmature.IsDestroyed && !unrelatedArmature.IsDestroyed &&
+              unrelatedArmature.Children.Single().Children.Count == 1 && scopedPhysics[0] == bodyHips &&
+              clothingRenderer.Bones[0] == bodyHips && clothingRenderer.Bones[1] == bodyArmature &&
+              clothingHelper.Parent == bodyArmature,
+            "Merge Armature consumes its scoped source even when another same-name clothing has more matching bones");
         Slot branches = root.AddSlot("Branches");
         Slot left = branches.AddSlot("Left").AddSlot("Shared");
         Slot right = branches.AddSlot("Right").AddSlot("Shared");

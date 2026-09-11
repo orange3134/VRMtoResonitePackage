@@ -84,6 +84,7 @@ AnimationClip:
     }
     Asset("Assets/Face.controller", controllerGuid, controller.ToString());
     AnimatorFaceConflictChecks.Run(Asset, selected);
+    ModularArmatureChecks.Run(Asset);
     CheckAnimatorBlink(Asset, selected);
     CheckFbxDefaultOccurrences();
     AnimatorReachabilityChecks.Run(Asset, selected);

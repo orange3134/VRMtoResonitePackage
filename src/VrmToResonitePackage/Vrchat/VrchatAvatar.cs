@@ -191,6 +191,9 @@ public sealed class VrchatModularMergeArmature
 {
     public string SourceName { get; set; }
     public string TargetName { get; set; }
+    public VrchatBoneTarget SourceBoneTarget { get; set; }
+    public VrchatBoneTarget TargetBoneTarget { get; set; }
+    public string TargetPath { get; set; }
     public string Prefix { get; set; } = "";
     public string Suffix { get; set; } = "";
     public bool MangleNames { get; set; } = true;

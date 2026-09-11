@@ -2923,16 +2923,19 @@ public static class VrchatAvatarParser
     private static void ParseVariantModularAvatar(UnityPackage package, string sourceGuid,
         VrchatAvatar avatar, HashSet<long> sourceSubtree = null)
     {
-        var scenes = new List<(string Guid, UnityScene Scene)>();
-        CollectVariantPrefabSceneEntries(package, sourceGuid, scenes,
+        var scenes = CollectPrefabComponentSceneEntries(package, sourceGuid,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase), sourceSubtree);
+        var modifications = new List<(string Guid, YamlNode Modifications)>();
+        CollectVariantModificationBlocks(package, sourceGuid, modifications, new(StringComparer.OrdinalIgnoreCase));
         var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);
         var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
-        foreach ((string guid, UnityScene scene) in scenes)
+        foreach (var entry in scenes)
         {
+            string guid = entry.Guid;
+            UnityScene scene = entry.Scene;
             var included = IncludedPrefabObjects(package, guid, scene, avatar, modelResolvers, prefabScenes);
             if (guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
-            ParseModularAvatar(package, scene, included, avatar);
+            ParseModularAvatar(package, scene, included, avatar, entry, modifications);
         }
     }
 
@@ -2958,19 +2961,54 @@ public static class VrchatAvatarParser
     }
 
     private static void ParseModularAvatar(UnityPackage package, UnityScene scene,
-        HashSet<long> subtree, VrchatAvatar avatar)
+        HashSet<long> subtree, VrchatAvatar avatar, PrefabComponentSceneEntry entry,
+        List<(string Guid, YamlNode Modifications)> modifications)
     {
         int beforeMerge = avatar.ModularMergeArmatures.Count;
         int beforeProxy = avatar.ModularBoneProxies.Count;
         foreach (YamlDocument component in scene.MonoBehavioursByScript(ModularAvatarMergeArmatureScriptGuid))
         {
-            if (subtree != null && !InSubtree(scene, subtree, component))
+            if (entry.Removed.Contains(component.FileId) || (subtree != null && !InSubtree(scene, subtree, component)))
             {
                 continue;
             }
             YamlDocument owner = scene.OwnerGameObject(component);
             string sourceName = ResolveSceneObjectName(package, scene, owner?.FileId ?? 0);
-            string targetName = ResolveAvatarObjectReferenceName(component.Root?["mergeTarget"]);
+            YamlNode targetReference = component.Root?["mergeTarget"]?["targetObject"];
+            string targetGuid = targetReference?.Guid ?? entry.Guid;
+            string targetPath = component.Root?["mergeTarget"]?["referencePath"]?.AsString();
+            string prefix = component.Root?["prefix"]?.AsString() ?? "";
+            string suffix = component.Root?["suffix"]?.AsString() ?? "";
+            foreach (var block in modifications)
+                foreach (var modification in block.Modifications.Seq)
+                {
+                    var reference = modification["target"];
+                    if (!entry.Aliases.TryGetValue((reference?.Guid ?? block.Guid, reference?.FileID ?? 0), out long id) ||
+                        id != component.FileId) continue;
+                    switch (modification["propertyPath"]?.AsString())
+                    {
+                        case "mergeTarget.targetObject":
+                            targetReference = modification["objectReference"];
+                            targetGuid = targetReference?.Guid ?? block.Guid;
+                            break;
+                        case "mergeTarget.referencePath": targetPath = modification["value"]?.AsString(); break;
+                        case "prefix": prefix = modification["value"]?.AsString() ?? ""; break;
+                        case "suffix": suffix = modification["value"]?.AsString() ?? ""; break;
+                    }
+                }
+            VrchatBoneTarget Resolve(string guid, long id)
+            {
+                var identity = ResolveObjectIdentity(package, guid, id);
+                return ResolvePhysicsTarget(package, identity.Guid, identity.Id, avatar.FbxGuid);
+            }
+            var sourceTarget = Resolve(entry.Guid, owner?.FileId ?? 0);
+            var target = Resolve(targetGuid, targetReference?.FileID ?? 0);
+            if (sourceTarget == null || ((targetReference?.FileID ?? 0) != 0 && target == null))
+            {
+                UniLog.Warning($"Merge Armature reference could not be resolved: {sourceName} -> {targetPath}");
+                continue;
+            }
+            string targetName = target?.Name ?? targetPath?.Split('/').LastOrDefault();
             if (string.IsNullOrEmpty(sourceName) || string.IsNullOrEmpty(targetName))
             {
                 continue;
@@ -2982,8 +3020,11 @@ public static class VrchatAvatarParser
             {
                 SourceName = sourceName,
                 TargetName = targetName,
-                Prefix = component.Root?["prefix"]?.AsString() ?? "",
-                Suffix = component.Root?["suffix"]?.AsString() ?? "",
+                SourceBoneTarget = sourceTarget,
+                TargetBoneTarget = target,
+                TargetPath = targetPath,
+                Prefix = prefix,
+                Suffix = suffix,
                 MangleNames = component.Root?["mangleNames"]?.AsBool(true) ?? true,
             });
         }
