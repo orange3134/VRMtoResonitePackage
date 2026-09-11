@@ -1296,7 +1296,7 @@ MeshRenderer:
     var placement = Activator.CreateInstance(placementType)!;
     typeof(VrchatAvatarParser).GetMethod("CaptureLocalPlacementParents", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
         .Invoke(null, new object[] { accessoryPackage, accessoryScene, accessoryPackage.InputPrefab.Guid, 151L,
-            placement, guid, new Dictionary<string, UnityModelFileIdResolver> { [guid] = resolver } });
+            placement, guid, new Dictionary<string, UnityModelFileIdResolver> { [guid] = resolver }, false });
     var parents = (List<VrchatPrefabTransform>)placementType.GetProperty("ParentTransforms")!.GetValue(placement)!;
     Check(parents.Count == 2 && parents[0].ImportedBone?.Path == "Left/Shared" &&
           parents[0].ImportedBone.TransformFileId == 121 && parents[1].Name == "Attachment",
@@ -1342,6 +1342,45 @@ MonoBehaviour:
     }
     const string extraModelGuid = "73737373737373737373737373737374";
     asset("Assets/PhysicsAccessory.fbx", extraModelGuid, File.ReadAllText(model));
+    string mergeFixture = local
+        .Replace("m_GameObject: {fileID: 110}\n", "m_GameObject: {fileID: 110}\n  m_Children:\n  - {fileID: 121}\n")
+        .Replace("m_GameObject: {fileID: 130}\n", "m_GameObject: {fileID: 130}\n  m_Children:\n  - {fileID: 141}\n") + $$"""
+
+--- !u!137 &500
+SkinnedMeshRenderer:
+  m_GameObject: {fileID: 100}
+  m_Mesh: {fileID: 4300000, guid: {{guid}}}
+  m_Bones:
+  - {fileID: 121}
+--- !u!137 &501
+SkinnedMeshRenderer:
+  m_GameObject: {fileID: 100}
+  m_Mesh: {fileID: 4300000, guid: {{extraModelGuid}}}
+  m_Bones:
+  - {fileID: 141}
+--- !u!114 &502
+MonoBehaviour:
+  m_GameObject: {fileID: 130}
+  m_Script: {guid: 2df373bf91cf30b4bbd495e11cb1a2ec}
+  mergeTarget:
+    targetObject: {fileID: 110}
+""";
+    string mergeFile = asset("Assets/UnpackedMerge.prefab", "74747474747474747474747474747479", mergeFixture);
+    using (var mergePackage = UnityPackage.Open(mergeFile))
+    {
+        var mergeAvatar = new VrchatAvatar { FbxGuid = guid };
+        typeof(VrchatAvatarParser).GetMethod("ParseVariantModularAvatar", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { mergePackage, mergePackage.InputPrefab.Guid, mergeAvatar, null });
+        var merge = mergeAvatar.ModularMergeArmatures.Single();
+        Check(merge.SourceBoneTarget.FbxGuid == null && merge.TargetBoneTarget.FbxGuid == null,
+            "Multiple-model unpacked merge reproduces prefab-only armature identities");
+        var transforms = mergeAvatar.PhysicsPlacements.SelectMany(p => p.Transforms).ToList();
+        Check(transforms.Any(t => t.Key == $"{mergePackage.InputPrefab.Guid}:111" &&
+                  t.ImportedBone?.FbxGuid == guid && t.ImportedBone.Path == "Left") &&
+              transforms.Any(t => t.Key == $"{mergePackage.InputPrefab.Guid}:131" &&
+                  t.ImportedBone?.FbxGuid == extraModelGuid && t.ImportedBone.Path == "Right"),
+            "Unpacked merge armatures reuse skin-verified model ancestors without physics or mesh-parent placements");
+    }
     string multipleModelPhysics = asset("Assets/MultipleModelPhysics.prefab", "74747474747474747474747474747478", physics + $$"""
 
 --- !u!1 &400

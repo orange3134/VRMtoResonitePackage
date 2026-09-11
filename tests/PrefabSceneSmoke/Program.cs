@@ -250,6 +250,39 @@ static async Task Run(string fbxPath, string rendererName)
               clothingHelper.Parent == bodyArmature,
             "Merge Armature consumes its scoped source even when another same-name clothing has more matching bones");
         Slot branches = root.AddSlot("Branches");
+        var chainRoot = root.AddSlot("Chained identity merges");
+        var chainBody = chainRoot.AddSlot("armature");
+        var chainBodyBone = chainBody.AddSlot("Hips");
+        var chainA = chainRoot.AddSlot("armature");
+        var chainABone = chainA.AddSlot("Hips");
+        var chainB = chainRoot.AddSlot("armature");
+        var chainBBone = chainB.AddSlot("Hips");
+        var chainC = chainRoot.AddSlot("Hips");
+        var chainRenderer = chainRoot.AddSlot("Skin").AttachComponent<SkinnedMeshRenderer>();
+        chainRenderer.Bones.Add(chainBBone);
+        chainRenderer.Bones.Add(chainC);
+        var chainSlots = new Dictionary<VrchatBoneTarget, Slot>();
+        VrchatBoneTarget Identity(string guid, string path, Slot slot)
+        {
+            var identity = new VrchatBoneTarget(guid, slot.Name, path);
+            chainSlots.Add(identity, slot);
+            return identity;
+        }
+        var bodyId = Identity("body", "armature", chainBody);
+        var aId = Identity("a", "armature", chainA);
+        var aBoneId = Identity("a", "armature/Hips", chainABone);
+        var bId = Identity("b", "armature", chainB);
+        var cId = Identity("c", "Hips", chainC);
+        var chainAvatar = new VrchatAvatar();
+        foreach (var (source, target) in new[] { (aId, bodyId), (bId, aId), (cId, aBoneId) })
+            chainAvatar.ModularMergeArmatures.Add(new VrchatModularMergeArmature
+                { SourceBoneTarget = source, TargetBoneTarget = target });
+        Func<VrchatBoneTarget, Slot> chainResolver = t => chainSlots[t].IsDestroyed ? null : chainSlots[t];
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", chainRoot, chainAvatar,
+            null, chainResolver);
+        Check(chainA.IsDestroyed && chainB.IsDestroyed && chainC.IsDestroyed &&
+              chainRenderer.Bones.All(b => b == chainBodyBone),
+            "Later merges follow consumed armature and descendant identities to the surviving body bones");
         Slot left = branches.AddSlot("Left").AddSlot("Shared");
         Slot right = branches.AddSlot("Right").AddSlot("Shared");
         left.AddSlot("Body");

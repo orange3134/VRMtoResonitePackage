@@ -380,10 +380,15 @@ internal static class VrchatSceneSetup
     public static void ApplyModularAvatar(Slot root, VrchatAvatar avatar, IDictionary<int, Slot> physicsNodes = null,
         Func<VrchatBoneTarget, Slot> resolveTarget = null, Slot descriptorRoot = null)
     {
+        // Capture identities before any merge destroys their original slots.
+        var mergeTargets = avatar.ModularMergeArmatures
+            .SelectMany(m => new[] { m.SourceBoneTarget, m.TargetBoneTarget })
+            .Where(t => t != null).Distinct().ToDictionary(t => t, t => resolveTarget?.Invoke(t));
         int merged = 0;
         foreach (VrchatModularMergeArmature merge in avatar.ModularMergeArmatures)
         {
-            int rewritten = ApplyMergeArmature(root, merge, physicsNodes, resolveTarget, descriptorRoot);
+            int rewritten = ApplyMergeArmature(root, merge, physicsNodes,
+                t => mergeTargets.GetValueOrDefault(t), descriptorRoot, mergeTargets);
             merged += rewritten;
             UniLog.Log($"Modular Avatar Merge Armature: {merge.SourceName} -> {merge.TargetName}, " +
                        $"{rewritten} bone reference(s) rewritten.");
@@ -405,7 +410,7 @@ internal static class VrchatSceneSetup
     }
 
     private static int ApplyMergeArmature(Slot root, VrchatModularMergeArmature merge, IDictionary<int, Slot> physicsNodes,
-        Func<VrchatBoneTarget, Slot> resolveTarget, Slot descriptorRoot)
+        Func<VrchatBoneTarget, Slot> resolveTarget, Slot descriptorRoot, IDictionary<VrchatBoneTarget, Slot> mergeTargets)
     {
         Slot target = merge.TargetBoneTarget != null ? resolveTarget?.Invoke(merge.TargetBoneTarget) :
             descriptorRoot != null && merge.TargetPath != null ? ResolveAvatarPath(descriptorRoot, merge.TargetPath) :
@@ -451,6 +456,9 @@ internal static class VrchatSceneSetup
                     physicsNodes[node] = target;
                 else if (physicsNodes[node] is {} slot && mappings.TryGetValue(slot, out Slot mapped))
                     physicsNodes[node] = mapped;
+        foreach (var identity in mergeTargets.Keys.ToArray())
+            if (mergeTargets[identity] is {} resolved && mappings.TryGetValue(resolved, out Slot replacement))
+                mergeTargets[identity] = replacement;
         foreach ((Slot src, Slot dst) in mappings.OrderByDescending(pair => Depth(pair.Key)))
         {
             MoveUnmappedChildren(src, dst, mappings);

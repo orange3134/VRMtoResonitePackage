@@ -137,6 +137,11 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - 参照される追加FBXを再帰収集し、各FBXのmaterial mapを混ぜずに保持する。
 - `PrefabInstance.m_TransformParent` とsource objectを辿り、追加FBXを対応する親boneへ配置する。
 - Merge Armatureは同じsource/target名でもcomponentごとに適用する。
+  Authored source/target hierarchies are captured even without physics or mesh-parent
+  placements. Skin bone references select the owning FBX in multi-model unpacked prefabs;
+  imported bones and their armature ancestors are reused only at verified full paths.
+  Resolve all merge identities before consuming any armature, then remap subsequent
+  source and target references (including descendants) with each skin bone replacement.
   source GameObjectとtargetObjectをprefab instance・Transform・FBX pathの参照として保持し、
   名前や一致する骨の数で別の衣装を選ばない。variantのtargetObject・prefix・suffix上書きと
   component削除を反映する。targetObjectがない旧形式ではdescriptor rootからreferencePathを辿る。

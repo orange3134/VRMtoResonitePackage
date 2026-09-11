@@ -921,7 +921,7 @@ public static class VrchatAvatarParser
     /// </summary>
     private static void CaptureLocalPlacementParents(UnityPackage package, UnityScene scene,
         string sceneGuid, long parentId, FbxPlacement placement, string primaryFbxGuid = null,
-        Dictionary<string, UnityModelFileIdResolver> resolvers = null)
+        Dictionary<string, UnityModelFileIdResolver> resolvers = null, bool includeSkeletonAncestors = false)
     {
         long current = parentId;
         var visited = new HashSet<long>();
@@ -953,7 +953,11 @@ public static class VrchatAvatarParser
                     resolvers[bone.FbxGuid] = resolver = new UnityModelFileIdResolver(package.ByGuid(bone.FbxGuid));
                 static string Normalize(string path) => path.TrimStart('/').StartsWith("RootNode/", StringComparison.Ordinal)
                     ? path.TrimStart('/')[9..] : path.TrimStart('/');
-                if (resolver.MeshBoneNames.Values.SelectMany(names => names).Contains(bone.Name) &&
+                var boneNames = resolver.MeshBoneNames.Values.SelectMany(names => names).ToHashSet();
+                bool skeletonMember = boneNames.Contains(bone.Name) || includeSkeletonAncestors &&
+                    resolver.NodePathsUnder(0).Any(path => Normalize(path).StartsWith(
+                        Normalize(bone.Path) + "/", StringComparison.Ordinal) && boneNames.Contains(path.Split('/')[^1]));
+                if (skeletonMember &&
                     resolver.NodePathsUnder(0).Count(path => Normalize(path) == Normalize(bone.Path)) == 1)
                 {
                     placement.ParentFbxGuid = bone.FbxGuid;
@@ -2942,6 +2946,9 @@ public static class VrchatAvatarParser
             if (guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
             ParseModularAvatar(package, scene, included, avatar, entry, modifications);
         }
+        CaptureTargetPlacements(package, sourceGuid, avatar, sourceSubtree, scenes,
+            avatar.ModularMergeArmatures.SelectMany(m => new[] { m.SourceBoneTarget, m.TargetBoneTarget }),
+            includeSkeletonAncestors: true);
     }
 
     private static HashSet<long> IncludedPrefabObjects(UnityPackage package, string guid, UnityScene scene,
@@ -3183,11 +3190,19 @@ public static class VrchatAvatarParser
             if (guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
             ParsePhysBones(scene, included, avatar, guid, rootOverrides, package, entry.Removed);
         }
-        // Materialize local physics hierarchies even when no renderer requires their parents.
+        CaptureTargetPlacements(package, sourceGuid, avatar, sourceSubtree, scenes,
+            avatar.PhysBones.SelectMany(b => b.IgnoreBoneTargets
+                .Concat(b.Colliders.Select(c => c.AttachBoneTarget)).Append(b.RootBoneTarget)));
+    }
+
+    private static void CaptureTargetPlacements(UnityPackage package, string sourceGuid, VrchatAvatar avatar,
+        HashSet<long> sourceSubtree, List<PrefabComponentSceneEntry> scenes,
+        IEnumerable<VrchatBoneTarget> targets, bool includeSkeletonAncestors = false)
+    {
+        var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);
+        var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
         var modifications = new List<(string Guid, YamlNode Modifications)>();
         CollectVariantModificationBlocks(package, sourceGuid, modifications, new(StringComparer.OrdinalIgnoreCase));
-        var targets = avatar.PhysBones.SelectMany(b => b.IgnoreBoneTargets
-            .Concat(b.Colliders.Select(c => c.AttachBoneTarget)).Append(b.RootBoneTarget));
         var captured = new HashSet<(string, long)>();
         // Local targets can carry an inferred FBX GUID without existing in that model.
         // Capture their hierarchy too; placement capture verifies imported bone matches.
@@ -3207,6 +3222,19 @@ public static class VrchatAvatarParser
                 localModels.Length == 1 ? localModels[0] : null;
             var subtree = entry.Scene.SubtreeGameObjectIds(
                 entry.Scene.Doc(target.TransformFileId)?.Root?["m_GameObject"]?.FileID ?? 0);
+            if (includeSkeletonAncestors)
+            {
+                // Skin references identify an armature's model even when all renderers
+                // are siblings under the avatar root and several FBXs are referenced.
+                var skinModels = entry.Scene.MeshRenderers.Where(r =>
+                        included.Contains(r.Root?["m_GameObject"]?.FileID ?? 0) &&
+                        r.Root?["m_Bones"]?.Seq.Any(b => (b.Guid == null || b.Guid == entry.Guid) && subtree.Contains(
+                            entry.Scene.Doc(b.FileID ?? 0)?.Root?["m_GameObject"]?.FileID ?? 0)) == true)
+                    .Select(r => entry.Scene.RendererMesh(r)?.Guid)
+                    .Where(g => package.ByGuid(g)?.Extension == ".fbx").Distinct().ToArray();
+                if (skinModels.Length == 1) skeletonModel = skinModels[0];
+                else if (skinModels.Length > 1) skeletonModel = null;
+            }
             foreach (var transform in entry.Scene.Documents.Values.Where(d => d.ClassId == 4 &&
                          included.Contains(d.Root?["m_GameObject"]?.FileID ?? 0) &&
                          subtree.Contains(d.Root?["m_GameObject"]?.FileID ?? 0)))
@@ -3214,7 +3242,7 @@ public static class VrchatAvatarParser
                 if (!captured.Add((entry.Guid, transform.FileId))) continue;
                 var placement = new FbxPlacement();
                 CaptureLocalPlacementParents(package, entry.Scene, entry.Guid, transform.FileId, placement,
-                    skeletonModel, modelResolvers);
+                    skeletonModel, modelResolvers, includeSkeletonAncestors);
                 string childGuid = entry.Guid;
                 var ancestors = new HashSet<string>();
                 while (placement.ParentFbxGuid == null && ancestors.Add(childGuid))
