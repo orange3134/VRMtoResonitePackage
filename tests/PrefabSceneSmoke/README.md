@@ -33,6 +33,8 @@ Root-renderer replacement also covers a mesh source nested beneath the placehold
 Model-root physics references survive both primary-wrapper and alignment collapse,
 while another model's root identity remains independent.
 Additional RootNode wrapper collapse preserves synthetic-root physics identities.
+Primary imports retaining a RootNode resolve empty, RootNode and //RootNode paths
+to that node before and after wrapper and alignment collapse.
 Unpacked attachments reuse the imported skin bone, and same-path authored physics
 targets install independent chains on their respective slots.
 Reused imported bones apply authored inactive state to their attachment hierarchy.

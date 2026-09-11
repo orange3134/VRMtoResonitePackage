@@ -227,6 +227,12 @@ internal static class VrchatSceneSetup
         var matches = sources.Where(entry => !entry.Key.IsDestroyed && entry.Value == target.FbxGuid &&
             (target.Path != null ? paths.TryGetValue(entry.Key, out string path) && ImportedPathMatches(path, target.Path)
                 : entry.Key.Name == target.Name)).Select(entry => entry.Key).ToArray();
+        // The wrapper's empty path is a fallback root identity. If Assimp retained
+        // RootNode, use that model node even after the wrapper identity moves to
+        // the export root. Keep duplicate model nodes ambiguous.
+        if (target.Path != null && ImportedPathMatches(target.Path, "") &&
+            matches.Any(slot => paths[slot].TrimStart('/') == "RootNode"))
+            matches = matches.Where(slot => paths[slot].TrimStart('/') == "RootNode").ToArray();
         return matches.Length == 1 ? matches[0] : null;
     }
 

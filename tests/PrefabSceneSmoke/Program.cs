@@ -139,6 +139,27 @@ static async Task Run(string fbxPath, string rendererName)
         Check((Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
                 new VrchatBoneTarget("other", "RootNode", ""), wrapperSources, wrapperPaths) == otherWrapper &&
               rootChild.Parent == root, "Wrapper collapse retains other model identities and children");
+        foreach (string targetPath in new[] { "", "RootNode", "//RootNode" })
+        {
+            var primaryAlignment = root.AddSlot("RootNode alignment");
+            var primaryWrapper = primaryAlignment.AddSlot("Primary wrapper");
+            var primaryNode = primaryWrapper.AddSlot("RootNode");
+            primaryNode.AddSlot("Tip");
+            var primaryRoots = new Dictionary<string, Slot> { ["primary-node"] = primaryWrapper };
+            var primarySources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", primaryRoots);
+            var primaryPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", primaryRoots);
+            var target = new VrchatBoneTarget("primary-node", "RootNode", targetPath);
+            void CheckRoot() => Check((Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
+                target, primarySources, primaryPaths) == primaryNode,
+                "Primary model root resolves to RootNode instead of its synthetic wrapper: " + targetPath);
+            CheckRoot();
+            Call("VrmToResonitePackage.Converter", "CollapsePrimaryFbxWrapper", primaryAlignment,
+                new VrchatAvatar { FbxGuid = "primary-node" }, primaryRoots, primarySources, primaryPaths);
+            CheckRoot();
+            Call("VrmToResonitePackage.Converter", "RemoveImportAlignment", primaryAlignment, root, primarySources, primaryPaths);
+            CheckRoot();
+            primaryNode.Destroy();
+        }
         var additionalWrapper = root.AddSlot("Additional wrapper");
         var additionalNode = additionalWrapper.AddSlot("RootNode");
         additionalNode.AddSlot("Payload");

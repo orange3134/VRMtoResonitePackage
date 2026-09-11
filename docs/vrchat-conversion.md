@@ -97,6 +97,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   FBX rootを指す空pathも保持する。primary wrapperとimport alignmentを畳むときは、
   捕捉済みのGUID/pathを順に生存する親Slotへ移し、physics解決時の参照切れを防ぐ。
   additional wrapper を畳む場合も、生存する source root へ GUID/空path と import root 表を移す。
+  When a captured `RootNode` survives beneath the primary wrapper, root references
+  prefer that node over the wrapper's empty-path identity, including after wrapper
+  and alignment collapse. Imports without `RootNode` retain the empty-path fallback.
 - Descriptor roots created by FBX placement must resolve through the prefab Transform slot map,
   even without authored mesh copies, so descriptor-relative Merge Armature paths retain their scope.
 - Animatorのbinding pathはdescriptor root基準で解決する。追加layerの部分weightは、
