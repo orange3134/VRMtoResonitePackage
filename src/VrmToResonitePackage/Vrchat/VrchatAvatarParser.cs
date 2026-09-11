@@ -2393,13 +2393,16 @@ public static class VrchatAvatarParser
             StringComparer.OrdinalIgnoreCase);
         var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
         var editorOnlyRoots = new Dictionary<VariantObjectReference, (string Guid, long FileId)>();
+        var removedRoots = new HashSet<(string Guid, long FileId)>();
         CollectVariantPrefabGameObjectNames(
             package, sourceGuid, keep, new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-            modelResolvers, prefabScenes, editorOnlyRoots);
+            modelResolvers, prefabScenes, editorOnlyRoots, removedRoots);
 
         // Resolve tags first, then exclude their subtrees. An Untagged override on a child
         // cannot restore it while an ancestor is still EditorOnly.
-        foreach (var target in editorOnlyRoots.Values)
+        // Deletions cannot be cleared by tag overrides. Apply them after all keep entries
+        // exist, using the subtree exclusions shared by copies, materials and physics.
+        foreach (var target in editorOnlyRoots.Values.Concat(removedRoots))
         {
             ExcludeEditorOnlySubtree(package, target.Guid, target.FileId, keep,
                 modelResolvers, prefabScenes, new HashSet<(string, long)>(), avatar);
@@ -2429,7 +2432,8 @@ public static class VrchatAvatarParser
         HashSet<string> visited,
         Dictionary<string, UnityModelFileIdResolver> modelResolvers,
         Dictionary<string, UnityScene> prefabScenes,
-        Dictionary<VariantObjectReference, (string Guid, long FileId)> editorOnlyRoots)
+        Dictionary<VariantObjectReference, (string Guid, long FileId)> editorOnlyRoots,
+        HashSet<(string Guid, long FileId)> removedRoots)
     {
         if (string.IsNullOrEmpty(guid) || !visited.Add(guid))
         {
@@ -2473,7 +2477,7 @@ public static class VrchatAvatarParser
         {
             CollectVariantPrefabGameObjectNames(
                 package, instance.Root?["m_SourcePrefab"]?.Guid, keep, visited,
-                modelResolvers, prefabScenes, editorOnlyRoots);
+                modelResolvers, prefabScenes, editorOnlyRoots, removedRoots);
         }
 
         foreach (YamlDocument smr in scene.MeshRenderers)
@@ -2496,7 +2500,7 @@ public static class VrchatAvatarParser
         foreach (YamlDocument instance in scene.Documents.Values.Where(
                      document => document.ClassId == ClassPrefabInstance))
         {
-            ApplyRemovedGameObjects(package, instance, keep, modelResolvers, prefabScenes);
+            CollectRemovedGameObjects(package, instance, removedRoots);
             ApplyTagModifications(package, instance, editorOnlyRoots, modelResolvers, prefabScenes);
         }
     }
@@ -2505,12 +2509,10 @@ public static class VrchatAvatarParser
         => string.Equals(gameObject?.Root?["m_TagString"]?.AsString(), "EditorOnly",
             StringComparison.Ordinal);
 
-    private static void ApplyRemovedGameObjects(
+    private static void CollectRemovedGameObjects(
         UnityPackage package,
         YamlDocument instance,
-        Dictionary<VrchatGameObjectReference, bool> keep,
-        Dictionary<string, UnityModelFileIdResolver> modelResolvers,
-        Dictionary<string, UnityScene> prefabScenes)
+        HashSet<(string Guid, long FileId)> removedRoots)
     {
         YamlNode removed = instance.Root?["m_Modification"]?["m_RemovedGameObjects"];
         if (removed?.Seq == null)
@@ -2520,11 +2522,11 @@ public static class VrchatAvatarParser
         foreach (YamlNode entry in removed.Seq)
         {
             YamlNode target = entry?["asset"] ?? entry;
-            VariantObjectReference gameObject = ResolveVariantObjectReference(
-                package, target?.Guid, target?.FileID ?? 0, modelResolvers, prefabScenes);
-            if (!string.IsNullOrEmpty(gameObject.Name))
+            // Resolve aliases by occurrence/object identity, never by display name.
+            var identity = ResolveObjectIdentity(package, target?.Guid, target?.FileID ?? 0);
+            if (identity.Guid != null)
             {
-                keep[new VrchatGameObjectReference(gameObject.FbxGuid, gameObject.Name)] = false;
+                removedRoots.Add(identity);
             }
         }
     }

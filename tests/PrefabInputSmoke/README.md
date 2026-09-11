@@ -76,6 +76,9 @@ Renderer-removal checks cover MeshRenderer and MeshFilter removals through direc
 explicit stripped and omitted stripped references across nested instances. They
 retain surviving child/sibling renderers, discard removed material records and
 verify that the reusable source scenes remain intact.
+GameObject-removal checks cover direct, explicit stripped and omitted stripped parent
+references, excluding descendant copies, materials and physics placements while retaining
+the same-named hierarchy in another instance and preserving source scenes.
 
 Review regressions also cover rebasing a selected subtree without changing its
 source, imported bone parents for unpacked attachments, distinct same-path physics

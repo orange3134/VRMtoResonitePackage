@@ -81,6 +81,11 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   元の skin binding を保持して警告する。別名の骨を名前だけで推測しない。
 - prefabの外側にあるattachmentも複製の親階層へ含める。上書きは表示名ではなく、
   explicit/omitted stripped参照を解決したobject identityへ適用する。EditorOnlyタグも同様。
+  `m_RemovedGameObjects` also resolves per-occurrence object identities, including
+  explicit/omitted stripped aliases. Apply permanent subtree exclusions after collecting
+  keep entries and before authored mesh copies or physics placements, so deleted parents
+  cannot be recreated by descendants. Repeated sibling instances retain their geometry
+  and components; tag overrides cannot restore a deleted subtree.
 - authored rendererは全コピーを登録してから親を解決する。descriptor rootにrendererがある場合も、
   子rendererや先に生成したattachmentを同じGameObject相当のSlotへ配置する。
   mesh供給元のFBX instanceがroot placeholder配下にある場合、置換Slotをplaceholderの親へ
