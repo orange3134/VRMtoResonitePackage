@@ -45,6 +45,10 @@ public static class VrchatAnimatorFaceParser
                         if (node != null) owners[node] = document.Root;
                     }
             }
+            var animatorLayers = settings?["m_AnimatorLayers"]?.Seq ?? new();
+            var layerBindings = animatorLayers.Select((item, index) =>
+                index == 0 || (item["m_DefaultWeight"]?.AsFloat() ?? 0) != 0
+                    ? LayerBindings(item) : new HashSet<(string, string)>()).ToArray();
             int layerIndex = 0;
             foreach (YamlNode animatorLayer in settings?["m_AnimatorLayers"]?.Seq ?? new())
             {
@@ -134,7 +138,13 @@ public static class VrchatAnimatorFaceParser
                         }
                         current = machine;
                     }
-                    return ActiveShapes(Clip(state?["m_Motion"]), requireConstant: true);
+                    var shapes = ActiveShapes(Clip(state?["m_Motion"]), requireConstant: true);
+                    // Even a constant zero curve in another contributing layer can override
+                    // this expression. Partial/gated layers also compete despite not being
+                    // eligible to supply a permanent driver themselves.
+                    if (shapes.Any(shape => layerBindings.Where((_, index) => index != layerIndex - 1)
+                        .Any(bindings => bindings.Contains((shape.Renderer, shape.Name))))) return new();
+                    return shapes;
                 }
 
                 void Gather(long id, bool followDestinations = false)
@@ -169,8 +179,46 @@ public static class VrchatAnimatorFaceParser
                             Gather(node?["m_DefaultState"]?.FileID ?? 0, followDestinations);
                     }
                 }
+            }
 
+            HashSet<(string, string)> LayerBindings(YamlNode animatorLayer)
+            {
+                var bindings = new HashSet<(string, string)>();
+                var visited = new HashSet<long>();
+                Visit(animatorLayer["m_StateMachine"]?.FileID ?? 0);
+                return bindings;
 
+                void Visit(long id)
+                {
+                    if (id == 0 || !visited.Add(id)) return;
+                    var node = controller.Doc(id)?.Root;
+                    VisitMotion(node?["m_Motion"]);
+                    foreach (string key in new[] { "m_DefaultState", "m_DstState", "m_DstStateMachine" })
+                        Visit(node?[key]?.FileID ?? 0);
+                    foreach (string key in new[] { "m_ChildStates", "m_ChildStateMachines", "m_Children" })
+                        foreach (var child in node?[key]?.Seq ?? new())
+                        {
+                            // BlendTree children carry motions rather than states.
+                            if (key == "m_Children")
+                                VisitMotion(child["m_Motion"]);
+                            else Visit(child[key == "m_ChildStates" ? "m_State" : "m_StateMachine"]?.FileID ?? 0);
+                        }
+                    foreach (string key in new[] { "m_Transitions", "m_EntryTransitions", "m_AnyStateTransitions" })
+                        foreach (var reference in VrchatAnimatorDefaults.ActiveTransitions(controller, node?[key]?.Seq))
+                            Visit(reference.FileID ?? 0);
+                }
+
+                void VisitMotion(YamlNode motion)
+                {
+                    foreach (var curve in Clip(motion)?["m_FloatCurves"]?.Seq ?? new())
+                    {
+                        string attribute = curve["attribute"]?.AsString();
+                        if (curve["classID"]?.AsInt() == 137 && curve["path"]?.AsString() is string path &&
+                            attribute?.StartsWith("blendShape.", StringComparison.Ordinal) == true)
+                            bindings.Add((path, attribute["blendShape.".Length..]));
+                    }
+                    if (motion?.Guid == null) Visit(motion?.FileID ?? 0);
+                }
             }
         }
         foreach ((string preset, int index) in VrchatConstants.VisemeToVrcSlot())

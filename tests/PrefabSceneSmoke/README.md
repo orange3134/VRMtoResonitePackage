@@ -34,6 +34,9 @@ Reused imported bones apply authored inactive state to their attachment hierarch
 Physics on authored static renderer copies resolves through prefab transform
 identity before imported template paths, including repeated local file IDs in
 different prefab instances and targets without an FBX identity.
+Converter-order regressions verify that physics placements created after mesh copies
+share their authored bones with copied skins when multiple FBX sources are present,
+and retain unit position and scale under a static renderer with a 0.01 import correction.
 
 This integration check boots Resonite's headless engine and imports a local FBX containing a skinned mesh with at least one blendshape. It copies the renderer from an additional model under a primary model, then checks explicit material overrides, FBX default material mappings, initial blendshape weights, inactive state, and isolation from an identically named primary-model renderer.
 

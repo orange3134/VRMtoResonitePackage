@@ -10,7 +10,8 @@ internal static class AnimatorReachabilityChecks
             "bypassed default", "muted entry default", "conditional entry default",
             "shadowed entry", "muted fallback", "later fallback", "alternate route", "shadowed any", "shadowed state", "range shadow",
             "any departure", "ancestor any departure", "muted any departure", "other viseme any departure",
-            "transient", "timed departure", "muted departure", "other viseme departure" })
+            "transient", "timed departure", "muted departure", "other viseme departure",
+            "override layer", "partial override layer", "unrelated layer", "zero weight layer" })
         {
             string controller = $$"""
 --- !u!91 &91
@@ -104,12 +105,24 @@ AnimatorState:
                     (mode == "other viseme any departure" ? "  m_Conditions:\n  - m_ConditionEvent: Viseme\n    m_ConditionMode: 7\n    m_EventTreshold: 10\n" : "  m_Conditions: []\n") +
                     "--- !u!1102 &500\nAnimatorState:\n  m_Motion: {fileID: 0}\n";
             }
+            if (mode.EndsWith("layer", StringComparison.Ordinal))
+            {
+                const string resetGuid = "abcd1200000000000000000000000002";
+                asset("Assets/CompetingFace.anim", resetGuid,
+                    "--- !u!74 &7400000\nAnimationClip:\n  m_FloatCurves:\n  - curve:\n      m_Curve:\n      - value: 0\n    attribute: blendShape." +
+                    (mode == "unrelated layer" ? "unrelated" : "face10") + "\n    path: Branch10/Body\n    classID: 137\n");
+                controller = controller.Replace("  - m_StateMachine: {fileID: 100}",
+                    "  - m_StateMachine: {fileID: 100}\n  - m_StateMachine: {fileID: 700}\n    m_DefaultWeight: " +
+                    (mode == "zero weight layer" ? "0" : mode == "partial override layer" ? "0.5" : "1"));
+                controller += "\n--- !u!1107 &700\nAnimatorStateMachine:\n  m_DefaultState: {fileID: 701}\n--- !u!1102 &701\nAnimatorState:\n  m_Motion: {fileID: 7400000, guid: " + resetGuid + "}\n";
+            }
             asset("Assets/GatedFace.controller", guid, controller);
             using var package = UnityPackage.Open(selected);
             var avatar = new VrchatAvatar();
             VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument(
                 $"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {guid}}}\n"), avatar);
             int expected = mode is "muted any departure" or "other viseme any departure" or "ungated" or "muted fallback" or "later fallback" or "alternate route" or "muted entry default" or "conditional entry default" or "muted departure" or "other viseme departure" ? 1 : 0;
+            if (mode is "unrelated layer" or "zero weight layer") expected = 1;
             if (avatar.Visemes.Count != expected)
                 throw new Exception($"Viseme reachability ({mode}): expected {expected}, got {avatar.Visemes.Count}");
             Console.WriteLine($"PASS: Viseme reachability ({mode})");

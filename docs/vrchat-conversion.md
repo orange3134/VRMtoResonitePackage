@@ -85,6 +85,10 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   Viseme motion must also keep each blendshape curve constant: changing key values or
   nonzero interpolation slopes cannot become a permanent full-weight binding. Blink
   inference still uses the peak of its animated curve.
+  Before accepting a viseme, check its renderer path and blendshape against bindings
+  in other nonzero-weight Animator layers, including zero-valued curves and BlendTree
+  motions. Reject overlapping bindings conservatively because permanent drivers cannot
+  reproduce the combined layer result; unrelated bindings do not block inference.
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
   少数の名前一致だけでは推定しない。
@@ -147,6 +151,11 @@ VRChatの15 visemeはResonite enumへ対応させ、Unityの0〜100をResonite�
 - Physics-only prefab roots retain their prefab Transform identity without an inferred FBX-root identity.
   Capture their local descendants and enclosing prefab placement even when no mesh needs those slots;
   create them before resolving physics targets. Imported skeleton parents are reused when verified.
+- Create physics placements after registering and placing mesh copies, but before resolving
+  copied skin bones and compensating static-renderer children. With multiple local FBX
+  sources, authored physics bones may have no verified imported match; skins must then
+  resolve to the same authored Transform slots as physics. Children created by physics
+  placement need the same inverse mesh import-scale correction as existing children.
 - Local physics descendants may carry an inferred FBX GUID in unpacked prefabs. Capture
   their authored hierarchy regardless of that GUID; only reuse imported skeleton bones
   when skeleton membership and the full path match. The inferred GUID alone is not proof

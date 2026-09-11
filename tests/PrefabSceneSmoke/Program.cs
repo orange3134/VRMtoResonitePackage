@@ -189,6 +189,36 @@ static async Task Run(string fbxPath, string rendererName)
         var boneSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", boneRoots);
         var bonePaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", boneRoots);
         primaryRight.SetParent(primaryLeft, false);
+        // Multiple local mesh sources can leave physics bones as authored placements.
+        // Exercise the converter order, so skin binding and scale see those later slots.
+        foreach (bool lateStatic in new[] { true, false })
+        {
+            var lateAvatar = new VrchatAvatar { FbxGuid = "primary", FbxImportScale = 1f };
+            lateAvatar.AdditionalFbxs.Add(new VrchatFbxAsset { Guid = "additional", ImportScale = 0.01f });
+            var lateCopy = new VrchatMeshCopy("additional", rendererName, "LatePhysicsCopy", true, true)
+            {
+                IsSkinned = !lateStatic,
+                Transform = new VrchatPrefabTransform { Key = "late:1", GameObjectKey = "late:go" },
+            };
+            lateCopy.BoneTargets[0] = new VrchatBoneTarget("primary", "Hips", "Right/Hips", "late", 2);
+            lateAvatar.MeshCopies.Add(lateCopy);
+            var latePlacement = new VrchatPhysicsPlacement();
+            if (lateStatic) latePlacement.Transforms.Add(lateCopy.Transform);
+            latePlacement.Transforms.Add(new VrchatPrefabTransform { Key = "late:2", Name = "Hips",
+                LocalPosition = new System.Numerics.Vector3(1, 0, 0) });
+            lateAvatar.PhysicsPlacements.Add(latePlacement);
+            object[] lateArgs = { root, lateAvatar, boneRoots, boneSources, bonePaths, null, null };
+            typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
+                .GetMethod("ApplyVrchatPrefabHierarchy", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, lateArgs);
+            var lateSlots = (Dictionary<string, Slot>)lateArgs[6];
+            if (lateStatic)
+                Check(MathF.Abs(lateSlots["late:2"].GlobalPosition.x - lateSlots["late:1"].GlobalPosition.x - 1f) < 0.001f &&
+                      MathF.Abs(lateSlots["late:2"].GlobalScale.x - 1f) < 0.001f,
+                    "Late physics child retains authored position and scale beneath a corrected static mesh");
+            else
+                Check(lateSlots["late:1"].GetComponent<SkinnedMeshRenderer>().Bones[0] == lateSlots["late:2"],
+                    "Skin and later physics placement share the authored bone with multiple model sources");
+        }
         var reboundAvatar = new VrchatAvatar { FbxGuid = "primary" };
         var rebound = new VrchatMeshCopy("additional", rendererName, "ReboundCopy", true, true)
             { Transform = new VrchatPrefabTransform() };

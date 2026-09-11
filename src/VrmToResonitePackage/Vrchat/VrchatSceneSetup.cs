@@ -12,7 +12,7 @@ internal static class VrchatSceneSetup
 {
     public static Dictionary<string, Slot> CreateMeshCopies(VrchatAvatar avatar, Dictionary<Slot, string> sources,
         Func<VrchatMeshCopy, Slot> resolveParent, IReadOnlyDictionary<Slot, string> importedPaths,
-        Dictionary<string, Slot> prefabSlots = null)
+        Dictionary<string, Slot> prefabSlots = null, Action createPhysicsHierarchy = null)
     {
         prefabSlots ??= new(StringComparer.Ordinal);
         var importedSources = sources.ToArray();
@@ -100,6 +100,10 @@ internal static class VrchatSceneSetup
                 staticScaleCorrections[slot] = correction;
             }
         }
+        // Physics-only bones must share identity with skins, including unpacked prefabs
+        // with multiple FBX sources where no single imported skeleton can be inferred.
+        // Create these after renderer placement but before skin binding and compensation.
+        createPhysicsHierarchy?.Invoke();
         // Parent creation and renderer registration can provide authored bone identities.
         // Resolve skins only after all of those slots are available.
         var capturedSources = importedSources.ToDictionary(entry => entry.Key, entry => entry.Value);

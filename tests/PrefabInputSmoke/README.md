@@ -82,3 +82,5 @@ Curve checks reject rising/falling viseme weights and equal keys with nonzero
 interpolation slopes while retaining constant visemes and animated blink inference.
 Unpacked physics helpers with inferred FBX identities retain their local roots,
 descendants and collider placements and reuse verified imported skeleton parents.
+Competing Animator layers reject visemes overridden by constant zero curves at full
+or partial weight, while unrelated blendshapes and zero-weight layers remain eligible.
