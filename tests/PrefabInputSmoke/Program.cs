@@ -12,7 +12,19 @@ AssemblyLoadContext.Default.Resolving += (_, name) =>
     string path = Path.Combine(resonite, name.Name + ".dll");
     return File.Exists(path) ? AssemblyLoadContext.Default.LoadFromAssemblyPath(path) : null;
 };
-Run();
+try
+{
+    Run();
+    return 0;
+}
+catch (Exception error)
+{
+    // Regression reproduction deliberately fails assertions. Report a failing test
+    // without handing an unhandled CLR exception to Windows Error Reporting.
+    Console.Error.WriteLine("Prefab input smoke checks failed.");
+    Console.Error.WriteLine(error);
+    return 1;
+}
 
 [MethodImpl(MethodImplOptions.NoInlining)]
 static void Run()
