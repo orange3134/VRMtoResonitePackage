@@ -84,3 +84,6 @@ Unpacked physics helpers with inferred FBX identities retain their local roots,
 descendants and collider placements and reuse verified imported skeleton parents.
 Competing Animator layers reject visemes overridden by constant zero curves at full
 or partial weight, while unrelated blendshapes and zero-weight layers remain eligible.
+The same competing-layer checks cover blink inference. Viseme clips that reset an
+authored Smile weight while activating a mouth shape are rejected; single-shape
+visemes remain eligible.

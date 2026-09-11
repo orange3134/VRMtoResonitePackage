@@ -85,10 +85,14 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   Viseme motion must also keep each blendshape curve constant: changing key values or
   nonzero interpolation slopes cannot become a permanent full-weight binding. Blink
   inference still uses the peak of its animated curve.
-  Before accepting a viseme, check its renderer path and blendshape against bindings
+  Before accepting a viseme or blink, check its renderer path and blendshape against bindings
   in other nonzero-weight Animator layers, including zero-valued curves and BlendTree
   motions. Reject overlapping bindings conservatively because permanent drivers cannot
   reproduce the combined layer result; unrelated bindings do not block inference.
+  Retain zero-valued curves when counting viseme shape requirements. Initial prefab
+  and FBX weights are collected after face inference, so a neutral curve cannot be
+  assumed redundant. Reject multi-curve visemes conservatively: a single-shape driver
+  cannot also clear another authored shape, even when its required value is zero.
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
   少数の名前一致だけでは推定しない。

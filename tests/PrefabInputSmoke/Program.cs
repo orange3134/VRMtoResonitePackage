@@ -64,12 +64,6 @@ AnimationClip:
     attribute: blendShape.face{{i}}
     path: Branch{{i}}/Body
     classID: 137
-  - curve:
-      m_Curve:
-      - value: 0
-    attribute: blendShape.reset
-    path: Body
-    classID: 137
 """);
         int entry = i == 0 ? 15 : i;
         controller.Append($"--- !u!1109 &{-100 - entry}\nAnimatorTransition:\n");
@@ -77,6 +71,7 @@ AnimationClip:
         controller.Append($"  m_DstState: {{fileID: {-200 - i}}}\n--- !u!1102 &{-200 - i}\nAnimatorState:\n  m_Motion: {{fileID: 7400000, guid: {clipGuid}}}\n");
     }
     Asset("Assets/Face.controller", controllerGuid, controller.ToString());
+    AnimatorFaceConflictChecks.Run(Asset, selected);
     CheckAnimatorBlink(Asset, selected);
     AnimatorReachabilityChecks.Run(Asset, selected);
     string soloViseme = controller.ToString().Replace("--- !u!1109 &-101\nAnimatorTransition:\n",
@@ -159,7 +154,7 @@ AnimationClip:
     File.WriteAllText(rootClipPath, rootClip);
     string conflictGuid = "aa001122334455667788990011223344";
     string conflictClip = File.ReadAllText(Path.Combine(root, "Assets/Face1.anim"))
-        .Replace("blendShape.reset", "blendShape.second").Replace("      - value: 0", "      - value: 100");
+        + "\n  - curve:\n      m_Curve:\n      - value: 100\n    attribute: blendShape.second\n    path: Body\n    classID: 137\n";
     Asset("Assets/Conflict.anim", conflictGuid, conflictClip);
     string conflictingController = controller.ToString().Replace("  m_EntryTransitions:\n",
         "  m_AnyStateTransitions:\n  - {fileID: -501}\n  m_EntryTransitions:\n") + $$"""

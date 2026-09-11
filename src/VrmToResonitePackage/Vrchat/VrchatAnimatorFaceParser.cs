@@ -105,9 +105,14 @@ public static class VrchatAnimatorFaceParser
                     var shapes = ActiveShapes(clip);
                     if (clip?["m_AnimationClipSettings"]?["m_LoopTime"]?.AsBool() == true &&
                         shapes.Count == 1 && MathF.Abs(shapes[0].Peak - 100) < 0.01f &&
-                        string.Equals(shapes[0].Name, "blink", StringComparison.OrdinalIgnoreCase))
+                        string.Equals(shapes[0].Name, "blink", StringComparison.OrdinalIgnoreCase) &&
+                        !HasCompetingBindings(shapes))
                         blinks.Add(shapes[0]);
                 }
+
+                bool HasCompetingBindings(List<Shape> shapes) =>
+                    shapes.Any(shape => layerBindings.Where((_, index) => index != layerIndex - 1)
+                        .Any(bindings => bindings.Contains((shape.Renderer, shape.Name))));
 
                 List<Shape> StableShapes(YamlNode state, int viseme)
                 {
@@ -142,8 +147,7 @@ public static class VrchatAnimatorFaceParser
                     // Even a constant zero curve in another contributing layer can override
                     // this expression. Partial/gated layers also compete despite not being
                     // eligible to supply a permanent driver themselves.
-                    if (shapes.Any(shape => layerBindings.Where((_, index) => index != layerIndex - 1)
-                        .Any(bindings => bindings.Contains((shape.Renderer, shape.Name))))) return new();
+                    if (HasCompetingBindings(shapes)) return new();
                     return shapes;
                 }
 
@@ -295,7 +299,10 @@ public static class VrchatAnimatorFaceParser
                         (keys[i + 1]["inSlope"]?.AsFloat() ?? 0) != 0) return new();
             }
             float peak = keys?.Select(key => key["value"]?.AsFloat() ?? 0).DefaultIfEmpty().Max() ?? 0;
-            if (peak > 0.001f)
+            // Neutral curves are requirements too: prefab/FBX initial weights are
+            // collected after inference and may be nonzero. Keep every viseme curve
+            // so the single-shape check rejects motions requiring additional resets.
+            if (requireConstant || peak > 0.001f)
                 result.Add(new Shape(path, attribute["blendShape.".Length..], peak));
         }
         return result;
