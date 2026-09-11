@@ -87,3 +87,5 @@ or partial weight, while unrelated blendshapes and zero-weight layers remain eli
 The same competing-layer checks cover blink inference. Viseme clips that reset an
 authored Smile weight while activating a mouth shape are rejected; single-shape
 visemes remain eligible.
+Multiple local FBX sources preserve the verified primary skeleton in physics
+placements, including when an accessory model contains identical bone paths.

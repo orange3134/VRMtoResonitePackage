@@ -1326,6 +1326,36 @@ MonoBehaviour:
         Check(transforms.Any(t => t.ImportedBone?.Path == "Left/Shared"),
             "Authored physics helper reuses its verified imported skeleton parent");
     }
+    const string extraModelGuid = "73737373737373737373737373737374";
+    asset("Assets/PhysicsAccessory.fbx", extraModelGuid, File.ReadAllText(model));
+    string multipleModelPhysics = asset("Assets/MultipleModelPhysics.prefab", "74747474747474747474747474747478", physics + $$"""
+
+--- !u!1 &400
+GameObject:
+  m_Name: OtherModel
+--- !u!4 &401
+Transform:
+  m_GameObject: {fileID: 400}
+  m_Father: {fileID: 101}
+--- !u!33 &402
+MeshFilter:
+  m_GameObject: {fileID: 400}
+  m_Mesh: {fileID: 4300000, guid: {{extraModelGuid}}}
+--- !u!23 &403
+MeshRenderer:
+  m_GameObject: {fileID: 400}
+""");
+    using (var physicsPackage = UnityPackage.Open(multipleModelPhysics))
+    {
+        var physicsAvatar = new VrchatAvatar { FbxGuid = guid };
+        typeof(VrchatAvatarParser).GetMethod("ParseVariantPhysBones", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { physicsPackage, physicsPackage.InputPrefab.Guid, physicsAvatar, null });
+        var transforms = physicsAvatar.PhysicsPlacements.SelectMany(p => p.Transforms).ToList();
+        Check(transforms.Any(t => t.ImportedBone is { } bone && bone.FbxGuid == guid && bone.Path == "Left/Shared"),
+            "Multiple local models retain the primary imported skeleton for authored physics helpers");
+        Check(transforms.Where(t => t.Key == $"{physicsPackage.InputPrefab.Guid}:121").All(t => t.ImportedBone != null),
+            "Physics placement never duplicates the primary skin and humanoid skeleton");
+    }
     var collect = typeof(VrchatAvatarParser).GetMethod("CollectAuthoredMeshCopy",
         System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
     var accessoryAvatar = new VrchatAvatar { FbxGuid = guid };

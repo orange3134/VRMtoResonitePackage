@@ -56,6 +56,34 @@ static async Task Run(string fbxPath, string rendererName)
     {
         await default(ToWorld);
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
+        {
+            Slot rigRoot = root.AddSlot("Shared rig regression");
+            Slot importedRig = rigRoot.AddSlot("Imported");
+            Slot rigHips = importedRig.AddSlot("Hips");
+            Slot rigBody = importedRig.AddSlot("Body");
+            rigBody.AttachComponent<SkinnedMeshRenderer>().Bones.Add(rigHips);
+            var rigRoots = new Dictionary<string, Slot> { ["rig"] = importedRig };
+            var rigSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", rigRoots);
+            var rigPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", rigRoots);
+            var rigAvatar = new VrchatAvatar { FbxGuid = "rig" };
+            var rigCopy = new VrchatMeshCopy("rig", "Body", "AuthoredBody", true, true)
+            { Transform = new VrchatPrefabTransform { Key = "rigPrefab:body", GameObjectKey = "rigPrefab:body-go" } };
+            var rigTarget = new VrchatBoneTarget("rig", "Hips", "Hips", "rigPrefab", 2);
+            rigCopy.BoneTargets[0] = rigTarget;
+            rigAvatar.MeshCopies.Add(rigCopy);
+            var rigPlacement = new VrchatPhysicsPlacement();
+            rigPlacement.Transforms.Add(new VrchatPrefabTransform { Key = "rigPrefab:2", Name = "Hips", ImportedBone = rigTarget });
+            rigAvatar.PhysicsPlacements.Add(rigPlacement);
+            object[] rigArgs = { rigRoot, rigAvatar, rigRoots, rigSources, rigPaths, null, null };
+            typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
+                .GetMethod("ApplyVrchatPrefabHierarchy", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, rigArgs);
+            var rigSlots = (Dictionary<string, Slot>)rigArgs[6];
+            var rigNames = (Dictionary<string, Slot>)Call("VrmToResonitePackage.SlotIndex", "Build", rigRoot);
+            Check(rigSlots["rigPrefab:body"].GetComponent<SkinnedMeshRenderer>().Bones[0] == rigHips &&
+                  rigSlots["rigPrefab:2"] == rigHips && rigNames["Hips"] == rigHips,
+                "Copied skin, physics and humanoid lookup share the primary imported skeleton");
+            rigRoot.Destroy();
+        }
         Slot alignment = root.AddSlot("Alignment"), wrapper = alignment.AddSlot("Model wrapper");
         Slot rootChild = wrapper.AddSlot("Physics child"), otherWrapper = root.AddSlot("Other model wrapper");
         var wrapperAvatar = new VrchatAvatar { FbxGuid = "wrapped" };

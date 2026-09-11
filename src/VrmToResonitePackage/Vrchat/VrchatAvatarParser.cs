@@ -3106,6 +3106,12 @@ public static class VrchatAvatarParser
             if (entry.Guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
             var localModels = entry.Scene.MeshRenderers.Select(r => entry.Scene.RendererMesh(r)?.Guid)
                 .Where(g => package.ByGuid(g)?.Extension == ".fbx").Distinct().ToArray();
+            // A local accessory model must not make the primary skeleton become an
+            // authored duplicate: humanoid setup still controls the imported body bones.
+            // CaptureLocalPlacementParents verifies bone membership and the full path,
+            // and explicit source ancestors retain their own model identity.
+            string skeletonModel = localModels.Contains(avatar.FbxGuid) ? avatar.FbxGuid :
+                localModels.Length == 1 ? localModels[0] : null;
             var subtree = entry.Scene.SubtreeGameObjectIds(
                 entry.Scene.Doc(target.TransformFileId)?.Root?["m_GameObject"]?.FileID ?? 0);
             foreach (var transform in entry.Scene.Documents.Values.Where(d => d.ClassId == 4 &&
@@ -3115,7 +3121,7 @@ public static class VrchatAvatarParser
                 if (!captured.Add((entry.Guid, transform.FileId))) continue;
                 var placement = new FbxPlacement();
                 CaptureLocalPlacementParents(package, entry.Scene, entry.Guid, transform.FileId, placement,
-                    localModels.Length == 1 ? localModels[0] : null, modelResolvers);
+                    skeletonModel, modelResolvers);
                 string childGuid = entry.Guid;
                 var ancestors = new HashSet<string>();
                 while (placement.ParentFbxGuid == null && ancestors.Add(childGuid))

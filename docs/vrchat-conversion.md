@@ -152,6 +152,10 @@ VRChatの15 visemeはResonite enumへ対応させ、Unityの0〜100をResonite�
 
 ## PhysBone
 
+- unpack済みprefabが複数のFBXを参照しても、物理用の親骨は主モデルを候補にして所属とフルパスを照合する。
+  renderer数だけで候補を捨てると、物理とskinが複製した骨へ接続される一方、humanoidの名前解決は
+  元の骨を選び、着用時の姿勢がメッシュへ伝わらない。明示的なsource祖先はそのFBX identityを優先する。
+
 - Physics-only prefab roots retain their prefab Transform identity without an inferred FBX-root identity.
   Capture their local descendants and enclosing prefab placement even when no mesh needs those slots;
   create them before resolving physics targets. Imported skeleton parents are reused when verified.
