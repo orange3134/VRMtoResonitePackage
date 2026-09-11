@@ -73,3 +73,6 @@ verify that the reusable source scenes remain intact.
 Review regressions also cover rebasing a selected subtree without changing its
 source, imported bone parents for unpacked attachments, distinct same-path physics
 targets with and without FBX identities, and defaults bypassed by Entry routing.
+Imported bone parents retain model scale identity and authored inactive state.
+Viseme stability checks include owning and ancestor Any State departures, with
+muted and other-phoneme transitions retained as negative controls.

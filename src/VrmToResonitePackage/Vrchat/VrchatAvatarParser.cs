@@ -945,11 +945,13 @@ public static class VrchatAvatarParser
                 if (resolver.MeshBoneNames.Values.SelectMany(names => names).Contains(bone.Name) &&
                     resolver.NodePathsUnder(0).Count(path => Normalize(path) == Normalize(bone.Path)) == 1)
                 {
+                    placement.ParentFbxGuid = bone.FbxGuid;
                     placement.ParentTransforms.Insert(0, new VrchatPrefabTransform
                     {
                         Key = $"{sceneGuid}:{current}",
                         GameObjectKey = $"{sceneGuid}:{root["m_GameObject"]?.FileID}",
                         Name = bone.Name, ImportedBone = bone,
+                        Active = scene.OwnerGameObject(transform)?.Root?["m_IsActive"]?.AsBool(true) ?? true,
                     });
                     return;
                 }

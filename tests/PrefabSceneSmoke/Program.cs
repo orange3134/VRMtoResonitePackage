@@ -90,13 +90,15 @@ static async Task Run(string fbxPath, string rendererName)
         additionalSources[localBone] = "additional";
         additionalPaths[localBone] = "Head";
         var localParents = new List<VrchatPrefabTransform> {
-            new() { Key = "prefab:head", ImportedBone = new VrchatBoneTarget("additional", "Head", "Head") },
+            new() { Key = "prefab:head", Active = false, ImportedBone = new VrchatBoneTarget("additional", "Head", "Head") },
             new() { Key = "prefab:attachment", Name = "Attachment", LocalPosition = new System.Numerics.Vector3(1, 0, 0) } };
         var localSlots = new Dictionary<string, Slot>();
         var attachment = (Slot)Call("VrmToResonitePackage.Converter", "ResolvePrefabParent", root,
             null, null, localParents, additionalRoots, localSlots, additionalSources, additionalPaths);
         Check(attachment.Parent == localBone && localSlots["prefab:head"] == localBone && attachment.LocalPosition.x == 1,
             "Unpacked attachment shares the imported skin bone and preserves its local placement");
+        Check(!localBone.ActiveSelf && !attachment.IsActive,
+            "Reused imported bone applies authored inactive state to its attachment hierarchy");
         var mergeRoot = root.AddSlot("Physics merge regression");
         var targetHips = mergeRoot.AddSlot("AvatarArmature").AddSlot("Hips");
         var sourceHips = mergeRoot.AddSlot("ClothingArmature").AddSlot("Hips");

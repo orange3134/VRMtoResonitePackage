@@ -1235,6 +1235,7 @@ PolygonVertexIndex: *6 { a: 0,1,-3,0,1,-3 }
     foreach (var (id, name, parent) in new[] { (110, "Left", 101), (120, "Shared", 111),
                  (130, "Right", 101), (140, "Shared", 131), (150, "Attachment", 121) })
         local += $"--- !u!1 &{id}\nGameObject:\n  m_Name: {name}\n--- !u!4 &{id + 1}\nTransform:\n  m_GameObject: {{fileID: {id}}}\n  m_Father: {{fileID: {parent}}}\n";
+    local = local.Replace("m_Name: Shared\n", "m_Name: Shared\n  m_IsActive: 0\n");
     string accessory = RendererPrefab(guid, "Untagged") + "\n  m_Bones:\n  - {fileID: 121}\n  - {fileID: 141}\n" + local;
     accessory += $$"""
 
@@ -1265,6 +1266,9 @@ MeshRenderer:
     Check(parents.Count == 2 && parents[0].ImportedBone?.Path == "Left/Shared" &&
           parents[0].ImportedBone.TransformFileId == 121 && parents[1].Name == "Attachment",
         "Unpacked accessory uses the imported bone path and retains only its authored attachment");
+    Check((string)placementType.GetField("ParentFbxGuid")!.GetValue(placement)! == guid,
+        "Imported bone parent carries its model identity for static import scale correction");
+    Check(!parents[0].Active, "Imported bone parent preserves authored inactive state");
     var collect = typeof(VrchatAvatarParser).GetMethod("CollectAuthoredMeshCopy",
         System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
     var accessoryAvatar = new VrchatAvatar { FbxGuid = guid };

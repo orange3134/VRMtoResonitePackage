@@ -47,6 +47,8 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   コピーの親がローカル skeleton の骨で、FBX の skin bone と完全な path が一致するときは、
   prefab Transform identity と imported bone target を保持して既存の骨 Slot を使う。
   骨の下に追加された attachment だけを生成し、別の skeleton chain を作らない。
+  imported bone を親として再利用するときも model GUID と authored active state を保持し、
+  static attachment の import scale を親モデル分で補正して、既存の骨 Slot へ active state を適用する。
   コピーの skin bone は全 renderer と親 Slot の生成後に prefab Transform identity を優先して解決する。
   unpack 後に改名されたローカル骨の path が FBX と一致せず、対応する authored Slot もない場合は、
   元の skin binding を保持して警告する。別名の骨を名前だけで推測しない。
@@ -79,6 +81,7 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   永続的なDirectVisemeDriverでは条件付きの有効化・無効化を保持できないため。
   同じ Viseme 値のまま遷移先 state から離脱できる場合も、その phoneme の推論を除外する。
   無条件・exit time 付きの離脱と silence fallback にも適用し、Mute/Solo と Viseme 条件を尊重する。
+  所属 state machine と祖先の Any State 遷移も離脱判定に含める。
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
   少数の名前一致だけでは推定しない。

@@ -650,6 +650,7 @@ internal static class Converter
                 parent = Vrchat.VrchatSceneSetup.ResolveImportedTarget(transform.ImportedBone,
                     importedSources, importedPaths) ?? throw new InvalidDataException(
                         $"Cannot resolve unpacked skeleton parent: {transform.ImportedBone.Path}");
+                parent.ActiveSelf = transform.Active;
                 if (!string.IsNullOrEmpty(transform.Key)) prefabSlots[transform.Key] = parent;
                 continue;
             }

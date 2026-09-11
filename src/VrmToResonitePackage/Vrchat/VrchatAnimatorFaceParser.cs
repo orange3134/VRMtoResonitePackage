@@ -35,6 +35,16 @@ public static class VrchatAnimatorFaceParser
                 };
             }
             var initialStates = VrchatAnimatorDefaults.Resolve(controller, settings, defaults);
+            var owners = new Dictionary<YamlNode, YamlNode>();
+            foreach (var document in controller.Documents.Values.Where(d => d.ClassId == 1107))
+            {
+                foreach (string key in new[] { "m_ChildStates", "m_ChildStateMachines" })
+                    foreach (var child in document.Root?[key]?.Seq ?? new())
+                    {
+                        var node = controller.Doc(child[key == "m_ChildStates" ? "m_State" : "m_StateMachine"]?.FileID ?? 0)?.Root;
+                        if (node != null) owners[node] = document.Root;
+                    }
+            }
             int layerIndex = 0;
             foreach (YamlNode animatorLayer in settings?["m_AnimatorLayers"]?.Seq ?? new())
             {
@@ -105,6 +115,24 @@ public static class VrchatAnimatorFaceParser
                         if (departure == null || (departure["m_Conditions"]?.Seq ?? new()).All(condition =>
                             condition["m_ConditionEvent"]?.AsString() != "Viseme" || MatchesViseme(condition, viseme)))
                             return new();
+                    }
+                    var visited = new HashSet<YamlNode>();
+                    var current = state;
+                    while (current != null && owners.TryGetValue(current, out var machine) && visited.Add(machine))
+                    {
+                        foreach (var reference in VrchatAnimatorDefaults.ActiveTransitions(controller, machine["m_AnyStateTransitions"]?.Seq))
+                        {
+                            var departure = controller.Doc(reference.FileID ?? 0)?.Root;
+                            if (departure == null) return new();
+                            if (!(departure["m_Conditions"]?.Seq ?? new()).All(condition =>
+                                condition["m_ConditionEvent"]?.AsString() != "Viseme" || MatchesViseme(condition, viseme))) continue;
+                            bool self = controller.Doc(departure["m_DstState"]?.FileID ?? 0)?.Root == state;
+                            if (!self) return new();
+                            if (departure["m_CanTransitionToSelf"]?.AsBool() == false) continue;
+                            // A self route retains this motion and can shadow later departures.
+                            if (departure["m_HasExitTime"]?.AsBool() != true) break;
+                        }
+                        current = machine;
                     }
                     return ActiveShapes(Clip(state?["m_Motion"]));
                 }

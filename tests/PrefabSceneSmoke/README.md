@@ -27,6 +27,7 @@ while another model's root identity remains independent.
 Additional RootNode wrapper collapse preserves synthetic-root physics identities.
 Unpacked attachments reuse the imported skin bone, and same-path authored physics
 targets install independent chains on their respective slots.
+Reused imported bones apply authored inactive state to their attachment hierarchy.
 Physics on authored static renderer copies resolves through prefab transform
 identity before imported template paths, including repeated local file IDs in
 different prefab instances and targets without an FBX identity.

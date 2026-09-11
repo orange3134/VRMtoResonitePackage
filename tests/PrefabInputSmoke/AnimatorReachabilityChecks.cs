@@ -9,6 +9,7 @@ internal static class AnimatorReachabilityChecks
         foreach (string mode in new[] { "disabled toggle", "enabled toggle", "unreachable", "ungated",
             "bypassed default", "muted entry default", "conditional entry default",
             "shadowed entry", "muted fallback", "later fallback", "alternate route", "shadowed any", "shadowed state", "range shadow",
+            "any departure", "ancestor any departure", "muted any departure", "other viseme any departure",
             "transient", "timed departure", "muted departure", "other viseme departure" })
         {
             string controller = $$"""
@@ -39,6 +40,8 @@ AnimatorStateTransition:
     m_ConditionMode: 1
 --- !u!1107 &300
 AnimatorStateMachine:
+  m_ChildStates:
+  - m_State: {fileID: 400}
   m_EntryTransitions:
   - {fileID: 301}
 --- !u!1109 &301
@@ -91,12 +94,22 @@ AnimatorState:
                     (mode == "timed departure" ? "  m_HasExitTime: 1\n  m_ExitTime: 1\n" : "") +
                     (mode == "other viseme departure" ? "  m_Conditions:\n  - m_ConditionEvent: Viseme\n    m_ConditionMode: 7\n    m_EventTreshold: 10\n" : "  m_Conditions: []\n") +
                     "--- !u!1102 &500\nAnimatorState:\n  m_Motion: {fileID: 0}\n";
+            if (mode.Contains("any departure"))
+            {
+                string machine = mode == "ancestor any departure" ? "100" : "300";
+                controller = controller.Replace($"--- !u!1107 &{machine}\nAnimatorStateMachine:",
+                    $"--- !u!1107 &{machine}\nAnimatorStateMachine:\n  m_AnyStateTransitions:\n  - {{fileID: 401}}");
+                controller += "\n--- !u!1101 &401\nAnimatorStateTransition:\n  m_DstState: {fileID: 500}\n" +
+                    (mode == "muted any departure" ? "  m_Mute: 1\n" : "") +
+                    (mode == "other viseme any departure" ? "  m_Conditions:\n  - m_ConditionEvent: Viseme\n    m_ConditionMode: 7\n    m_EventTreshold: 10\n" : "  m_Conditions: []\n") +
+                    "--- !u!1102 &500\nAnimatorState:\n  m_Motion: {fileID: 0}\n";
+            }
             asset("Assets/GatedFace.controller", guid, controller);
             using var package = UnityPackage.Open(selected);
             var avatar = new VrchatAvatar();
             VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument(
                 $"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {guid}}}\n"), avatar);
-            int expected = mode is "ungated" or "muted fallback" or "later fallback" or "alternate route" or "muted entry default" or "conditional entry default" or "muted departure" or "other viseme departure" ? 1 : 0;
+            int expected = mode is "muted any departure" or "other viseme any departure" or "ungated" or "muted fallback" or "later fallback" or "alternate route" or "muted entry default" or "conditional entry default" or "muted departure" or "other viseme departure" ? 1 : 0;
             if (avatar.Visemes.Count != expected)
                 throw new Exception($"Viseme reachability ({mode}): expected {expected}, got {avatar.Visemes.Count}");
             Console.WriteLine($"PASS: Viseme reachability ({mode})");
