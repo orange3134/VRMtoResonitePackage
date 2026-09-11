@@ -70,6 +70,7 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - `UpAxis` メタデータだけで事前回転せず、import後のHipsからHeadの実方向をY+へ最小回転で合わせる。
 - `FBX Import Alignment` は一時スロットであり、global transformを保持して畳む。
 - static meshをモデル階層外へ複製するときはimport scaleを保持し、配置先FBXの補正分を除く。
+  この補正はそのmeshだけに必要なので、子の位置とscaleへ逆補正して二重適用を防ぐ。
 
 ## prefabの状態反映
 
@@ -81,6 +82,7 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - authored FBX meshのコピーはprefab GUIDとGameObject fileIDから実Slotを保持し、同名でも
   materialと初期blendshapeを個別に適用する。識別子を持たない従来のrendererは、空のoverrideも
   含めて出現順に1対1で消費する。
+- コピーとその親のactive stateもobject単位で保持し、従来の名前照合による非アクティブ化を重ねない。
 - outer variant自身の変更を読むときは、descriptorの親sceneではなく選択候補のsourceを再読込する。
 
 ## ブレンドシェイプ

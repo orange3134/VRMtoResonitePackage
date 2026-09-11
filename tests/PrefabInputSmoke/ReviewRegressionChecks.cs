@@ -58,6 +58,7 @@ internal static class ReviewRegressionChecks
 --- !u!1 &{{id}}
 GameObject:
   m_Name: Shared
+  m_IsActive: {{(id == 501 ? 0 : 1)}}
 --- !u!4 &{{id + 1}}
 Transform:
   m_GameObject: {fileID: {{id}}}
@@ -75,6 +76,12 @@ SkinnedMeshRenderer:
             Require(parsed.RendererMaterials.Count == 2 &&
                 parsed.RendererMaterials.Select(r => r.PrefabObjectKey).Distinct().Count() == 2 &&
                 parsed.RendererMaterials.SelectMany(r => r.MaterialGuids).ToHashSet().SetEquals(new[] { "materialA", "materialB" }));
+            using var package = UnityPackage.Open(file);
+            var authoredScene = package.ReadScene(package.InputPrefab);
+            parsed.FbxGuid = mesh.Guid;
+            Call("ParseInactiveGameObjects", authoredScene, authoredScene.GameObjects.Select(go => go.FileId).ToHashSet(),
+                parsed, package.InputPrefab.Guid);
+            Require(parsed.MeshCopies.Count(c => c.Active) == 1 && parsed.InactiveGameObjects.Count == 0);
         });
 
         Case("copy retains enclosing translated and rotated attachment", () =>

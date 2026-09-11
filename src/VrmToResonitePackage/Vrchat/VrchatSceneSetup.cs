@@ -18,6 +18,7 @@ internal static class VrchatSceneSetup
         var importedSources = sources.ToArray();
         var authoredObjects = new Dictionary<string, Slot>();
         var copies = new List<(VrchatMeshCopy Copy, Slot Slot)>();
+        var staticScaleCorrections = new Dictionary<Slot, float>();
         var replacedRenderers = new HashSet<MeshRenderer>();
         foreach (VrchatMeshCopy copy in avatar.MeshCopies)
         {
@@ -101,8 +102,22 @@ internal static class VrchatSceneSetup
             slot.LocalRotation = new floatQ(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W);
             slot.LocalScale = new float3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z);
             if (!copy.IsSkinned)
-                slot.LocalScale *= ImportScale(copy.FbxGuid) / ImportScale(copy.ParentFbxGuid);
+            {
+                float correction = ImportScale(copy.FbxGuid) / ImportScale(copy.ParentFbxGuid);
+                if (!float.IsFinite(correction) || correction == 0)
+                    throw new InvalidDataException($"Invalid prefab mesh import scale: {copy.Name}");
+                slot.LocalScale *= correction;
+                staticScaleCorrections[slot] = correction;
+            }
         }
+        // Import units correct this renderer's mesh only. Unity-authored child transforms
+        // must not inherit the extra factor, including attachments created before the copy.
+        foreach (var (slot, correction) in staticScaleCorrections)
+            foreach (Slot child in slot.Children)
+            {
+                child.LocalPosition /= correction;
+                child.LocalScale /= correction;
+            }
         // Unpacked prefabs explicitly describe their renderers. Keep imported bones and
         // slots as references, but do not also render the FBX template at its old location.
         foreach (var renderer in replacedRenderers) renderer.Destroy();

@@ -233,7 +233,7 @@ public static class VrchatAvatarParser
                      includedSubtree.Contains(smr.Root["m_GameObject"]?.FileID ?? 0)))
             CollectAuthoredMeshCopy(package, selected.Source.Guid, selected.Scene, smr, avatar,
                 copyResolvers, copyScenes, replaceSourceRenderer: true);
-        ParseInactiveGameObjects(selected.Scene, includedSubtree, avatar);
+        ParseInactiveGameObjects(selected.Scene, includedSubtree, avatar, selected.Source.Guid);
         ParseVariantModularAvatar(package, selected.Source.Guid, avatar, includedSubtree);
         ApplyFbxDefaultBlendShapeWeights(avatar);
         return avatar;
@@ -296,14 +296,20 @@ public static class VrchatAvatarParser
         }
     }
 
-    private static void ParseInactiveGameObjects(UnityScene scene, HashSet<long> subtree, VrchatAvatar avatar)
+    private static void ParseInactiveGameObjects(UnityScene scene, HashSet<long> subtree, VrchatAvatar avatar,
+        string sceneGuid = null)
     {
+        var authoredObjects = avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms.Append(copy.Transform))
+            .Where(transform => transform?.GameObjectKey != null).Select(transform => transform.GameObjectKey).ToHashSet();
         foreach (YamlDocument go in scene.GameObjects)
         {
             if (!subtree.Contains(go.FileId))
             {
                 continue;
             }
+            // Copies and their authored parents already carry per-object active state.
+            // A second name-based assignment would also disable an active namesake.
+            if (authoredObjects.Contains($"{sceneGuid}:{go.FileId}")) continue;
             if ((go.Root?["m_IsActive"]?.AsInt(1) ?? 1) == 0)
             {
                 string name = go.Root?["m_Name"]?.AsString();

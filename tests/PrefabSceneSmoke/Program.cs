@@ -315,15 +315,18 @@ static async Task Run(string fbxPath, string rendererName)
             (Func<VrchatMeshCopy, Slot>)(_ => primary), sourcePaths);
         Check(Math.Abs(primary.FindChild("RightCopy").GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] - 0.89f) < 0.001f,
             "Captured source path selects the second same-named renderer after reparenting");
-        var hierarchyAvatar = new VrchatAvatar();
+        var hierarchyAvatar = new VrchatAvatar { FbxGuid = "model", FbxImportScale = 2f };
         foreach (string name in new[] { "AuthoredChild", "AuthoredRoot" })
             hierarchyAvatar.MeshCopies.Add(new VrchatMeshCopy("model", rendererName, name, true, true)
             {
                 SourcePath = "RootNode/Right/" + rendererName,
-                Transform = new VrchatPrefabTransform { Key = name, GameObjectKey = name + "GO" },
+                IsSkinned = false,
+                Transform = new VrchatPrefabTransform { Key = name, GameObjectKey = name + "GO",
+                    LocalPosition = name == "AuthoredChild" ? new System.Numerics.Vector3(3, 0, 0) : default },
             });
         var placeholder = primary.AddSlot("Old authored root placeholder");
         var existingChild = placeholder.AddSlot("Existing attachment");
+        existingChild.LocalPosition = new float3(4, 0, 0);
         var prefabSlots = new Dictionary<string, Slot> { ["AuthoredRoot"] = placeholder };
         var hierarchyObjects = (Dictionary<string, Slot>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies",
             hierarchyAvatar, pathSources, (Func<VrchatMeshCopy, Slot>)(c => c.Name == "AuthoredChild" ? prefabSlots["AuthoredRoot"] : primary),
@@ -331,6 +334,10 @@ static async Task Run(string fbxPath, string rendererName)
         Check(hierarchyObjects["AuthoredChildGO"].Parent == hierarchyObjects["AuthoredRootGO"] &&
               existingChild.Parent == hierarchyObjects["AuthoredRootGO"] && placeholder.IsDestroyed,
             "Renderer on the authored root owns its child renderer and existing attachments regardless of document order");
+        Check(hierarchyObjects["AuthoredRootGO"].LocalScale == new float3(2f, 2f, 2f) &&
+              hierarchyObjects["AuthoredChildGO"].LocalScale == new float3(1f, 1f, 1f) &&
+              hierarchyObjects["AuthoredChildGO"].LocalPosition.x == 1.5f && existingChild.LocalPosition.x == 2f,
+            "Static renderer scale correction does not scale authored child geometry or attachment placement twice");
     });
 }
 
