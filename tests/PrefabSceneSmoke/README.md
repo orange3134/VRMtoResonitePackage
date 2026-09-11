@@ -6,6 +6,8 @@ in repeated model instances.
 Merge Armature checks reproduce the destroyed-source lookup and verify that physics
 targets follow successive bone replacements while another instance remains intact.
 References on the source armature itself also follow successive replacements.
+Descriptor wrappers created by intact FBX placement resolve without authored mesh
+copies, so descriptor-relative Merge Armature paths connect clothing to body bones.
 Physics-only hierarchies are created without mesh copies and resolve independently
 of the exported avatar root.
 

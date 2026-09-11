@@ -57,6 +57,46 @@ static async Task Run(string fbxPath, string rendererName)
         await default(ToWorld);
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
         {
+            var exportRoot = root.AddSlot("Descriptor placement regression");
+            var body = exportRoot.AddSlot("Body");
+            var placementBodyArmature = body.AddSlot("Armature");
+            var bodyBone = placementBodyArmature.AddSlot("Hips");
+            var clothing = exportRoot.AddSlot("Clothing");
+            var clothingArmature = clothing.AddSlot("Armature");
+            var clothingBone = clothingArmature.AddSlot("Hips");
+            var skin = clothing.AddSlot("Skin").AttachComponent<SkinnedMeshRenderer>();
+            skin.Bones.Add(clothingBone);
+            var descriptor = new VrchatPrefabTransform
+                { Key = "wrapper:2", GameObjectKey = "wrapper:1", Name = "Descriptor" };
+            var placementAvatar = new VrchatAvatar { FbxGuid = "body", DescriptorRootKey = descriptor.GameObjectKey,
+                DescriptorRootTarget = new VrchatBoneTarget(null, "Descriptor", "", "wrapper", 2) };
+            placementAvatar.FbxParentTransforms.Add(descriptor);
+            var placementAdditional = new VrchatFbxAsset { Guid = "clothing" };
+            placementAdditional.ParentTransforms.Add(descriptor);
+            placementAvatar.AdditionalFbxs.Add(placementAdditional);
+            placementAvatar.ModularMergeArmatures.Add(new VrchatModularMergeArmature
+            {
+                SourceName = "Armature", SourceBoneTarget = new VrchatBoneTarget("clothing", "Armature", "Armature"),
+                TargetPath = "Body/Armature"
+            });
+            var roots = new Dictionary<string, Slot> { ["body"] = body, ["clothing"] = clothing };
+            var placementSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", roots);
+            var paths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", roots);
+            object[] placementHierarchyArgs = { exportRoot, placementAvatar, roots, placementSources, paths, null, null, null };
+            var descriptorRoot = (Slot)typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
+                .GetMethod("ApplyVrchatPrefabHierarchy", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, placementHierarchyArgs);
+            var slots = (Dictionary<string, Slot>)placementHierarchyArgs[6];
+            Func<VrchatBoneTarget, Slot> resolve = target => (Slot)Call(
+                "VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget", target, placementSources, paths, slots);
+            Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", exportRoot, placementAvatar,
+                new Dictionary<int, Slot>(), resolve, descriptorRoot ?? exportRoot);
+            Check(skin.Bones[0] == bodyBone && clothingArmature.IsDestroyed,
+                "Descriptor-relative Merge Armature connects intact FBX instances without authored mesh copies");
+            Check(descriptorRoot == slots[descriptor.Key] && descriptorRoot.Parent == exportRoot,
+                "FBX placement returns the authored descriptor wrapper as the binding root");
+            exportRoot.Destroy();
+        }
+        {
             Slot rigRoot = root.AddSlot("Shared rig regression");
             Slot importedRig = rigRoot.AddSlot("Imported");
             Slot rigHips = importedRig.AddSlot("Hips");
