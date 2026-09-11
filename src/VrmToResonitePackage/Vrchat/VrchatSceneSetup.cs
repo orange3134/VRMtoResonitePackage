@@ -308,14 +308,18 @@ internal static class VrchatSceneSetup
     /// Must run before avatar/material setup so nothing downstream references the removed meshes.
     /// </summary>
     public static void RemoveDeletedMeshes(Slot root, VrchatAvatar avatar,
-        IReadOnlyDictionary<Slot, string> importedMeshSources)
+        IReadOnlyDictionary<Slot, string> importedMeshSources,
+        IReadOnlyDictionary<string, Slot> authoredObjects = null)
     {
         if (avatar.PrefabGameObjectNames.Count == 0 && avatar.PrefabRendererStates.Count == 0)
         {
             return;
         }
+        // Authored copies already passed prefab exclusions and may have variant names
+        // absent from the imported renderer-name records. Retain their exact identities.
+        var authoredSlots = authoredObjects?.Values.ToHashSet() ?? new HashSet<Slot>();
         string SourceGuid(Slot slot) => FbxGuidForSlot(root, slot, avatar, importedMeshSources);
-        bool Keep(Slot slot) => avatar.ShouldKeepRenderer(SourceGuid(slot), slot.Name);
+        bool Keep(Slot slot) => authoredSlots.Contains(slot) || avatar.ShouldKeepRenderer(SourceGuid(slot), slot.Name);
 
         // Renderer slots whose GameObject name the prefab does not contain.
         var extras = new List<Slot>();

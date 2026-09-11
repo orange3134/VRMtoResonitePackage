@@ -468,7 +468,7 @@ internal static class Converter
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
                 // Finish asset reloads first: deleting their last renderer can unload providers.
                 Vrchat.VrchatSceneSetup.RemoveEditorOnlyObjects(avatar, importedMeshSources, importedNodePaths);
-                Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources);
+                Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources, authoredObjects);
                 var physicsNodes = model.NodeTargets.ToDictionary(entry => entry.Key, entry =>
                     Vrchat.VrchatSceneSetup.ResolveImportedTarget(entry.Value, importedMeshSources, importedNodePaths, prefabSlots));
                 if (descriptorRoot is { IsDestroyed: false })

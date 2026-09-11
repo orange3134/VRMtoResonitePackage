@@ -217,13 +217,24 @@ static async Task Run(string fbxPath, string rendererName)
         var cleanupAvatar = new VrchatAvatar();
         cleanupAvatar.MeshCopies.Add(new VrchatMeshCopy("template", "underwear", "Authored underwear", true, true)
             { IsSkinned = false, ReplaceSourceRenderer = true,
-              Transform = new VrchatPrefabTransform { Key = "clothing:1" } });
+              Transform = new VrchatPrefabTransform { Key = "clothing:1", GameObjectKey = "clothing:2" } });
         var cleanupRoots = new Dictionary<string, Slot> { ["template"] = templateRoot };
         var cleanupSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", cleanupRoots);
         var cleanupPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", cleanupRoots);
         var cleanupCandidates = new HashSet<Slot>();
-        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", cleanupAvatar, cleanupSources,
+        var cleanupObjects = (Dictionary<string, Slot>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", cleanupAvatar, cleanupSources,
             (Func<VrchatMeshCopy, Slot>)(_ => cleanupRoot), cleanupPaths, null, null, cleanupCandidates);
+        cleanupAvatar.PrefabGameObjectNames.Add("underwear");
+        var renamedCopy = cleanupObjects["clothing:2"];
+        var renamedChild = renamedCopy.AddSlot("Authored attachment");
+        var excludedNamesake = cleanupRoot.AddSlot("Authored underwear");
+        excludedNamesake.AttachComponent<MeshRenderer>();
+        cleanupSources[excludedNamesake] = "template";
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "RemoveDeletedMeshes",
+            cleanupRoot, cleanupAvatar, cleanupSources, cleanupObjects);
+        Check(!renamedCopy.IsDestroyed && renamedCopy.GetComponent<MeshRenderer>() != null && !renamedChild.IsDestroyed,
+            "Mesh filtering preserves renamed authored renderer identities and their children");
+        Check(excludedNamesake.IsDestroyed, "Mesh filtering still removes an unauthored namesake");
         var authoredEmpty = cleanupRoot.AddSlot("Authored empty");
         var referencedBone = cleanupRoot.AddSlot("Referenced bone");
         var referencedField = cleanupRoot.AddSlot("Referenced field");
