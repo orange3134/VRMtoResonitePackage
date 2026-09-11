@@ -66,6 +66,19 @@ public sealed class VrchatAvatar
     /// </summary>
     public Dictionary<string, IReadOnlyList<string>> FbxBlendShapeNames { get; } =
         new(StringComparer.Ordinal);
+    public Dictionary<VrchatGameObjectReference, IReadOnlyList<string>> ModelBlendShapeNames { get; } = new();
+
+    public IReadOnlyList<string> BlendShapeNamesFor(string fbxGuid, string rendererName, string objectKey = null)
+    {
+        if (objectKey != null)
+        {
+            var copy = MeshCopies.FirstOrDefault(c => c.Transform?.GameObjectKey == objectKey);
+            if (copy != null) return copy.BlendShapeNames;
+        }
+        return fbxGuid != null
+            ? ModelBlendShapeNames.GetValueOrDefault(new VrchatGameObjectReference(fbxGuid, rendererName))
+            : FbxBlendShapeNames.GetValueOrDefault(rendererName);
+    }
     public Dictionary<string, IReadOnlyList<float>> FbxBlendShapeDefaultWeights { get; } =
         new(StringComparer.Ordinal);
 
@@ -154,6 +167,7 @@ public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
 
 public sealed record VrchatMeshCopy(string FbxGuid, string SourceName, string Name, bool Active, bool Enabled)
 {
+    public IReadOnlyList<string> BlendShapeNames { get; set; } = Array.Empty<string>();
     public bool IsSkinned { get; init; } = true;
     public string SourcePath { get; init; }
     public string PrefabGuid { get; init; }

@@ -254,6 +254,7 @@ public static class VrchatAvatarParser
             foreach ((string rendererName, IReadOnlyList<string> names) in resolver.BlendShapeNames)
             {
                 avatar.FbxBlendShapeNames.TryAdd(rendererName, names);
+                avatar.ModelBlendShapeNames[new VrchatGameObjectReference(guid, rendererName)] = names;
             }
             foreach ((string rendererName, IReadOnlyList<float> weights) in
                      resolver.BlendShapeDefaultWeights)
@@ -1807,10 +1808,37 @@ public static class VrchatAvatarParser
                 int blinkIndex = eyelids.Length > 0 ? eyelids[0] : -1;
                 if (eyelidMesh != null && blinkIndex >= 0)
                 {
-                    avatar.Blink = new VrchatBlink { MeshGameObjectName = eyelidMesh, BlendShapeIndex = blinkIndex };
+                    avatar.Blink = new VrchatBlink { MeshGameObjectName = eyelidMesh, BlendShapeIndex = blinkIndex,
+                        BlendShapeName = ResolveReferencedBlendShape(package, scene, eye["eyelidsSkinnedMesh"],
+                            blinkIndex, modelResolvers, new()) };
                 }
             }
         }
+    }
+
+    private static string ResolveReferencedBlendShape(UnityPackage package, UnityScene scene,
+        YamlNode reference, int index, Dictionary<string, UnityModelFileIdResolver> resolvers,
+        HashSet<(UnityScene, string, long)> visited)
+    {
+        long id = reference?.FileID ?? 0;
+        if (id == 0 || !visited.Add((scene, reference.Guid, id))) return null;
+        if (reference.Guid != null)
+        {
+            var asset = package.ByGuid(reference.Guid);
+            if (asset?.Extension == ".fbx")
+            {
+                if (!resolvers.TryGetValue(reference.Guid, out var resolver))
+                    resolvers[reference.Guid] = resolver = new UnityModelFileIdResolver(asset);
+                string name = resolver.ResolveName(id);
+                return name != null && resolver.BlendShapeNames.TryGetValue(name, out var names) &&
+                    index >= 0 && index < names.Count ? names[index] : null;
+            }
+            if (asset?.Extension is not (".prefab" or ".unity")) return null;
+            scene = package.ReadScene(asset);
+        }
+        var doc = scene.Doc(id);
+        var next = doc?.Root?["m_Mesh"] ?? doc?.Root?["m_CorrespondingSourceObject"];
+        return next == null ? null : ResolveReferencedBlendShape(package, scene, next, index, resolvers, visited);
     }
 
     private static string ResolveReferenceGameObjectName(UnityPackage package, UnityScene scene,
@@ -1962,7 +1990,10 @@ public static class VrchatAvatarParser
                 }
                 avatar.MeshCopies.Add(copy);
                 if (modelResolvers[fbxGuid].BlendShapeNames.TryGetValue(sourceName, out var shapeNames))
-                    avatar.FbxBlendShapeNames[rendererName] = shapeNames.ToList();
+                {
+                    copy.BlendShapeNames = shapeNames.ToList();
+                    avatar.FbxBlendShapeNames.TryAdd(rendererName, copy.BlendShapeNames);
+                }
             }
         }
     }
@@ -2004,7 +2035,7 @@ public static class VrchatAvatarParser
             if (!resolvers.TryGetValue(guid, out var resolver))
                 resolvers[guid] = resolver = new UnityModelFileIdResolver(asset);
             return new VrchatBoneTarget(guid, resolver.ResolveName(fileId),
-                UnityModelFileIdResolver.IsRootFileId(fileId) ? "" : resolver.ResolveNodePath(fileId));
+                resolver.IsRootFileId(fileId) ? "" : resolver.ResolveNodePath(fileId));
         }
         if (asset?.Extension is not (".prefab" or ".unity")) return null;
         var scene = package.ReadScene(asset);
@@ -2559,7 +2590,7 @@ public static class VrchatAvatarParser
             paths.UnionWith(resolver.NodePathsUnder(fileId));
             foreach (string nodeName in resolver.NodeNamesUnder(fileId).Where(resolver.IsUniqueNodeName))
                 avatar.EditorOnlyModelObjects.Add(new VrchatGameObjectReference(guid, nodeName));
-            if (UnityModelFileIdResolver.IsRootFileId(fileId)) avatar.EditorOnlyFbxGuids.Add(guid);
+            if (resolver.IsRootFileId(fileId)) avatar.EditorOnlyFbxGuids.Add(guid);
             if (name != null && resolver.IsUniqueNodeName(name)) keep[new VrchatGameObjectReference(guid, name)] = false;
             return;
         }
@@ -2568,7 +2599,7 @@ public static class VrchatAvatarParser
         YamlDocument target = scene.Doc(fileId);
         YamlNode targetSource = target?.Root?["m_CorrespondingSourceObject"];
         if (fileId != 0 && targetSource?.FileID is long modelRootId &&
-            UnityModelFileIdResolver.IsRootFileId(modelRootId) &&
+            new UnityModelFileIdResolver(package.ByGuid(targetSource.Guid)).IsRootFileId(modelRootId) &&
             package.ByGuid(targetSource.Guid)?.Extension == ".fbx" && !scene.RootGameObjects().Any())
         {
             var rootInstances = scene.Documents.Values.Where(d => d.ClassId == ClassPrefabInstance &&

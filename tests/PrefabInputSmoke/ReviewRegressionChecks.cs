@@ -20,6 +20,66 @@ internal static class ReviewRegressionChecks
         string baseFile = asset("Assets/ReviewBase.prefab", baseGuid, baseText);
         string variantText = $"--- !u!1001 &99\nPrefabInstance:\n  m_SourcePrefab: {{guid: {baseGuid}}}\n";
         string variantFile = asset("Assets/ReviewVariant.prefab", variantGuid, variantText);
+        Case("authored lowercase root excludes only its own branch", () =>
+        {
+            using var source = UnityPackage.Open(baseFile);
+            const string guid = "ab120000000000000000000000000008";
+            asset("Assets/AuthoredRoot.fbx", guid, File.ReadAllText(source.ByGuid(branchesGuid).DiskPath)
+                .Replace("Model::Left", "Model::root"));
+            using var package = UnityPackage.Open(baseFile);
+            var resolver = new UnityModelFileIdResolver(package.ByGuid(guid));
+            long Id(string type, string path) => (long)typeof(UnityModelFileIdResolver)
+                .GetMethod("Compute", BindingFlags.NonPublic | BindingFlags.Static)!
+                .Invoke(null, new object[] { type, path, 0 })!;
+            long go = Id("GameObject", "//RootNode/root");
+            Require(resolver.NodePathsUnder(go).Count() == 3 &&
+                resolver.RendererPathsUnder(go).Single().EndsWith("/root/Shared/Body"));
+            var avatar = new VrchatAvatar();
+            Call("ExcludeEditorOnlySubtree", package, guid, go,
+                new Dictionary<VrchatGameObjectReference, bool>(),
+                new Dictionary<string, UnityModelFileIdResolver>(), new Dictionary<string, UnityScene>(),
+                new HashSet<(string, long)>(), avatar);
+            Require(!avatar.EditorOnlyFbxGuids.Contains(guid));
+            var bone = (VrchatBoneTarget)Call("ResolveCopiedBoneTarget", package, guid,
+                Id("Transform", "//RootNode/root/Transform"), guid,
+                new Dictionary<string, UnityModelFileIdResolver>(), new HashSet<(string, long)>());
+            Require(bone.Path.EndsWith("/root"));
+        });
+        Case("copied blendshape tables cannot overwrite primary blink", () =>
+        {
+            using var package = UnityPackage.Open(baseFile);
+            var scene = package.ReadScene(package.InputPrefab);
+            var smr = scene.MeshRenderers.Single();
+            string guid = scene.RendererMesh(smr).Guid;
+            var resolver = new UnityModelFileIdResolver(package.ByGuid(guid));
+            string sourceName = resolver.ResolveName(scene.RendererMesh(smr).FileID.Value);
+            ((Dictionary<string, IReadOnlyList<string>>)resolver.BlendShapeNames)[sourceName] = new[] { "Shrink" };
+            string name = scene.ResolveGameObjectName(smr.FileId);
+            var avatar = new VrchatAvatar { Blink = new VrchatBlink { MeshGameObjectName = name, BlendShapeIndex = 0 } };
+            avatar.FbxBlendShapeNames[name] = new[] { "Blink" };
+            Call("CollectAuthoredMeshCopy", package, baseGuid, scene, smr, avatar,
+                new Dictionary<string, UnityModelFileIdResolver> { [guid] = resolver },
+                new Dictionary<string, UnityScene>(), false);
+            var model = VrchatModelAdapter.ToVrmModel(avatar);
+            var bind = model.Expressions.Single(e => e.Preset == "blink").Binds.Single();
+            Require(model.MeshTargetNames[bind.MeshIndex][bind.MorphIndex] == "Blink");
+            var copy = avatar.MeshCopies.Single();
+            Require(avatar.BlendShapeNamesFor(guid, name, copy.Transform.GameObjectKey).Single() == "Shrink");
+            avatar.ModelBlendShapeNames[new VrchatGameObjectReference("primary", name)] = new[] { "Blink" };
+            avatar.ModelBlendShapeNames[new VrchatGameObjectReference(guid, name)] = new[] { "Shrink" };
+            Require(avatar.BlendShapeNamesFor("primary", name).Single() == "Blink" &&
+                avatar.BlendShapeNamesFor(guid, name).Single() == "Shrink" &&
+                avatar.BlendShapeNamesFor("unresolved", name) == null);
+            var reference = UnityYaml.ParseFlatDocument($"mesh: {{fileID: {smr.FileId}}}")["mesh"];
+            string blink = (string)Call("ResolveReferencedBlendShape", package, scene, reference, 0,
+                new Dictionary<string, UnityModelFileIdResolver> { [guid] = resolver },
+                new HashSet<(UnityScene, string, long)>());
+            Require(blink == "Shrink");
+            avatar.Blink.BlendShapeName = blink;
+            model = VrchatModelAdapter.ToVrmModel(avatar);
+            bind = model.Expressions.Single(e => e.Preset == "blink").Binds.Single();
+            Require(model.MeshTargetNames[bind.MeshIndex][bind.MorphIndex] == "Shrink");
+        });
         Case("selected subtree rebases local skeleton without mutating source", () =>
         {
             const string nestedGuid = "ab120000000000000000000000000007";

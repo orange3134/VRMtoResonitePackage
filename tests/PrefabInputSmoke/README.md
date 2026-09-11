@@ -92,3 +92,6 @@ authored Smile weight while activating a mouth shape are rejected; single-shape
 visemes remain eligible.
 Multiple local FBX sources preserve the verified primary skeleton in physics
 placements, including when an accessory model contains identical bone paths.
+Same-named copied renderers retain independent blendshape repair tables and descriptor
+blink names. A real top-level FBX child named `root` retains branch-only EditorOnly
+exclusion and a nonempty physics target path.

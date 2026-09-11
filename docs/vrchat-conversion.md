@@ -31,6 +31,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - GameObjectのhash pathには `/GameObject` を付けず、componentだけ型名を付ける。
 - serialized stripped documentがない参照は、prefab instance fileIDとのXORからsource fileID候補を復元する。
 - Assimpの人工root配下に実mesh nodeが1つある場合、Unityのsynthetic `//RootNode/root` pathを実childへ割り当てる。
+- A real top-level child named `root` takes precedence over the synthetic lowercase-root
+  alias. Its GameObject and Transform IDs retain that branch's path for EditorOnly
+  exclusion and physics references; sibling branches remain part of the model.
 
 ## FBXの選択と合成
 
@@ -153,6 +156,10 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
 
 VRChatの15 visemeはResonite enumへ対応させ、Unityの0〜100をResoniteの0〜1へ変換する。
 瞬きは `eyelidsBlendshapes[0]` だけを使い、LookingUp / LookingDownはblinkとして扱わない。
+Blendshape repair selects original tables by imported model identity or the authored
+copy's GameObject identity. Same-named copies must not replace the primary model's
+table. Descriptor blink indices resolve through the referenced renderer's source mesh,
+so an accessory with a different shape order retains its own blink name.
 
 ## PhysBone
 

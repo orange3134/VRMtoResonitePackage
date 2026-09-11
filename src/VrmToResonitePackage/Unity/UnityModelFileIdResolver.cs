@@ -11,6 +11,7 @@ namespace VrmToResonitePackage.Unity;
 public sealed class UnityModelFileIdResolver
 {
     private readonly Dictionary<long, string> _names = new();
+    private string _authoredRootPath;
     private readonly Dictionary<long, HashSet<string>> _nodePathsById = new();
     private readonly Dictionary<string, HashSet<string>> _pathsByName = new(StringComparer.Ordinal);
     public Dictionary<string, string[]> MeshBoneNames { get; } = new(StringComparer.Ordinal);
@@ -60,11 +61,14 @@ public sealed class UnityModelFileIdResolver
             return RendererNames;
         return RendererPathsUnder(fileId).Select(NodeName);
     }
-    public static bool IsRootFileId(long fileId)
-        => fileId == 0 || fileId == Compute("GameObject", "//RootNode", 0) ||
-           fileId == Compute("GameObject", "//RootNode/root", 0) ||
-           fileId == Compute("Transform", "//RootNode/Transform", 0) ||
+    private static bool IsLowercaseRootId(long fileId)
+        => fileId == Compute("GameObject", "//RootNode/root", 0) ||
            fileId == Compute("Transform", "//RootNode/root/Transform", 0);
+
+    public bool IsRootFileId(long fileId)
+        => fileId == 0 || fileId == Compute("GameObject", "//RootNode", 0) ||
+           fileId == Compute("Transform", "//RootNode/Transform", 0) ||
+           (_authoredRootPath == null && IsLowercaseRootId(fileId));
 
     public IEnumerable<string> NodeNamesUnder(long fileId)
         => NodePathsUnder(fileId).Select(NodeName);
@@ -77,7 +81,8 @@ public sealed class UnityModelFileIdResolver
            ResolveNodePath(fileId) is string path && _subtreeRenderers.TryGetValue(path, out var nodes)
                ? nodes : Array.Empty<string>();
     public string ResolveNodePath(long fileId)
-        => _nodePathsById.TryGetValue(fileId, out var paths)
+        => _authoredRootPath != null && IsLowercaseRootId(fileId) ? _authoredRootPath :
+           _nodePathsById.TryGetValue(fileId, out var paths)
             ? paths.Count == 1 ? paths.Single() : null
             : UniquePath(ResolveName(fileId));
     public bool IsUniqueNodeName(string name) => UniquePath(name) != null;
@@ -153,6 +158,16 @@ public sealed class UnityModelFileIdResolver
 
             var roots = new List<(Node Node, List<string> Path)>();
             CollectNodes(scene.RootNode, new List<string>(), roots);
+            // An actual top-level "root" owns this generation-2 path. Other top-level
+            // nodes must not claim it through the synthetic-root path variants.
+            var authoredRoot = roots.FirstOrDefault(entry =>
+                entry.Node.Parent == scene.RootNode && entry.Node.Name == "root");
+            if (authoredRoot.Node != null)
+            {
+                _authoredRootPath = string.Join("/", authoredRoot.Path.Select(NormalizeName));
+                _names[Compute("GameObject", "//RootNode/root", 0)] = "root";
+                _names[Compute("Transform", "//RootNode/root/Transform", 0)] = "root";
+            }
             // Material splitting repeats (and can omit unused) clusters in each submesh.
             // Read the unsplit geometry to recover the original skin index table, including
             // distinct clusters whose bones have identical names and bind poses.
