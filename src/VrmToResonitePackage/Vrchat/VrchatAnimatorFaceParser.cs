@@ -328,6 +328,20 @@ public static class VrchatAnimatorFaceParser
             // so the single-shape check rejects motions requiring additional resets.
             result.Add(new Shape(path, attribute["blendShape.".Length..], peak));
         }
+        // A face driver cannot reproduce visibility authored alongside the shape.
+        // Even constant enable curves may differ from the prefab's initial state.
+        foreach (YamlNode curve in clip?["m_FloatCurves"]?.Seq ?? new())
+        {
+            string path = curve["path"]?.AsString();
+            if (path == null) continue;
+            string attribute = curve["attribute"]?.AsString();
+            int classId = curve["classID"]?.AsInt() ?? 0;
+            if (result.Any(shape =>
+                (classId == 137 && attribute == "m_Enabled" && path == shape.Renderer) ||
+                (classId == 1 && attribute == "m_IsActive" &&
+                    (path.Length == 0 || path == shape.Renderer || shape.Renderer.StartsWith(path + "/", StringComparison.Ordinal)))))
+                return new();
+        }
         return result;
     }
 }

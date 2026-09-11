@@ -110,6 +110,11 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - Capture Animator renderer paths after prefab placement and mesh removal, before Merge Armature.
   Reuse that resolver for blink and visemes so moved renderers retain their identities through
   bone merging and eye-pivot insertion; missing or ambiguous paths still cannot select namesakes.
+- Face inference rejects motions that also animate the target renderer's `m_Enabled`
+  or `m_IsActive` on its GameObject or any ancestor (including the empty root path).
+  Even constant visibility curves can differ from prefab defaults; face drivers cannot
+  reproduce them. Sibling/child activation and ancestor renderer enable curves do not
+  control the target renderer and do not disqualify its face binding.
 - Animatorのbinding pathはdescriptor root基準で解決する。追加layerの部分weightは、
   full-weightのdriverへ誤変換しないよう推論対象から除く。
   Additive layerも最終的な絶対weightを表さないため、viseme・blinkの推論対象から除く。
