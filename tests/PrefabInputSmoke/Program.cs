@@ -416,6 +416,7 @@ Transform:
     LoggingRegressionChecks.Run();
     CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);
     CheckDuplicateSourceBones(Asset);
+    CheckDuplicateSourceBones(Asset, true);
     CheckNestedComponents(Asset, regularCopy);
     CheckDescriptorWrapper(Asset, regularCopy, "88000000000000000000000000000001");
     CheckDescriptorOverrides(Asset, regularCopy, controllerGuid);
@@ -1129,7 +1130,7 @@ Transform:
     }
 }
 
-static void CheckDuplicateSourceBones(Func<string, string, string, string> asset)
+static void CheckDuplicateSourceBones(Func<string, string, string, string> asset, bool multipleMaterials = false)
 {
     const string guid = "73737373737373737373737373737373";
     string model = asset("Assets/DuplicateBones.fbx", guid, """
@@ -1176,6 +1177,33 @@ Connections: {
     C: "OO",4,12
 }
 """);
+    if (multipleMaterials)
+    {
+        string fbx = File.ReadAllText(model)
+            .Replace("PolygonVertexIndex: *3 { a: 0,1,-3 }", """
+PolygonVertexIndex: *6 { a: 0,1,-3,0,1,-3 }
+        LayerElementMaterial: 0 {
+            Version: 101
+            MappingInformationType: "ByPolygon"
+            ReferenceInformationType: "IndexToDirect"
+            Materials: *2 { a: 0,1 }
+        }
+        Layer: 0 {
+            Version: 100
+            LayerElement: {
+                Type: "LayerElementMaterial"
+                TypedIndex: 0
+            }
+        }
+""")
+            .Replace("    Deformer: 10,", """
+    Material: 20, "Material::First", "" { ShadingModel: "phong" }
+    Material: 21, "Material::Second", "" { ShadingModel: "phong" }
+    Deformer: 10,
+""")
+            .Replace("    C: \"OO\",7,5", "    C: \"OO\",20,5\n    C: \"OO\",21,5\n    C: \"OO\",7,5");
+        File.WriteAllText(model, fbx);
+    }
     File.AppendAllText(model + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: 4300000\n    second: Body\n");
     string prefab = asset("Assets/DuplicateBones.prefab", "74747474747474747474747474747474",
         RendererPrefab(guid, "Untagged") + "\n  m_Bones:\n  - {fileID: 0}\n  - {fileID: 0}\n");

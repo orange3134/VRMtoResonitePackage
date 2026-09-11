@@ -448,8 +448,8 @@ internal static class Converter
                 Slot descriptorRoot = ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots,
                     importedMeshSources, importedNodePaths, out var authoredObjects);
                 AlignVrchatImportUp(importRoot, model);
-                CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots);
-                RemoveImportAlignment(importRoot, root);
+                CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
+                RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
                 CollapseAssimpFbxTransformBones(root);
 
                 Console.WriteLine("アセットの読み込みを待機中...");
@@ -753,7 +753,8 @@ internal static class Converter
     }
 
     private static void CollapsePrimaryFbxWrapper(Slot importRoot, Vrchat.VrchatAvatar avatar,
-        Dictionary<string, Slot> importedFbxRoots)
+        Dictionary<string, Slot> importedFbxRoots, Dictionary<Slot, string> sources,
+        Dictionary<Slot, string> paths)
     {
         if (!importedFbxRoots.TryGetValue(avatar.FbxGuid, out Slot primaryRoot) ||
             primaryRoot == importRoot ||
@@ -773,6 +774,7 @@ internal static class Converter
             child.GlobalScale = scale;
         }
         UniLog.Log($"primary FBX wrapper collapsed: {primaryRoot.Name}");
+        Vrchat.VrchatSceneSetup.RemapImportedRoot(primaryRoot, importRoot, sources, paths);
         primaryRoot.Destroy();
         importedFbxRoots[avatar.FbxGuid] = importRoot;
     }
@@ -818,7 +820,8 @@ internal static class Converter
                    $"from ({from.X:F3}, {from.Y:F3}, {from.Z:F3}) to Y+");
     }
 
-    private static void RemoveImportAlignment(Slot importRoot, Slot root)
+    private static void RemoveImportAlignment(Slot importRoot, Slot root, Dictionary<Slot, string> sources,
+        Dictionary<Slot, string> paths)
     {
         foreach (Slot child in importRoot.Children.ToList())
         {
@@ -830,6 +833,7 @@ internal static class Converter
             child.GlobalRotation = rotation;
             child.GlobalScale = scale;
         }
+        Vrchat.VrchatSceneSetup.RemapImportedRoot(importRoot, root, sources, paths);
         importRoot.Destroy();
     }
 

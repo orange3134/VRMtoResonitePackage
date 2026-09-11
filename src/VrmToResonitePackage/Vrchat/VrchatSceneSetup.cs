@@ -95,6 +95,9 @@ internal static class VrchatSceneSetup
             if (copy.Transform?.Key == null) continue;
             if (prefabSlots.TryGetValue(copy.Transform.Key, out Slot placeholder) && placeholder != slot)
             {
+                // The mesh template can be in an FBX instance beneath this placeholder.
+                // Detach its duplicate before moving that instance under the replacement.
+                slot.SetParent(placeholder.Parent, false);
                 foreach (Slot child in placeholder.Children.ToArray()) child.SetParent(slot, false);
                 placeholder.Destroy();
             }
@@ -177,6 +180,13 @@ internal static class VrchatSceneSetup
             paths[slot] = path;
             foreach (Slot child in slot.Children) Visit(child, path + "/" + child.Name);
         }
+    }
+
+    public static void RemapImportedRoot(Slot source, Slot target, Dictionary<Slot, string> sources,
+        Dictionary<Slot, string> paths)
+    {
+        if (sources.Remove(source, out string guid)) sources[target] = guid;
+        if (paths.Remove(source, out string path)) paths[target] = path;
     }
 
     public static void RemoveEditorOnlyObjects(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,

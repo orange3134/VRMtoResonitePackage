@@ -153,6 +153,23 @@ public sealed class UnityModelFileIdResolver
 
             var roots = new List<(Node Node, List<string> Path)>();
             CollectNodes(scene.RootNode, new List<string>(), roots);
+            // Material splitting repeats (and can omit unused) clusters in each submesh.
+            // Read the unsplit geometry to recover the original skin index table, including
+            // distinct clusters whose bones have identical names and bind poses.
+            var unsplitBones = new Dictionary<string, string[]>(StringComparer.Ordinal);
+            if (roots.Any(entry => entry.Node.MeshCount > 1 &&
+                entry.Node.MeshIndices.Any(i => scene.Meshes[i].HasBones)))
+            {
+                using var skinContext = new AssimpContext();
+                skinContext.SetConfig(new Assimp.Configs.FBXImportMaterialsConfig(false));
+                Scene skinScene = skinContext.ImportFile(importPath, PostProcessSteps.None);
+                var skinNodes = new List<(Node Node, List<string> Path)>();
+                CollectNodes(skinScene.RootNode, new List<string>(), skinNodes);
+                foreach (var entry in skinNodes.Where(entry => entry.Node.MeshCount > 0))
+                    unsplitBones[string.Join("/", entry.Path.Select(NormalizeName))] =
+                        entry.Node.MeshIndices.SelectMany(i => skinScene.Meshes[i].Bones)
+                            .Select(b => b.Name).ToArray();
+            }
             foreach ((Node node, List<string> nodePath) in roots)
             {
                 string pathKey = string.Join("/", nodePath.Select(NormalizeName));
@@ -188,8 +205,8 @@ public sealed class UnityModelFileIdResolver
                 if (node.MeshCount > 0)
                 {
                     _rendererNames.Add(node.Name);
-                    MeshBoneNames[node.Name] = node.MeshIndices.SelectMany(i => scene.Meshes[i].Bones)
-                        .Select(b => b.Name).ToArray();
+                    MeshBoneNames[node.Name] = unsplitBones.GetValueOrDefault(string.Join("/", nodePath.Select(NormalizeName)))
+                        ?? node.MeshIndices.SelectMany(i => scene.Meshes[i].Bones).Select(b => b.Name).ToArray();
                     MeshBoneNamesByPath[string.Join("/", nodePath.Select(NormalizeName))] = MeshBoneNames[node.Name];
                     AddPathVariants("Mesh", nodePath, node.Name);
                     // Unity's FBX importer can classify a mesh differently from Assimp when skin

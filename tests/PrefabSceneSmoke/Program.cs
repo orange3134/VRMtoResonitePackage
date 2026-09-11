@@ -56,6 +56,21 @@ static async Task Run(string fbxPath, string rendererName)
     {
         await default(ToWorld);
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
+        Slot alignment = root.AddSlot("Alignment"), wrapper = alignment.AddSlot("Model wrapper");
+        Slot rootChild = wrapper.AddSlot("Physics child"), otherWrapper = root.AddSlot("Other model wrapper");
+        var wrapperAvatar = new VrchatAvatar { FbxGuid = "wrapped" };
+        var wrapperRoots = new Dictionary<string, Slot> { ["wrapped"] = wrapper, ["other"] = otherWrapper };
+        var wrapperSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", wrapperRoots);
+        var wrapperPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", wrapperRoots);
+        Call("VrmToResonitePackage.Converter", "CollapsePrimaryFbxWrapper", alignment, wrapperAvatar, wrapperRoots,
+            wrapperSources, wrapperPaths);
+        Call("VrmToResonitePackage.Converter", "RemoveImportAlignment", alignment, root, wrapperSources, wrapperPaths);
+        Check((Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
+                new VrchatBoneTarget("wrapped", "RootNode", ""), wrapperSources, wrapperPaths) == root,
+            "Model-root physics references survive both wrapper and alignment collapse");
+        Check((Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
+                new VrchatBoneTarget("other", "RootNode", ""), wrapperSources, wrapperPaths) == otherWrapper &&
+              rootChild.Parent == root, "Wrapper collapse retains other model identities and children");
         var mergeRoot = root.AddSlot("Physics merge regression");
         var targetHips = mergeRoot.AddSlot("AvatarArmature").AddSlot("Hips");
         var sourceHips = mergeRoot.AddSlot("ClothingArmature").AddSlot("Hips");
@@ -353,6 +368,8 @@ static async Task Run(string fbxPath, string rendererName)
                     LocalPosition = name == "AuthoredChild" ? new System.Numerics.Vector3(3, 0, 0) : default },
             });
         var placeholder = primary.AddSlot("Old authored root placeholder");
+        var nestedModel = placeholder.AddSlot("Nested imported model");
+        rightSource.SetParent(nestedModel, false);
         var existingChild = placeholder.AddSlot("Existing attachment");
         existingChild.LocalPosition = new float3(4, 0, 0);
         var prefabSlots = new Dictionary<string, Slot> { ["AuthoredRoot"] = placeholder };

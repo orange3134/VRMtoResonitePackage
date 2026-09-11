@@ -18,6 +18,8 @@ explicit/omitted stripped references, FBX paths with duplicate node names, and
 Variant bone overrides (local references, external references, and null).
 Duplicate source bone names retain their individual indices through FBX lookup,
 authored renderer parsing, and Variant overrides.
+The same skin with two materials retains its two distinct, identically named bones
+without counting the repeated Assimp submesh bone arrays twice.
 
 Static-renderer checks cover MeshFilter pairing, regular-prefab placement and
 materials, Variant enabled/transform overrides, additional FBX discovery, and

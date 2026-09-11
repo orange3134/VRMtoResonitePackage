@@ -19,6 +19,9 @@ materials after reparenting, and using a skinned FBX mesh as a static renderer.
 
 Animator binding checks include empty paths resolving the root renderer without
 falling back to child renderers.
+Root-renderer replacement also covers a mesh source nested beneath the placeholder.
+Model-root physics references survive both primary-wrapper and alignment collapse,
+while another model's root identity remains independent.
 
 This integration check boots Resonite's headless engine and imports a local FBX containing a skinned mesh with at least one blendshape. It copies the renderer from an additional model under a primary model, then checks explicit material overrides, FBX default material mappings, initial blendshape weights, inactive state, and isolation from an identically named primary-model renderer.
 

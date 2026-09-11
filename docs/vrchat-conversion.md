@@ -46,11 +46,15 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   explicit/omitted stripped参照を解決したobject identityへ適用する。EditorOnlyタグも同様。
 - authored rendererは全コピーを登録してから親を解決する。descriptor rootにrendererがある場合も、
   子rendererや先に生成したattachmentを同じGameObject相当のSlotへ配置する。
+  mesh供給元のFBX instanceがroot placeholder配下にある場合、置換Slotをplaceholderの親へ
+  先に退避してから子を移す。複製時の親を保ったまま移すと祖先を自身の子にしてしまう。
 - `.unity` のcompositionもprefabと同じcollectorで配置・上書き・ローカル参照を解決する。
 - PhysBoneのroot、ignore、collider参照はモデルのinstance identityとpathを保持し、
   import時に捕捉したSlotへ解決してから共通のSpringBoneSetupへ渡す。
   Merge Armature前にSlotを解決し、各mergeのskin用bone mappingでphysics参照も更新する。
   破棄後のsource identity検索や名前fallbackでは、移動先や別instanceを正しく区別できない。
+  FBX rootを指す空pathも保持する。primary wrapperとimport alignmentを畳むときは、
+  捕捉済みのGUID/pathを順に生存する親Slotへ移し、physics解決時の参照切れを防ぐ。
 - Animatorのbinding pathはdescriptor root基準で解決する。追加layerの部分weightは、
   full-weightのdriverへ誤変換しないよう推論対象から除く。
   viseme推論はentry/defaultとtransitionの接続を辿り、未接続のchild state machineを含めない。
@@ -92,6 +96,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   materialと初期blendshapeを個別に適用する。識別子を持たない従来のrendererは、空のoverrideも
   含めて出現順に1対1で消費する。
 - コピーとその親のactive stateもobject単位で保持し、従来の名前照合による非アクティブ化を重ねない。
+- 複数materialのskinned FBXはAssimpでsubmeshへ分割され、bone配列も重複・部分化する。
+  bone index表はmaterial読込を無効にした別importの未分割geometryから取得する。
+  名前による重複除去は同名の別boneを失うため行わない。通常importのmaterial情報は保持する。
 - 同名のauthored rendererの一方がEditorOnlyでも、残るobjectのmodel/nameをkeep-listに残す。
   除外objectのmaterialと外側overrideは取り込まず、残るrendererへ流用しない。
 - outer variant自身の変更を読むときは、descriptorの親sceneではなく選択候補のsourceを再読込する。
