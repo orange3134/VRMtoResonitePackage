@@ -50,6 +50,13 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   書き換える。元の package のアセット・キャッシュ・Unity プロジェクトは変更しない。
 - 循環参照は祖先経路で検出する。兄弟の同一アセットを循環として除外しない。
 - unpacked prefabのFBXはメッシュのテンプレートとして扱い、複製後に元rendererを除く。
+  Authored mesh templates have a separate model identity from PrefabInstances of the
+  same FBX, so an EditorOnly instance cannot exclude visible local geometry. Select
+  the primary model from visible identities after collecting EditorOnly exclusions.
+  Local copied skin bones infer their model within the owning prefab occurrence:
+  prefer the primary model if referenced locally, otherwise the sole local model.
+  With no local mesh source, retain the caller's skeleton context; explicit source
+  ancestors still take precedence. Repeated unpacked skins keep separate skeletons.
   同じモデルがPrefabInstanceとしても配置されている場合は、そのrendererを残す。
   コピーの親がローカル skeleton の骨で、FBX の skin bone と完全な path が一致するときは、
   prefab Transform identity と imported bone target を保持して既存の骨 Slot を使う。

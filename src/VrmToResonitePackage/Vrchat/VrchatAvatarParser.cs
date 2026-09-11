@@ -164,8 +164,13 @@ public static class VrchatAvatarParser
             // descriptor. Materials / PhysBones / deletions can't be resolved from the stripped
             // references here, so the avatar imports with rig + visemes + view (bare materials).
             UniLog.Log($"FBXモデルのPrefab Variantとして処理します（基礎マテリアル対応、揺れもの等は制限あり）: {selected.Name}");
+            CollectVariantPrefabGameObjectNames(package, selected.Source.Guid, avatar);
+            var visibleModels = selected.FbxGuidOverrides.Where(g => !avatar.EditorOnlyFbxGuids.Contains(g)).ToList();
+            if (visibleModels.Count == 0)
+                throw new InvalidDataException("アバター本体のルートがEditorOnlyのため変換対象がありません。");
             string primaryFbxGuid = SelectHumanoidFbxGuid(
-                package, selected.FbxGuidOverrides, selected.DescriptorFbxGuid);
+                package, visibleModels, avatar.EditorOnlyFbxGuids.Contains(selected.DescriptorFbxGuid ?? "")
+                    ? null : selected.DescriptorFbxGuid);
             UnityAsset fbx = package.ByGuid(primaryFbxGuid);
             if (fbx?.HasContent != true)
             {
@@ -185,7 +190,6 @@ public static class VrchatAvatarParser
                 selected.FbxPlacements?.TryGetValue(guid, out placement);
                 AddAdditionalFbx(package, avatar, guid, placement);
             }
-            CollectVariantPrefabGameObjectNames(package, selected.Source.Guid, avatar);
             if (avatar.EditorOnlyFbxGuids.Contains(avatar.FbxGuid))
                 throw new InvalidDataException("アバター本体のルートがEditorOnlyのため変換対象がありません。");
             avatar.AdditionalFbxs.RemoveAll(model => avatar.EditorOnlyFbxGuids.Contains(model.Guid));
@@ -2046,6 +2050,10 @@ public static class VrchatAvatarParser
                 primaryFbxGuid, resolvers, visited);
         if (document?.ClassId == 4)
         {
+            var localModels = scene.MeshRenderers.Select(r => scene.RendererMesh(r)?.Guid)
+                .Where(g => package.ByGuid(g)?.Extension == ".fbx").Distinct().ToArray();
+            primaryFbxGuid = localModels.Length == 0 || localModels.Contains(primaryFbxGuid) ? primaryFbxGuid :
+                localModels.Length == 1 ? localModels[0] : null;
             string name = scene.ResolveGameObjectName(fileId);
             if (name == null) return null;
             long parentId = document.Root["m_Father"]?.FileID ?? 0;
@@ -2054,7 +2062,7 @@ public static class VrchatAvatarParser
                 return new VrchatBoneTarget(null, name, "", guid, fileId);
             var parent = ResolveCopiedBoneTarget(package, guid, parentId, primaryFbxGuid, resolvers, visited);
             if (parent?.Path == null) return null;
-            // A regular prefab's locally authored skeleton belongs to the primary model,
+            // A regular prefab's locally authored skeleton belongs to its local model,
             // unless an explicit source ancestor identifies another FBX. Exclude the
             // prefab root name; FBX import wrappers can have different display names.
             string path = parent.Path.Length == 0 ? name : parent.Path + "/" + name;

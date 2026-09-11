@@ -63,13 +63,14 @@ internal static class UnityPrefabInstances
             var documentIds = documents.Select(d => d.FileId).ToHashSet();
             // Unpacked geometry has no model PrefabInstance. Claim one source model per scene,
             // shared by its local renderers, Animator and bone references.
-            foreach (string model in documents.SelectMany(d => References(d.Root))
+            foreach (string model in documents.Where(d => d.ClassId != 1001 &&
+                         (d.Root?["m_PrefabInstance"]?.FileID ?? 0) == 0)
+                         .SelectMany(d => References(d.Root))
                          .Where(g => source.ByGuid(g)?.Extension == ".fbx").Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                if (mapping.ContainsKey(model)) continue;
                 foreach (var entry in Visit(model, path + "/mesh/" + model,
                              new HashSet<string>(ancestors, StringComparer.OrdinalIgnoreCase)))
-                    mapping.TryAdd(entry.Key, entry.Value);
+                    mapping[entry.Key] = entry.Value;
             }
             view.SetViewAsset(alias, UnityScene.FromDocuments(documents.Select(d =>
             {

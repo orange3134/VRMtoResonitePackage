@@ -1382,6 +1382,26 @@ MeshRenderer:
     Check(nestedAvatar.MeshCopies.Single().BoneTargets.Values.Select(b => b.Path).SequenceEqual(new[] { "Left/Shared", "Right/Shared" }) &&
           nestedScene.Doc(101).Root["m_Father"].FileID == 901,
         "Selected nested skinned renderer resolves serialized bones without altering its source parent");
+
+    string repeated = asset("Assets/RepeatedSkins.prefab", "74747474747474747474747474747480",
+        string.Concat(new[] { 10, 20 }.Select(id => $"--- !u!1001 &{id}\nPrefabInstance:\n  m_SourcePrefab: {{fileID: 100100000, guid: {accessoryPackage.InputPrefab.Guid}}}\n  m_Modification:\n    m_TransformParent: {{fileID: 0}}\n")));
+    using var repeatedPackage = UnityPackage.Open(repeated);
+    using var repeatedView = (UnityPackage)typeof(UnityPackage).Assembly.GetType("VrmToResonitePackage.Unity.UnityPrefabInstances")!
+        .GetMethod("CreateView")!.Invoke(null, new object[] { repeatedPackage, repeatedPackage.InputPrefab.Guid, null })!;
+    var repeatedScene = repeatedView.ReadScene(repeatedView.InputPrefab);
+    var repeatedAvatar = new VrchatAvatar { FbxGuid = guid };
+    foreach (var instance in repeatedScene.Documents.Values.Where(d => d.ClassId == 1001))
+    {
+        string owner = instance.Root["m_SourcePrefab"].Guid;
+        var ownedScene = repeatedView.ReadScene(repeatedView.ByGuid(owner));
+        string ownedModel = ownedScene.RendererMesh(ownedScene.Doc(2)).Guid;
+        collect.Invoke(null, new object[] { repeatedView, owner, ownedScene, ownedScene.Doc(2), repeatedAvatar,
+            new Dictionary<string, UnityModelFileIdResolver> { [ownedModel] = new(repeatedView.ByGuid(ownedModel)) },
+            new Dictionary<string, UnityScene>(), false });
+    }
+    Check(repeatedAvatar.MeshCopies.Count == 2 && repeatedAvatar.MeshCopies.Select(c => c.FbxGuid).Distinct().Count() == 2 &&
+          repeatedAvatar.MeshCopies.All(c => c.BoneTargets.Values.All(b => b.FbxGuid == c.FbxGuid)),
+        "Repeated unpacked skins bind local bones to their owning model instance");
 }
 
 static void CheckDescriptorWrapper(Func<string, string, string, string> asset, string regularCopy, string modelGuid)
@@ -1487,6 +1507,43 @@ PrefabInstance:
       value: {{(disabled ? 0 : 1)}}
 """;
     string rootOnly = wrapper[..wrapper.IndexOf("--- !u!1001", StringComparison.Ordinal)];
+    File.WriteAllText(input, rootOnly.Replace("m_Father: {fileID: 0}", "m_Father: {fileID: 0}\n  m_Children:\n  - {fileID: 11}\n  - {fileID: 21}") + $$"""
+--- !u!1 &10
+GameObject:
+  m_Name: Hidden
+  m_TagString: EditorOnly
+--- !u!4 &11
+Transform:
+  m_GameObject: {fileID: 10}
+  m_Father: {fileID: 2}
+--- !u!1 &20
+GameObject:
+  m_Name: Body_Base
+  m_Component:
+  - component: {fileID: 21}
+  - component: {fileID: 22}
+--- !u!4 &21
+Transform:
+  m_GameObject: {fileID: 20}
+  m_Father: {fileID: 2}
+--- !u!137 &22
+SkinnedMeshRenderer:
+  m_GameObject: {fileID: 20}
+  m_Mesh: {fileID: -1079801745714767569, guid: {{modelGuid}}}
+
+""" + Instance(4, modelGuid, 11, 1));
+    using (var package = UnityPackage.Open(input))
+    {
+        using var view = (UnityPackage)typeof(UnityPackage).Assembly.GetType("VrmToResonitePackage.Unity.UnityPrefabInstances")!
+            .GetMethod("CreateView")!.Invoke(null, new object[] { package, package.InputPrefab.Guid, null })!;
+        var scene = view.ReadScene(view.InputPrefab);
+        Check(scene.RendererMesh(scene.Doc(22)).Guid != scene.Doc(4).Root["m_SourcePrefab"].Guid,
+            "Authored mesh templates have independent identities from excluded model instances");
+        var parsed = VrchatAvatarParser.Parse(package);
+        Check(parsed.MeshCopies.Single().Name == "Body_Base" &&
+              !parsed.EditorOnlyFbxGuids.Contains(parsed.MeshCopies.Single().FbxGuid),
+            "Visible authored geometry survives an EditorOnly instance of the same model");
+    }
     foreach (string geometry in new[] { modelGuid, nestedGuid })
     {
         File.WriteAllText(input, rootOnly + Instance(4, geometry, 2, 1) + Instance(5, geometry, 2, 3, true));

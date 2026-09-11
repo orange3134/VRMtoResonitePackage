@@ -95,3 +95,6 @@ placements, including when an accessory model contains identical bone paths.
 Same-named copied renderers retain independent blendshape repair tables and descriptor
 blink names. A real top-level FBX child named `root` retains branch-only EditorOnly
 exclusion and a nonempty physics target path.
+Repeated unpacked skins retain their owning model's bone targets. Visible authored
+geometry keeps an independent mesh template when the same FBX also appears beneath
+an EditorOnly parent, and remains eligible as the primary model.
