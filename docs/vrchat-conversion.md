@@ -51,8 +51,12 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - 循環参照は祖先経路で検出する。兄弟の同一アセットを循環として除外しない。
 - unpacked prefabのFBXはメッシュのテンプレートとして扱い、複製後に元rendererを除く。
   Authored mesh templates have a separate model identity from PrefabInstances of the
-  same FBX, so an EditorOnly instance cannot exclude visible local geometry. Select
-  the primary model from visible identities after collecting EditorOnly exclusions.
+  same FBX, so an EditorOnly instance cannot exclude visible local geometry. Create
+  separate template identities only from authored MeshFilter/SkinnedMeshRenderer mesh
+  references; an Animator Avatar reference alone must not duplicate an instantiated model.
+  Composed candidates retain the selected root Animator's humanoid model preference,
+  including when nested humanoid clothing is discovered before the unpacked body.
+  Select the primary model from visible identities after collecting EditorOnly exclusions.
   Local copied skin bones infer their model within the owning prefab occurrence:
   prefer the primary model if referenced locally, otherwise the sole local model.
   With no local mesh source, retain the caller's skeleton context; explicit source

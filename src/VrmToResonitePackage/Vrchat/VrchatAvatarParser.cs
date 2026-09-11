@@ -404,6 +404,7 @@ public static class VrchatAvatarParser
                         Descriptor = descriptor,
                         Subtree = subtree,
                         FbxGuidOverrides = nestedModels,
+                        DescriptorFbxGuid = RootAnimatorFbxGuid(package, scene, root),
                         IsComposedPrefab = nestedModels != null,
                         Name = rootName,
                         HasOwnDescriptor = true,
@@ -1394,6 +1395,12 @@ public static class VrchatAvatarParser
         return skinned.Length > 0 ? skinned : scene.MeshRenderers;
     }
 
+    private static string RootAnimatorFbxGuid(UnityPackage package, UnityScene scene, YamlDocument root)
+        => scene.ComponentsOf(root)
+            .Where(document => document.ClassId == 95)
+            .Select(document => document.Root?["m_Avatar"]?.Guid)
+            .FirstOrDefault(guid => IsHumanoidFbx(package, guid));
+
     private static void ResolveFbx(UnityPackage package, UnityScene scene, YamlDocument avatarRoot,
         HashSet<long> subtree, VrchatAvatar avatar)
     {
@@ -1401,11 +1408,7 @@ public static class VrchatAvatarParser
         // renderers, while the root Animator still points at the humanoid Avatar sub-asset in the
         // original FBX. Prefer that authoritative reference; otherwise an accessory FBX with more
         // direct renderer references can be mistaken for the avatar body.
-        const int classAnimator = 95;
-        string fbxGuid = scene.ComponentsOf(avatarRoot)
-            .Where(document => document.ClassId == classAnimator)
-            .Select(document => document.Root?["m_Avatar"]?.Guid)
-            .FirstOrDefault(guid => IsHumanoidFbx(package, guid));
+        string fbxGuid = RootAnimatorFbxGuid(package, scene, avatarRoot);
         if (fbxGuid != null)
         {
             UniLog.Log($"Animator humanoid Avatar FBX selected: {fbxGuid}");

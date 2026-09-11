@@ -1432,6 +1432,7 @@ PrefabInstance:
     m_Modifications: []
 """;
     string input = asset("Assets/DescriptorWrapper.prefab", "52525252525252525252525252525252", wrapper);
+    CheckRootAnimatorModels(asset, wrapper);
     using (var package = UnityPackage.Open(input))
     {
         Check(VrchatAvatarParser.ListAvatars(package).Single().Name == "WrapperAvatar",
@@ -1583,6 +1584,55 @@ SkinnedMeshRenderer:
         var parsed = VrchatAvatarParser.Parse(sceneInput);
         Check(parsed.FbxGuid == modelGuid && parsed.FbxLocalPosition.X == 7 && parsed.AdditionalFbxs.Count == 0,
             "Scene descriptor composition retains nested model placement and excludes sibling instances");
+    }
+}
+
+static void CheckRootAnimatorModels(Func<string, string, string, string> asset, string wrapper)
+{
+    const string body = "52525252525252525252525252525260";
+    const string clothing = "52525252525252525252525252525261";
+    foreach (string guid in new[] { body, clothing })
+    {
+        string model = asset($"Assets/AnimatorModel{guid}.fbx", guid, "");
+        File.AppendAllText(model + ".meta", "ModelImporter:\n  humanDescription:\n    human:\n    - boneName: Hips\n      humanName: Hips\n");
+    }
+    string Animator(long id, long owner, string guid) =>
+        $"\n--- !u!95 &{id}\nAnimator:\n  m_GameObject: {{fileID: {owner}}}\n  m_Avatar: {{fileID: 9000000, guid: {guid}}}\n";
+    string text = wrapper.Replace("51515151515151515151515151515151", body)
+        .Replace("- component: {fileID: 3}", "- component: {fileID: 3}\n  - component: {fileID: 5}") + Animator(5, 1, body);
+    string input = asset("Assets/RootAnimatorModels.prefab", "52525252525252525252525252525262", text);
+    using (var package = UnityPackage.Open(input))
+    {
+        var parsed = VrchatAvatarParser.Parse(package);
+        Check(parsed.FbxGuid == body && parsed.AdditionalFbxs.Count == 0,
+            "Root Animator referencing an instantiated FBX does not import a duplicate skeleton");
+    }
+    text = text.Replace($"m_SourcePrefab: {{fileID: 100100000, guid: {body}}}",
+        $"m_SourcePrefab: {{fileID: 100100000, guid: {clothing}}}")
+        .Replace("m_Father: {fileID: 0}", "m_Father: {fileID: 0}\n  m_Children:\n  - {fileID: 11}") + $$"""
+
+--- !u!1 &10
+GameObject:
+  m_Name: Body
+  m_Component:
+  - component: {fileID: 11}
+  - component: {fileID: 12}
+  - component: {fileID: 13}
+--- !u!4 &11
+Transform:
+  m_GameObject: {fileID: 10}
+  m_Father: {fileID: 2}
+--- !u!137 &12
+SkinnedMeshRenderer:
+  m_GameObject: {fileID: 10}
+  m_Mesh: {fileID: 4300000, guid: {{body}}}
+""" + Animator(13, 10, clothing);
+    File.WriteAllText(input, text);
+    using (var package = UnityPackage.Open(input))
+    {
+        var parsed = VrchatAvatarParser.Parse(package);
+        Check(parsed.FbxGuid == body && parsed.AdditionalFbxs.Single().Guid == clothing,
+            "Composed unpacked body keeps the root Animator preference over nested humanoid clothing and descendant Animators");
     }
 }
 

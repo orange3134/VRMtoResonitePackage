@@ -63,9 +63,10 @@ internal static class UnityPrefabInstances
             var documentIds = documents.Select(d => d.FileId).ToHashSet();
             // Unpacked geometry has no model PrefabInstance. Claim one source model per scene,
             // shared by its local renderers, Animator and bone references.
-            foreach (string model in documents.Where(d => d.ClassId != 1001 &&
+            // Animator/bone references alone do not require another geometry occurrence.
+            foreach (string model in documents.Where(d => d.ClassId is 33 or 137 &&
                          (d.Root?["m_PrefabInstance"]?.FileID ?? 0) == 0)
-                         .SelectMany(d => References(d.Root))
+                         .Select(d => d.Root?["m_Mesh"]?.Guid)
                          .Where(g => source.ByGuid(g)?.Extension == ".fbx").Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 foreach (var entry in Visit(model, path + "/mesh/" + model,
@@ -91,14 +92,6 @@ internal static class UnityPrefabInstances
             })));
             return mapping;
         }
-    }
-
-    private static IEnumerable<string> References(YamlNode node)
-    {
-        if (node == null) yield break;
-        if (node.Guid != null) yield return node.Guid;
-        foreach (var child in node.Map?.Values.AsEnumerable() ?? node.Seq ?? Enumerable.Empty<YamlNode>())
-            foreach (string guid in References(child)) yield return guid;
     }
 
     private static YamlNode Rewrite(YamlNode node, Dictionary<string, string> mapping)
