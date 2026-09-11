@@ -446,7 +446,7 @@ internal static class Converter
                 var importedNodePaths = Vrchat.VrchatSceneSetup.CaptureImportedPaths(importedFbxRoots);
 
                 Slot descriptorRoot = ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots,
-                    importedMeshSources, importedNodePaths, out var authoredObjects);
+                    importedMeshSources, importedNodePaths, out var authoredObjects, out var prefabSlots);
                 AlignVrchatImportUp(importRoot, model);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
                 RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
@@ -467,7 +467,7 @@ internal static class Converter
                 Vrchat.VrchatSceneSetup.RemoveEditorOnlyObjects(avatar, importedMeshSources, importedNodePaths);
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources);
                 var physicsNodes = model.NodeTargets.ToDictionary(entry => entry.Key, entry =>
-                    Vrchat.VrchatSceneSetup.ResolveImportedTarget(entry.Value, importedMeshSources, importedNodePaths));
+                    Vrchat.VrchatSceneSetup.ResolveImportedTarget(entry.Value, importedMeshSources, importedNodePaths, prefabSlots));
                 Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes);
                 if (descriptorRoot is { IsDestroyed: false })
                 {
@@ -552,10 +552,12 @@ internal static class Converter
 
     private static Slot ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
         Dictionary<string, Slot> importedFbxRoots, Dictionary<Slot, string> importedMeshSources,
-        IReadOnlyDictionary<Slot, string> importedNodePaths, out Dictionary<string, Slot> authoredObjects)
+        IReadOnlyDictionary<Slot, string> importedNodePaths, out Dictionary<string, Slot> authoredObjects,
+        out Dictionary<string, Slot> prefabSlots)
     {
-        var prefabSlots = new Dictionary<string, Slot>(StringComparer.Ordinal);
-        ApplyPrimaryFbxPlacement(importRoot, avatar, importedFbxRoots, prefabSlots);
+        var slots = new Dictionary<string, Slot>(StringComparer.Ordinal);
+        prefabSlots = slots;
+        ApplyPrimaryFbxPlacement(importRoot, avatar, importedFbxRoots, slots);
 
         foreach (Vrchat.VrchatFbxAsset additional in avatar.AdditionalFbxs)
         {
@@ -564,7 +566,7 @@ internal static class Converter
                 continue;
             }
             Slot parent = ResolvePrefabParent(importRoot, additional.ParentFbxGuid,
-                additional.ParentNodeName, additional.ParentTransforms, importedFbxRoots, prefabSlots);
+                additional.ParentNodeName, additional.ParentTransforms, importedFbxRoots, slots);
             instanceRoot.Parent = parent;
             float3 position = new(
                 additional.LocalPosition.X, additional.LocalPosition.Y, additional.LocalPosition.Z);
@@ -614,10 +616,10 @@ internal static class Converter
         }
         authoredObjects = Vrchat.VrchatSceneSetup.CreateMeshCopies(avatar, importedMeshSources, copy =>
             ResolvePrefabParent(importRoot, copy.ParentFbxGuid, copy.ParentName, copy.ParentTransforms,
-                importedFbxRoots, prefabSlots), importedNodePaths, prefabSlots);
+                importedFbxRoots, slots), importedNodePaths, slots);
         return authoredObjects.GetValueOrDefault(avatar.DescriptorRootKey ?? "") ??
             avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms).Where(t => t.GameObjectKey == avatar.DescriptorRootKey)
-                .Select(t => prefabSlots.GetValueOrDefault(t.Key)).FirstOrDefault(slot => slot != null) ??
+                .Select(t => slots.GetValueOrDefault(t.Key)).FirstOrDefault(slot => slot != null) ??
             Vrchat.VrchatSceneSetup.ResolveImportedTarget(avatar.DescriptorRootTarget, importedMeshSources, importedNodePaths);
     }
 

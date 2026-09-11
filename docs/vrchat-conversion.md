@@ -50,6 +50,8 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   先に退避してから子を移す。複製時の親を保ったまま移すと祖先を自身の子にしてしまう。
 - `.unity` のcompositionもprefabと同じcollectorで配置・上書き・ローカル参照を解決する。
 - PhysBoneのroot、ignore、collider参照はモデルのinstance identityとpathを保持し、
+  prefab GUID/Transform fileIDに対応する生成済みSlotがあれば先に使用する。
+  authored rendererのコピーはimport pathを持たないため、FBXテンプレートより優先する。
   import時に捕捉したSlotへ解決してから共通のSpringBoneSetupへ渡す。
   Merge Armature前にSlotを解決し、各mergeのskin用bone mappingでphysics参照も更新する。
   破棄後のsource identity検索や名前fallbackでは、移動先や別instanceを正しく区別できない。
@@ -58,6 +60,8 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - Animatorのbinding pathはdescriptor root基準で解決する。追加layerの部分weightは、
   full-weightのdriverへ誤変換しないよう推論対象から除く。
   viseme推論はentry/defaultとtransitionの接続を辿り、未接続のchild state machineを含めない。
+  Solo/Mute適用後の同一transition listではViseme条件と順序を確認し、先行transitionが
+  必ず成立する値について後続transitionを辿らない。exit time付きの先行transitionは遮断と見なさない。
   Viseme以外の条件を持つlayerは、toggleの初期値に関係なく保守的に推論対象から除く。
   永続的なDirectVisemeDriverでは条件付きの有効化・無効化を保持できないため。
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。

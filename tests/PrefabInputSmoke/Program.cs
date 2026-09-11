@@ -147,7 +147,7 @@ AnimationClip:
         .Replace("blendShape.reset", "blendShape.second").Replace("      - value: 0", "      - value: 100");
     Asset("Assets/Conflict.anim", conflictGuid, conflictClip);
     string conflictingController = controller.ToString().Replace("  m_EntryTransitions:\n",
-        "  m_EntryTransitions:\n  - {fileID: -501}\n") + $$"""
+        "  m_AnyStateTransitions:\n  - {fileID: -501}\n  m_EntryTransitions:\n") + $$"""
 
 --- !u!1109 &-501
 AnimatorTransition:

@@ -137,8 +137,12 @@ internal static class VrchatSceneSetup
     }
 
     public static Slot ResolveImportedTarget(VrchatBoneTarget target, IReadOnlyDictionary<Slot, string> sources,
-        IReadOnlyDictionary<Slot, string> paths)
+        IReadOnlyDictionary<Slot, string> paths, IReadOnlyDictionary<string, Slot> prefabSlots = null)
     {
+        // Copies and authored attachments have prefab identity but no captured import path.
+        if (target?.PrefabGuid != null && target.TransformFileId != 0 &&
+            prefabSlots?.TryGetValue($"{target.PrefabGuid}:{target.TransformFileId}", out Slot authored) == true)
+            return authored.IsDestroyed ? null : authored;
         if (target?.FbxGuid == null) return null;
         var matches = sources.Where(entry => !entry.Key.IsDestroyed && entry.Value == target.FbxGuid &&
             (target.Path != null ? paths.TryGetValue(entry.Key, out string path) && BonePathMatches(path, target.Path)

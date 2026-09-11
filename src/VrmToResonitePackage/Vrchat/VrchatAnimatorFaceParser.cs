@@ -70,6 +70,7 @@ public static class VrchatAnimatorFaceParser
                     // after explicit entries for all fourteen spoken phonemes.
                     YamlNode machine = controller.Doc(animatorLayer["m_StateMachine"]?.FileID ?? 0)?.Root;
                     var entries = VrchatAnimatorDefaults.ActiveTransitions(controller, machine?["m_EntryTransitions"]?.Seq)
+                        .Where(e => reachable.Contains(e.FileID ?? 0))
                         .Select(e => controller.Doc(e.FileID ?? 0)?.Root).ToList();
                     var spoken = entries.Take(Math.Max(0, entries.Count - 1)).Select(e => e?["m_Conditions"]?.Seq)
                         .Where(c => c?.Count == 1 && c[0]["m_ConditionEvent"]?.AsString() == "Viseme" &&
@@ -106,8 +107,22 @@ public static class VrchatAnimatorFaceParser
                         foreach (YamlNode machine in node?["m_ChildStateMachines"]?.Seq ?? new()) Gather(machine["m_StateMachine"]?.FileID ?? 0);
                     }
                     foreach (string key in new[] { "m_Transitions", "m_EntryTransitions", "m_AnyStateTransitions" })
+                    {
+                        var remaining = Enumerable.Range(0, 15).ToHashSet();
                         foreach (YamlNode transition in VrchatAnimatorDefaults.ActiveTransitions(controller, node?[key]?.Seq))
+                        {
+                            YamlNode candidate = controller.Doc(transition.FileID ?? 0)?.Root;
+                            var conditions = candidate?["m_Conditions"]?.Seq ?? new();
+                            if (followDestinations && conditions.All(c => c["m_ConditionEvent"]?.AsString() == "Viseme"))
+                            {
+                                var eligible = remaining.Where(value => conditions.All(c => MatchesViseme(c, value))).ToArray();
+                                if (eligible.Length == 0) continue;
+                                // Timed transitions do not always win before later siblings.
+                                if (candidate?["m_HasExitTime"]?.AsBool() != true) remaining.ExceptWith(eligible);
+                            }
                             Gather(transition.FileID ?? 0, followDestinations);
+                        }
+                    }
                 }
 
 
@@ -152,6 +167,16 @@ public static class VrchatAnimatorFaceParser
             clips[guid] = clip;
             return clip;
         }
+    }
+
+    private static bool MatchesViseme(YamlNode condition, int value)
+    {
+        float threshold = condition["m_EventTreshold"]?.AsFloat() ?? 0;
+        return condition["m_ConditionMode"]?.AsInt() switch
+        {
+            1 => value != 0, 2 => value == 0, 3 => value > threshold, 4 => value < threshold,
+            6 => value == threshold, 7 => value != threshold, _ => false,
+        };
     }
 
     private static List<Shape> ActiveShapes(YamlNode clip)

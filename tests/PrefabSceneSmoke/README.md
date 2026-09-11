@@ -22,6 +22,9 @@ falling back to child renderers.
 Root-renderer replacement also covers a mesh source nested beneath the placeholder.
 Model-root physics references survive both primary-wrapper and alignment collapse,
 while another model's root identity remains independent.
+Physics on authored static renderer copies resolves through prefab transform
+identity before imported template paths, including repeated local file IDs in
+different prefab instances and targets without an FBX identity.
 
 This integration check boots Resonite's headless engine and imports a local FBX containing a skinned mesh with at least one blendshape. It copies the renderer from an additional model under a primary model, then checks explicit material overrides, FBX default material mappings, initial blendshape weights, inactive state, and isolation from an identically named primary-model renderer.
 

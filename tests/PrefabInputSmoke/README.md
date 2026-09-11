@@ -37,6 +37,9 @@ lists, condition-independent Solo suppression, priority among multiple Solo
 transitions, list isolation, and viseme/silence inference from eligible entries.
 Viseme reachability checks reject disabled and enabled toggle gates and disconnected
 submachines, while retaining an ungated connected submachine.
+Ordered transition checks reject shadowed Entry, State and Any State routes,
+including overlapping Viseme ranges, while preserving muted/later fallbacks and
+an independent route to the same transition.
 
 Descriptor inheritance checks cover FX controller replacement/null, layer type and
 default flags, layer-array shrinking, lip-sync mode, explicit/omitted stripped
