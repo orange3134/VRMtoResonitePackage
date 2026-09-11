@@ -202,6 +202,21 @@ static async Task Run(string fbxPath, string rendererName)
               indexedResult.Bones[2] == clothingRight,
             "Bone overrides retain separate indices for identical source names and restore null source bindings");
         indexedResult.Slot.Destroy();
+        indexedCopy.BoneTargets[0] = new VrchatBoneTarget("primary", "Pelvis", "Left/Pelvis", "prefab", 20);
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", reboundAvatar, indexedSources,
+            (Func<VrchatMeshCopy, Slot>)(_ => primary), bonePaths);
+        var renamedResult = primary.FindChild("IndexedCopy").GetComponent<SkinnedMeshRenderer>();
+        Check(renamedResult.Bones[0] == primaryLeft && renamedResult.Bones[2] == clothingRight,
+            "Renamed unpacked bone preserves the original skin binding when no authored slot exists");
+        renamedResult.Slot.Destroy();
+        var authoredBones = new Dictionary<string, Slot>();
+        Slot pelvis = primary.AddSlot("Pelvis");
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", reboundAvatar, indexedSources,
+            (Func<VrchatMeshCopy, Slot>)(_ => { authoredBones["prefab:20"] = pelvis; return primary; }), bonePaths, authoredBones);
+        renamedResult = primary.FindChild("IndexedCopy").GetComponent<SkinnedMeshRenderer>();
+        Check(renamedResult.Bones[0] == pelvis && renamedResult.Bones[2] == clothingRight,
+            "Renamed bone resolves authored identity after parent creation without changing other model bindings");
+        renamedResult.Slot.Destroy();
         indexedSource.Destroy();
         foreach (var material in original.Materials)
         {

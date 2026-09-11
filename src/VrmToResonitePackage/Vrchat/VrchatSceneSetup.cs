@@ -66,25 +66,6 @@ internal static class VrchatSceneSetup
                 foreach (var material in materials) meshRenderer.Materials.Add().Target = material;
             }
             meshRenderer.Enabled = copy.Enabled;
-            var renderer = meshRenderer as SkinnedMeshRenderer;
-            for (int i = 0; i < (renderer?.Bones.Count ?? 0); i++)
-            {
-                if (!copy.BoneTargets.TryGetValue(i, out var target)) continue;
-                if (target.Name == null)
-                {
-                    renderer.Bones[i] = null;
-                    continue;
-                }
-                // Resolve against the captured model hierarchy, never the copy's new
-                // ancestry or all models sharing a common bone name such as Hips.
-                var matches = importedSources.Where(entry => !entry.Key.IsDestroyed &&
-                    entry.Value == target.FbxGuid && (target.Path != null
-                        ? importedPaths.TryGetValue(entry.Key, out string path) && BonePathMatches(path, target.Path)
-                        : entry.Key.Name == target.Name)).Select(entry => entry.Key).ToList();
-                if (matches.Count != 1)
-                    throw new InvalidDataException($"複製メッシュのボーン参照を特定できません: {copy.Name} / {target.Name}");
-                renderer.Bones[i] = matches[0];
-            }
             foreach (Slot slot in EnumerateSlots(duplicate)) sources[slot] = copy.FbxGuid;
             UniLog.Log($"Prefab mesh copy: {copy.Name} <- {copy.SourceName} (fbx={copy.FbxGuid})");
         }
@@ -117,6 +98,37 @@ internal static class VrchatSceneSetup
                     throw new InvalidDataException($"Invalid prefab mesh import scale: {copy.Name}");
                 slot.LocalScale *= correction;
                 staticScaleCorrections[slot] = correction;
+            }
+        }
+        // Parent creation and renderer registration can provide authored bone identities.
+        // Resolve skins only after all of those slots are available.
+        var capturedSources = importedSources.ToDictionary(entry => entry.Key, entry => entry.Value);
+        foreach (var (copy, slot) in copies)
+        {
+            var renderer = slot.GetComponent<SkinnedMeshRenderer>();
+            for (int i = 0; i < (renderer?.Bones.Count ?? 0); i++)
+            {
+                if (!copy.BoneTargets.TryGetValue(i, out var target)) continue;
+                if (target.Name == null)
+                {
+                    renderer.Bones[i] = null;
+                    continue;
+                }
+                Slot bone = ResolveImportedTarget(target, capturedSources, importedPaths, prefabSlots);
+                if (bone != null)
+                {
+                    renderer.Bones[i] = bone;
+                    continue;
+                }
+                // Unpacking loses the FBX identity of local transforms. A renamed bone's
+                // authored path cannot identify its original imported slot. Retain the
+                // copied skin's existing binding instead of guessing by name or aborting.
+                if (target.PrefabGuid != null && target.TransformFileId != 0 && renderer.Bones[i] != null)
+                {
+                    UniLog.Warning($"Prefab bone keeps imported skin binding: {copy.Name} / {target.Name}");
+                    continue;
+                }
+                throw new InvalidDataException($"複製メッシュのボーン参照を特定できません: {copy.Name} / {target.Name}");
             }
         }
         // Import units correct this renderer's mesh only. Unity-authored child transforms

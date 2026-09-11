@@ -1080,6 +1080,16 @@ Transform:
         Check(Resolve(package, prefabGuid, 0)?.Name == null, "Explicit null copied bone remains null");
         Check(Resolve(package, prefabGuid, 9) == null, "A GameObject cannot masquerade as a bone transform");
     }
+    string originalBones = File.ReadAllText(prefab);
+    File.WriteAllText(prefab, originalBones.Replace("m_Name: Hips", "m_Name: Pelvis"));
+    using (var package = UnityPackage.Open(prefab))
+    {
+        var renamed = Resolve(package, prefabGuid, 10)!;
+        Check(renamed.Name == "Pelvis" && renamed.Path == "Right/Pelvis" &&
+              renamed.PrefabGuid == prefabGuid && renamed.TransformFileId == 10,
+            "Renaming an unpacked bone changes its path but retains its serialized transform identity");
+    }
+    File.WriteAllText(prefab, originalBones);
     const string variantGuid = "13131313131313131313131313131313";
     long modelId = (long)typeof(UnityModelFileIdResolver).GetMethod("Compute",
         System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!

@@ -12,6 +12,8 @@ Copied-bone checks distinguish same-named bones in two branches of the primary
 model and in an additional model, including targets moved after path capture.
 Index-based overrides also distinguish identical source bone names and restore a
 binding whose imported source entry is null.
+Renamed unpacked bones retain the original binding when unresolved, or use their
+prefab transform identity once authored parent slots have been created.
 
 Static-renderer checks cover copying an imported MeshRenderer, retaining its
 placement and disabled/inactive states, replacing its template, applying prefab

@@ -63,7 +63,7 @@ public static class VrchatAnimatorFaceParser
                         float threshold = condition["m_EventTreshold"]?.AsFloat(-1) ?? -1;
                         if (threshold < 0 || threshold > 14 || threshold != MathF.Truncate(threshold)) continue;
                         YamlNode state = controller.Doc(transition["m_DstState"]?.FileID ?? 0)?.Root;
-                        var shapes = ActiveShapes(Clip(state?["m_Motion"]));
+                        var shapes = StableShapes(state, (int)threshold);
                         RecordViseme((int)threshold, shapes);
                     }
                     // Some controllers use an unconditional entry fallback for silence,
@@ -80,7 +80,7 @@ public static class VrchatAnimatorFaceParser
                     if (Enumerable.Range(1, 14).All(i => spoken.Contains(i)) &&
                         fallback?["m_Conditions"]?.Seq?.Count == 0 && fallback["m_Mute"]?.AsBool() != true)
                     {
-                        var shapes = ActiveShapes(Clip(controller.Doc(fallback["m_DstState"]?.FileID ?? 0)?.Root?["m_Motion"]));
+                        var shapes = StableShapes(controller.Doc(fallback["m_DstState"]?.FileID ?? 0)?.Root, 0);
                         RecordViseme(0, shapes);
                     }
                 }
@@ -93,6 +93,20 @@ public static class VrchatAnimatorFaceParser
                         shapes.Count == 1 && MathF.Abs(shapes[0].Peak - 100) < 0.01f &&
                         string.Equals(shapes[0].Name, "blink", StringComparison.OrdinalIgnoreCase))
                         blinks.Add(shapes[0]);
+                }
+
+                List<Shape> StableShapes(YamlNode state, int viseme)
+                {
+                    // A permanent driver cannot reproduce an expression that departs while
+                    // this phoneme is still active, even if departure waits for exit time.
+                    foreach (YamlNode reference in VrchatAnimatorDefaults.ActiveTransitions(controller, state?["m_Transitions"]?.Seq))
+                    {
+                        YamlNode departure = controller.Doc(reference.FileID ?? 0)?.Root;
+                        if (departure == null || (departure["m_Conditions"]?.Seq ?? new()).All(condition =>
+                            condition["m_ConditionEvent"]?.AsString() != "Viseme" || MatchesViseme(condition, viseme)))
+                            return new();
+                    }
+                    return ActiveShapes(Clip(state?["m_Motion"]));
                 }
 
                 void Gather(long id, bool followDestinations = false)

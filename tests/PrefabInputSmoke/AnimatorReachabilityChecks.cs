@@ -8,7 +8,8 @@ internal static class AnimatorReachabilityChecks
         const string guid = "abcd1200000000000000000000000001";
         foreach (string mode in new[] { "disabled toggle", "enabled toggle", "unreachable", "ungated",
             "bypassed default", "muted entry default", "conditional entry default",
-            "shadowed entry", "muted fallback", "later fallback", "alternate route", "shadowed any", "shadowed state", "range shadow" })
+            "shadowed entry", "muted fallback", "later fallback", "alternate route", "shadowed any", "shadowed state", "range shadow",
+            "transient", "timed departure", "muted departure", "other viseme departure" })
         {
             string controller = $$"""
 --- !u!91 &91
@@ -84,12 +85,18 @@ AnimatorState:
                     controller = controller.Replace("AnimatorTransition:\n  m_Conditions: []\n  m_DstState: {fileID: 500}",
                         "AnimatorTransition:\n  m_Conditions:\n  - m_ConditionEvent: Viseme\n    m_ConditionMode: 3\n    m_EventTreshold: 5\n  m_DstState: {fileID: 500}");
             }
+            if (mode is "transient" or "timed departure" or "muted departure" or "other viseme departure")
+                controller += "\n  m_Transitions:\n  - {fileID: 401}\n--- !u!1101 &401\nAnimatorStateTransition:\n  m_DstState: {fileID: 500}\n" +
+                    (mode == "muted departure" ? "  m_Mute: 1\n" : "") +
+                    (mode == "timed departure" ? "  m_HasExitTime: 1\n  m_ExitTime: 1\n" : "") +
+                    (mode == "other viseme departure" ? "  m_Conditions:\n  - m_ConditionEvent: Viseme\n    m_ConditionMode: 7\n    m_EventTreshold: 10\n" : "  m_Conditions: []\n") +
+                    "--- !u!1102 &500\nAnimatorState:\n  m_Motion: {fileID: 0}\n";
             asset("Assets/GatedFace.controller", guid, controller);
             using var package = UnityPackage.Open(selected);
             var avatar = new VrchatAvatar();
             VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument(
                 $"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {guid}}}\n"), avatar);
-            int expected = mode is "ungated" or "muted fallback" or "later fallback" or "alternate route" or "muted entry default" or "conditional entry default" ? 1 : 0;
+            int expected = mode is "ungated" or "muted fallback" or "later fallback" or "alternate route" or "muted entry default" or "conditional entry default" or "muted departure" or "other viseme departure" ? 1 : 0;
             if (avatar.Visemes.Count != expected)
                 throw new Exception($"Viseme reachability ({mode}): expected {expected}, got {avatar.Visemes.Count}");
             Console.WriteLine($"PASS: Viseme reachability ({mode})");
