@@ -49,8 +49,13 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - `.unity` のcompositionもprefabと同じcollectorで配置・上書き・ローカル参照を解決する。
 - PhysBoneのroot、ignore、collider参照はモデルのinstance identityとpathを保持し、
   import時に捕捉したSlotへ解決してから共通のSpringBoneSetupへ渡す。
+  Merge Armature前にSlotを解決し、各mergeのskin用bone mappingでphysics参照も更新する。
+  破棄後のsource identity検索や名前fallbackでは、移動先や別instanceを正しく区別できない。
 - Animatorのbinding pathはdescriptor root基準で解決する。追加layerの部分weightは、
   full-weightのdriverへ誤変換しないよう推論対象から除く。
+  viseme推論はentry/defaultとtransitionの接続を辿り、未接続のchild state machineを含めない。
+  Viseme以外の条件を持つlayerは、toggleの初期値に関係なく保守的に推論対象から除く。
+  永続的なDirectVisemeDriverでは条件付きの有効化・無効化を保持できないため。
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
   少数の名前一致だけでは推定しない。

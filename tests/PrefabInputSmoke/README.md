@@ -33,6 +33,8 @@ omitted stripped aliases in outer variants; sibling instances retain their compo
 Animator checks cover Solo/Mute filtering of State, Entry and Any State transition
 lists, condition-independent Solo suppression, priority among multiple Solo
 transitions, list isolation, and viseme/silence inference from eligible entries.
+Viseme reachability checks reject disabled and enabled toggle gates and disconnected
+submachines, while retaining an ungated connected submachine.
 
 Descriptor inheritance checks cover FX controller replacement/null, layer type and
 default flags, layer-array shrinking, lip-sync mode, explicit/omitted stripped

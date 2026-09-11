@@ -43,7 +43,13 @@ public static class VrchatAnimatorFaceParser
                 if (layerIndex++ > 0 && (animatorLayer["m_DefaultWeight"]?.AsFloat() ?? 0) != 1f) continue;
                 var reachable = new HashSet<long>();
                 Gather(animatorLayer["m_StateMachine"]?.FileID ?? 0);
-                if (descriptor["lipSync"]?.AsInt() == 4)
+                // Permanent drivers cannot preserve a toggle/parameter gate, even when
+                // its startup default is enabled. Reject such layers conservatively.
+                bool gated = reachable.Any(id => (controller.Doc(id)?.Root?["m_Conditions"]?.Seq ?? new())
+                    .Any(condition => condition["m_ConditionEvent"]?.AsString() != "Viseme"));
+                reachable.Clear();
+                Gather(animatorLayer["m_StateMachine"]?.FileID ?? 0, followDestinations: true);
+                if (descriptor["lipSync"]?.AsInt() == 4 && !gated)
                 {
                     foreach (long id in reachable)
                     {
@@ -88,15 +94,20 @@ public static class VrchatAnimatorFaceParser
                         blinks.Add(shapes[0]);
                 }
 
-                void Gather(long id)
+                void Gather(long id, bool followDestinations = false)
                 {
                     if (id == 0 || !reachable.Add(id)) return;
                     YamlNode node = controller.Doc(id)?.Root;
-                    foreach (YamlNode state in node?["m_ChildStates"]?.Seq ?? new()) Gather(state["m_State"]?.FileID ?? 0);
-                    foreach (YamlNode machine in node?["m_ChildStateMachines"]?.Seq ?? new()) Gather(machine["m_StateMachine"]?.FileID ?? 0);
+                    foreach (string key in new[] { "m_DefaultState", "m_DstState", "m_DstStateMachine" })
+                        Gather(node?[key]?.FileID ?? 0, followDestinations);
+                    if (!followDestinations)
+                    {
+                        foreach (YamlNode state in node?["m_ChildStates"]?.Seq ?? new()) Gather(state["m_State"]?.FileID ?? 0);
+                        foreach (YamlNode machine in node?["m_ChildStateMachines"]?.Seq ?? new()) Gather(machine["m_StateMachine"]?.FileID ?? 0);
+                    }
                     foreach (string key in new[] { "m_Transitions", "m_EntryTransitions", "m_AnyStateTransitions" })
                         foreach (YamlNode transition in VrchatAnimatorDefaults.ActiveTransitions(controller, node?[key]?.Seq))
-                            Gather(transition.FileID ?? 0);
+                            Gather(transition.FileID ?? 0, followDestinations);
                 }
 
 

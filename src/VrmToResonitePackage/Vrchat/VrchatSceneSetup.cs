@@ -283,12 +283,12 @@ internal static class VrchatSceneSetup
         }
     }
 
-    public static void ApplyModularAvatar(Slot root, VrchatAvatar avatar)
+    public static void ApplyModularAvatar(Slot root, VrchatAvatar avatar, IDictionary<int, Slot> physicsNodes = null)
     {
         int merged = 0;
         foreach (VrchatModularMergeArmature merge in avatar.ModularMergeArmatures)
         {
-            int rewritten = ApplyMergeArmature(root, merge);
+            int rewritten = ApplyMergeArmature(root, merge, physicsNodes);
             merged += rewritten;
             UniLog.Log($"Modular Avatar Merge Armature: {merge.SourceName} -> {merge.TargetName}, " +
                        $"{rewritten} bone reference(s) rewritten.");
@@ -309,7 +309,7 @@ internal static class VrchatSceneSetup
         }
     }
 
-    private static int ApplyMergeArmature(Slot root, VrchatModularMergeArmature merge)
+    private static int ApplyMergeArmature(Slot root, VrchatModularMergeArmature merge, IDictionary<int, Slot> physicsNodes)
     {
         Slot target = FindFirstSlot(root, merge.TargetName);
         if (target == null)
@@ -335,6 +335,13 @@ internal static class VrchatSceneSetup
         }
 
         int rewritten = RewriteSkinnedMeshBones(root, mappings);
+        // Resolve identities before merging, then remap every physics role (root, ignore,
+        // collider) with the same mapping as the skin. Updating each merge also handles
+        // destinations that become sources of a later Merge Armature component.
+        if (physicsNodes != null)
+            foreach (int node in physicsNodes.Keys.ToArray())
+                if (physicsNodes[node] is {} slot && mappings.TryGetValue(slot, out Slot mapped))
+                    physicsNodes[node] = mapped;
         foreach ((Slot src, Slot dst) in mappings.OrderByDescending(pair => Depth(pair.Key)))
         {
             MoveUnmappedChildren(src, dst, mappings);

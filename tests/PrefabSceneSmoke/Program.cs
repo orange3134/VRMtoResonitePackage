@@ -56,6 +56,34 @@ static async Task Run(string fbxPath, string rendererName)
     {
         await default(ToWorld);
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
+        var mergeRoot = root.AddSlot("Physics merge regression");
+        var targetHips = mergeRoot.AddSlot("AvatarArmature").AddSlot("Hips");
+        var sourceHips = mergeRoot.AddSlot("ClothingArmature").AddSlot("Hips");
+        var untouchedHips = mergeRoot.AddSlot("OtherArmature").AddSlot("Hips");
+        var mergeSources = new Dictionary<Slot, string> { [sourceHips] = "clothing", [untouchedHips] = "other" };
+        var mergePaths = new Dictionary<Slot, string> { [sourceHips] = "Hips", [untouchedHips] = "Hips" };
+        var mergeAvatar = new VrchatAvatar();
+        mergeAvatar.ModularMergeArmatures.Add(new VrchatModularMergeArmature
+            { SourceName = "ClothingArmature", TargetName = "AvatarArmature" });
+        var mergeNodes = new Dictionary<int, Slot>
+            { [0] = sourceHips, [1] = sourceHips, [2] = untouchedHips };
+        mergeNodes[0] = (Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
+            new VrchatBoneTarget("clothing", "Hips", "Hips"), mergeSources, mergePaths);
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", mergeRoot, mergeAvatar, mergeNodes);
+        Check(Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
+                new VrchatBoneTarget("clothing", "Hips", "Hips"), mergeSources, mergePaths) == null,
+            "Post-merge source identity lookup reproduces the destroyed physics target");
+        Check(sourceHips.IsDestroyed && mergeNodes[0] == targetHips && mergeNodes[1] == targetHips &&
+              mergeNodes[2] == untouchedHips,
+            "Merged physics root and collider retain the surviving bone");
+        var finalHips = mergeRoot.AddSlot("FinalArmature").AddSlot("Hips");
+        var secondMerge = new VrchatAvatar();
+        secondMerge.ModularMergeArmatures.Add(new VrchatModularMergeArmature
+            { SourceName = "AvatarArmature", TargetName = "FinalArmature" });
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", mergeRoot, secondMerge, mergeNodes);
+        Check(targetHips.IsDestroyed && mergeNodes[0] == finalHips && mergeNodes[1] == finalHips &&
+              mergeNodes[2] == untouchedHips,
+            "Successive armature merges remap physics targets without changing another instance");
         Slot primary = root.AddSlot("Primary"), additional = root.AddSlot("Additional");
         Slot branches = root.AddSlot("Branches");
         Slot left = branches.AddSlot("Left").AddSlot("Shared");

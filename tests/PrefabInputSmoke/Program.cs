@@ -78,6 +78,7 @@ AnimationClip:
     }
     Asset("Assets/Face.controller", controllerGuid, controller.ToString());
     CheckAnimatorBlink(Asset, selected);
+    AnimatorReachabilityChecks.Run(Asset, selected);
     string soloViseme = controller.ToString().Replace("--- !u!1109 &-101\nAnimatorTransition:\n",
         "--- !u!1109 &-101\nAnimatorTransition:\n  m_Solo: 1\n");
     Asset("Assets/Face.controller", controllerGuid, soloViseme);

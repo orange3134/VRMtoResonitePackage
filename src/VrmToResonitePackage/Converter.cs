@@ -466,15 +466,15 @@ internal static class Converter
                 // Finish asset reloads first: deleting their last renderer can unload providers.
                 Vrchat.VrchatSceneSetup.RemoveEditorOnlyObjects(avatar, importedMeshSources, importedNodePaths);
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources);
-                Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar);
+                var physicsNodes = model.NodeTargets.ToDictionary(entry => entry.Key, entry =>
+                    Vrchat.VrchatSceneSetup.ResolveImportedTarget(entry.Value, importedMeshSources, importedNodePaths));
+                Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes);
                 if (descriptorRoot is { IsDestroyed: false })
                 {
                     var parts = new Stack<string>();
                     for (Slot slot = descriptorRoot; slot != null && slot != root; slot = slot.Parent) parts.Push(slot.Name);
                     model.MeshBindingRootPath = string.Join("/", parts);
                 }
-                var physicsNodes = model.NodeTargets.ToDictionary(entry => entry.Key, entry =>
-                    Vrchat.VrchatSceneSetup.ResolveImportedTarget(entry.Value, importedMeshSources, importedNodePaths));
 
                 if (options.NoAvatar)
                 {

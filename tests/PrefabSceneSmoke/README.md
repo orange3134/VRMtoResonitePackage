@@ -3,6 +3,8 @@
 Also verifies static-mesh import scale outside the source hierarchy, empty Animator
 bindings below the export root, and separate DynamicBoneChains on same-named bones
 in repeated model instances.
+Merge Armature checks reproduce the destroyed-source lookup and verify that physics
+targets follow successive bone replacements while another instance remains intact.
 
 Also checks that EditorOnly removal follows captured model paths after reparenting and preserves a separate branch containing identically named nodes.
 
