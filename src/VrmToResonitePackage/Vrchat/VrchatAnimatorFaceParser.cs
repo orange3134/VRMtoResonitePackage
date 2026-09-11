@@ -56,6 +56,7 @@ public static class VrchatAnimatorFaceParser
                 // cannot be represented without changing the deformation.
                 if (layerIndex++ > 0 && (animatorLayer["m_DefaultWeight"]?.AsFloat() ?? 0) != 1f) continue;
                 var reachable = new HashSet<long>();
+                var reachedValues = new Dictionary<long, HashSet<int>>();
                 Gather(animatorLayer["m_StateMachine"]?.FileID ?? 0);
                 // Permanent drivers cannot preserve a toggle/parameter gate, even when
                 // its startup default is enabled. Reject such layers conservatively.
@@ -151,12 +152,22 @@ public static class VrchatAnimatorFaceParser
                     return shapes;
                 }
 
-                void Gather(long id, bool followDestinations = false)
+                void Gather(long id, bool followDestinations = false, IEnumerable<int> eligibleValues = null)
                 {
-                    if (id == 0 || !reachable.Add(id)) return;
+                    if (id == 0) return;
+                    var incoming = (eligibleValues ?? Enumerable.Range(0, 15)).ToHashSet();
+                    if (followDestinations)
+                    {
+                        if (!reachedValues.TryGetValue(id, out var seen)) reachedValues[id] = seen = new();
+                        incoming.ExceptWith(seen);
+                        if (incoming.Count == 0) return;
+                        seen.UnionWith(incoming);
+                        reachable.Add(id);
+                    }
+                    else if (!reachable.Add(id)) return;
                     YamlNode node = controller.Doc(id)?.Root;
                     foreach (string key in new[] { "m_DstState", "m_DstStateMachine" })
-                        Gather(node?[key]?.FileID ?? 0, followDestinations);
+                        Gather(node?[key]?.FileID ?? 0, followDestinations, incoming);
                     if (!followDestinations)
                     {
                         foreach (YamlNode state in node?["m_ChildStates"]?.Seq ?? new()) Gather(state["m_State"]?.FileID ?? 0);
@@ -164,23 +175,26 @@ public static class VrchatAnimatorFaceParser
                     }
                     foreach (string key in new[] { "m_Transitions", "m_EntryTransitions", "m_AnyStateTransitions" })
                     {
-                        var remaining = Enumerable.Range(0, 15).ToHashSet();
+                        // Entry routing happens immediately with the incoming parameter value.
+                        // State/Any State transitions can run later, after Viseme changes.
+                        var remaining = key == "m_EntryTransitions" ? incoming.ToHashSet() : Enumerable.Range(0, 15).ToHashSet();
                         foreach (YamlNode transition in VrchatAnimatorDefaults.ActiveTransitions(controller, node?[key]?.Seq))
                         {
                             YamlNode candidate = controller.Doc(transition.FileID ?? 0)?.Root;
                             var conditions = candidate?["m_Conditions"]?.Seq ?? new();
+                            IEnumerable<int> eligible = remaining.ToArray();
                             if (followDestinations && conditions.All(c => c["m_ConditionEvent"]?.AsString() == "Viseme"))
                             {
-                                var eligible = remaining.Where(value => conditions.All(c => MatchesViseme(c, value))).ToArray();
-                                if (eligible.Length == 0) continue;
+                                eligible = remaining.Where(value => conditions.All(c => MatchesViseme(c, value))).ToArray();
+                                if (!eligible.Any()) continue;
                                 // Timed transitions do not always win before later siblings.
                                 if (candidate?["m_HasExitTime"]?.AsBool() != true) remaining.ExceptWith(eligible);
                             }
-                            Gather(transition.FileID ?? 0, followDestinations);
+                            Gather(transition.FileID ?? 0, followDestinations, eligible);
                         }
                         // Default is the fallback only for values not routed by Entry.
                         if (key == "m_EntryTransitions" && (!followDestinations || remaining.Count > 0))
-                            Gather(node?["m_DefaultState"]?.FileID ?? 0, followDestinations);
+                            Gather(node?["m_DefaultState"]?.FileID ?? 0, followDestinations, remaining);
                     }
                 }
             }

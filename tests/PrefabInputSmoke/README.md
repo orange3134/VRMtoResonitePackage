@@ -39,6 +39,9 @@ lists, condition-independent Solo suppression, priority among multiple Solo
 transitions, list isolation, and viseme/silence inference from eligible entries.
 Viseme reachability checks reject disabled and enabled toggle gates and disconnected
 submachines, while retaining an ungated connected submachine.
+Nested Entry checks reject incompatible incoming Viseme conditions, retain compatible
+entries and revisits with additional values, and allow later state transitions after
+the Viseme value changes.
 Ordered transition checks reject shadowed Entry, State and Any State routes,
 including overlapping Viseme ranges, while preserving muted/later fallbacks and
 an independent route to the same transition.

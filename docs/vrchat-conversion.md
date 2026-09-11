@@ -75,6 +75,10 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   viseme推論はentry/defaultとtransitionの接続を辿り、未接続のchild state machineを含めない。
   Entry が全 Viseme 値を処理する場合、default state を無条件に到達可能としない。
   muted Entry や一部の値だけを処理する Entry では default fallback を残す。
+  Nested Entry routing carries the Viseme values allowed by the incoming transition,
+  intersecting each Entry condition and its default fallback. Track visited values per
+  node so another route can enter the same machine with additional values. State and
+  Any State transitions may run later after Viseme changes, so their value domain resets.
   Solo/Mute適用後の同一transition listではViseme条件と順序を確認し、先行transitionが
   必ず成立する値について後続transitionを辿らない。exit time付きの先行transitionは遮断と見なさない。
   Viseme以外の条件を持つlayerは、toggleの初期値に関係なく保守的に推論対象から除く。

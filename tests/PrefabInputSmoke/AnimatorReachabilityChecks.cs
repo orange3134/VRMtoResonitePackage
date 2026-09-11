@@ -7,6 +7,7 @@ internal static class AnimatorReachabilityChecks
     {
         const string guid = "abcd1200000000000000000000000001";
         foreach (string mode in new[] { "disabled toggle", "enabled toggle", "unreachable", "ungated",
+            "incompatible nested entry", "compatible nested entry", "revisited nested entry", "later state value",
             "bypassed default", "muted entry default", "conditional entry default",
             "shadowed entry", "muted fallback", "later fallback", "alternate route", "shadowed any", "shadowed state", "range shadow",
             "any departure", "ancestor any departure", "muted any departure", "other viseme any departure",
@@ -61,6 +62,20 @@ AnimatorState:
                     "  m_Conditions: []");
             if (mode == "unreachable")
                 controller = controller.Replace("  m_Transitions:\n  - {fileID: 201}", "  m_Transitions: []");
+            if (mode is "incompatible nested entry" or "compatible nested entry" or "revisited nested entry" or "later state value")
+            {
+                controller = controller.Replace("AnimatorStateTransition:\n  m_DstStateMachine: {fileID: 300}\n  m_Conditions: []",
+                    "AnimatorStateTransition:\n  m_DstStateMachine: {fileID: 300}\n  m_Conditions:\n  - m_ConditionEvent: Viseme\n    m_ConditionMode: " +
+                    (mode == "compatible nested entry" ? "3\n    m_EventTreshold: 9" : "6\n    m_EventTreshold: 5"));
+                if (mode == "revisited nested entry")
+                {
+                    controller = controller.Replace("  - {fileID: 201}", "  - {fileID: 201}\n  - {fileID: 202}");
+                    controller += "\n--- !u!1101 &202\nAnimatorStateTransition:\n  m_DstStateMachine: {fileID: 300}\n  m_Conditions:\n  - m_ConditionEvent: Viseme\n    m_ConditionMode: 3\n    m_EventTreshold: 9\n";
+                }
+                if (mode == "later state value")
+                    controller = controller.Replace("  m_EntryTransitions:\n  - {fileID: 301}",
+                        "  m_DefaultState: {fileID: 350}\n--- !u!1102 &350\nAnimatorState:\n  m_Transitions:\n  - {fileID: 301}");
+            }
             if (mode is "bypassed default" or "muted entry default" or "conditional entry default")
             {
                 controller = controller.Replace("  m_DefaultState: {fileID: 200}",
@@ -123,6 +138,7 @@ AnimatorState:
                 $"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {guid}}}\n"), avatar);
             int expected = mode is "muted any departure" or "other viseme any departure" or "ungated" or "muted fallback" or "later fallback" or "alternate route" or "muted entry default" or "conditional entry default" or "muted departure" or "other viseme departure" ? 1 : 0;
             if (mode is "unrelated layer" or "zero weight layer") expected = 1;
+            if (mode is "compatible nested entry" or "revisited nested entry" or "later state value") expected = 1;
             if (avatar.Visemes.Count != expected)
                 throw new Exception($"Viseme reachability ({mode}): expected {expected}, got {avatar.Visemes.Count}");
             Console.WriteLine($"PASS: Viseme reachability ({mode})");
