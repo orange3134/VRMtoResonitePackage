@@ -37,6 +37,10 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 
 ## FBXの選択と合成
 
+- Mesh template selection and EditorOnly exclusions compare complete captured model
+  paths after removing only the synthetic `RootNode` prefix (and leading slashes).
+  A nested `Armature/Body` must never match a top-level `Body` by suffix; the latter
+  remains an independent renderer and bone subtree even after reparenting.
 - 詳細解析は `UnityPrefabInstances` の非所有ビューで行う。選択した descriptor の subtree に
   含まれる document と PrefabInstance だけを残し、すべての collector に同じ範囲を見せる。
   除外した祖先への root の `m_Father` はビュー内だけで 0 に戻し、ローカル骨の path を

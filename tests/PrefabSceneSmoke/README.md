@@ -10,6 +10,9 @@ Physics-only hierarchies are created without mesh copies and resolve independent
 of the exported avatar root.
 
 Also checks that EditorOnly removal follows captured model paths after reparenting and preserves a separate branch containing identically named nodes.
+Top-level namesakes also remain intact, including their child bones. Mesh template
+selection distinguishes a nested renderer from a top-level renderer with the same
+name, using the captured path even after reparenting.
 
 Copied-bone checks distinguish same-named bones in two branches of the primary
 model and in an additional model, including targets moved after path capture.

@@ -183,6 +183,9 @@ static async Task Run(string fbxPath, string rendererName)
         Slot right = branches.AddSlot("Right").AddSlot("Shared");
         left.AddSlot("Body");
         Slot survivingBody = right.AddSlot("Body");
+        Slot topLevelBody = branches.AddSlot("Body");
+        topLevelBody.AttachComponent<MeshRenderer>();
+        Slot survivingBone = topLevelBody.AddSlot("Bone");
         var branchRoots = new Dictionary<string, Slot> { ["branches"] = branches };
         var branchSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup",
             "CaptureImportedObjects", branchRoots);
@@ -196,6 +199,8 @@ static async Task Run(string fbxPath, string rendererName)
             excludedBranch, branchSources, branchPaths);
         Check(left.IsDestroyed && !right.IsDestroyed && !survivingBody.IsDestroyed,
             "EditorOnly removal follows captured paths after reparenting and preserves the other same-named branch");
+        Check(!topLevelBody.IsDestroyed && !survivingBone.IsDestroyed,
+            "EditorOnly nested path preserves a top-level namesake renderer and its bones");
         var settings = ModelImportSettings.XiexeToon(false, true, false);
         settings.SetupIK = false;
         settings.ForceTpose = false;
@@ -469,9 +474,11 @@ static async Task Run(string fbxPath, string rendererName)
         Slot modelRoot = root.AddSlot("Duplicate source model");
         Slot leftSource = sameA.Slot.Duplicate(modelRoot.AddSlot("Left"));
         Slot rightSource = sameB.Slot.Duplicate(modelRoot.AddSlot("Right"));
+        Slot topLevelSource = sameA.Slot.Duplicate(modelRoot);
         leftSource.GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] = 0.12f;
         rightSource.GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] = 0.89f;
-        var pathSources = new Dictionary<Slot, string> { [leftSource] = "model", [rightSource] = "model" };
+        var pathSources = new Dictionary<Slot, string>
+            { [leftSource] = "model", [rightSource] = "model", [topLevelSource] = "model" };
         var sourcePaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths",
             new Dictionary<string, Slot> { ["model"] = modelRoot });
         rightSource.SetParent(primary, false);

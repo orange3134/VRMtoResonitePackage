@@ -27,7 +27,7 @@ internal static class VrchatSceneSetup
                 (!copy.IsSkinned || entry.Key.GetComponent<SkinnedMeshRenderer>() != null) &&
                 (copy.SourcePath != null
                     ? importedPaths.TryGetValue(entry.Key, out string path) &&
-                      (copy.SourcePath == path || copy.SourcePath.EndsWith("/" + path, StringComparison.Ordinal))
+                      ImportedPathMatches(path, copy.SourcePath)
                     : entry.Key.Name == copy.SourceName)).Select(entry => entry.Key).ToArray();
             if (matchesBySource.Length > 1)
                 throw new InvalidDataException($"Ambiguous prefab mesh copy source: {copy.Name} <- {copy.SourcePath ?? copy.SourceName}");
@@ -161,12 +161,12 @@ internal static class VrchatSceneSetup
             return authored.IsDestroyed ? null : authored;
         if (target?.FbxGuid == null) return null;
         var matches = sources.Where(entry => !entry.Key.IsDestroyed && entry.Value == target.FbxGuid &&
-            (target.Path != null ? paths.TryGetValue(entry.Key, out string path) && BonePathMatches(path, target.Path)
+            (target.Path != null ? paths.TryGetValue(entry.Key, out string path) && ImportedPathMatches(path, target.Path)
                 : entry.Key.Name == target.Name)).Select(entry => entry.Key).ToArray();
         return matches.Length == 1 ? matches[0] : null;
     }
 
-    private static bool BonePathMatches(string importedPath, string targetPath)
+    private static bool ImportedPathMatches(string importedPath, string targetPath)
     {
         // Assimp may retain its synthetic root in one representation but omit it in the other.
         static string Normalize(string path)
@@ -217,7 +217,7 @@ internal static class VrchatSceneSetup
             if (slot.IsDestroyed) continue;
             bool excluded = avatar.EditorOnlyModelObjects.Contains(new VrchatGameObjectReference(guid, slot.Name));
             if (importedPaths.TryGetValue(slot, out string path) && avatar.EditorOnlyModelPaths.TryGetValue(guid, out var excludedPaths))
-                excluded |= excludedPaths.Any(p => p == path || p.EndsWith("/" + path, StringComparison.Ordinal));
+                excluded |= excludedPaths.Any(p => ImportedPathMatches(path, p));
             if (!excluded) continue;
             UniLog.Log($"Removing EditorOnly object subtree: {slot.Name} (fbx={guid})");
             slot.Destroy();
