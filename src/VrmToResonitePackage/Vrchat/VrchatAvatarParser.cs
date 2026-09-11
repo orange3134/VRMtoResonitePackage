@@ -1842,8 +1842,10 @@ public static class VrchatAvatarParser
                 if (!resolvers.TryGetValue(reference.Guid, out var resolver))
                     resolvers[reference.Guid] = resolver = new UnityModelFileIdResolver(asset);
                 string name = resolver.ResolveName(id);
-                return name != null && resolver.BlendShapeNames.TryGetValue(name, out var names) &&
-                    index >= 0 && index < names.Count ? names[index] : null;
+                string path = resolver.ResolveNodePath(id);
+                var names = path != null ? resolver.BlendShapeNamesByPath.GetValueOrDefault(path) :
+                    name != null ? resolver.BlendShapeNames.GetValueOrDefault(name) : null;
+                return names != null && index >= 0 && index < names.Count ? names[index] : null;
             }
             if (asset?.Extension is not (".prefab" or ".unity")) return null;
             scene = package.ReadScene(asset);
@@ -2001,7 +2003,10 @@ public static class VrchatAvatarParser
                     }
                 }
                 avatar.MeshCopies.Add(copy);
-                if (modelResolvers[fbxGuid].BlendShapeNames.TryGetValue(sourceName, out var shapeNames))
+                var shapeNames = copy.SourcePath != null
+                    ? resolver.BlendShapeNamesByPath.GetValueOrDefault(copy.SourcePath)
+                    : resolver.BlendShapeNames.GetValueOrDefault(sourceName);
+                if (shapeNames != null)
                 {
                     copy.BlendShapeNames = shapeNames.ToList();
                     avatar.FbxBlendShapeNames.TryAdd(rendererName, copy.BlendShapeNames);
@@ -3031,7 +3036,7 @@ public static class VrchatAvatarParser
 
         foreach (YamlDocument component in scene.MonoBehavioursByScript(ModularAvatarBoneProxyScriptGuid))
         {
-            if (subtree != null && !InSubtree(scene, subtree, component))
+            if (entry.Removed.Contains(component.FileId) || (subtree != null && !InSubtree(scene, subtree, component)))
             {
                 continue;
             }

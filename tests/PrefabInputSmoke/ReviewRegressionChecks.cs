@@ -20,6 +20,23 @@ internal static class ReviewRegressionChecks
         string baseFile = asset("Assets/ReviewBase.prefab", baseGuid, baseText);
         string variantText = $"--- !u!1001 &99\nPrefabInstance:\n  m_SourcePrefab: {{guid: {baseGuid}}}\n";
         string variantFile = asset("Assets/ReviewVariant.prefab", variantGuid, variantText);
+        Case("same-named source renderers retain independent blendshape tables by path", () =>
+        {
+            var resolver = new UnityModelFileIdResolver(null);
+            var scene = new Assimp.Scene();
+            foreach (string branch in new[] { "Left", "Right" })
+            {
+                var mesh = new Assimp.Mesh("Body", Assimp.PrimitiveType.Triangle);
+                mesh.MeshAnimationAttachments.Add(new Assimp.MeshAnimationAttachment { Name = branch + "Shape" });
+                var node = new Assimp.Node("Body");
+                node.MeshIndices.Add(scene.MeshCount);
+                scene.Meshes.Add(mesh);
+                typeof(UnityModelFileIdResolver).GetMethod("AddBlendShapeNames", BindingFlags.NonPublic | BindingFlags.Instance)!
+                    .Invoke(resolver, new object[] { scene, node, "RootNode/" + branch + "/Body" });
+            }
+            Require(resolver.BlendShapeNamesByPath["RootNode/Left/Body"].Single() == "LeftShape" &&
+                resolver.BlendShapeNamesByPath["RootNode/Right/Body"].Single() == "RightShape");
+        });
         Case("authored lowercase root excludes only its own branch", () =>
         {
             using var source = UnityPackage.Open(baseFile);
@@ -53,7 +70,13 @@ internal static class ReviewRegressionChecks
             string guid = scene.RendererMesh(smr).Guid;
             var resolver = new UnityModelFileIdResolver(package.ByGuid(guid));
             string sourceName = resolver.ResolveName(scene.RendererMesh(smr).FileID.Value);
+            const string sourcePath = "RootNode/Clothing/Body";
+            ((Dictionary<long, HashSet<string>>)typeof(UnityModelFileIdResolver)
+                .GetField("_nodePathsById", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(resolver)!)
+                [scene.RendererMesh(smr).FileID.Value] = new() { sourcePath };
             ((Dictionary<string, IReadOnlyList<string>>)resolver.BlendShapeNames)[sourceName] = new[] { "Shrink" };
+            ((Dictionary<string, IReadOnlyList<string>>)resolver.BlendShapeNamesByPath)
+                [sourcePath] = new[] { "Shrink" };
             string name = scene.ResolveGameObjectName(smr.FileId);
             var avatar = new VrchatAvatar { Blink = new VrchatBlink { MeshGameObjectName = name, BlendShapeIndex = 0 } };
             avatar.FbxBlendShapeNames[name] = new[] { "Blink" };
@@ -65,6 +88,12 @@ internal static class ReviewRegressionChecks
             Require(model.MeshTargetNames[bind.MeshIndex][bind.MorphIndex] == "Blink");
             var copy = avatar.MeshCopies.Single();
             Require(avatar.BlendShapeNamesFor(guid, name, copy.Transform.GameObjectKey).Single() == "Shrink");
+            ((Dictionary<string, IReadOnlyList<string>>)resolver.BlendShapeNames)[sourceName] = new[] { "Other branch shape" };
+            avatar.MeshCopies.Clear();
+            Call("CollectAuthoredMeshCopy", package, baseGuid, scene, smr, avatar,
+                new Dictionary<string, UnityModelFileIdResolver> { [guid] = resolver },
+                new Dictionary<string, UnityScene>(), false);
+            Require(avatar.MeshCopies.Single().BlendShapeNames.Single() == "Shrink");
             avatar.ModelBlendShapeNames[new VrchatGameObjectReference("primary", name)] = new[] { "Blink" };
             avatar.ModelBlendShapeNames[new VrchatGameObjectReference(guid, name)] = new[] { "Shrink" };
             Require(avatar.BlendShapeNamesFor("primary", name).Single() == "Blink" &&

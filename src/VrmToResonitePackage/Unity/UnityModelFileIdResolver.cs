@@ -18,6 +18,8 @@ public sealed class UnityModelFileIdResolver
     public Dictionary<string, string[]> MeshBoneNamesByPath { get; } = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNames =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNamesByPath =
+        new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<float>> _blendShapeDefaultWeights =
         new(StringComparer.Ordinal);
     private readonly HashSet<string> _rendererNames = new(StringComparer.Ordinal);
@@ -47,6 +49,7 @@ public sealed class UnityModelFileIdResolver
            _names.TryGetValue(fileId, out string name) ? name : null;
 
     public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNames => _blendShapeNames;
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNamesByPath => _blendShapeNamesByPath;
     public IReadOnlyDictionary<string, IReadOnlyList<float>> BlendShapeDefaultWeights =>
         _blendShapeDefaultWeights;
     public IReadOnlyCollection<string> RendererNames => _rendererNames;
@@ -231,7 +234,7 @@ public sealed class UnityModelFileIdResolver
                     AddPathVariants("MeshRenderer", nodePath, node.Name);
                     if (skinned)
                     {
-                        AddBlendShapeNames(scene, node);
+                        AddBlendShapeNames(scene, node, string.Join("/", nodePath.Select(NormalizeName)));
                     }
                     else
                     {
@@ -254,7 +257,7 @@ public sealed class UnityModelFileIdResolver
         }
     }
 
-    private void AddBlendShapeNames(Scene scene, Node node)
+    private void AddBlendShapeNames(Scene scene, Node node, string path)
     {
         Mesh mesh = node.MeshIndices
             .Where(index => index >= 0 && index < scene.MeshCount)
@@ -277,6 +280,7 @@ public sealed class UnityModelFileIdResolver
             names.Add(name);
         }
         _blendShapeNames.TryAdd(node.Name, names);
+        _blendShapeNamesByPath[path] = names;
         var defaults = new float[names.Count];
         for (int i = 0; i < names.Count; i++)
         {

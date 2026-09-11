@@ -12,7 +12,8 @@ internal static class VrchatSceneSetup
 {
     public static Dictionary<string, Slot> CreateMeshCopies(VrchatAvatar avatar, Dictionary<Slot, string> sources,
         Func<VrchatMeshCopy, Slot> resolveParent, IReadOnlyDictionary<Slot, string> importedPaths,
-        Dictionary<string, Slot> prefabSlots = null, Action createPhysicsHierarchy = null)
+        Dictionary<string, Slot> prefabSlots = null, Action createPhysicsHierarchy = null,
+        HashSet<Slot> replacedTemplateSlots = null)
     {
         prefabSlots ??= new(StringComparer.Ordinal);
         var importedSources = sources.ToArray();
@@ -145,11 +146,74 @@ internal static class VrchatSceneSetup
             }
         // Unpacked prefabs explicitly describe their renderers. Keep imported bones and
         // slots as references, but do not also render the FBX template at its old location.
-        foreach (var renderer in replacedRenderers) renderer.Destroy();
+        foreach (var renderer in replacedRenderers)
+        {
+            for (Slot slot = renderer.Slot; slot != null && importedPaths.ContainsKey(slot); slot = slot.Parent)
+                replacedTemplateSlots?.Add(slot);
+            renderer.Destroy();
+        }
         return authoredObjects;
 
         float ImportScale(string guid) => guid == null ? 1f : guid == avatar.FbxGuid ? avatar.FbxImportScale :
             avatar.AdditionalFbxs.FirstOrDefault(model => model.Guid == guid)?.ImportScale ?? 1f;
+    }
+
+    public static void RemoveEmptyMeshTemplates(Slot root, IEnumerable<Slot> candidates,
+        IEnumerable<Slot> authoredSlots)
+    {
+        // Only prune the replaced import templates and their import ancestors. Empty
+        // authored objects, physics targets, bones and fields referenced by drivers remain.
+        var retained = authoredSlots.Where(slot => slot != null).ToHashSet();
+        retained.Add(root);
+        var references = new List<IWorldElement>();
+        foreach (var component in root.GetComponentsInChildren<Component>())
+            component.GetReferencedObjects(references, assetRefOnly: false, persistentOnly: false);
+        foreach (var reference in references)
+            for (IWorldElement element = reference; element != null; element = element.Parent)
+                if (element is Slot slot)
+                {
+                    retained.Add(slot);
+                    break;
+                }
+        int removed = 0;
+        foreach (Slot slot in candidates.Where(slot => !slot.IsDestroyed).OrderByDescending(Depth))
+            if (!slot.IsDestroyed && !retained.Contains(slot) && slot.Children.Count == 0)
+            {
+                // ModelImporter leaves these registries on its wrapper even after all
+                // template renderers were replaced and its bones were merged elsewhere.
+                foreach (var rig in slot.GetComponents<Rig>())
+                {
+                    var bones = rig.Bones.Where(bone => bone != null && !bone.IsDestroyed).Distinct().ToArray();
+                    if (bones.Any(bone => bone != root && !IsDescendantOf(bone, root))) continue;
+                    var destinations = bones.Select(bone => (Bone: bone, Rig: OwningRig(bone, rig))).ToArray();
+                    if (destinations.Any(entry => entry.Rig == null)) continue;
+                    // Unmatched clothing helpers move to the body during Merge Armature.
+                    // Preserve their registry entries with the rig that now contains them.
+                    foreach (var entry in destinations)
+                        if (!entry.Rig.Bones.Contains(entry.Bone)) entry.Rig.Bones.Add(entry.Bone);
+                    rig.Destroy();
+                }
+                foreach (var relay in slot.GetComponents<MeshRendererMaterialRelay>())
+                    if (!relay.Renderers.Any(renderer => renderer != null && !renderer.IsDestroyed)) relay.Destroy();
+                if (slot.ComponentCount == 0)
+                {
+                    slot.Destroy();
+                    removed++;
+                }
+            }
+        if (removed > 0) UniLog.Log($"Removed {removed} empty imported mesh template slot(s).");
+
+        Rig OwningRig(Slot bone, Rig source)
+        {
+            for (Slot parent = bone; parent != null; parent = parent.Parent)
+            {
+                var rigs = parent.GetComponents<Rig>().Where(rig => rig != source).ToArray();
+                if (rigs.Length > 0) return rigs.Length == 1 ? rigs[0] : null;
+            }
+            // The primary FBX wrapper (and its Rig) can already have been collapsed.
+            // Keep the surviving clothing helpers registered on the avatar in that case.
+            return root.GetComponent<Rig>() ?? root.AttachComponent<Rig>();
+        }
     }
 
     public static Slot ResolveImportedTarget(VrchatBoneTarget target, IReadOnlyDictionary<Slot, string> sources,

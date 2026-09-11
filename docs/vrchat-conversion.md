@@ -50,6 +50,15 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   書き換える。元の package のアセット・キャッシュ・Unity プロジェクトは変更しない。
 - 循環参照は祖先経路で検出する。兄弟の同一アセットを循環として除外しない。
 - unpacked prefabのFBXはメッシュのテンプレートとして扱い、複製後に元rendererを除く。
+  置換したrendererの元スロットとimport側の祖先を記録し、アバター設定後に子・componentが
+  なくなったものだけを葉から削除する。Prefab由来のobjectやcomponentから参照されるSlot・
+  Slotのfieldは保持する。Revan underwearのように骨格統合後に空になるimport階層も対象となる。
+  import wrapperに残るRig・MeshRendererMaterialRelayは、登録先のbone・rendererがすべて
+  消失していて外部からの参照もない場合に除去する。有効な登録先を持つcomponentは保持する。
+  Merge Armatureが統合先へ移した未一致の補助骨は、移動先の祖先にあるRigへ登録を移す。
+  primary wrapperとそのRigが既に畳まれている場合はアバターrootにRigを作成して登録を保持する。
+  アバター外のboneを含む場合や旧Rigが外部参照されている場合は旧wrapperを保持する。
+  名前や空であることだけを条件に、アバター全体のスロットを削除しない。
   Authored mesh templates have a separate model identity from PrefabInstances of the
   same FBX, so an EditorOnly instance cannot exclude visible local geometry. Create
   separate template identities only from authored MeshFilter/SkinnedMeshRenderer mesh
@@ -131,6 +140,7 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   source GameObjectとtargetObjectをprefab instance・Transform・FBX pathの参照として保持し、
   名前や一致する骨の数で別の衣装を選ばない。variantのtargetObject・prefix・suffix上書きと
   component削除を反映する。targetObjectがない旧形式ではdescriptor rootからreferencePathを辿る。
+  Bone Proxyも同じ削除集合を使い、outer variantで削除された操作を再生成しない。
   descendantに配置済みのsourceも統合できる。Revan underwearを含む複数衣装では、
   同名の別衣装に一致する骨が多くても指定された衣装だけを消費することを検証する。
 - semanticに同じbone間で子を移すときはglobalではなくlocal transformを保持する。
@@ -180,6 +190,8 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
   weights on every corresponding renderer record. Explicit zero overrides remain authoritative.
 - 明示的なprefab `m_BlendShapeWeights` は0を含めて既定値より優先する。
 - 初期weightはblendshape修復直後と最終scene setupの両方で適用する。
+  同じFBX内に同名rendererが複数ある場合、複製元のblendshape名・順序とdescriptorの瞬きindexは
+  rendererの完全なFBX pathで解決する。pathが判明している参照を名前だけの表へfallbackしない。
 
 VRChatの15 visemeはResonite enumへ対応させ、Unityの0〜100をResoniteの0〜1へ変換する。
 瞬きは `eyelidsBlendshapes[0]` だけを使い、LookingUp / LookingDownはblinkとして扱わない。

@@ -74,7 +74,7 @@ static async Task Run(string fbxPath, string rendererName)
             var rigPlacement = new VrchatPhysicsPlacement();
             rigPlacement.Transforms.Add(new VrchatPrefabTransform { Key = "rigPrefab:2", Name = "Hips", ImportedBone = rigTarget });
             rigAvatar.PhysicsPlacements.Add(rigPlacement);
-            object[] rigArgs = { rigRoot, rigAvatar, rigRoots, rigSources, rigPaths, null, null };
+            object[] rigArgs = { rigRoot, rigAvatar, rigRoots, rigSources, rigPaths, null, null, null };
             typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
                 .GetMethod("ApplyVrchatPrefabHierarchy", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, rigArgs);
             var rigSlots = (Dictionary<string, Slot>)rigArgs[6];
@@ -135,7 +135,7 @@ static async Task Run(string fbxPath, string rendererName)
             LocalPosition = new System.Numerics.Vector3(0, 1, 0) });
         physicsOnlyAvatar.PhysicsPlacements.Add(physicsPlacement);
         object[] hierarchyArgs = { root, physicsOnlyAvatar, new Dictionary<string, Slot>(),
-            wrapperSources, wrapperPaths, null, null };
+            wrapperSources, wrapperPaths, null, null, null };
         typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
             .GetMethod("ApplyVrchatPrefabHierarchy", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, hierarchyArgs);
@@ -147,6 +147,51 @@ static async Task Run(string fbxPath, string rendererName)
               physicsOnlySlots["physics:2"].Parent == physicsOnlySlots["physics:1"],
             "Physics-only hierarchy is created without meshes and resolves independently of the avatar root");
         var mergeRoot = root.AddSlot("Physics merge regression");
+        var cleanupRoot = root.AddSlot("Template cleanup regression");
+        var templateRoot = cleanupRoot.AddSlot("Revan_Kipfel_underwear");
+        var templateMesh = templateRoot.AddSlot("RootNode").AddSlot("underwear");
+        var templateRenderer = templateMesh.AttachComponent<MeshRenderer>();
+        templateRoot.AttachComponent<Rig>().Bones.Add((Slot)null);
+        templateRoot.AttachComponent<MeshRendererMaterialRelay>().Renderers.Add(templateRenderer);
+        var cleanupAvatar = new VrchatAvatar();
+        cleanupAvatar.MeshCopies.Add(new VrchatMeshCopy("template", "underwear", "Authored underwear", true, true)
+            { IsSkinned = false, ReplaceSourceRenderer = true,
+              Transform = new VrchatPrefabTransform { Key = "clothing:1" } });
+        var cleanupRoots = new Dictionary<string, Slot> { ["template"] = templateRoot };
+        var cleanupSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", cleanupRoots);
+        var cleanupPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", cleanupRoots);
+        var cleanupCandidates = new HashSet<Slot>();
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", cleanupAvatar, cleanupSources,
+            (Func<VrchatMeshCopy, Slot>)(_ => cleanupRoot), cleanupPaths, null, null, cleanupCandidates);
+        var authoredEmpty = cleanupRoot.AddSlot("Authored empty");
+        var referencedBone = cleanupRoot.AddSlot("Referenced bone");
+        var referencedField = cleanupRoot.AddSlot("Referenced field");
+        var untouchedEmpty = cleanupRoot.AddSlot("Unrelated empty");
+        var liveRig = cleanupRoot.AddSlot("Live import rig");
+        liveRig.AttachComponent<Rig>().Bones.Add(root.AddSlot("External bone"));
+        var mergedSkeleton = cleanupRoot.AddSlot("Body skeleton");
+        var destinationRig = mergedSkeleton.AttachComponent<Rig>();
+        var movedHelper = mergedSkeleton.AddSlot("Bag.Root");
+        var abandonedClothing = cleanupRoot.AddSlot("Merged clothing wrapper");
+        abandonedClothing.AttachComponent<Rig>().Bones.Add(movedHelper);
+        var rootHelper = cleanupRoot.AddSlot("Helper after primary wrapper collapse");
+        var fallbackClothing = cleanupRoot.AddSlot("Clothing without destination rig");
+        fallbackClothing.AttachComponent<Rig>().Bones.Add(rootHelper);
+        cleanupRoot.AttachComponent<SkinnedMeshRenderer>().Bones.Add(referencedBone);
+        cleanupRoot.AttachComponent<ReferenceField<IWorldElement>>().Reference.Target = referencedField.GetSyncMember("Position");
+        cleanupCandidates.UnionWith(new[] { authoredEmpty, referencedBone, referencedField, liveRig, abandonedClothing, fallbackClothing });
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "RemoveEmptyMeshTemplates", cleanupRoot,
+            cleanupCandidates, new[] { authoredEmpty });
+        Check(templateRoot.IsDestroyed && templateMesh.IsDestroyed &&
+              cleanupRoot.FindChild("Authored underwear").GetComponent<MeshRenderer>() != null,
+            "Replaced mesh templates and their empty import parents are removed while the authored mesh remains");
+        Check(!authoredEmpty.IsDestroyed && !referencedBone.IsDestroyed && !referencedField.IsDestroyed &&
+              !untouchedEmpty.IsDestroyed && !liveRig.IsDestroyed && liveRig.GetComponent<Rig>() != null,
+            "Template cleanup preserves authored objects, bone and field references, and unrelated empty slots");
+        Check(abandonedClothing.IsDestroyed && !movedHelper.IsDestroyed && destinationRig.Bones.Contains(movedHelper),
+            "Merged clothing helper registrations move to the containing body rig before the empty wrapper is removed");
+        Check(fallbackClothing.IsDestroyed && cleanupRoot.GetComponent<Rig>().Bones.Contains(rootHelper),
+            "Clothing helpers remain registered after the primary import wrapper and its rig have been collapsed");
         var targetHips = mergeRoot.AddSlot("AvatarArmature").AddSlot("Hips");
         var sourceHips = mergeRoot.AddSlot("ClothingArmature").AddSlot("Hips");
         var untouchedHips = mergeRoot.AddSlot("OtherArmature").AddSlot("Hips");
@@ -266,7 +311,7 @@ static async Task Run(string fbxPath, string rendererName)
             latePlacement.Transforms.Add(new VrchatPrefabTransform { Key = "late:2", Name = "Hips",
                 LocalPosition = new System.Numerics.Vector3(1, 0, 0) });
             lateAvatar.PhysicsPlacements.Add(latePlacement);
-            object[] lateArgs = { root, lateAvatar, boneRoots, boneSources, bonePaths, null, null };
+            object[] lateArgs = { root, lateAvatar, boneRoots, boneSources, bonePaths, null, null, null };
             typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
                 .GetMethod("ApplyVrchatPrefabHierarchy", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, lateArgs);
             var lateSlots = (Dictionary<string, Slot>)lateArgs[6];

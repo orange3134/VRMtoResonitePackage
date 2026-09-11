@@ -445,8 +445,10 @@ internal static class Converter
                 var importedMeshSources = Vrchat.VrchatSceneSetup.CaptureImportedObjects(importedFbxRoots);
                 var importedNodePaths = Vrchat.VrchatSceneSetup.CaptureImportedPaths(importedFbxRoots);
 
+                var replacedTemplateSlots = new HashSet<Slot>();
                 Slot descriptorRoot = ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots,
-                    importedMeshSources, importedNodePaths, out var authoredObjects, out var prefabSlots);
+                    importedMeshSources, importedNodePaths, out var authoredObjects, out var prefabSlots,
+                    replacedTemplateSlots);
                 AlignVrchatImportUp(importRoot, model);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
                 RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
@@ -510,6 +512,10 @@ internal static class Converter
                 // Reflect prefab-authored scene state (inactive GameObjects, initial blendshape weights).
                 Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources, authoredObjects);
 
+                Vrchat.VrchatSceneSetup.RemoveEmptyMeshTemplates(root, replacedTemplateSlots,
+                    prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values)
+                        .Append(descriptorRoot));
+
                 await MeshLoadingSetup.Apply(root);
 
                 for (int i = 0; i < 30; i++)
@@ -556,7 +562,7 @@ internal static class Converter
     private static Slot ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
         Dictionary<string, Slot> importedFbxRoots, Dictionary<Slot, string> importedMeshSources,
         Dictionary<Slot, string> importedNodePaths, out Dictionary<string, Slot> authoredObjects,
-        out Dictionary<string, Slot> prefabSlots)
+        out Dictionary<string, Slot> prefabSlots, HashSet<Slot> replacedTemplateSlots = null)
     {
         var slots = new Dictionary<string, Slot>(StringComparer.Ordinal);
         prefabSlots = slots;
@@ -627,7 +633,7 @@ internal static class Converter
                 foreach (var placement in avatar.PhysicsPlacements)
                     ResolvePrefabParent(importRoot, placement.ParentFbxGuid, placement.ParentName, placement.Transforms,
                         importedFbxRoots, slots, importedMeshSources, importedNodePaths);
-            });
+            }, replacedTemplateSlots);
         return authoredObjects.GetValueOrDefault(avatar.DescriptorRootKey ?? "") ??
             avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms).Where(t => t.GameObjectKey == avatar.DescriptorRootKey)
                 .Select(t => slots.GetValueOrDefault(t.Key)).FirstOrDefault(slot => slot != null) ??
