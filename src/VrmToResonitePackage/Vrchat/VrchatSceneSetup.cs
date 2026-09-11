@@ -48,6 +48,12 @@ internal static class VrchatSceneSetup
             if (copy.Transform?.GameObjectKey != null) authoredObjects[copy.Transform.GameObjectKey] = duplicate;
             duplicate.ActiveSelf = copy.Active;
             var meshRenderer = duplicate.GetComponent<MeshRenderer>();
+            if (copy.RendererRemoved)
+            {
+                meshRenderer.Destroy();
+                // Preserve the GameObject slot for children, descriptor and attachment paths.
+                continue;
+            }
             if (!copy.IsSkinned && meshRenderer is SkinnedMeshRenderer)
             {
                 // Unity can use an imported skinned mesh as a static mesh.
@@ -101,7 +107,7 @@ internal static class VrchatSceneSetup
             slot.LocalPosition = new float3(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z);
             slot.LocalRotation = new floatQ(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W);
             slot.LocalScale = new float3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z);
-            if (!copy.IsSkinned)
+            if (!copy.IsSkinned && !copy.RendererRemoved)
             {
                 float correction = ImportScale(copy.FbxGuid) / ImportScale(copy.ParentFbxGuid);
                 if (!float.IsFinite(correction) || correction == 0)

@@ -338,6 +338,26 @@ static async Task Run(string fbxPath, string rendererName)
               hierarchyObjects["AuthoredChildGO"].LocalScale == new float3(1f, 1f, 1f) &&
               hierarchyObjects["AuthoredChildGO"].LocalPosition.x == 1.5f && existingChild.LocalPosition.x == 2f,
             "Static renderer scale correction does not scale authored child geometry or attachment placement twice");
+        var removalAvatar = new VrchatAvatar { FbxGuid = "model", FbxImportScale = 2f };
+        foreach (string name in new[] { "SurvivingChild", "RemovedParent" })
+            removalAvatar.MeshCopies.Add(new VrchatMeshCopy("model", rendererName, name, true, true)
+            {
+                IsSkinned = false, RendererRemoved = name == "RemovedParent", ReplaceSourceRenderer = true,
+                SourcePath = "RootNode/Right/" + rendererName,
+                Transform = new VrchatPrefabTransform { Key = name, GameObjectKey = name,
+                    LocalPosition = new System.Numerics.Vector3(3, 0, 0) },
+            });
+        var removalSlots = new Dictionary<string, Slot>();
+        var removedObjects = (Dictionary<string, Slot>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies",
+            removalAvatar, pathSources, (Func<VrchatMeshCopy, Slot>)(c => c.Name == "SurvivingChild" ? removalSlots["RemovedParent"] : primary),
+            sourcePaths, removalSlots);
+        Check(removedObjects["RemovedParent"].GetComponent<MeshRenderer>() == null &&
+              removedObjects["SurvivingChild"].GetComponent<MeshRenderer>() != null &&
+              removedObjects["SurvivingChild"].Parent == removedObjects["RemovedParent"] &&
+              removedObjects["SurvivingChild"].LocalPosition.x == 3 &&
+              removedObjects["RemovedParent"].LocalScale == new float3(1f, 1f, 1f) &&
+              rightSource.GetComponent<MeshRenderer>() == null && !rightSource.IsDestroyed,
+            "Removed renderer leaves its authored object and child placement intact and cannot reappear as an imported template");
     });
 }
 

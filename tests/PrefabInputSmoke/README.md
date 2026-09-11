@@ -57,3 +57,8 @@ separately instantiated models, scene-local bone references, enclosing attachmen
 transforms, explicit/omitted aliases in outer variants, independent model tags,
 partial Animator layer rejection, and per-instance physics node identities.
 Logging checks exercise captured callbacks and console writers after log disposal.
+
+Renderer-removal checks cover MeshRenderer and MeshFilter removals through direct,
+explicit stripped and omitted stripped references across nested instances. They
+retain surviving child/sibling renderers, discard removed material records and
+verify that the reusable source scenes remain intact.

@@ -411,6 +411,7 @@ Transform:
             "Regular descriptor prefab collects authored renderer placement and replaces the imported template");
     }
     ReviewRegressionChecks.Run(Asset, regularCopy, branchesGuid);
+    RendererRemovalChecks.Run(Asset, regularCopy);
     LoggingRegressionChecks.Run();
     CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);
     CheckDuplicateSourceBones(Asset);

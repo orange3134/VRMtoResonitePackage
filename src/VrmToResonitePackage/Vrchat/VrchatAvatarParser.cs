@@ -2034,9 +2034,19 @@ public static class VrchatAvatarParser
         int materialAssignments = 0;
         int activeAssignments = 0;
 
-        var inheritedScenes = new List<(string Guid, UnityScene Scene)>();
-        CollectVariantPrefabSceneEntries(package, sourceGuid, inheritedScenes,
+        var componentScenes = CollectPrefabComponentSceneEntries(package, sourceGuid,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        var inheritedScenes = componentScenes.Select(entry => (entry.Guid, entry.Scene)).ToList();
+        var removedRenderers = new HashSet<(string Guid, long Id)>();
+        foreach (var entry in componentScenes)
+            foreach (var renderer in entry.Scene.MeshRenderers)
+            {
+                long owner = renderer.Root?["m_GameObject"]?.FileID ?? 0;
+                if (entry.Removed.Contains(renderer.FileId) || (renderer.ClassId == 23 &&
+                    entry.Scene.Documents.Values.Any(d => d.ClassId == 33 &&
+                        d.Root?["m_GameObject"]?.FileID == owner && entry.Removed.Contains(d.FileId))))
+                    removedRenderers.Add((entry.Guid, renderer.FileId));
+            }
         var instantiatedModels = inheritedScenes.SelectMany(entry => entry.Scene.Documents.Values)
             .Where(document => document.ClassId == ClassPrefabInstance)
             .Select(document => document.Root?["m_SourcePrefab"]?.Guid)
@@ -2052,6 +2062,12 @@ public static class VrchatAvatarParser
                 string fbxGuid = scene.RendererMesh(smr)?.Guid;
                 CollectAuthoredMeshCopy(package, sceneGuid, scene, smr, avatar, modelResolvers, prefabScenes,
                     replaceSourceRenderer: !instantiatedModels.Contains(fbxGuid ?? ""));
+                if (removedRenderers.Contains((sceneGuid, smr.FileId)))
+                {
+                    var copy = avatar.MeshCopies.FirstOrDefault(c => c.PrefabGuid == sceneGuid && c.RendererFileId == smr.FileId);
+                    if (copy != null) copy.RendererRemoved = true;
+                    continue;
+                }
                 YamlNode materials = smr.Root?["m_Materials"];
                 YamlNode weights = smr.Root?["m_BlendShapeWeights"];
                 if (string.IsNullOrEmpty(rendererName) ||
@@ -2134,6 +2150,7 @@ public static class VrchatAvatarParser
                 string propertyPath = modification?["propertyPath"]?.AsString();
                 var targetIdentity = ResolveObjectIdentity(package, modification?["target"]?.Guid,
                     modification?["target"]?.FileID ?? 0);
+                if (removedRenderers.Contains(targetIdentity)) continue;
                 if (targetIdentity.Guid != null && avatar.EditorOnlyPrefabObjects.TryGetValue(targetIdentity.Guid, out var excluded))
                 {
                     var targetDocument = package.ReadScene(package.ByGuid(targetIdentity.Guid))?.Doc(targetIdentity.Id);
@@ -3032,7 +3049,7 @@ public static class VrchatAvatarParser
         CollectVariantRootTransformOverrides(package, sourceGuid, rootOverrides,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase), sourceSubtree);
 
-        var scenes = CollectPhysBoneSceneEntries(package, sourceGuid,
+        var scenes = CollectPrefabComponentSceneEntries(package, sourceGuid,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase), sourceSubtree);
         var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);
         var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
@@ -3046,7 +3063,7 @@ public static class VrchatAvatarParser
         }
     }
 
-    private sealed class PhysBoneSceneEntry
+    private sealed class PrefabComponentSceneEntry
     {
         public string Guid;
         public UnityScene Scene;
@@ -3054,10 +3071,10 @@ public static class VrchatAvatarParser
         public Dictionary<(string Guid, long Id), long> Aliases = new();
     }
 
-    private static List<PhysBoneSceneEntry> CollectPhysBoneSceneEntries(UnityPackage package,
+    private static List<PrefabComponentSceneEntry> CollectPrefabComponentSceneEntries(UnityPackage package,
         string guid, HashSet<string> ancestors, HashSet<long> subtree = null)
     {
-        var result = new List<PhysBoneSceneEntry>();
+        var result = new List<PrefabComponentSceneEntry>();
         if (string.IsNullOrEmpty(guid) || !ancestors.Add(guid)) return result;
         try
         {
@@ -3068,7 +3085,7 @@ public static class VrchatAvatarParser
                          document.ClassId == ClassPrefabInstance && PrefabInstanceInSubtree(scene, document, subtree)))
             {
                 string childGuid = instance.Root?["m_SourcePrefab"]?.Guid;
-                var children = CollectPhysBoneSceneEntries(package, childGuid, ancestors);
+                var children = CollectPrefabComponentSceneEntries(package, childGuid, ancestors);
                 var removals = instance.Root?["m_Modification"]?["m_RemovedComponents"]?.Seq;
                 foreach (var child in children)
                 {
@@ -3091,8 +3108,8 @@ public static class VrchatAvatarParser
                 }
                 result.AddRange(children);
             }
-            var own = new PhysBoneSceneEntry { Guid = guid, Scene = scene };
-            foreach (var document in scene.MonoBehaviours)
+            var own = new PrefabComponentSceneEntry { Guid = guid, Scene = scene };
+            foreach (var document in scene.Documents.Values)
                 own.Aliases[(guid, document.FileId)] = document.FileId;
             result.Add(own);
             return result;

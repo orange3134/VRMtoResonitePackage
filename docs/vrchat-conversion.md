@@ -74,6 +74,10 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 
 ## prefabの状態反映
 
+- `m_RemovedComponents` は共通のinstance別component collectorで継承順に畳む。
+  static MeshRendererまたはMeshFilterの削除は描画を除き、authored objectと子の階層を残す。
+  元FBXのテンプレートrendererも復活させず、削除componentのmaterial/weight overrideは無視する。
+  outer variantのexplicit/omitted stripped aliasを解決し、同じprefabの別instanceへ削除を伝播しない。
 - `m_RemovedGameObjects` とprefabに存在しないrendererを除去する。
 - `m_IsActive`、material、初期blendshapeはbaseからderivedの順に畳み、外側overrideを最後に適用する。
 - overrideはrenderer名だけでなくsource FBX GUIDでscopeする。同名rendererを持つ合成FBXを混同しない。

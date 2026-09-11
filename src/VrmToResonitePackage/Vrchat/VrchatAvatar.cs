@@ -151,6 +151,8 @@ public sealed record VrchatMeshCopy(string FbxGuid, string SourceName, string Na
     public long RendererFileId { get; init; }
     public long GameObjectFileId { get; init; }
     public bool ReplaceSourceRenderer { get; init; }
+    /// <summary>Keep the authored object/children, but omit a removed renderer or MeshFilter.</summary>
+    public bool RendererRemoved { get; set; }
     public VrchatPrefabTransform Transform { get; set; }
     public string ParentFbxGuid { get; set; }
     public string ParentName { get; set; }
