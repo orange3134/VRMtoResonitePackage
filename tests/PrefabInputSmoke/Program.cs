@@ -547,6 +547,15 @@ PrefabInstance:
     - target: {fileID: 33, guid: 99000000000000000000000000000001}
       propertyPath: m_LocalPosition.y
       value: 8
+    - target: {fileID: 1, guid: 99000000000000000000000000000001}
+      propertyPath: m_Name
+      value: RenamedBody
+    - target: {fileID: 32, guid: 99000000000000000000000000000001}
+      propertyPath: m_Name
+      value: RenamedFace
+    - target: {fileID: 2, guid: 99000000000000000000000000000001}
+      propertyPath: m_BlendShapeWeights.Array.data[0]
+      value: 100
 """);
     using (var package = UnityPackage.Open(movedCopy))
     {
@@ -557,6 +566,11 @@ PrefabInstance:
         Check(copy.Transform.LocalPosition.Y == 2 && copy.Transform.LocalScale.Z == 2 &&
               copy.Transform.LocalRotation.W == 0.5f && copy.ParentTransforms.Single().LocalPosition.Y == 8,
             "Variant overrides rotation, scale and authored parents without changing unrelated axes");
+        Check(copy.Name == "RenamedBody" && copy.Transform.Name == "RenamedBody" &&
+              copy.ParentTransforms.Single().Name == "RenamedFace" &&
+              avatar.RendererMaterials.Single().RendererGameObjectName == "RenamedBody" &&
+              avatar.RendererMaterials.Single().InitialBlendShapes.Contains((0, 100)),
+            "Variant name overrides preserve the Animator path RenamedFace/RenamedBody and renderer records");
     }
     string originalCopy = File.ReadAllText(copyPrefab);
     foreach (bool initial in new[] { false, true })
@@ -1858,6 +1872,12 @@ AnimatorState:
     Check(blinkModel.MeshBindingPaths[blinkModel.Expressions.Single(e => e.Preset == "blink").Binds.Single().MeshIndex] == "Face/Body",
         "Animator blink retains its full renderer path through adaptation");
     string blinkClip = File.ReadAllText(blinkPath);
+    foreach (string values in new[] { "      - value: 100", "      - value: 100\n      - value: 100", "      - value: 50\n      - value: 100\n      - value: 50" })
+    {
+        File.WriteAllText(blinkPath, blinkClip.Replace("      - value: 0\n      - value: 100\n      - value: 0", values));
+        Check(Read(controller).Blink == null, "A looping closed-eye or partial-open pose cannot infer automatic blink");
+    }
+    File.WriteAllText(blinkPath, blinkClip);
     File.WriteAllText(blinkPath, blinkClip + "\n  - curve:\n      m_Curve:\n      - value: 0\n      - value: 0\n    attribute: blendShape.Smile\n    path: Face/Body\n    classID: 137\n");
     Check(Read(controller).Blink == null,
         "Blink with an additional neutral Smile requirement cannot become a single-shape driver");

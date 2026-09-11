@@ -31,7 +31,8 @@ internal static class AnimatorFaceConflictChecks
                 $"  - curve:\n      m_Curve:\n      - value: {visibility.Item4}\n    attribute: {visibility.Item1}\n    path: {visibility.Item2}\n    classID: {visibility.Item3}\n";
             asset("Assets/ConflictCheck.anim", clipGuid,
                 "--- !u!74 &7400000\nAnimationClip:\n  m_AnimationClipSettings:\n    m_LoopTime: 1\n  m_FloatCurves:\n" +
-                Curve(blink ? "blink" : "mouth", 100) + (mode == "neutral viseme" ? Curve("Smile", 0) : "") + visibilityCurve);
+                (blink ? Curve("blink", 100).Replace("      - value: 100", "      - value: 0\n      - value: 100\n      - value: 0") : Curve("mouth", 100)) +
+                (mode == "neutral viseme" ? Curve("Smile", 0) : "") + visibilityCurve);
             asset("Assets/ConflictReset.anim", resetGuid,
                 "--- !u!74 &7400000\nAnimationClip:\n  m_FloatCurves:\n" + Curve(mode is "blink unrelated" or "blink hidden renderer" ? "Smile" : "blink", 0));
             string controller = "--- !u!91 &91\nAnimatorController:\n  m_AnimatorLayers:\n  - m_StateMachine: {fileID: 100}\n" +

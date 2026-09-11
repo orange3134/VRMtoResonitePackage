@@ -2283,6 +2283,21 @@ public static class VrchatAvatarParser
                         ApplyCopiedBoneOverride(package, copy, modificationGuid, modification, avatar.FbxGuid, modelResolvers);
                     continue;
                 }
+                if (propertyPath == "m_Name")
+                {
+                    string name = modification["value"]?.AsString();
+                    if (name == null) continue;
+                    string key = $"{targetIdentity.Guid}:{targetIdentity.Id}";
+                    foreach (var transform in authoredTransforms.Where(t => t.GameObjectKey == key))
+                        transform.Name = name;
+                    for (int i = 0; i < avatar.MeshCopies.Count; i++)
+                    {
+                        var copy = avatar.MeshCopies[i];
+                        if ((copy.PrefabGuid, copy.GameObjectFileId) == targetIdentity)
+                            avatar.MeshCopies[i] = copy with { Name = name };
+                    }
+                    continue;
+                }
                 if (propertyPath?.StartsWith("m_Local", StringComparison.Ordinal) == true)
                 {
                     YamlNode transformTarget = modification["target"];
@@ -2409,6 +2424,12 @@ public static class VrchatAvatarParser
             }
         }
 
+        // Keep dictionary keys in source names while folding material/weight overrides,
+        // then publish the final authored names using the stable GameObject identity.
+        foreach (var copy in avatar.MeshCopies)
+            foreach (var renderer in renderers.Values.Where(r =>
+                r.PrefabObjectKey == $"{copy.PrefabGuid}:{copy.GameObjectFileId}"))
+                renderer.RendererGameObjectName = copy.Name;
         avatar.RendererMaterials.AddRange(renderers.Values);
         if (renderers.Count > 0)
         {

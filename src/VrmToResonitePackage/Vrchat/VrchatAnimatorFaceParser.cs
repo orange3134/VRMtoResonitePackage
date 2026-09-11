@@ -102,7 +102,7 @@ public static class VrchatAnimatorFaceParser
                 {
                     initialStates.TryGetValue(animatorLayer["m_StateMachine"]?.FileID ?? 0, out YamlNode state);
                     YamlNode clip = Clip(state?["m_Motion"]);
-                    var shapes = ActiveShapes(clip);
+                    var shapes = ActiveShapes(clip, requireOpen: true);
                     if (clip?["m_AnimationClipSettings"]?["m_LoopTime"]?.AsBool() == true &&
                         shapes.Count == 1 && MathF.Abs(shapes[0].Peak - 100) < 0.01f &&
                         string.Equals(shapes[0].Name, "blink", StringComparison.OrdinalIgnoreCase) &&
@@ -300,7 +300,7 @@ public static class VrchatAnimatorFaceParser
         };
     }
 
-    private static List<Shape> ActiveShapes(YamlNode clip, bool requireConstant = false)
+    private static List<Shape> ActiveShapes(YamlNode clip, bool requireConstant = false, bool requireOpen = false)
     {
         var result = new List<Shape>();
         foreach (YamlNode curve in clip?["m_FloatCurves"]?.Seq ?? new())
@@ -310,6 +310,11 @@ public static class VrchatAnimatorFaceParser
             if (curve["classID"]?.AsInt() != 137 || attribute?.StartsWith("blendShape.", StringComparison.Ordinal) != true ||
                 path == null) continue;
             var keys = curve["curve"]?["m_Curve"]?.Seq;
+            // A looping closed-eye pose must not become a driver that opens the eyes.
+            // Require an authored fully open value as well as the closed peak.
+            if (requireOpen && (keys == null || keys.Count == 0 ||
+                keys.Any(key => !float.IsFinite(key["value"]?.AsFloat() ?? 0)) ||
+                MathF.Abs(keys.Min(key => key["value"]?.AsFloat() ?? 0)) >= 0.01f)) return new();
             if (requireConstant)
             {
                 // Peak weights describe a blink, but a permanent viseme must retain its
