@@ -28,13 +28,14 @@ internal static class Converter
         string logPath = Path.Combine(AppContext.BaseDirectory, "Logs", $"convert_{DateTime.Now:yyyyMMdd_HHmmss}.log");
         Directory.CreateDirectory(Path.GetDirectoryName(logPath));
         using var logWriter = new StreamWriter(logPath) { AutoFlush = true };
+        TextWriter synchronizedLog = TextWriter.Synchronized(logWriter);
         TextWriter originalOut = Console.Out;
         TextWriter originalError = Console.Error;
-        using var teeOut = new TeeTextWriter(originalOut, logWriter);
-        using var teeError = new TeeTextWriter(originalError, logWriter);
+        using var teeOut = new TeeTextWriter(originalOut, synchronizedLog);
+        using var teeError = new TeeTextWriter(originalError, synchronizedLog);
         Console.SetOut(teeOut);
         Console.SetError(teeError);
-        Action unhookLogging = HookLogging(logWriter);
+        Action unhookLogging = HookLogging(synchronizedLog);
         try
         {
 
@@ -110,20 +111,13 @@ internal static class Converter
         finally
         {
             Console.WriteLine();
-            Console.WriteLine("エンジンを終了しています...");
-            try
-            {
-                Task shutdown = runner.Shutdown();
-                if (await Task.WhenAny(shutdown, Task.Delay(TimeSpan.FromSeconds(15))).ConfigureAwait(false) != shutdown)
-                {
-                    UniLog.Warning("エンジンの終了がタイムアウトしました。プロセスを終了します。");
-                }
-            }
-            catch (Exception ex)
-            {
-                UniLog.Warning("Engine shutdown failed: " + ex.Message);
-            }
-            LocalDbMaintenance.ReleaseRunDataDirectory(dataDirectory);
+            // The CLI (also used by the GUI child) owns this engine for its entire lifetime.
+            // Shutdown disposes WorkProcessor while async asset jobs can still schedule work,
+            // causing an unhandled ThrowAsync exception on a thread-pool thread. All exports
+            // above have completed; Program exits the process after flushing the result/log.
+            // Keep the live DB locked and let the next run sweep it after this process exits.
+            Console.WriteLine("変換処理を終了します。");
+            LocalDbMaintenance.PreserveRunIdentity(dataDirectory);
         }
         return new ConversionRunResult(failures == 0 ? 0 : 1, outputs, logPath, failures);
         }
@@ -152,14 +146,16 @@ internal static class Converter
         }
     }
 
-    private static Action HookLogging(StreamWriter writer)
+    private static Action HookLogging(TextWriter writer)
     {
         object gate = new();
+        bool active = true;
         void WriteLine(string prefix, object message, bool toConsole)
         {
             string line = $"[{DateTime.Now:HH:mm:ss.fff}] {prefix}{message}";
             lock (gate)
             {
+                if (!active) return;
                 writer.WriteLine(line);
                 if (toConsole)
                 {
@@ -175,6 +171,9 @@ internal static class Converter
         UniLog.OnError += error;
         return () =>
         {
+            // An event invocation may already have captured the delegates. Drain it before
+            // disposing the log, and make any later captured invocation a no-op.
+            lock (gate) active = false;
             UniLog.OnLog -= log;
             UniLog.OnWarning -= warning;
             UniLog.OnError -= error;
@@ -446,7 +445,7 @@ internal static class Converter
                 var importedMeshSources = Vrchat.VrchatSceneSetup.CaptureImportedObjects(importedFbxRoots);
                 var importedNodePaths = Vrchat.VrchatSceneSetup.CaptureImportedPaths(importedFbxRoots);
 
-                ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
+                Slot descriptorRoot = ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
                 AlignVrchatImportUp(importRoot, model);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots);
                 RemoveImportAlignment(importRoot, root);
@@ -467,11 +466,19 @@ internal static class Converter
                 Vrchat.VrchatSceneSetup.RemoveEditorOnlyObjects(avatar, importedMeshSources, importedNodePaths);
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources);
                 Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar);
+                if (descriptorRoot is { IsDestroyed: false })
+                {
+                    var parts = new Stack<string>();
+                    for (Slot slot = descriptorRoot; slot != null && slot != root; slot = slot.Parent) parts.Push(slot.Name);
+                    model.MeshBindingRootPath = string.Join("/", parts);
+                }
+                var physicsNodes = model.NodeTargets.ToDictionary(entry => entry.Key, entry =>
+                    Vrchat.VrchatSceneSetup.ResolveImportedTarget(entry.Value, importedMeshSources, importedNodePaths));
 
                 if (options.NoAvatar)
                 {
                     await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources);
-                    SpringBoneSetup.Apply(root, model);
+                    SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
                 else
                 {
@@ -493,7 +500,7 @@ internal static class Converter
                     AvatarSetup.Build(root, model, setupOptions);
                     await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources);
                     await AvatarSetup.ApplyFirstPersonAutoAsync(root, model);
-                    SpringBoneSetup.Apply(root, model);
+                    SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
 
                 // Reflect prefab-authored scene state (inactive GameObjects, initial blendshape weights).
@@ -542,7 +549,7 @@ internal static class Converter
         return outputPath;
     }
 
-    private static void ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
+    private static Slot ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
         Dictionary<string, Slot> importedFbxRoots, Dictionary<Slot, string> importedMeshSources,
         IReadOnlyDictionary<Slot, string> importedNodePaths)
     {
@@ -604,9 +611,13 @@ internal static class Converter
             }
             UniLog.Log($"prefab階層を適用: {instanceRoot.Name} -> {parent.Name}");
         }
-        Vrchat.VrchatSceneSetup.CreateMeshCopies(avatar, importedMeshSources, copy =>
+        var authoredObjects = Vrchat.VrchatSceneSetup.CreateMeshCopies(avatar, importedMeshSources, copy =>
             ResolvePrefabParent(importRoot, copy.ParentFbxGuid, copy.ParentName, copy.ParentTransforms,
                 importedFbxRoots, prefabSlots), importedNodePaths);
+        return authoredObjects.GetValueOrDefault(avatar.DescriptorRootKey ?? "") ??
+            avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms).Where(t => t.GameObjectKey == avatar.DescriptorRootKey)
+                .Select(t => prefabSlots.GetValueOrDefault(t.Key)).FirstOrDefault(slot => slot != null) ??
+            Vrchat.VrchatSceneSetup.ResolveImportedTarget(avatar.DescriptorRootTarget, importedMeshSources, importedNodePaths);
     }
 
     private static bool IsUnityRootNode(string nodeName)
@@ -980,7 +991,8 @@ internal sealed record ConversionRunResult(int ExitCode, IReadOnlyList<string> O
 internal sealed class TeeTextWriter : TextWriter
 {
     private readonly TextWriter _primary;
-    private readonly TextWriter _secondary;
+    private TextWriter _secondary;
+    private readonly object _gate = new();
 
     public TeeTextWriter(TextWriter primary, TextWriter secondary)
     {
@@ -992,25 +1004,45 @@ internal sealed class TeeTextWriter : TextWriter
 
     public override void Write(char value)
     {
-        _primary.Write(value);
-        _secondary.Write(value);
+        lock (_gate)
+        {
+            _primary.Write(value);
+            _secondary?.Write(value);
+        }
     }
 
     public override void Write(string value)
     {
-        _primary.Write(value);
-        _secondary.Write(value);
+        lock (_gate)
+        {
+            _primary.Write(value);
+            _secondary?.Write(value);
+        }
     }
 
     public override void WriteLine(string value)
     {
-        _primary.WriteLine(value);
-        _secondary.WriteLine(value);
+        lock (_gate)
+        {
+            _primary.WriteLine(value);
+            _secondary?.WriteLine(value);
+        }
     }
 
     public override void Flush()
     {
-        _primary.Flush();
-        _secondary.Flush();
+        lock (_gate)
+        {
+            _primary.Flush();
+            _secondary?.Flush();
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        // Console callers may still hold a reference to this tee after Console.SetOut.
+        // Keep forwarding to the original console, but never touch the closed log again.
+        lock (_gate) _secondary = null;
+        base.Dispose(disposing);
     }
 }

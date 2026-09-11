@@ -40,6 +40,14 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   source file と `.meta` は共有して読み取り、instance の上書きと stripped 参照を同じ内部 GUID へ
   書き換える。元の package のアセット・キャッシュ・Unity プロジェクトは変更しない。
 - 循環参照は祖先経路で検出する。兄弟の同一アセットを循環として除外しない。
+- unpacked prefabのFBXはメッシュのテンプレートとして扱い、複製後に元rendererを除く。
+  同じモデルがPrefabInstanceとしても配置されている場合は、そのrendererを残す。
+- prefabの外側にあるattachmentも複製の親階層へ含める。上書きは表示名ではなく、
+  explicit/omitted stripped参照を解決したobject identityへ適用する。EditorOnlyタグも同様。
+- PhysBoneのroot、ignore、collider参照はモデルのinstance identityとpathを保持し、
+  import時に捕捉したSlotへ解決してから共通のSpringBoneSetupへ渡す。
+- Animatorのbinding pathはdescriptor root基準で解決する。追加layerの部分weightは、
+  full-weightのdriverへ誤変換しないよう推論対象から除く。
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
   少数の名前一致だけでは推定しない。

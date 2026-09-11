@@ -77,8 +77,8 @@ internal static class Program
         {
             int result = RunConverter(options, resonitePath);
             PauseIfInteractive();
-            // The engine's update loop runs on a foreground thread; make sure the
-            // process actually terminates even if engine shutdown timed out.
+            // The engine belongs to this conversion process. Exports and logs are complete;
+            // terminate its foreground loop without racing asynchronous engine disposal.
             Environment.Exit(result);
             return result;
         }

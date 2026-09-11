@@ -20,13 +20,13 @@ internal static class SpringBoneSetup
     private const string SettingsRootVariable = "modular_avatar/AvatarSettingsRoot";
     private const string DynBoneControllerTag = "modular_avatar/dynamic_bone_controller";
 
-    public static void Apply(Slot root, VrmModel vrm)
+    public static void Apply(Slot root, VrmModel vrm, IReadOnlyDictionary<int, Slot> resolvedNodes = null)
     {
         if (vrm.SpringChains.Count == 0)
         {
             return;
         }
-        new Converter(root).Run(vrm);
+        new Converter(root, resolvedNodes).Run(vrm);
     }
 
     /// <summary>
@@ -37,15 +37,17 @@ internal static class SpringBoneSetup
     {
         private readonly Slot _root;
         private readonly Dictionary<string, Slot> _slotsByName;
+        private readonly IReadOnlyDictionary<int, Slot> _resolvedNodes;
         private readonly Dictionary<int, List<IDynamicBoneCollider>> _colliderCache = new();
         private readonly HashSet<string> _generatedTemplates = new();
 
         private Slot _settingsRoot;
         private Slot _templateRoot;
 
-        public Converter(Slot root)
+        public Converter(Slot root, IReadOnlyDictionary<int, Slot> resolvedNodes)
         {
             _root = root;
+            _resolvedNodes = resolvedNodes;
             _slotsByName = SlotIndex.Build(root);
         }
 
@@ -63,10 +65,8 @@ internal static class SpringBoneSetup
                         continue;
                     }
                     DynamicBoneChain dynamicChain = boneRoot.AttachComponent<DynamicBoneChain>();
-                    HashSet<string> excludedRootNames = chain.ExcludedRootNodes
-                        .Select(vrm.GetNodeName)
-                        .Where(name => !string.IsNullOrEmpty(name))
-                        .ToHashSet(StringComparer.Ordinal);
+                    HashSet<Slot> excludedRootNames = chain.ExcludedRootNodes
+                        .Select(index => ResolveNode(vrm, index)).Where(slot => slot != null).ToHashSet();
                     if (excludedRootNames.Count == 0)
                     {
                         dynamicChain.SetupFromChildren(boneRoot);
@@ -76,7 +76,7 @@ internal static class SpringBoneSetup
                         // PhysBone ignoreTransforms excludes each referenced transform and its whole
                         // subtree. SetupFromChildren stops descending when its filter rejects a slot.
                         dynamicChain.SetupFromChildren(boneRoot, false,
-                            slot => !excludedRootNames.Contains(slot.Name));
+                            slot => !excludedRootNames.Contains(slot));
                     }
                     if (dynamicChain.Bones.Count == 0)
                     {
@@ -383,6 +383,8 @@ internal static class SpringBoneSetup
 
         private Slot ResolveNode(VrmModel vrm, int nodeIndex)
         {
+            if (vrm.NodeTargets.ContainsKey(nodeIndex))
+                return _resolvedNodes?.GetValueOrDefault(nodeIndex) is { IsDestroyed: false } resolved ? resolved : null;
             string name = vrm.GetNodeName(nodeIndex);
             if (name == null)
             {

@@ -1372,6 +1372,13 @@ internal sealed class BlendshapeResolver
     {
         if (_vrm.MeshBindingPaths.TryGetValue(bind.MeshIndex, out string bindingPath))
         {
+            if (_vrm.MeshBindingRootPath != null)
+            {
+                string path = string.Join("/", new[] { _vrm.MeshBindingRootPath, bindingPath }.Where(p => p.Length > 0));
+                var exact = _renderers.Where(skin => _rendererPaths[skin] == path).ToArray();
+                if (exact.Length == 1) yield return exact[0];
+                yield break;
+            }
             // Import wrappers can add ancestors, but every segment of the authored path
             // must match. Ambiguous or missing paths must never target a namesake mesh.
             var matches = _renderers.Where(skin => _rendererPaths[skin] == bindingPath ||

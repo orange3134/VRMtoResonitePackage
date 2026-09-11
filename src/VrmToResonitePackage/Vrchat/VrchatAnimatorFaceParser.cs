@@ -38,7 +38,9 @@ public static class VrchatAnimatorFaceParser
             int layerIndex = 0;
             foreach (YamlNode animatorLayer in settings?["m_AnimatorLayers"]?.Seq ?? new())
             {
-                if (layerIndex++ > 0 && (animatorLayer["m_DefaultWeight"]?.AsFloat() ?? 0) <= 0) continue;
+                // Inferred drivers emit full-weight expressions; partial layer contributions
+                // cannot be represented without changing the deformation.
+                if (layerIndex++ > 0 && (animatorLayer["m_DefaultWeight"]?.AsFloat() ?? 0) != 1f) continue;
                 var reachable = new HashSet<long>();
                 Gather(animatorLayer["m_StateMachine"]?.FileID ?? 0);
                 if (descriptor["lipSync"]?.AsInt() == 4)

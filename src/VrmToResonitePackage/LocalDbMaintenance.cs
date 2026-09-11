@@ -7,8 +7,8 @@ namespace VrmToResonitePackage;
 /// single-process; concurrent converter instances (GUI children, CLI runs) sharing
 /// one directory corrupt it, which surfaces as "LiteDB.LiteException: Invalid
 /// password" on the next start. Every engine run therefore gets its own throwaway
-/// data directory, deleted afterwards; leftovers from crashed runs are swept on the
-/// next start. Only LocalKey.bin (the machine identity) is shared between runs.
+/// data directory, swept on the next start after the owning process releases its lock.
+/// Only LocalKey.bin (the machine identity) is shared between runs.
 /// </summary>
 internal static class LocalDbMaintenance
 {
@@ -40,6 +40,9 @@ internal static class LocalDbMaintenance
         PersistLocalKey(directory);
         TryDeleteDirectory(directory);
     }
+
+    /// <summary>Preserves identity before process exit; the live engine retains its DB lock.</summary>
+    public static void PreserveRunIdentity(string directory) => PersistLocalKey(directory);
 
     private static void CleanupOrphans()
     {

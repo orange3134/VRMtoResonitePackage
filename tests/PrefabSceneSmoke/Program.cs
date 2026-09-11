@@ -166,6 +166,7 @@ static async Task Run(string fbxPath, string rendererName)
         foreach (var material in original.Materials) staticRenderer.Materials.Add().Target = material;
         sources[staticSource] = "additional";
         var staticAvatar = new VrchatAvatar { FbxGuid = "primary" };
+        model.ImportScale = 2f;
         staticAvatar.AdditionalFbxs.Add(model);
         staticAvatar.MeshCopies.Add(new VrchatMeshCopy("additional", "StaticSource", "StaticCopy", false, false)
         {
@@ -180,6 +181,8 @@ static async Task Run(string fbxPath, string rendererName)
         Check(staticCopy != null && staticCopy is not SkinnedMeshRenderer && !staticCopy.Enabled &&
               !staticCopy.Slot.ActiveSelf && staticCopy.Slot.LocalPosition.x == 3 && staticCopy.Mesh.Target == staticMesh,
             "Static mesh copy retains mesh, authored placement, active state and enabled state");
+        Check(staticCopy.Slot.LocalScale == new float3(2f, 2f, 2f),
+            $"Static copy preserves FBX import scale outside its model hierarchy (scale={staticCopy.Slot.LocalScale})");
         Check(staticSource.GetComponent<MeshRenderer>() == null && !staticSource.IsDestroyed,
             "Regular static prefab removes the imported template renderer while keeping its slot");
         Check(primary.FindChild("StaticFromSkin").GetComponent<MeshRenderer>() is not SkinnedMeshRenderer,
@@ -237,6 +240,33 @@ static async Task Run(string fbxPath, string rendererName)
         Check(ReferenceEquals(resolverType.GetMethod("Resolve")!.Invoke(rootResolver, new object[] { bind }),
                 sameB.BlendShapeWeights.GetElement(0)),
             "Empty Animator path resolves the renderer on the root itself");
+        var descriptorParts = new Stack<string>();
+        for (Slot slot = sameB.Slot; slot != root; slot = slot.Parent) descriptorParts.Push(slot.Name);
+        faceModel.MeshBindingRootPath = string.Join("/", descriptorParts);
+        var exportResolver = Activator.CreateInstance(resolverType, root, faceModel)!;
+        Check(ReferenceEquals(resolverType.GetMethod("Resolve")!.Invoke(exportResolver, new object[] { bind }),
+            sameB.BlendShapeWeights.GetElement(0)), "Empty Animator path resolves the descriptor renderer below the export root");
+        var physicsRoot = root.AddSlot("Repeated physics");
+        var leftJoint = physicsRoot.AddSlot("Joint");
+        var rightJoint = physicsRoot.AddSlot("Joint");
+        leftJoint.AddSlot("Tip").LocalPosition = new float3(0, 0.1f, 0);
+        rightJoint.AddSlot("Tip").LocalPosition = new float3(0, 0.1f, 0);
+        var physicsAvatar = new VrchatAvatar();
+        physicsAvatar.PhysBones.Add(new VrchatPhysBone { RootBoneName = "Joint",
+            RootBoneTarget = new VrchatBoneTarget("left", "Joint", "") });
+        physicsAvatar.PhysBones.Add(new VrchatPhysBone { RootBoneName = "Joint",
+            RootBoneTarget = new VrchatBoneTarget("right", "Joint", "") });
+        var physicsModel = VrchatModelAdapter.ToVrmModel(physicsAvatar);
+        var physicsSources = new Dictionary<Slot, string> { [leftJoint] = "left", [rightJoint] = "right" };
+        var physicsPaths = new Dictionary<Slot, string> { [leftJoint] = "", [rightJoint] = "" };
+        var physicsNodes = physicsModel.NodeTargets.ToDictionary(entry => entry.Key, entry =>
+            (Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
+                entry.Value, physicsSources, physicsPaths));
+        typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.SpringBoneSetup")!
+            .GetMethod("Apply")!.Invoke(null, new object[] { physicsRoot, physicsModel, physicsNodes });
+        Check(leftJoint.GetComponents<DynamicBoneChain>().Count() == 1 &&
+              rightJoint.GetComponents<DynamicBoneChain>().Count() == 1,
+            "Repeated instances attach one PhysBone chain to each same-named joint");
         Check(sameA.Bones.Count > 0 && sameA.Bones[0] == null && sameB.Bones[0] == null,
             "Same-named renderer copies apply authored bone overrides");
         Check(originalSlot.GetComponent<SkinnedMeshRenderer>() == null && !originalSlot.IsDestroyed,

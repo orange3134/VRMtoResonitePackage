@@ -1,5 +1,9 @@
 # Prefab scene regression checks
 
+Also verifies static-mesh import scale outside the source hierarchy, empty Animator
+bindings below the export root, and separate DynamicBoneChains on same-named bones
+in repeated model instances.
+
 Also checks that EditorOnly removal follows captured model paths after reparenting and preserves a separate branch containing identically named nodes.
 
 Copied-bone checks distinguish same-named bones in two branches of the primary

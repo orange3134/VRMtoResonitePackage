@@ -410,6 +410,8 @@ Transform:
               copy.ParentTransforms.Single().Name == "CopyParent" && copy.ReplaceSourceRenderer,
             "Regular descriptor prefab collects authored renderer placement and replaces the imported template");
     }
+    ReviewRegressionChecks.Run(Asset, regularCopy, branchesGuid);
+    LoggingRegressionChecks.Run();
     CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);
     CheckDuplicateSourceBones(Asset);
     CheckNestedComponents(Asset, regularCopy);
@@ -1519,6 +1521,9 @@ AnimationClip:
     classID: 137
 """);
     Check(Read(controller).Blink == null, "Partial-weight Animator blink cannot become a full-weight blink driver");
+    string clipPath = asset("Assets/Blink.anim", clipGuid, File.ReadAllText(Path.Combine(Path.GetDirectoryName(selected)!, "Blink.anim")).Replace("value: 25", "value: 100"));
+    Check(Read(controller.Replace("m_DefaultWeight: 1", "m_DefaultWeight: 0.5")).Blink == null,
+        "Partial Animator layer weight cannot emit a full-weight blink");
 }
 
 static VrchatAvatar ReadFilter(string path)

@@ -17,18 +17,20 @@ public static class VrchatModelAdapter
 
         // Intern bone/mesh names into a synthetic node table (index -> name).
         var nodeIndexByName = new Dictionary<string, int>(StringComparer.Ordinal);
-        int NodeFor(string name)
+        int NodeFor(string name, VrchatBoneTarget target = null)
         {
             if (string.IsNullOrEmpty(name))
             {
                 return -1;
             }
-            if (!nodeIndexByName.TryGetValue(name, out int index))
+            string key = target?.FbxGuid != null ? $"{target.FbxGuid}:{target.Path ?? name}" : name;
+            if (!nodeIndexByName.TryGetValue(key, out int index))
             {
                 index = model.NodeNames.Count;
                 model.NodeNames.Add(name);
                 model.NodeMeshIndices.Add(-1);
-                nodeIndexByName[name] = index;
+                nodeIndexByName[key] = index;
+                if (target?.FbxGuid != null) model.NodeTargets[index] = target;
             }
             return index;
         }
@@ -120,16 +122,16 @@ public static class VrchatModelAdapter
         var colliderIndexBySignature = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (VrchatPhysBone pb in avatar.PhysBones)
         {
-            int rootNode = NodeFor(pb.RootBoneName);
+            int rootNode = NodeFor(pb.RootBoneName, pb.RootBoneTarget);
             if (rootNode < 0)
             {
                 continue;
             }
             var chain = new VrmSpringChain { Name = pb.RootBoneName, HitRadius = MathX.Max(0.001f, pb.Radius) };
             chain.RootNodes.Add(rootNode);
-            foreach (string ignoredBoneName in pb.IgnoreBoneNames)
+            foreach (var (ignoredBoneName, ignoredIndex) in pb.IgnoreBoneNames.Select((name, index) => (name, index)))
             {
-                int ignoredNode = NodeFor(ignoredBoneName);
+                int ignoredNode = NodeFor(ignoredBoneName, pb.IgnoreBoneTargets.ElementAtOrDefault(ignoredIndex));
                 if (ignoredNode >= 0 && !chain.ExcludedRootNodes.Contains(ignoredNode))
                 {
                     chain.ExcludedRootNodes.Add(ignoredNode);
@@ -137,7 +139,7 @@ public static class VrchatModelAdapter
             }
             foreach (VrchatPhysBoneCollider collider in pb.Colliders)
             {
-                int node = NodeFor(collider.AttachBoneName);
+                int node = NodeFor(collider.AttachBoneName, collider.AttachBoneTarget);
                 if (node < 0)
                 {
                     continue;

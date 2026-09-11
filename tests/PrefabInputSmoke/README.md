@@ -51,3 +51,9 @@ Composed-wrapper checks also exclude sibling instances outside the selected
 descriptor subtree and preserve repeated direct FBX/nested prefab occurrences,
 independent placements and renderer overrides, stable per-occurrence identities,
 and unchanged source-scene caches across repeated parsing.
+
+Local-review regressions cover unpacked template replacement while retaining
+separately instantiated models, scene-local bone references, enclosing attachment
+transforms, explicit/omitted aliases in outer variants, independent model tags,
+partial Animator layer rejection, and per-instance physics node identities.
+Logging checks exercise captured callbacks and console writers after log disposal.

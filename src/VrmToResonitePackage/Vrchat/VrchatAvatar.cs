@@ -14,6 +14,8 @@ public sealed class VrchatAvatar
     public string Name { get; set; }
 
     public string PrefabPath { get; set; }
+    public string DescriptorRootKey { get; set; }
+    public VrchatBoneTarget DescriptorRootTarget { get; set; }
 
     /// <summary>Disk path of the humanoid FBX to import.</summary>
     public string FbxPath { get; set; }
@@ -206,7 +208,9 @@ public sealed class VrchatBlink
 public sealed class VrchatPhysBone
 {
     public string RootBoneName { get; set; }
+    public VrchatBoneTarget RootBoneTarget { get; set; }
     public List<string> IgnoreBoneNames { get; } = new();
+    public List<VrchatBoneTarget> IgnoreBoneTargets { get; } = new();
 
     public float Pull { get; set; } = 0.2f;
     public float Spring { get; set; } = 0.2f;
@@ -223,6 +227,7 @@ public sealed class VrchatPhysBoneCollider
 {
     /// <summary>The imported bone the collider is attached under (its parent in the prefab).</summary>
     public string AttachBoneName { get; set; }
+    public VrchatBoneTarget AttachBoneTarget { get; set; }
 
     /// <summary>Collider centre (sphere) or first endpoint (capsule), in the attach bone's local space.</summary>
     public Vec3 Offset { get; set; }

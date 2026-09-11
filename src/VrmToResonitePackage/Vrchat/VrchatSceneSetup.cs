@@ -10,10 +10,11 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static class VrchatSceneSetup
 {
-    public static void CreateMeshCopies(VrchatAvatar avatar, Dictionary<Slot, string> sources,
+    public static Dictionary<string, Slot> CreateMeshCopies(VrchatAvatar avatar, Dictionary<Slot, string> sources,
         Func<VrchatMeshCopy, Slot> resolveParent, IReadOnlyDictionary<Slot, string> importedPaths)
     {
         var importedSources = sources.ToArray();
+        var authoredObjects = new Dictionary<string, Slot>();
         var replacedRenderers = new HashSet<MeshRenderer>();
         foreach (VrchatMeshCopy copy in avatar.MeshCopies)
         {
@@ -44,8 +45,12 @@ internal static class VrchatSceneSetup
                 duplicate.LocalPosition = new float3(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z);
                 duplicate.LocalRotation = new floatQ(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W);
                 duplicate.LocalScale = new float3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z);
+                if (!copy.IsSkinned)
+                    duplicate.LocalScale *= copy.FbxGuid == avatar.FbxGuid ? avatar.FbxImportScale :
+                        avatar.AdditionalFbxs.FirstOrDefault(model => model.Guid == copy.FbxGuid)?.ImportScale ?? 1f;
             }
             duplicate.Name = copy.Name;
+            if (copy.Transform?.GameObjectKey != null) authoredObjects[copy.Transform.GameObjectKey] = duplicate;
             duplicate.ActiveSelf = copy.Active;
             var meshRenderer = duplicate.GetComponent<MeshRenderer>();
             if (!copy.IsSkinned && meshRenderer is SkinnedMeshRenderer)
@@ -85,6 +90,17 @@ internal static class VrchatSceneSetup
         // Unpacked prefabs explicitly describe their renderers. Keep imported bones and
         // slots as references, but do not also render the FBX template at its old location.
         foreach (var renderer in replacedRenderers) renderer.Destroy();
+        return authoredObjects;
+    }
+
+    public static Slot ResolveImportedTarget(VrchatBoneTarget target, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<Slot, string> paths)
+    {
+        if (target?.FbxGuid == null) return null;
+        var matches = sources.Where(entry => !entry.Key.IsDestroyed && entry.Value == target.FbxGuid &&
+            (target.Path != null ? paths.TryGetValue(entry.Key, out string path) && BonePathMatches(path, target.Path)
+                : entry.Key.Name == target.Name)).Select(entry => entry.Key).ToArray();
+        return matches.Length == 1 ? matches[0] : null;
     }
 
     private static bool BonePathMatches(string importedPath, string targetPath)
