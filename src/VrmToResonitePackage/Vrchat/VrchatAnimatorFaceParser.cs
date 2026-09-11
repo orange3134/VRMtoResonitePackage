@@ -314,10 +314,9 @@ public static class VrchatAnimatorFaceParser
             }
             float peak = keys?.Select(key => key["value"]?.AsFloat() ?? 0).DefaultIfEmpty().Max() ?? 0;
             // Neutral curves are requirements too: prefab/FBX initial weights are
-            // collected after inference and may be nonzero. Keep every viseme curve
+            // collected after inference and may be nonzero. Keep every face curve
             // so the single-shape check rejects motions requiring additional resets.
-            if (requireConstant || peak > 0.001f)
-                result.Add(new Shape(path, attribute["blendShape.".Length..], peak));
+            result.Add(new Shape(path, attribute["blendShape.".Length..], peak));
         }
         return result;
     }

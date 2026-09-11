@@ -111,9 +111,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   in other nonzero-weight Animator layers, including zero-valued curves and BlendTree
   motions. Reject overlapping bindings conservatively because permanent drivers cannot
   reproduce the combined layer result; unrelated bindings do not block inference.
-  Retain zero-valued curves when counting viseme shape requirements. Initial prefab
+  Retain zero-valued curves when counting viseme and blink shape requirements. Initial prefab
   and FBX weights are collected after face inference, so a neutral curve cannot be
-  assumed redundant. Reject multi-curve visemes conservatively: a single-shape driver
+  assumed redundant. Reject multi-curve face motions conservatively: a single-shape driver
   cannot also clear another authored shape, even when its required value is zero.
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
@@ -166,6 +166,8 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
 - blinkやprefab weightが数値参照する最大indexまで、欠落shapeを空frameとして復元する。
 - 名前参照だけのrendererは大量の空frameを復元しない。
 - FBX `BlendShapeChannel.DeformPercent` をモデルprefabの既定weightとして読み込む。
+- Scope FBX default weights by model occurrence and renderer name, and fill missing
+  weights on every corresponding renderer record. Explicit zero overrides remain authoritative.
 - 明示的なprefab `m_BlendShapeWeights` は0を含めて既定値より優先する。
 - 初期weightはblendshape修復直後と最終scene setupの両方で適用する。
 

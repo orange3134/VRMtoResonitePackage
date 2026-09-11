@@ -73,6 +73,7 @@ AnimationClip:
     Asset("Assets/Face.controller", controllerGuid, controller.ToString());
     AnimatorFaceConflictChecks.Run(Asset, selected);
     CheckAnimatorBlink(Asset, selected);
+    CheckFbxDefaultOccurrences();
     AnimatorReachabilityChecks.Run(Asset, selected);
     string soloViseme = controller.ToString().Replace("--- !u!1109 &-101\nAnimatorTransition:\n",
         "--- !u!1109 &-101\nAnimatorTransition:\n  m_Solo: 1\n");
@@ -1636,6 +1637,32 @@ SkinnedMeshRenderer:
     }
 }
 
+static void CheckFbxDefaultOccurrences()
+{
+    var avatar = new VrchatAvatar();
+    foreach (string guid in new[] { "first", "second" })
+        avatar.FbxBlendShapeDefaultWeights[new VrchatGameObjectReference(guid, "Body")] = new float[] { 75, 25 };
+    var explicitRenderer = new VrchatRendererMaterials { FbxGuid = "first", RendererGameObjectName = "Body" };
+    explicitRenderer.InitialBlendShapes.Add((0, 0));
+    avatar.RendererMaterials.Add(explicitRenderer);
+    typeof(VrchatAvatarParser).GetMethod("ApplyFbxDefaultBlendShapeWeights",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.Invoke(null, new object[] { avatar });
+    Check(avatar.RendererMaterials.Count == 2 &&
+          avatar.RendererMaterials.Single(r => r.FbxGuid == "second").InitialBlendShapes.Contains((0, 75)),
+        "Repeated model occurrences each retain their FBX default deformation");
+    Check(explicitRenderer.InitialBlendShapes.Contains((0, 0)) && explicitRenderer.InitialBlendShapes.Contains((1, 25)),
+        "Explicit zero overrides win while missing weights inherit FBX defaults");
+    var copy = new VrchatRendererMaterials { FbxGuid = "first", RendererGameObjectName = "Body" };
+    avatar.RendererMaterials.Add(copy);
+    avatar.FbxBlendShapeDefaultWeights[new VrchatGameObjectReference("second", "Body")] = new float[] { 90, 10 };
+    avatar.RendererMaterials.Single(r => r.FbxGuid == "second").InitialBlendShapes.Clear();
+    typeof(VrchatAvatarParser).GetMethod("ApplyFbxDefaultBlendShapeWeights",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.Invoke(null, new object[] { avatar });
+    Check(copy.InitialBlendShapes.Contains((0, 75)) &&
+          avatar.RendererMaterials.Single(r => r.FbxGuid == "second").InitialBlendShapes.Contains((0, 90)),
+        "Every matching renderer inherits defaults without leaking weights across models");
+}
+
 static void CheckAnimatorBlink(Func<string, string, string, string> asset, string selected)
 {
     const string controllerGuid = "aabbccddeeff00112233445566778899";
@@ -1734,6 +1761,10 @@ AnimatorState:
     Check(blinkModel.MeshBindingPaths[blinkModel.Expressions.Single(e => e.Preset == "blink").Binds.Single().MeshIndex] == "Face/Body",
         "Animator blink retains its full renderer path through adaptation");
     string blinkClip = File.ReadAllText(blinkPath);
+    File.WriteAllText(blinkPath, blinkClip + "\n  - curve:\n      m_Curve:\n      - value: 0\n      - value: 0\n    attribute: blendShape.Smile\n    path: Face/Body\n    classID: 137\n");
+    Check(Read(controller).Blink == null,
+        "Blink with an additional neutral Smile requirement cannot become a single-shape driver");
+    File.WriteAllText(blinkPath, blinkClip);
     File.WriteAllText(blinkPath, blinkClip.Replace("path: Face/Body", "path:"));
     var rootBlink = VrchatModelAdapter.ToVrmModel(Read(controller));
     Check(rootBlink.MeshBindingPaths[rootBlink.Expressions.Single(e => e.Preset == "blink").Binds.Single().MeshIndex] == "",

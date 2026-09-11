@@ -263,7 +263,7 @@ public static class VrchatAvatarParser
             foreach ((string rendererName, IReadOnlyList<float> weights) in
                      resolver.BlendShapeDefaultWeights)
             {
-                avatar.FbxBlendShapeDefaultWeights.TryAdd(rendererName, weights);
+                avatar.FbxBlendShapeDefaultWeights[new VrchatGameObjectReference(guid, rendererName)] = weights;
             }
         }
         if (avatar.FbxBlendShapeNames.Count > 0)
@@ -274,20 +274,25 @@ public static class VrchatAvatarParser
 
     private static void ApplyFbxDefaultBlendShapeWeights(VrchatAvatar avatar)
     {
-        foreach ((string rendererName, IReadOnlyList<float> weights) in
+        foreach ((VrchatGameObjectReference source, IReadOnlyList<float> weights) in
                  avatar.FbxBlendShapeDefaultWeights)
         {
-            VrchatRendererMaterials renderer = avatar.RendererMaterials.FirstOrDefault(candidate =>
-                string.Equals(candidate.RendererGameObjectName, rendererName,
-                    StringComparison.Ordinal));
-            if (renderer == null)
+            var renderers = avatar.RendererMaterials.Where(candidate =>
+                string.Equals(candidate.FbxGuid, source.FbxGuid, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(candidate.PrefabObjectKey == null ? candidate.RendererGameObjectName :
+                    avatar.MeshCopies.FirstOrDefault(copy => copy.Transform?.GameObjectKey == candidate.PrefabObjectKey)?.SourceName
+                        ?? candidate.RendererGameObjectName, source.Name, StringComparison.Ordinal)).ToList();
+            if (renderers.Count == 0)
             {
-                renderer = new VrchatRendererMaterials
+                var renderer = new VrchatRendererMaterials
                 {
-                    RendererGameObjectName = rendererName,
+                    FbxGuid = source.FbxGuid,
+                    RendererGameObjectName = source.Name,
                 };
                 avatar.RendererMaterials.Add(renderer);
+                renderers.Add(renderer);
             }
+            foreach (var renderer in renderers)
             for (int index = 0; index < weights.Count; index++)
             {
                 float weight = weights[index];

@@ -79,8 +79,7 @@ public sealed class VrchatAvatar
             ? ModelBlendShapeNames.GetValueOrDefault(new VrchatGameObjectReference(fbxGuid, rendererName))
             : FbxBlendShapeNames.GetValueOrDefault(rendererName);
     }
-    public Dictionary<string, IReadOnlyList<float>> FbxBlendShapeDefaultWeights { get; } =
-        new(StringComparer.Ordinal);
+    public Dictionary<VrchatGameObjectReference, IReadOnlyList<float>> FbxBlendShapeDefaultWeights { get; } = new();
 
     /// <summary>
     /// FBX embedded material name -> Unity .mat guid, from ModelImporter.externalObjects or
