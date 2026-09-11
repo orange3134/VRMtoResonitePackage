@@ -471,15 +471,17 @@ internal static class Converter
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources);
                 var physicsNodes = model.NodeTargets.ToDictionary(entry => entry.Key, entry =>
                     Vrchat.VrchatSceneSetup.ResolveImportedTarget(entry.Value, importedMeshSources, importedNodePaths, prefabSlots));
-                Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes,
-                    target => Vrchat.VrchatSceneSetup.ResolveImportedTarget(target, importedMeshSources,
-                        importedNodePaths, prefabSlots), descriptorRoot is { IsDestroyed: false } ? descriptorRoot : root);
                 if (descriptorRoot is { IsDestroyed: false })
                 {
                     var parts = new Stack<string>();
                     for (Slot slot = descriptorRoot; slot != null && slot != root; slot = slot.Parent) parts.Push(slot.Name);
                     model.MeshBindingRootPath = string.Join("/", parts);
                 }
+                // Retain authored paths before Merge Armature or eye pivots move renderers.
+                var faceResolver = new BlendshapeResolver(root, model);
+                Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes,
+                    target => Vrchat.VrchatSceneSetup.ResolveImportedTarget(target, importedMeshSources,
+                        importedNodePaths, prefabSlots), descriptorRoot is { IsDestroyed: false } ? descriptorRoot : root);
 
                 if (options.NoAvatar)
                 {
@@ -503,7 +505,7 @@ internal static class Converter
                     {
                         setupOptions.NearClip = options.NearClip.Value;
                     }
-                    AvatarSetup.Build(root, model, setupOptions);
+                    AvatarSetup.Build(root, model, setupOptions, faceResolver);
                     await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects);
                     await AvatarSetup.ApplyFirstPersonAutoAsync(root, model);
                     SpringBoneSetup.Apply(root, model, physicsNodes);

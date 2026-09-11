@@ -610,6 +610,28 @@ static async Task Run(string fbxPath, string rendererName)
         var exportResolver = Activator.CreateInstance(resolverType, root, faceModel)!;
         Check(ReferenceEquals(resolverType.GetMethod("Resolve")!.Invoke(exportResolver, new object[] { bind }),
             sameB.BlendShapeWeights.GetElement(0)), "Empty Animator path resolves the descriptor renderer below the export root");
+        // Reproduce setup-time reparenting while a namesake renderer stays in place.
+        Slot originalFaceParent = sameB.Slot.Parent;
+        Slot movedFaceParent = root.AddSlot("Merged face parent");
+        sameB.Slot.Parent = movedFaceParent;
+        var lateResolver = Activator.CreateInstance(resolverType, root, faceModel)!;
+        Check(resolverType.GetMethod("Resolve")!.Invoke(lateResolver, new object[] { bind }) == null,
+            "Reproduction: capturing Animator paths after reparenting loses the surviving face");
+        Check(ReferenceEquals(resolverType.GetMethod("Resolve")!.Invoke(exportResolver, new object[] { bind }),
+            sameB.BlendShapeWeights.GetElement(0)), "Captured descriptor renderer survives Merge Armature reparenting");
+        string originalDescriptorPath = faceModel.MeshBindingRootPath;
+        faceModel.MeshBindingRootPath = "";
+        faceModel.MeshBindingPaths[bind.MeshIndex] = originalDescriptorPath;
+        Check(ReferenceEquals(resolverType.GetMethod("Resolve")!.Invoke(exportResolver, new object[] { bind }),
+            sameB.BlendShapeWeights.GetElement(0)), "Nonempty Animator path retains the moved renderer instead of its namesake");
+        faceModel.MeshBindingRootPath = originalDescriptorPath;
+        faceModel.MeshBindingPaths[bind.MeshIndex] = "";
+        Slot eyePivot = movedFaceParent.AddSlot("Left Eye Pivot");
+        sameB.Slot.Parent = eyePivot;
+        Check(ReferenceEquals(resolverType.GetMethod("Resolve")!.Invoke(exportResolver, new object[] { bind }),
+            sameB.BlendShapeWeights.GetElement(0)), "Captured face binding survives subsequent eye pivot insertion");
+        sameB.Slot.Parent = originalFaceParent;
+        movedFaceParent.Destroy();
         var physicsRoot = root.AddSlot("Repeated physics");
         var leftJoint = physicsRoot.AddSlot("Joint");
         var rightJoint = physicsRoot.AddSlot("Joint");

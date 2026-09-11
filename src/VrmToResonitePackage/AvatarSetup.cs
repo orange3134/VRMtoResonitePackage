@@ -101,8 +101,10 @@ internal static class AvatarSetup
         ["rightLittleDistal"] = BodyNode.RightPinky_Distal,
     };
 
-    public static void Build(Slot root, VrmModel vrm, AvatarSetupOptions options)
+    public static void Build(Slot root, VrmModel vrm, AvatarSetupOptions options, BlendshapeResolver resolver = null)
     {
+        // Capture renderer paths before rig/eye setup changes the hierarchy.
+        resolver ??= new BlendshapeResolver(root, vrm);
         Dictionary<string, Slot> slotsByName = SlotIndex.Build(root);
 
         BipedRig rig = SetupRig(root, vrm, slotsByName);
@@ -143,7 +145,7 @@ internal static class AvatarSetup
             SetupToolAnchors(leftRef, leftHand);
             SetupToolAnchors(rightRef, rightHand);
 
-            SetupEyesAndBlink(root, rig, vrm, headsetRef, slotsByName);
+            SetupEyesAndBlink(root, rig, vrm, headsetRef, slotsByName, resolver);
 
             VRIKAvatar avatar = root.AttachComponent<VRIKAvatar>();
             avatar.Setup(ik, rig, headsetRef, leftRef, rightRef, null, null, null);
@@ -221,7 +223,7 @@ internal static class AvatarSetup
         // that misassigns blendshapes on many models, so the voice output is set up
         // here and visemes are wired exclusively from the VRM expression data.
         SetupVoiceOutput(root);
-        SetupVisemesFromVrm(root, vrm);
+        SetupVisemesFromVrm(root, vrm, resolver);
         if (options.FaceTracking)
         {
             AvatarCreator.TrySetupFaceTracking(root);
@@ -496,7 +498,7 @@ internal static class AvatarSetup
     // ---------------------------------------------------------------- eyes & blink
 
     private static void SetupEyesAndBlink(Slot root, BipedRig rig, VrmModel vrm, Slot headsetRef,
-        Dictionary<string, Slot> slotsByName)
+        Dictionary<string, Slot> slotsByName, BlendshapeResolver resolver)
     {
         Slot head = rig[BodyNode.Head];
         Slot leftEye = rig.TryGetBone(BodyNode.LeftEye);
@@ -539,7 +541,6 @@ internal static class AvatarSetup
         EyeLinearDriver linearDriver = managerSlot.AttachComponent<EyeLinearDriver>();
         linearDriver.EyeManager.Target = eyeManager;
 
-        var resolver = new BlendshapeResolver(root, vrm);
         List<(IField<float> field, float weight)> blinkLeft = ResolveBinds(resolver, vrm, "blinkLeft");
         List<(IField<float> field, float weight)> blinkRight = ResolveBinds(resolver, vrm, "blinkRight");
         List<(IField<float> field, float weight)> blinkBoth = ResolveBinds(resolver, vrm, "blink");
@@ -683,9 +684,8 @@ internal static class AvatarSetup
     /// auto-assignment is bypassed entirely, so only blendshapes the source explicitly declares get
     /// linked. VRM provides the five vowels; VRChat provides up to all 15 visemes.
     /// </summary>
-    private static void SetupVisemesFromVrm(Slot root, VrmModel vrm)
+    private static void SetupVisemesFromVrm(Slot root, VrmModel vrm, BlendshapeResolver resolver)
     {
-        var resolver = new BlendshapeResolver(root, vrm);
         var drivers = new List<DirectVisemeDriver>();
 
         foreach ((string preset, Viseme viseme) in VisemePresets)

@@ -102,6 +102,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   and alignment collapse. Imports without `RootNode` retain the empty-path fallback.
 - Descriptor roots created by FBX placement must resolve through the prefab Transform slot map,
   even without authored mesh copies, so descriptor-relative Merge Armature paths retain their scope.
+- Capture Animator renderer paths after prefab placement and mesh removal, before Merge Armature.
+  Reuse that resolver for blink and visemes so moved renderers retain their identities through
+  bone merging and eye-pivot insertion; missing or ambiguous paths still cannot select namesakes.
 - Animatorのbinding pathはdescriptor root基準で解決する。追加layerの部分weightは、
   full-weightのdriverへ誤変換しないよう推論対象から除く。
   Additive layerも最終的な絶対weightを表さないため、viseme・blinkの推論対象から除く。

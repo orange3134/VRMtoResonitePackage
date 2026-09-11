@@ -29,6 +29,8 @@ materials after reparenting, and using a skinned FBX mesh as a static renderer.
 
 Animator binding checks include empty paths resolving the root renderer without
 falling back to child renderers.
+Captured empty and nonempty binding paths also retain the original renderer after
+reparenting and eye-pivot insertion, while a late capture reproduces the missing binding.
 Root-renderer replacement also covers a mesh source nested beneath the placeholder.
 Model-root physics references survive both primary-wrapper and alignment collapse,
 while another model's root identity remains independent.
