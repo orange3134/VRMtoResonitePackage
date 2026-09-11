@@ -2046,6 +2046,8 @@ public static class VrchatAvatarParser
         {
             foreach (YamlDocument smr in scene.MeshRenderers)
             {
+                if (avatar.EditorOnlyPrefabObjects.TryGetValue(sceneGuid, out var excluded) &&
+                    excluded.Contains(smr.Root?["m_GameObject"]?.FileID ?? 0)) continue;
                 string rendererName = scene.ResolveGameObjectName(smr.FileId);
                 string fbxGuid = scene.RendererMesh(smr)?.Guid;
                 CollectAuthoredMeshCopy(package, sceneGuid, scene, smr, avatar, modelResolvers, prefabScenes,
@@ -2132,6 +2134,12 @@ public static class VrchatAvatarParser
                 string propertyPath = modification?["propertyPath"]?.AsString();
                 var targetIdentity = ResolveObjectIdentity(package, modification?["target"]?.Guid,
                     modification?["target"]?.FileID ?? 0);
+                if (targetIdentity.Guid != null && avatar.EditorOnlyPrefabObjects.TryGetValue(targetIdentity.Guid, out var excluded))
+                {
+                    var targetDocument = package.ReadScene(package.ByGuid(targetIdentity.Guid))?.Doc(targetIdentity.Id);
+                    if (excluded.Contains(targetDocument?.ClassId == 1 ? targetIdentity.Id :
+                            targetDocument?.Root?["m_GameObject"]?.FileID ?? 0)) continue;
+                }
                 if (propertyPath?.StartsWith("m_Bones.Array.", StringComparison.Ordinal) == true)
                 {
                     var boneTarget = modification["target"];
@@ -2600,9 +2608,14 @@ public static class VrchatAvatarParser
         {
             if (!gameObjects.Contains(renderer.Root?["m_GameObject"]?.FileID ?? 0)) continue;
             string name = scene.ResolveGameObjectName(renderer.FileId);
-            if (name != null)
-                keep[new VrchatGameObjectReference(ResolvePrefabObjectFbxGuid(package, scene, renderer), name)] = false;
             string modelGuid = ResolvePrefabObjectFbxGuid(package, scene, renderer);
+            // Keep the shared model/name entry while another authored object still needs it.
+            // Excluded copies are skipped by fileID; a name-level false would drop both.
+            if (name != null && !scene.MeshRenderers.Any(other =>
+                    !excludedObjects.Contains(other.Root?["m_GameObject"]?.FileID ?? 0) &&
+                    scene.ResolveGameObjectName(other.FileId) == name &&
+                    ResolvePrefabObjectFbxGuid(package, scene, other) == modelGuid))
+                keep[new VrchatGameObjectReference(modelGuid, name)] = false;
             long rootGo = target?.ClassId == 1 ? target.FileId : target?.Root?["m_GameObject"]?.FileID ?? 0;
             if (modelGuid != null && (fileId == 0 ||
                 scene.TransformOfGameObject(rootGo)?.Root?["m_Father"]?.FileID == 0))

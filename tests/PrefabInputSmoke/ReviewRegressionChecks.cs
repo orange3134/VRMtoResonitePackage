@@ -82,6 +82,31 @@ SkinnedMeshRenderer:
             Call("ParseInactiveGameObjects", authoredScene, authoredScene.GameObjects.Select(go => go.FileId).ToHashSet(),
                 parsed, package.InputPrefab.Guid);
             Require(parsed.MeshCopies.Count(c => c.Active) == 1 && parsed.InactiveGameObjects.Count == 0);
+            foreach (bool bothExcluded in new[] { false, true })
+            {
+                File.WriteAllText(file, Renderer(501, "materialA").Replace("m_Name: Shared", "m_Name: Shared\n  m_TagString: EditorOnly") +
+                    Renderer(601, "materialB").Replace("m_Name: Shared", "m_Name: Shared\n  m_TagString: " + (bothExcluded ? "EditorOnly" : "Untagged")));
+                string taggedWrapper = asset("Assets/ReviewTaggedWrapper.prefab", "ab120000000000000000000000000006", """
+--- !u!1001 &100
+PrefabInstance:
+  m_SourcePrefab: {guid: ab120000000000000000000000000005}
+  m_Modification:
+    m_Modifications:
+    - target: {guid: ab120000000000000000000000000005, fileID: 503}
+      propertyPath: m_Materials.Array.data[0]
+      objectReference: {guid: excludedOverride}
+""");
+                using var taggedPackage = UnityPackage.Open(taggedWrapper);
+                var tagged = new VrchatAvatar();
+                typeof(VrchatAvatarParser).GetMethod("CollectVariantPrefabGameObjectNames", BindingFlags.NonPublic | BindingFlags.Static,
+                    new[] { typeof(UnityPackage), typeof(string), typeof(VrchatAvatar) })!
+                    .Invoke(null, new object[] { taggedPackage, taggedPackage.InputPrefab.Guid, tagged });
+                Call("ParseVariantRendererOverrides", taggedPackage, taggedPackage.InputPrefab.Guid, tagged);
+                Require(tagged.MeshCopies.Count == (bothExcluded ? 0 : 1) &&
+                    tagged.ShouldKeepRenderer(mesh.Guid, "Shared") == !bothExcluded &&
+                    tagged.RendererMaterials.Count == (bothExcluded ? 0 : 1) &&
+                    tagged.RendererMaterials.All(r => r.MaterialGuids.Single() == "materialB"));
+            }
         });
 
         Case("copy retains enclosing translated and rotated attachment", () =>

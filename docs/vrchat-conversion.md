@@ -83,6 +83,8 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   materialと初期blendshapeを個別に適用する。識別子を持たない従来のrendererは、空のoverrideも
   含めて出現順に1対1で消費する。
 - コピーとその親のactive stateもobject単位で保持し、従来の名前照合による非アクティブ化を重ねない。
+- 同名のauthored rendererの一方がEditorOnlyでも、残るobjectのmodel/nameをkeep-listに残す。
+  除外objectのmaterialと外側overrideは取り込まず、残るrendererへ流用しない。
 - outer variant自身の変更を読むときは、descriptorの親sceneではなく選択候補のsourceを再読込する。
 
 ## ブレンドシェイプ
