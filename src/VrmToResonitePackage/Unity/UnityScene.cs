@@ -20,9 +20,12 @@ public sealed class UnityScene
     public IReadOnlyDictionary<long, YamlDocument> Documents => _byFileId;
 
     public static UnityScene Parse(string text)
+        => FromDocuments(UnityYaml.ParseDocuments(text));
+
+    internal static UnityScene FromDocuments(IEnumerable<YamlDocument> documents)
     {
         var scene = new UnityScene();
-        foreach (YamlDocument doc in UnityYaml.ParseDocuments(text))
+        foreach (YamlDocument doc in documents)
         {
             scene._byFileId[doc.FileId] = doc;
         }

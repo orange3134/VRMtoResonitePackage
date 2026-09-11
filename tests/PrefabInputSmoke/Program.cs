@@ -1276,6 +1276,52 @@ m_Modifications:
         Check(!copy.Enabled && copy.Transform.LocalPosition.X == 9,
             "Descriptor wrapper applies its overrides to nested geometry");
     }
+
+    string Instance(long id, string guid, int parent, int x, bool disabled = false) => $$"""
+
+--- !u!1001 &{{id}}
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: {{guid}}}
+  m_Modification:
+    m_TransformParent: {fileID: {{parent}}}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: {{guid}}}
+      propertyPath: m_LocalPosition.x
+      value: {{x}}
+    - target: {fileID: 2, guid: {{guid}}}
+      propertyPath: m_Enabled
+      value: {{(disabled ? 0 : 1)}}
+""";
+    string rootOnly = wrapper[..wrapper.IndexOf("--- !u!1001", StringComparison.Ordinal)];
+    foreach (string geometry in new[] { modelGuid, nestedGuid })
+    {
+        File.WriteAllText(input, rootOnly + Instance(4, geometry, 2, 1) + Instance(5, geometry, 2, 3, true));
+        using var package = UnityPackage.Open(input);
+        var originalScene = package.ReadScene(package.InputPrefab);
+        var parsed = VrchatAvatarParser.Parse(package);
+        Check(parsed.FbxGuid == modelGuid && parsed.AdditionalFbxs.Count == 1 &&
+              parsed.AdditionalFbxs[0].Guid != modelGuid && parsed.AdditionalFbxs[0].Path == parsed.FbxPath &&
+              parsed.FbxLocalPosition.X == 1 && parsed.AdditionalFbxs[0].LocalPosition.X == 3,
+            "Repeated " + geometry + " preserves both model occurrences and their placements");
+        if (geometry == nestedGuid)
+            Check(parsed.MeshCopies.Count == 2 && parsed.MeshCopies.Select(c => c.FbxGuid).Distinct().Count() == 2 &&
+                  parsed.MeshCopies.Count(c => c.Enabled) == 1,
+                "Repeated nested prefab retains independent renderer overrides and source identities");
+        Check(ReferenceEquals(originalScene, package.ReadScene(package.InputPrefab)) &&
+              originalScene.Doc(5).Root["m_SourcePrefab"].Guid == geometry &&
+              VrchatAvatarParser.Parse(package).AdditionalFbxs.Single().Guid == parsed.AdditionalFbxs.Single().Guid,
+            "Instance parsing leaves cached source scenes unchanged and uses stable identities on repeat parse");
+    }
+
+    string outside = Instance(5, nestedGuid, 0, 99, true);
+    File.WriteAllText(input, wrapper + outside);
+    using (var package = UnityPackage.Open(input))
+    {
+        var parsed = VrchatAvatarParser.Parse(package);
+        Check(parsed.AdditionalFbxs.Count == 0 && parsed.MeshCopies.Single().Enabled &&
+              parsed.FbxLocalPosition.X != 99,
+            "Composed descriptor parsing excludes sibling instances outside the selected subtree");
+    }
 }
 
 static void CheckAnimatorBlink(Func<string, string, string, string> asset, string selected)

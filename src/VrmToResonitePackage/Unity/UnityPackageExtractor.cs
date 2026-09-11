@@ -112,6 +112,17 @@ public sealed class UnityPackage : IDisposable
     public UnityAsset ByGuid(string guid)
         => guid != null && _byGuid.TryGetValue(guid, out UnityAsset a) ? a : null;
 
+    // A non-owning parsing view. Source files and the caller's cached scenes stay unchanged.
+    internal UnityPackage CreateView(string sourceGuid)
+        => new(null, new Dictionary<string, UnityAsset>(_byGuid, StringComparer.OrdinalIgnoreCase))
+        { InputPrefab = ByGuid(sourceGuid) };
+
+    internal void SetViewAsset(UnityAsset asset, UnityScene scene = null)
+    {
+        _byGuid[asset.Guid] = asset;
+        if (scene != null) _sceneByGuid[asset.Guid] = scene;
+    }
+
     public IEnumerable<UnityAsset> ByExtension(string extensionWithDot)
         => _byGuid.Values.Where(a => a.Extension == extensionWithDot.ToLowerInvariant());
 

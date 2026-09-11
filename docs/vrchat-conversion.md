@@ -34,6 +34,12 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 
 ## FBXの選択と合成
 
+- 詳細解析は `UnityPrefabInstances` の非所有ビューで行う。選択した descriptor の subtree に
+  含まれる document と PrefabInstance だけを残し、すべての collector に同じ範囲を見せる。
+- 同じ prefab/FBX の繰り返し配置は、配置経路から生成した内部 GUID で区別する。
+  source file と `.meta` は共有して読み取り、instance の上書きと stripped 参照を同じ内部 GUID へ
+  書き換える。元の package のアセット・キャッシュ・Unity プロジェクトは変更しない。
+- 循環参照は祖先経路で検出する。兄弟の同一アセットを循環として除外しない。
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
   少数の名前一致だけでは推定しない。

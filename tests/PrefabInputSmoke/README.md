@@ -46,3 +46,8 @@ Mixed wrappers retain nested body geometry alongside local static/skinned
 accessories. Descriptor inheritance also covers viewpoint, viseme strings,
 eye/eyelid fields, packed eyelid arrays, null references, and local/stripped/external
 object references across multiple variants without mutating the base asset.
+
+Composed-wrapper checks also exclude sibling instances outside the selected
+descriptor subtree and preserve repeated direct FBX/nested prefab occurrences,
+independent placements and renderer overrides, stable per-occurrence identities,
+and unchanged source-scene caches across repeated parsing.

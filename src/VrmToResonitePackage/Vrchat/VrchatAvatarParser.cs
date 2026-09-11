@@ -109,6 +109,9 @@ public static class VrchatAvatarParser
     /// root/file name (exact match preferred, otherwise substring) when the package holds more than one.
     /// </summary>
     public static VrchatAvatar Parse(UnityPackage package, string avatarOverride = null)
+        => Parse(package, avatarOverride, false);
+
+    private static VrchatAvatar Parse(UnityPackage package, string avatarOverride, bool instanceView)
     {
         List<Candidate> candidates = FindCandidates(package);
         if (package.InputPrefab != null && candidates.Count == 0)
@@ -125,6 +128,14 @@ public static class VrchatAvatarParser
         }
 
         Candidate selected = SelectPrimary(candidates, avatarOverride);
+        if (!instanceView)
+        {
+            // All collectors must see the same selected hierarchy and instance identities.
+            // Re-discover the descriptor in the view so inherited references use its scenes too.
+            using var view = UnityPrefabInstances.CreateView(package, selected.Source.Guid,
+                selected.Root != null ? selected.Subtree : null);
+            return Parse(view, selected.Name, true);
+        }
         YamlDocument effectiveDescriptor = VrchatDescriptorOverrides.Resolve(package, selected.Source.Guid, selected.Descriptor);
         foreach (Candidate c in OrderByPrimary(candidates))
         {
