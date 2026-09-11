@@ -42,6 +42,8 @@ submachines, while retaining an ungated connected submachine.
 Nested Entry checks reject incompatible incoming Viseme conditions, retain compatible
 entries and revisits with additional values, and allow later state transitions after
 the Viseme value changes.
+Equality transitions into nested machines retain Entry and default mouth bindings;
+cyclic routing and muted entries without a default remain unsupported.
 Ordered transition checks reject shadowed Entry, State and Any State routes,
 including overlapping Viseme ranges, while preserving muted/later fallbacks and
 an independent route to the same transition.

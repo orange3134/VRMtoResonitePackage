@@ -8,6 +8,7 @@ internal static class AnimatorReachabilityChecks
         const string guid = "abcd1200000000000000000000000001";
         foreach (string mode in new[] { "disabled toggle", "enabled toggle", "unreachable", "ungated",
             "incompatible nested entry", "compatible nested entry", "revisited nested entry", "later state value",
+            "equality nested entry", "equality nested default", "equality nested cycle", "equality nested muted entry",
             "bypassed default", "muted entry default", "conditional entry default",
             "shadowed entry", "muted fallback", "later fallback", "alternate route", "shadowed any", "shadowed state", "range shadow",
             "any departure", "ancestor any departure", "muted any departure", "other viseme any departure",
@@ -76,6 +77,17 @@ AnimatorState:
                     controller = controller.Replace("  m_EntryTransitions:\n  - {fileID: 301}",
                         "  m_DefaultState: {fileID: 350}\n--- !u!1102 &350\nAnimatorState:\n  m_Transitions:\n  - {fileID: 301}");
             }
+            if (mode.StartsWith("equality nested", StringComparison.Ordinal))
+            {
+                controller = controller.Replace("AnimatorStateTransition:\n  m_DstStateMachine: {fileID: 300}\n  m_Conditions: []",
+                    "AnimatorStateTransition:\n  m_DstStateMachine: {fileID: 300}\n  m_Conditions:\n  - m_ConditionEvent: Viseme\n    m_ConditionMode: 6\n    m_EventTreshold: 10");
+                if (mode == "equality nested default")
+                    controller = controller.Replace("  m_EntryTransitions:\n  - {fileID: 301}", "  m_DefaultState: {fileID: 400}");
+                if (mode == "equality nested cycle")
+                    controller = controller.Replace("  m_DstState: {fileID: 400}", "  m_DstStateMachine: {fileID: 300}");
+                if (mode == "equality nested muted entry")
+                    controller = controller.Replace("AnimatorTransition:\n", "AnimatorTransition:\n  m_Mute: 1\n");
+            }
             if (mode is "bypassed default" or "muted entry default" or "conditional entry default")
             {
                 controller = controller.Replace("  m_DefaultState: {fileID: 200}",
@@ -139,6 +151,7 @@ AnimatorState:
             int expected = mode is "muted any departure" or "other viseme any departure" or "ungated" or "muted fallback" or "later fallback" or "alternate route" or "muted entry default" or "conditional entry default" or "muted departure" or "other viseme departure" ? 1 : 0;
             if (mode is "unrelated layer" or "zero weight layer") expected = 1;
             if (mode is "compatible nested entry" or "revisited nested entry" or "later state value") expected = 1;
+            if (mode is "equality nested entry" or "equality nested default") expected = 1;
             if (avatar.Visemes.Count != expected)
                 throw new Exception($"Viseme reachability ({mode}): expected {expected}, got {avatar.Visemes.Count}");
             Console.WriteLine($"PASS: Viseme reachability ({mode})");

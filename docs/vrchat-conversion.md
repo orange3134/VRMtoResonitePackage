@@ -97,6 +97,10 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   intersecting each Entry condition and its default fallback. Track visited values per
   node so another route can enter the same machine with additional values. State and
   Any State transitions may run later after Viseme changes, so their value domain resets.
+  Equality transitions targeting a nested machine resolve its ordered, Solo/Mute-filtered
+  Entry route or default state for that same Viseme before checking the constant shape.
+  A missing direct destination is not itself an unsupported motion; unresolved or cyclic
+  nested routes remain unsupported.
   Solo/Mute適用後の同一transition listではViseme条件と順序を確認し、先行transitionが
   必ず成立する値について後続transitionを辿らない。exit time付きの先行transitionは遮断と見なさない。
   Viseme以外の条件を持つlayerは、toggleの初期値に関係なく保守的に推論対象から除く。

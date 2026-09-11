@@ -77,7 +77,7 @@ public static class VrchatAnimatorFaceParser
                             condition["m_ConditionMode"]?.AsInt() != 6) continue;
                         float threshold = condition["m_EventTreshold"]?.AsFloat(-1) ?? -1;
                         if (threshold < 0 || threshold > 14 || threshold != MathF.Truncate(threshold)) continue;
-                        YamlNode state = controller.Doc(transition["m_DstState"]?.FileID ?? 0)?.Root;
+                        YamlNode state = Destination(transition, (int)threshold, new());
                         var shapes = StableShapes(state, (int)threshold);
                         RecordViseme((int)threshold, shapes);
                     }
@@ -95,7 +95,7 @@ public static class VrchatAnimatorFaceParser
                     if (Enumerable.Range(1, 14).All(i => spoken.Contains(i)) &&
                         fallback?["m_Conditions"]?.Seq?.Count == 0 && fallback["m_Mute"]?.AsBool() != true)
                     {
-                        var shapes = StableShapes(controller.Doc(fallback["m_DstState"]?.FileID ?? 0)?.Root, 0);
+                        var shapes = StableShapes(Destination(fallback, 0, new()), 0);
                         RecordViseme(0, shapes);
                     }
                 }
@@ -114,6 +114,26 @@ public static class VrchatAnimatorFaceParser
                 bool HasCompetingBindings(List<Shape> shapes) =>
                     shapes.Any(shape => layerBindings.Where((_, index) => index != layerIndex - 1)
                         .Any(bindings => bindings.Contains((shape.Renderer, shape.Name))));
+
+                YamlNode Destination(YamlNode transition, int viseme, HashSet<long> visited)
+                {
+                    if (transition == null || transition["m_IsExit"]?.AsBool() == true) return null;
+                    long state = transition["m_DstState"]?.FileID ?? 0;
+                    if (state != 0) return controller.Doc(state)?.Root;
+                    long machine = transition["m_DstStateMachine"]?.FileID ?? 0;
+                    if (machine == 0 || !visited.Add(machine)) return null;
+                    YamlNode node = controller.Doc(machine)?.Root;
+                    // Entry routing preserves the incoming phoneme. Apply list priority and
+                    // Solo/Mute before falling back to the nested machine's default state.
+                    foreach (var reference in VrchatAnimatorDefaults.ActiveTransitions(controller, node?["m_EntryTransitions"]?.Seq))
+                    {
+                        YamlNode entry = controller.Doc(reference.FileID ?? 0)?.Root;
+                        if (!(entry?["m_Conditions"]?.Seq ?? new()).All(condition =>
+                            condition["m_ConditionEvent"]?.AsString() == "Viseme" && MatchesViseme(condition, viseme))) continue;
+                        return Destination(entry, viseme, visited);
+                    }
+                    return controller.Doc(node?["m_DefaultState"]?.FileID ?? 0)?.Root;
+                }
 
                 List<Shape> StableShapes(YamlNode state, int viseme)
                 {
