@@ -11,10 +11,13 @@ namespace VrmToResonitePackage.Vrchat;
 internal static class VrchatSceneSetup
 {
     public static Dictionary<string, Slot> CreateMeshCopies(VrchatAvatar avatar, Dictionary<Slot, string> sources,
-        Func<VrchatMeshCopy, Slot> resolveParent, IReadOnlyDictionary<Slot, string> importedPaths)
+        Func<VrchatMeshCopy, Slot> resolveParent, IReadOnlyDictionary<Slot, string> importedPaths,
+        Dictionary<string, Slot> prefabSlots = null)
     {
+        prefabSlots ??= new(StringComparer.Ordinal);
         var importedSources = sources.ToArray();
         var authoredObjects = new Dictionary<string, Slot>();
+        var copies = new List<(VrchatMeshCopy Copy, Slot Slot)>();
         var replacedRenderers = new HashSet<MeshRenderer>();
         foreach (VrchatMeshCopy copy in avatar.MeshCopies)
         {
@@ -39,16 +42,7 @@ internal static class VrchatSceneSetup
             {
                 SlotFilter = slot => slot == source,
             });
-            if (copy.Transform is {} transform)
-            {
-                duplicate.Parent = resolveParent(copy);
-                duplicate.LocalPosition = new float3(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z);
-                duplicate.LocalRotation = new floatQ(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W);
-                duplicate.LocalScale = new float3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z);
-                if (!copy.IsSkinned)
-                    duplicate.LocalScale *= copy.FbxGuid == avatar.FbxGuid ? avatar.FbxImportScale :
-                        avatar.AdditionalFbxs.FirstOrDefault(model => model.Guid == copy.FbxGuid)?.ImportScale ?? 1f;
-            }
+            copies.Add((copy, duplicate));
             duplicate.Name = copy.Name;
             if (copy.Transform?.GameObjectKey != null) authoredObjects[copy.Transform.GameObjectKey] = duplicate;
             duplicate.ActiveSelf = copy.Active;
@@ -87,10 +81,35 @@ internal static class VrchatSceneSetup
             foreach (Slot slot in EnumerateSlots(duplicate)) sources[slot] = copy.FbxGuid;
             UniLog.Log($"Prefab mesh copy: {copy.Name} <- {copy.SourceName} (fbx={copy.FbxGuid})");
         }
+        // Register every authored renderer before resolving parents: a renderer can live on
+        // the descriptor root and own other renderer objects, regardless of document order.
+        foreach (var (copy, slot) in copies)
+        {
+            if (copy.Transform?.Key == null) continue;
+            if (prefabSlots.TryGetValue(copy.Transform.Key, out Slot placeholder) && placeholder != slot)
+            {
+                foreach (Slot child in placeholder.Children.ToArray()) child.SetParent(slot, false);
+                placeholder.Destroy();
+            }
+            prefabSlots[copy.Transform.Key] = slot;
+        }
+        foreach (var (copy, slot) in copies)
+        {
+            if (copy.Transform is not {} transform) continue;
+            slot.Parent = resolveParent(copy);
+            slot.LocalPosition = new float3(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z);
+            slot.LocalRotation = new floatQ(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W);
+            slot.LocalScale = new float3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z);
+            if (!copy.IsSkinned)
+                slot.LocalScale *= ImportScale(copy.FbxGuid) / ImportScale(copy.ParentFbxGuid);
+        }
         // Unpacked prefabs explicitly describe their renderers. Keep imported bones and
         // slots as references, but do not also render the FBX template at its old location.
         foreach (var renderer in replacedRenderers) renderer.Destroy();
         return authoredObjects;
+
+        float ImportScale(string guid) => guid == null ? 1f : guid == avatar.FbxGuid ? avatar.FbxImportScale :
+            avatar.AdditionalFbxs.FirstOrDefault(model => model.Guid == guid)?.ImportScale ?? 1f;
     }
 
     public static Slot ResolveImportedTarget(VrchatBoneTarget target, IReadOnlyDictionary<Slot, string> sources,
@@ -154,10 +173,11 @@ internal static class VrchatSceneSetup
         }
     }
 
-    public static void Apply(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources)
+    public static void Apply(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<string, Slot> authoredObjects = null)
     {
         ApplyInactiveStates(root, avatar, sources);
-        ApplyInitialBlendShapes(root, avatar, sources);
+        ApplyInitialBlendShapes(root, avatar, sources, authoredObjects);
     }
 
     /// <summary>
@@ -513,7 +533,8 @@ internal static class VrchatSceneSetup
         return avatar.FbxGuid;
     }
 
-    public static void ApplyInitialBlendShapes(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources)
+    public static void ApplyInitialBlendShapes(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<string, Slot> authoredObjects = null)
     {
         List<SkinnedMeshRenderer> renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>().ToList();
         var assignedRendererSlots = new HashSet<Slot>();
@@ -523,6 +544,7 @@ internal static class VrchatSceneSetup
         {
             SkinnedMeshRenderer renderer = renderers.FirstOrDefault(candidate =>
                 !assignedRendererSlots.Contains(candidate.Slot) &&
+                (rm.PrefabObjectKey == null || authoredObjects?.GetValueOrDefault(rm.PrefabObjectKey) == candidate.Slot) &&
                 string.Equals(candidate.Slot.Name, rm.RendererGameObjectName, StringComparison.Ordinal) &&
                 (string.IsNullOrEmpty(rm.FbxGuid) || string.Equals(
                     FbxGuidForSlot(root, candidate.Slot, avatar, sources), rm.FbxGuid,

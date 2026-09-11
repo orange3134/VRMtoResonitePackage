@@ -33,6 +33,7 @@ public sealed class UnityPackage : IDisposable
     private readonly Dictionary<string, UnityAsset> _byGuid;
     private readonly Dictionary<string, string> _textByGuid = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UnityScene> _sceneByGuid = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, UnityModelFileIdResolver> _modelIds = new(StringComparer.OrdinalIgnoreCase);
 
     private UnityPackage(string root, Dictionary<string, UnityAsset> byGuid)
     {
@@ -111,6 +112,13 @@ public sealed class UnityPackage : IDisposable
 
     public UnityAsset ByGuid(string guid)
         => guid != null && _byGuid.TryGetValue(guid, out UnityAsset a) ? a : null;
+
+    internal UnityModelFileIdResolver ModelFileIds(string guid)
+    {
+        if (!_modelIds.TryGetValue(guid, out var resolver))
+            _modelIds.Add(guid, resolver = new UnityModelFileIdResolver(ByGuid(guid)));
+        return resolver;
+    }
 
     // A non-owning parsing view. Source files and the caller's cached scenes stay unchanged.
     internal UnityPackage CreateView(string sourceGuid)

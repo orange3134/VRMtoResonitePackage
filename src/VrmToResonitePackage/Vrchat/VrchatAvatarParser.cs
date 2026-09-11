@@ -226,7 +226,7 @@ public static class VrchatAvatarParser
         ParseDescriptor(package, selected.Scene, effectiveDescriptor, avatar);
         VrchatAnimatorFaceParser.Apply(package, effectiveDescriptor.Root, avatar);
         ParseVariantPhysBones(package, selected.Source.Guid, avatar, includedSubtree);
-        ParseRendererMaterials(package, selected.Scene, includedSubtree, avatar);
+        ParseRendererMaterials(package, selected.Scene, includedSubtree, avatar, selected.Source.Guid);
         var copyResolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);
         var copyScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
         foreach (var smr in selected.Scene.MeshRenderers.Where(smr =>
@@ -624,7 +624,7 @@ public static class VrchatAvatarParser
             return null;
         }
         UnityAsset asset = package.ByGuid(guid);
-        if (asset?.Extension != ".prefab")
+        if (asset?.Extension is not (".prefab" or ".unity"))
         {
             return null;
         }
@@ -737,7 +737,7 @@ public static class VrchatAvatarParser
             AddFbxGuid(result, guid);
             return;
         }
-        if (asset.Extension != ".prefab")
+        if (asset.Extension is not (".prefab" or ".unity"))
         {
             return;
         }
@@ -810,7 +810,7 @@ public static class VrchatAvatarParser
             });
             return;
         }
-        if (asset?.Extension != ".prefab")
+        if (asset?.Extension is not (".prefab" or ".unity"))
         {
             return;
         }
@@ -1079,7 +1079,7 @@ public static class VrchatAvatarParser
         {
             return (guid, ResolveFbxNodeName(asset, fileId));
         }
-        if (asset?.Extension == ".prefab")
+        if (asset?.Extension is ".prefab" or ".unity")
         {
             string text = package.ReadText(asset);
             if (text != null)
@@ -1112,7 +1112,7 @@ public static class VrchatAvatarParser
             {
                 return (sourceGuid, ResolveFbxNodeName(asset, sourceId));
             }
-            if (asset?.Extension == ".prefab")
+            if (asset?.Extension is ".prefab" or ".unity")
             {
                 string text = package.ReadText(asset);
                 if (text != null)
@@ -1817,7 +1817,7 @@ public static class VrchatAvatarParser
             }
             return resolver.ResolveName(fileId);
         }
-        if (asset?.Extension == ".prefab")
+        if (asset?.Extension is ".prefab" or ".unity")
         {
             string text = package.ReadText(asset);
             if (text != null)
@@ -2021,7 +2021,7 @@ public static class VrchatAvatarParser
         // Avatar Descriptor. Compositions can keep body and clothing in sibling instances, each
         // with renderer overrides. The collector emits each base before its instance overrides.
         CollectVariantModificationBlocks(package, sourceGuid, modificationBlocks, visited);
-        var renderers = new Dictionary<(string FbxGuid, string Name), VrchatRendererMaterials>();
+        var renderers = new Dictionary<(string FbxGuid, string Name, string ObjectKey), VrchatRendererMaterials>();
         var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(
             StringComparer.OrdinalIgnoreCase);
         var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
@@ -2051,13 +2051,16 @@ public static class VrchatAvatarParser
                 {
                     continue;
                 }
-                var rendererKey = (fbxGuid, rendererName);
+                string objectKey = avatar.MeshCopies.Any(copy => copy.PrefabGuid == sceneGuid && copy.RendererFileId == smr.FileId)
+                    ? $"{sceneGuid}:{smr.Root?["m_GameObject"]?.FileID}" : null;
+                var rendererKey = (fbxGuid, rendererName, objectKey);
                 if (!renderers.TryGetValue(rendererKey, out VrchatRendererMaterials renderer))
                 {
                     renderer = new VrchatRendererMaterials
                     {
                         FbxGuid = fbxGuid,
                         RendererGameObjectName = rendererName,
+                        PrefabObjectKey = objectKey,
                     };
                     renderers.Add(rendererKey, renderer);
                 }
@@ -2170,7 +2173,8 @@ public static class VrchatAvatarParser
                     // helper objects (for example collider anchors named Hips/Upperleg.L) are not
                     // imported as slots. Treating their unscoped names as overrides would disable
                     // identically named bones in the avatar's FBX hierarchy.
-                    if (!string.IsNullOrEmpty(gameObject.Name) &&
+                    if (package.ByGuid(targetIdentity.Guid)?.Extension == ".fbx" &&
+                        !string.IsNullOrEmpty(gameObject.Name) &&
                         !string.IsNullOrEmpty(gameObject.FbxGuid))
                     {
                         var reference = new VrchatGameObjectReference(
@@ -2213,13 +2217,17 @@ public static class VrchatAvatarParser
                     continue;
                 }
 
-                var rendererKey = (rendererReference.FbxGuid, rendererName);
+                var targetCopy = avatar.MeshCopies.FirstOrDefault(copy =>
+                    (copy.PrefabGuid, copy.RendererFileId) == targetIdentity);
+                string objectKey = targetCopy == null ? null : $"{targetCopy.PrefabGuid}:{targetCopy.GameObjectFileId}";
+                var rendererKey = (rendererReference.FbxGuid, rendererName, objectKey);
                 if (!renderers.TryGetValue(rendererKey, out VrchatRendererMaterials renderer))
                 {
                     renderer = new VrchatRendererMaterials
                     {
                         FbxGuid = rendererReference.FbxGuid,
                         RendererGameObjectName = rendererName,
+                        PrefabObjectKey = objectKey,
                     };
                     renderers.Add(rendererKey, renderer);
                 }
@@ -2328,7 +2336,7 @@ public static class VrchatAvatarParser
             }
             return;
         }
-        if (asset?.Extension != ".prefab" || package.ReadText(asset) == null)
+        if (asset?.Extension is not (".prefab" or ".unity") || package.ReadText(asset) == null)
         {
             return;
         }
@@ -2452,7 +2460,7 @@ public static class VrchatAvatarParser
         if (guid == null || id == 0 || !visited.Add((guid, id))) return default;
         var asset = package.ByGuid(guid);
         if (asset?.Extension == ".fbx")
-            return new UnityModelFileIdResolver(asset).ResolveName(id) != null ? (guid, id) : default;
+            return package.ModelFileIds(guid).ResolveName(id) != null ? (guid, id) : default;
         if (asset?.Extension is not (".prefab" or ".unity")) return default;
         var scene = package.ReadScene(asset);
         var document = scene.Doc(id);
@@ -2495,7 +2503,7 @@ public static class VrchatAvatarParser
             if (name != null && resolver.IsUniqueNodeName(name)) keep[new VrchatGameObjectReference(guid, name)] = false;
             return;
         }
-        if (asset?.Extension != ".prefab") return;
+        if (asset?.Extension is not (".prefab" or ".unity")) return;
         UnityScene scene = package.ReadScene(asset);
         YamlDocument target = scene.Doc(fileId);
         YamlNode targetSource = target?.Root?["m_CorrespondingSourceObject"];
@@ -2739,7 +2747,7 @@ public static class VrchatAvatarParser
             return;
         }
         UnityAsset asset = package.ByGuid(guid);
-        if (asset?.Extension != ".prefab")
+        if (asset?.Extension is not (".prefab" or ".unity"))
         {
             return;
         }
@@ -2776,7 +2784,7 @@ public static class VrchatAvatarParser
             return;
         }
         UnityAsset asset = package.ByGuid(guid);
-        if (asset?.Extension != ".prefab" || package.ReadText(asset) == null)
+        if (asset?.Extension is not (".prefab" or ".unity") || package.ReadText(asset) == null)
         {
             return;
         }
@@ -3409,7 +3417,7 @@ public static class VrchatAvatarParser
     // ---------------------------------------------------------------- material assignments
 
     private static void ParseRendererMaterials(UnityPackage package, UnityScene scene,
-        HashSet<long> subtree, VrchatAvatar avatar)
+        HashSet<long> subtree, VrchatAvatar avatar, string sceneGuid = null)
     {
         foreach (YamlDocument smr in scene.MeshRenderers)
         {
@@ -3432,6 +3440,8 @@ public static class VrchatAvatarParser
                 // Keep unresolved GUIDs scoped so missing dependencies cannot match by name.
                 FbxGuid = meshAsset?.Extension == ".asset" ? null : meshGuid,
                 RendererGameObjectName = name,
+                PrefabObjectKey = sceneGuid != null && meshAsset?.Extension == ".fbx"
+                    ? $"{sceneGuid}:{smr.Root?["m_GameObject"]?.FileID}" : null,
             };
             YamlNode materials = smr.Root?["m_Materials"];
             if (materials?.Seq != null)

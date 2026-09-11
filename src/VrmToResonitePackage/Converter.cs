@@ -445,7 +445,8 @@ internal static class Converter
                 var importedMeshSources = Vrchat.VrchatSceneSetup.CaptureImportedObjects(importedFbxRoots);
                 var importedNodePaths = Vrchat.VrchatSceneSetup.CaptureImportedPaths(importedFbxRoots);
 
-                Slot descriptorRoot = ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
+                Slot descriptorRoot = ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots,
+                    importedMeshSources, importedNodePaths, out var authoredObjects);
                 AlignVrchatImportUp(importRoot, model);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots);
                 RemoveImportAlignment(importRoot, root);
@@ -459,7 +460,7 @@ internal static class Converter
                 {
                     await WaitForAssets(assetsSlot);
                 }
-                Vrchat.VrchatSceneSetup.ApplyInitialBlendShapes(root, avatar, importedMeshSources);
+                Vrchat.VrchatSceneSetup.ApplyInitialBlendShapes(root, avatar, importedMeshSources, authoredObjects);
 
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
                 // Finish asset reloads first: deleting their last renderer can unload providers.
@@ -477,7 +478,7 @@ internal static class Converter
 
                 if (options.NoAvatar)
                 {
-                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources);
+                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects);
                     SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
                 else
@@ -498,13 +499,13 @@ internal static class Converter
                         setupOptions.NearClip = options.NearClip.Value;
                     }
                     AvatarSetup.Build(root, model, setupOptions);
-                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources);
+                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects);
                     await AvatarSetup.ApplyFirstPersonAutoAsync(root, model);
                     SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
 
                 // Reflect prefab-authored scene state (inactive GameObjects, initial blendshape weights).
-                Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources);
+                Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources, authoredObjects);
 
                 await MeshLoadingSetup.Apply(root);
 
@@ -551,7 +552,7 @@ internal static class Converter
 
     private static Slot ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
         Dictionary<string, Slot> importedFbxRoots, Dictionary<Slot, string> importedMeshSources,
-        IReadOnlyDictionary<Slot, string> importedNodePaths)
+        IReadOnlyDictionary<Slot, string> importedNodePaths, out Dictionary<string, Slot> authoredObjects)
     {
         var prefabSlots = new Dictionary<string, Slot>(StringComparer.Ordinal);
         ApplyPrimaryFbxPlacement(importRoot, avatar, importedFbxRoots, prefabSlots);
@@ -611,9 +612,9 @@ internal static class Converter
             }
             UniLog.Log($"prefab階層を適用: {instanceRoot.Name} -> {parent.Name}");
         }
-        var authoredObjects = Vrchat.VrchatSceneSetup.CreateMeshCopies(avatar, importedMeshSources, copy =>
+        authoredObjects = Vrchat.VrchatSceneSetup.CreateMeshCopies(avatar, importedMeshSources, copy =>
             ResolvePrefabParent(importRoot, copy.ParentFbxGuid, copy.ParentName, copy.ParentTransforms,
-                importedFbxRoots, prefabSlots), importedNodePaths);
+                importedFbxRoots, prefabSlots), importedNodePaths, prefabSlots);
         return authoredObjects.GetValueOrDefault(avatar.DescriptorRootKey ?? "") ??
             avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms).Where(t => t.GameObjectKey == avatar.DescriptorRootKey)
                 .Select(t => prefabSlots.GetValueOrDefault(t.Key)).FirstOrDefault(slot => slot != null) ??

@@ -1324,6 +1324,17 @@ PrefabInstance:
               parsed.FbxLocalPosition.X != 99,
             "Composed descriptor parsing excludes sibling instances outside the selected subtree");
     }
+    const string sceneGuid = "54545454545454545454545454545454";
+    asset("Assets/WrapperScene.unity", sceneGuid, rootOnly + Instance(4, modelGuid, 2, 7) + outside);
+    using (var package = UnityPackage.Open(input))
+    using (var sceneInput = (UnityPackage)typeof(UnityPackage).GetMethod("CreateView",
+               System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+               .Invoke(package, new object[] { sceneGuid })!)
+    {
+        var parsed = VrchatAvatarParser.Parse(sceneInput);
+        Check(parsed.FbxGuid == modelGuid && parsed.FbxLocalPosition.X == 7 && parsed.AdditionalFbxs.Count == 0,
+            "Scene descriptor composition retains nested model placement and excludes sibling instances");
+    }
 }
 
 static void CheckAnimatorBlink(Func<string, string, string, string> asset, string selected)

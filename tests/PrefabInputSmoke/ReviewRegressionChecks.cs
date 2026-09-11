@@ -49,6 +49,34 @@ internal static class ReviewRegressionChecks
             Require(bone?.Name == "Body_Base" && bone.Path == "Body_Base");
         });
 
+        Case("same-named copies retain separate material records", () =>
+        {
+            var scene = UnityScene.Parse(baseText);
+            var mesh = scene.RendererMesh(scene.MeshRenderers.Single());
+            string Renderer(long id, string material) => $$"""
+
+--- !u!1 &{{id}}
+GameObject:
+  m_Name: Shared
+--- !u!4 &{{id + 1}}
+Transform:
+  m_GameObject: {fileID: {{id}}}
+  m_Father: {fileID: 0}
+--- !u!137 &{{id + 2}}
+SkinnedMeshRenderer:
+  m_GameObject: {fileID: {{id}}}
+  m_Mesh: {guid: {{mesh.Guid}}, fileID: {{mesh.FileID}}}
+  m_Materials:
+  - {guid: {{material}}}
+""";
+            string file = asset("Assets/ReviewMaterials.prefab", "ab120000000000000000000000000005",
+                Renderer(501, "materialA") + Renderer(601, "materialB"));
+            var parsed = Copies(file);
+            Require(parsed.RendererMaterials.Count == 2 &&
+                parsed.RendererMaterials.Select(r => r.PrefabObjectKey).Distinct().Count() == 2 &&
+                parsed.RendererMaterials.SelectMany(r => r.MaterialGuids).ToHashSet().SetEquals(new[] { "materialA", "materialB" }));
+        });
+
         Case("copy retains enclosing translated and rotated attachment", () =>
         {
             string composed = asset("Assets/ReviewOuter.prefab", outerGuid, variantText.Replace(

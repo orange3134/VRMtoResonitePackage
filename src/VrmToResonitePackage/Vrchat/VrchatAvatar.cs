@@ -240,6 +240,7 @@ public sealed class VrchatPhysBoneCollider
 
 public sealed class VrchatRendererMaterials
 {
+    public string PrefabObjectKey { get; set; }
     /// <summary>
     /// FBX that owns this renderer. Null keeps name-only matching for prefab-authored renderers
     /// that cannot be traced back to a model asset.

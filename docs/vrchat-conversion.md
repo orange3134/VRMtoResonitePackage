@@ -44,6 +44,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   同じモデルがPrefabInstanceとしても配置されている場合は、そのrendererを残す。
 - prefabの外側にあるattachmentも複製の親階層へ含める。上書きは表示名ではなく、
   explicit/omitted stripped参照を解決したobject identityへ適用する。EditorOnlyタグも同様。
+- authored rendererは全コピーを登録してから親を解決する。descriptor rootにrendererがある場合も、
+  子rendererや先に生成したattachmentを同じGameObject相当のSlotへ配置する。
+- `.unity` のcompositionもprefabと同じcollectorで配置・上書き・ローカル参照を解決する。
 - PhysBoneのroot、ignore、collider参照はモデルのinstance identityとpathを保持し、
   import時に捕捉したSlotへ解決してから共通のSpringBoneSetupへ渡す。
 - Animatorのbinding pathはdescriptor root基準で解決する。追加layerの部分weightは、
@@ -66,6 +69,7 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - `UnitScaleFactor=100` かつtop-level wrapperのuniform 0.01は、Unity生成scaleとの二重適用を避ける。
 - `UpAxis` メタデータだけで事前回転せず、import後のHipsからHeadの実方向をY+へ最小回転で合わせる。
 - `FBX Import Alignment` は一時スロットであり、global transformを保持して畳む。
+- static meshをモデル階層外へ複製するときはimport scaleを保持し、配置先FBXの補正分を除く。
 
 ## prefabの状態反映
 
@@ -74,7 +78,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - overrideはrenderer名だけでなくsource FBX GUIDでscopeする。同名rendererを持つ合成FBXを混同しない。
 - standalone `.asset` meshだけはFBX GUIDがないため名前照合を許可する。
   未解決GUIDを `.asset` と同一視してscopeを外してはいけない。
-- 同名rendererが複数ある場合は、空のoverrideも含めて出現順に1対1で消費する。
+- authored FBX meshのコピーはprefab GUIDとGameObject fileIDから実Slotを保持し、同名でも
+  materialと初期blendshapeを個別に適用する。識別子を持たない従来のrendererは、空のoverrideも
+  含めて出現順に1対1で消費する。
 - outer variant自身の変更を読むときは、descriptorの親sceneではなく選択候補のsourceを再読込する。
 
 ## ブレンドシェイプ

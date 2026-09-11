@@ -183,6 +183,18 @@ static async Task Run(string fbxPath, string rendererName)
             "Static mesh copy retains mesh, authored placement, active state and enabled state");
         Check(staticCopy.Slot.LocalScale == new float3(2f, 2f, 2f),
             $"Static copy preserves FBX import scale outside its model hierarchy (scale={staticCopy.Slot.LocalScale})");
+        Slot scaledParent = primary.AddSlot("Scaled imported parent");
+        scaledParent.LocalScale = new float3(2f, 2f, 2f);
+        var attachedAvatar = new VrchatAvatar();
+        attachedAvatar.AdditionalFbxs.Add(model);
+        attachedAvatar.MeshCopies.Add(new VrchatMeshCopy("additional", "StaticCopy", "AttachedStatic", true, true)
+        {
+            IsSkinned = false, ParentFbxGuid = "additional", Transform = new VrchatPrefabTransform(),
+        });
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", attachedAvatar, sources,
+            (Func<VrchatMeshCopy, Slot>)(_ => scaledParent), new Dictionary<Slot, string>());
+        Check(scaledParent.FindChild("AttachedStatic").LocalScale == new float3(1f, 1f, 1f),
+            "Static copy under a scaled imported parent does not apply import scale twice");
         Check(staticSource.GetComponent<MeshRenderer>() == null && !staticSource.IsDestroyed,
             "Regular static prefab removes the imported template renderer while keeping its slot");
         Check(primary.FindChild("StaticFromSkin").GetComponent<MeshRenderer>() is not SkinnedMeshRenderer,
@@ -203,19 +215,35 @@ static async Task Run(string fbxPath, string rendererName)
             var authored = new VrchatMeshCopy("additional", rendererName, rendererName, true, true)
             {
                 PrefabGuid = "regular", RendererFileId = i + 1, ReplaceSourceRenderer = true,
-                Transform = new VrchatPrefabTransform { LocalPosition = new System.Numerics.Vector3(i + 1, 2, 3) },
+                Transform = new VrchatPrefabTransform { Key = $"regular:transform{i}", GameObjectKey = $"regular:{i}",
+                    LocalPosition = new System.Numerics.Vector3(i + 1, 2, 3) },
             };
             if (original.Bones.Count > 0 && original.Bones[0] != null)
                 authored.BoneTargets[0] = new VrchatBoneTarget(null, null);
             sameNameAvatar.MeshCopies.Add(authored);
         }
         Slot originalSlot = original.Slot;
-        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", sameNameAvatar, sources,
+        var authoredObjects = (Dictionary<string, Slot>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", sameNameAvatar, sources,
             (Func<VrchatMeshCopy, Slot>)(c => c.RendererFileId == 1 ? parentA : parentB), new Dictionary<Slot, string>());
         var sameA = parentA.FindChild(rendererName).GetComponent<SkinnedMeshRenderer>();
         var sameB = parentB.FindChild(rendererName).GetComponent<SkinnedMeshRenderer>();
         Check(sameA != null && sameB != null && sameA.Slot.LocalPosition.x == 1 && sameB.Slot.LocalPosition.x == 2,
             "Two same-named authored renderers retain separate parents and transforms");
+        for (int i = 1; i >= 0; i--)
+        {
+            var distinct = new VrchatRendererMaterials { FbxGuid = "additional", RendererGameObjectName = rendererName,
+                PrefabObjectKey = $"regular:{i}" };
+            distinct.MaterialGuids.Add(i == 0 ? materialGuid : defaultMaterialGuid);
+            distinct.InitialBlendShapes.Add((0, i == 0 ? 25f : 75f));
+            sameNameAvatar.RendererMaterials.Add(distinct);
+        }
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyInitialBlendShapes", root, sameNameAvatar, sources, authoredObjects);
+        await (Task)Call("VrmToResonitePackage.Vrchat.VrchatMaterialBuilder", "Apply", root, assets, sameNameAvatar, package, sources, authoredObjects);
+        Check(Math.Abs(sameA.BlendShapeWeights[0] - 0.25f) < 0.001f &&
+              Math.Abs(sameB.BlendShapeWeights[0] - 0.75f) < 0.001f &&
+              ((Component)sameA.Materials[0]).Slot.Name == "Material: ReviewMaterial" &&
+              ((Component)sameB.Materials[0]).Slot.Name == "Material: ReviewDefault",
+            "Same-named copies receive separate materials and morph weights independent of record order");
         var faceAvatar = new VrchatAvatar();
         faceAvatar.Visemes.Add(new VrchatViseme { ResonitePreset = "aa", MeshGameObjectName = rendererName,
             MeshGameObjectPath = "Copy parent B/" + rendererName, BlendShapeName = sameB.BlendShapeName(0) });
@@ -287,11 +315,31 @@ static async Task Run(string fbxPath, string rendererName)
             (Func<VrchatMeshCopy, Slot>)(_ => primary), sourcePaths);
         Check(Math.Abs(primary.FindChild("RightCopy").GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] - 0.89f) < 0.001f,
             "Captured source path selects the second same-named renderer after reparenting");
+        var hierarchyAvatar = new VrchatAvatar();
+        foreach (string name in new[] { "AuthoredChild", "AuthoredRoot" })
+            hierarchyAvatar.MeshCopies.Add(new VrchatMeshCopy("model", rendererName, name, true, true)
+            {
+                SourcePath = "RootNode/Right/" + rendererName,
+                Transform = new VrchatPrefabTransform { Key = name, GameObjectKey = name + "GO" },
+            });
+        var placeholder = primary.AddSlot("Old authored root placeholder");
+        var existingChild = placeholder.AddSlot("Existing attachment");
+        var prefabSlots = new Dictionary<string, Slot> { ["AuthoredRoot"] = placeholder };
+        var hierarchyObjects = (Dictionary<string, Slot>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies",
+            hierarchyAvatar, pathSources, (Func<VrchatMeshCopy, Slot>)(c => c.Name == "AuthoredChild" ? prefabSlots["AuthoredRoot"] : primary),
+            sourcePaths, prefabSlots);
+        Check(hierarchyObjects["AuthoredChildGO"].Parent == hierarchyObjects["AuthoredRootGO"] &&
+              existingChild.Parent == hierarchyObjects["AuthoredRootGO"] && placeholder.IsDestroyed,
+            "Renderer on the authored root owns its child renderer and existing attachments regardless of document order");
     });
 }
 
-static object Call(string type, string method, params object[] args) => typeof(VrchatAvatar).Assembly
-    .GetType(type)!.GetMethod(method, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!.Invoke(null, args)!;
+static object Call(string type, string method, params object[] args)
+{
+    var info = typeof(VrchatAvatar).Assembly.GetType(type)!
+        .GetMethod(method, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!;
+    return info.Invoke(null, args.Concat(info.GetParameters().Skip(args.Length).Select(p => p.DefaultValue)).ToArray())!;
+}
 static void Check(bool condition, string label)
 {
     if (!condition) throw new Exception(label);

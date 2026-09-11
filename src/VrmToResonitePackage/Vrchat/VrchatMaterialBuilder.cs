@@ -21,7 +21,7 @@ namespace VrmToResonitePackage.Vrchat;
 internal static class VrchatMaterialBuilder
 {
     public static async Task Apply(Slot root, Slot assetsSlot, VrchatAvatar avatar, UnityPackage package,
-        IReadOnlyDictionary<Slot, string> sources)
+        IReadOnlyDictionary<Slot, string> sources, IReadOnlyDictionary<string, Slot> authoredObjects = null)
     {
         var textureCache = new Dictionary<string, StaticTexture2D>(StringComparer.OrdinalIgnoreCase);
         var metallicGlossCache = new Dictionary<string, MetallicGlossResult>(
@@ -83,6 +83,7 @@ internal static class VrchatMaterialBuilder
         {
             MeshRenderer renderer = renderers.FirstOrDefault(candidate =>
                 !assignedRendererSlots.Contains(candidate.Slot) &&
+                (rm.PrefabObjectKey == null || authoredObjects?.GetValueOrDefault(rm.PrefabObjectKey) == candidate.Slot) &&
                 string.Equals(candidate.Slot.Name, rm.RendererGameObjectName, StringComparison.Ordinal) &&
                 (string.IsNullOrEmpty(rm.FbxGuid) || string.Equals(
                     VrchatSceneSetup.FbxGuidForSlot(root, candidate.Slot, avatar, sources), rm.FbxGuid,
