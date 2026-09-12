@@ -1812,8 +1812,12 @@ public static class VrchatAvatarParser
         bool eyeLook = (d?["enableEyeLook"]?.AsBool() ?? false);
         if (eyeLook && eye != null)
         {
-            avatar.LeftEyeBoneName = ResolveReferenceGameObjectName(package, scene, eye["leftEye"], modelResolvers);
-            avatar.RightEyeBoneName = ResolveReferenceGameObjectName(package, scene, eye["rightEye"], modelResolvers);
+            avatar.LeftEyeBoneTarget = ResolvePhysicsTarget(package, eye["leftEye"]?.Guid ?? descriptorGuid,
+                eye["leftEye"]?.FileID ?? 0, avatar.FbxGuid);
+            avatar.RightEyeBoneTarget = ResolvePhysicsTarget(package, eye["rightEye"]?.Guid ?? descriptorGuid,
+                eye["rightEye"]?.FileID ?? 0, avatar.FbxGuid);
+            avatar.LeftEyeBoneName = avatar.LeftEyeBoneTarget?.Name;
+            avatar.RightEyeBoneName = avatar.RightEyeBoneTarget?.Name;
 
             int eyelidType = eye["eyelidType"]?.AsInt(0) ?? 0;
             if (eyelidType == 2)
@@ -2686,10 +2690,11 @@ public static class VrchatAvatarParser
             UnityScene scene = entry.Scene;
             var included = IncludedPrefabObjects(package, guid, scene, avatar, modelResolvers, prefabScenes);
             if (guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
-            ParseModularAvatar(package, scene, included, avatar, entry);
+            ParseModularAvatar(package, scene, included, avatar, entry, modelResolvers);
         }
         CaptureTargetPlacements(package, sourceGuid, avatar, sourceSubtree, scenes,
-            avatar.ModularMergeArmatures.SelectMany(m => new[] { m.SourceBoneTarget, m.TargetBoneTarget }),
+            avatar.ModularMergeArmatures.SelectMany(m => new[] { m.SourceBoneTarget, m.TargetBoneTarget })
+                .Concat(avatar.ModularBoneProxies.SelectMany(p => new[] { p.SourceBoneTarget, p.TargetBoneTarget })),
             includeSkeletonAncestors: true);
     }
 
@@ -2715,7 +2720,8 @@ public static class VrchatAvatarParser
     }
 
     private static void ParseModularAvatar(UnityPackage package, UnityScene scene,
-        HashSet<long> subtree, VrchatAvatar avatar, UnityPrefabGraph.SceneEntry entry)
+        HashSet<long> subtree, VrchatAvatar avatar, UnityPrefabGraph.SceneEntry entry,
+        Dictionary<string, UnityModelFileIdResolver> modelResolvers)
     {
         int beforeMerge = avatar.ModularMergeArmatures.Count;
         int beforeProxy = avatar.ModularBoneProxies.Count;
@@ -2773,21 +2779,37 @@ public static class VrchatAvatarParser
             }
             YamlDocument owner = scene.OwnerGameObject(component);
             string sourceName = ResolveSceneObjectName(package, scene, owner?.FileId ?? 0);
-            string targetName = ResolveBoneProxyTargetName(component.Root, avatar);
-            if (string.IsNullOrEmpty(sourceName) || string.IsNullOrEmpty(targetName))
+            var sourceTarget = ResolvePhysicsTarget(package, entry.Guid, owner?.FileId ?? 0, avatar.FbxGuid);
+            string targetPath = component.Root?["subPath"]?.AsString() ?? "";
+            if (string.IsNullOrWhiteSpace(targetPath)) targetPath = "";
+            int boneReference = component.Root?["boneReference"]?.AsInt(55) ?? 55;
+            VrchatBoneTarget target = null;
+            if (targetPath != "$$AVATAR" && boneReference != 55)
+            {
+                string bone = UnityHumanBodyBoneToVrmName(boneReference);
+                string boneName = bone != null ? avatar.HumanBones.GetValueOrDefault(bone) : null;
+                if (!modelResolvers.TryGetValue(avatar.FbxGuid ?? "", out var resolver))
+                    modelResolvers[avatar.FbxGuid ?? ""] = resolver = new UnityModelFileIdResolver(package.ByGuid(avatar.FbxGuid));
+                var paths = resolver.NodePathsUnder(0).Where(p => p.Split('/')[^1] == boneName).ToArray();
+                if (paths.Length != 1)
+                {
+                    UniLog.Warning($"Bone Proxy humanoid target could not be resolved: {sourceName} -> {bone}");
+                    continue;
+                }
+                target = new VrchatBoneTarget(avatar.FbxGuid, boneName, paths[0]);
+            }
+            if (sourceTarget == null || (boneReference == 55 && string.IsNullOrWhiteSpace(targetPath)))
             {
                 continue;
             }
-            if (avatar.ModularBoneProxies.Any(existing =>
-                    string.Equals(existing.SourceName, sourceName, StringComparison.Ordinal) &&
-                    string.Equals(existing.TargetName, targetName, StringComparison.Ordinal)))
-            {
-                continue;
-            }
+            // Each component in each prefab occurrence is a separate operation.
             avatar.ModularBoneProxies.Add(new VrchatModularBoneProxy
             {
                 SourceName = sourceName,
-                TargetName = targetName,
+                TargetName = string.IsNullOrEmpty(targetPath) ? target?.Name : targetPath.Split('/').LastOrDefault(),
+                SourceBoneTarget = sourceTarget,
+                TargetBoneTarget = target,
+                TargetPath = targetPath == "$$AVATAR" ? "" : targetPath,
                 AttachmentMode = component.Root?["attachmentMode"]?.AsInt(0) ?? 0,
                 MatchScale = component.Root?["matchScale"]?.AsBool(false) ?? false,
             });
@@ -2842,29 +2864,6 @@ public static class VrchatAvatarParser
         return parts.Length == 0 ? path : parts[^1];
     }
 
-    private static string ResolveBoneProxyTargetName(YamlNode root, VrchatAvatar avatar)
-    {
-        string subPath = root?["subPath"]?.AsString();
-        if (string.Equals(subPath, "$$AVATAR", StringComparison.Ordinal))
-        {
-            return avatar.Name;
-        }
-        if (!string.IsNullOrWhiteSpace(subPath))
-        {
-            string[] parts = subPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length > 0)
-            {
-                return parts[^1];
-            }
-        }
-
-        int boneReference = root?["boneReference"]?.AsInt(-1) ?? -1;
-        string vrmBone = UnityHumanBodyBoneToVrmName(boneReference);
-        return vrmBone != null && avatar.HumanBones.TryGetValue(vrmBone, out string boneName)
-            ? boneName
-            : null;
-    }
-
     private static string UnityHumanBodyBoneToVrmName(int bone)
         => bone switch
         {
@@ -2889,6 +2888,39 @@ public static class VrchatAvatarParser
             18 => "rightHand",
             19 => "leftToes",
             20 => "rightToes",
+            21 => "leftEye",
+            22 => "rightEye",
+            23 => "jaw",
+            24 => "leftThumbMetacarpal",
+            25 => "leftThumbProximal",
+            26 => "leftThumbDistal",
+            27 => "leftIndexProximal",
+            28 => "leftIndexIntermediate",
+            29 => "leftIndexDistal",
+            30 => "leftMiddleProximal",
+            31 => "leftMiddleIntermediate",
+            32 => "leftMiddleDistal",
+            33 => "leftRingProximal",
+            34 => "leftRingIntermediate",
+            35 => "leftRingDistal",
+            36 => "leftLittleProximal",
+            37 => "leftLittleIntermediate",
+            38 => "leftLittleDistal",
+            39 => "rightThumbMetacarpal",
+            40 => "rightThumbProximal",
+            41 => "rightThumbDistal",
+            42 => "rightIndexProximal",
+            43 => "rightIndexIntermediate",
+            44 => "rightIndexDistal",
+            45 => "rightMiddleProximal",
+            46 => "rightMiddleIntermediate",
+            47 => "rightMiddleDistal",
+            48 => "rightRingProximal",
+            49 => "rightRingIntermediate",
+            50 => "rightRingDistal",
+            51 => "rightLittleProximal",
+            52 => "rightLittleIntermediate",
+            53 => "rightLittleDistal",
             54 => "upperChest",
             _ => null,
         };
@@ -2917,7 +2949,8 @@ public static class VrchatAvatarParser
         }
         CaptureTargetPlacements(package, sourceGuid, avatar, sourceSubtree, scenes,
             avatar.PhysBones.SelectMany(b => b.IgnoreBoneTargets
-                .Concat(b.Colliders.Select(c => c.AttachBoneTarget)).Append(b.RootBoneTarget)));
+                .Concat(b.Colliders.Select(c => c.AttachBoneTarget)).Append(b.RootBoneTarget))
+                .Concat(new[] { avatar.LeftEyeBoneTarget, avatar.RightEyeBoneTarget }));
     }
 
     private static void CaptureTargetPlacements(UnityPackage package, string sourceGuid, VrchatAvatar avatar,
@@ -2986,7 +3019,12 @@ public static class VrchatAvatarParser
                 var result = new VrchatPhysicsPlacement { ParentFbxGuid = placement.ParentFbxGuid,
                     ParentName = placement.ParentNodeName };
                 result.Transforms.AddRange(placement.ParentTransforms);
-                avatar.PhysicsPlacements.Add(result);
+                // A transform may serve physics, custom eyes and a Bone Proxy simultaneously.
+                // They share the same composed hierarchy, so store identical placements once.
+                if (!avatar.PhysicsPlacements.Any(existing => existing.ParentFbxGuid == result.ParentFbxGuid &&
+                        existing.ParentName == result.ParentName && existing.Transforms.Select(t => t.Key)
+                            .SequenceEqual(result.Transforms.Select(t => t.Key))))
+                    avatar.PhysicsPlacements.Add(result);
             }
         }
     }

@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.Store;
+using Renderite.Shared;
 using VrmToResonitePackage.Unity;
 using VrmToResonitePackage.Vrchat;
 
@@ -353,6 +354,105 @@ static async Task Run(string fbxPath, string rendererName)
               clothingRenderer.Bones[0] == bodyHips && clothingRenderer.Bones[1] == bodyArmature &&
               clothingHelper.Parent == bodyArmature,
             "Merge Armature consumes its scoped source even when another same-name clothing has more matching bones");
+        var eyeReviewRoot = root.AddSlot("Custom eye identity");
+        var eyeDecoy = eyeReviewRoot.AddSlot("Eye");
+        var eyeLeft = eyeReviewRoot.AddSlot("Eye");
+        var eyeRight = eyeReviewRoot.AddSlot("Eye");
+        var eyeAvatar = new VrchatAvatar
+        {
+            LeftEyeBoneName = "Eye", RightEyeBoneName = "Eye",
+            LeftEyeBoneTarget = new VrchatBoneTarget(null, "Eye", null, "eyes", 21),
+            RightEyeBoneTarget = new VrchatBoneTarget(null, "Eye", null, "eyes", 31),
+        };
+        var eyeModel = VrchatModelAdapter.ToVrmModel(eyeAvatar);
+        var eyeSlots = new Dictionary<int, Slot>
+        {
+            [eyeModel.HumanBones["leftEye"]] = eyeLeft,
+            [eyeModel.HumanBones["rightEye"]] = eyeRight,
+        };
+        var eyeNames = new Dictionary<string, Slot> { ["Eye"] = eyeDecoy };
+        var eyeRig = (BipedRig)Call("VrmToResonitePackage.AvatarSetup", "SetupRig",
+            eyeReviewRoot, eyeModel, eyeNames, eyeSlots);
+        Check(eyeRig.TryGetBone(BodyNode.LeftEye) == eyeLeft && eyeRig.TryGetBone(BodyNode.RightEye) == eyeRight,
+            "Rig setup assigns both custom eyes by identity despite an earlier same-named decoy");
+        eyeSlots[eyeModel.HumanBones["leftEye"]] = null;
+        eyeRight.Destroy();
+        eyeRig = (BipedRig)Call("VrmToResonitePackage.AvatarSetup", "SetupRig",
+            eyeReviewRoot, eyeModel, eyeNames, eyeSlots);
+        Check(eyeRig.TryGetBone(BodyNode.LeftEye) == null && eyeRig.TryGetBone(BodyNode.RightEye) == null,
+            "Missing or destroyed explicit eye targets never fall back to another same-named slot");
+
+        var proxyReviewRoot = root.AddSlot("Repeated proxies");
+        var proxyDescriptor = proxyReviewRoot.AddSlot("Avatar");
+        var proxyDecoy = proxyDescriptor.AddSlot("Wrong").AddSlot("Hips");
+        var proxyTarget = proxyDescriptor.AddSlot("armature").AddSlot("Hips");
+        var proxySourceA = proxyDescriptor.AddSlot("First").AddSlot("Accessory");
+        var proxySourceB = proxyDescriptor.AddSlot("Second").AddSlot("Accessory");
+        var proxyIds = new Dictionary<VrchatBoneTarget, Slot>();
+        var proxyAvatar = new VrchatAvatar();
+        foreach (var (slot, occurrence) in new[] { (proxySourceA, "first"), (proxySourceB, "second") })
+        {
+            var identity = new VrchatBoneTarget(null, "Accessory", null, occurrence, 4);
+            proxyIds[identity] = slot;
+            proxyAvatar.ModularBoneProxies.Add(new VrchatModularBoneProxy
+                { SourceName = "Accessory", TargetName = "Hips", SourceBoneTarget = identity,
+                    TargetPath = "armature/Hips" });
+        }
+        Func<VrchatBoneTarget, Slot> proxyResolver = t => proxyIds.GetValueOrDefault(t);
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
+            proxyReviewRoot, proxyAvatar, null, proxyResolver, proxyDescriptor);
+        Check(proxySourceA.Parent == proxyTarget && proxySourceB.Parent == proxyTarget && proxyDecoy.Children.Count == 0,
+            "Both same-named Bone Proxy occurrences attach to the complete descriptor-relative target path");
+        proxyAvatar.ModularBoneProxies[0].TargetPath = "Missing/Hips";
+        proxyAvatar.ModularBoneProxies.RemoveAt(1);
+        proxySourceA.Parent = proxyDescriptor;
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
+            proxyReviewRoot, proxyAvatar, null, proxyResolver, proxyDescriptor);
+        Check(proxySourceA.Parent == proxyDescriptor,
+            "Missing Bone Proxy target path cannot redirect the operation to a same-named bone");
+        proxyAvatar.ModularBoneProxies[0].TargetPath = "";
+        proxySourceA.Parent = proxyTarget;
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
+            proxyReviewRoot, proxyAvatar, null, proxyResolver, proxyDescriptor);
+        Check(proxySourceA.Parent == proxyDescriptor, "Bone Proxy avatar target selects the descriptor root");
+        var proxyTip = proxyTarget.AddSlot("Tip");
+        var proxyOldArmature = proxyDescriptor.AddSlot("armature");
+        var proxyOldHips = proxyOldArmature.AddSlot("Hips");
+        proxySourceA.Name = "Proxy holder";
+        proxySourceA.Parent = proxyOldHips;
+        var proxyOldId = new VrchatBoneTarget("clothing", "armature", "armature");
+        var proxyBodyId = new VrchatBoneTarget("body", "armature", "armature");
+        var proxyHipsId = new VrchatBoneTarget("clothing", "Hips", "armature/Hips");
+        proxyIds[proxyOldId] = proxyOldArmature;
+        proxyIds[proxyBodyId] = proxyTarget.Parent;
+        proxyIds[proxyHipsId] = proxyOldHips;
+        proxyAvatar.ModularMergeArmatures.Add(new VrchatModularMergeArmature
+            { SourceBoneTarget = proxyOldId, TargetBoneTarget = proxyBodyId });
+        proxyAvatar.ModularBoneProxies[0].TargetBoneTarget = proxyHipsId;
+        proxyAvatar.ModularBoneProxies[0].TargetPath = "Tip";
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
+            proxyReviewRoot, proxyAvatar, null, proxyResolver, proxyDescriptor);
+        Check(proxyOldHips.IsDestroyed && proxySourceA.Parent == proxyTip,
+            "Bone Proxy target follows a merged humanoid bone and then resolves its relative subpath");
+        proxySourceA.Name = "Accessory";
+        proxyAvatar.ModularMergeArmatures.Clear();
+        proxyAvatar.ModularBoneProxies[0].TargetBoneTarget = null;
+        proxyAvatar.ModularBoneProxies[0].TargetPath = "";
+        proxyIds.Clear();
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
+            proxyReviewRoot, proxyAvatar, null, proxyResolver, proxyDescriptor);
+        Check(proxySourceA.Parent == proxyTip && proxySourceB.Parent == proxyTarget,
+            "Missing explicit Bone Proxy owner never moves another same-named accessory");
+        proxyIds[proxyAvatar.ModularBoneProxies[0].SourceBoneTarget] = proxySourceA;
+        var proxySecondId = new VrchatBoneTarget(null, "Accessory", null, "second", 4);
+        proxyIds[proxySecondId] = proxySourceB;
+        proxyAvatar.ModularBoneProxies.Add(new VrchatModularBoneProxy
+            { SourceBoneTarget = proxySecondId, TargetPath = "armature/Hips/Tip/Accessory" });
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
+            proxyReviewRoot, proxyAvatar, null, proxyResolver, proxyDescriptor);
+        Check(proxySourceA.Parent == proxyDescriptor && proxySourceB.Parent == proxySourceA,
+            "Later Bone Proxy retains its destination when an earlier proxy changes the destination path");
+
         Slot branches = root.AddSlot("Branches");
         var chainRoot = root.AddSlot("Chained identity merges");
         var chainBody = chainRoot.AddSlot("armature");

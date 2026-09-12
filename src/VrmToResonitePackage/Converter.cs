@@ -505,7 +505,7 @@ internal static class Converter
                     {
                         setupOptions.NearClip = options.NearClip.Value;
                     }
-                    AvatarSetup.Build(root, model, setupOptions, faceResolver);
+                    AvatarSetup.Build(root, model, setupOptions, faceResolver, physicsNodes);
                     await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths);
                     await AvatarSetup.ApplyFirstPersonAutoAsync(root, model);
                     SpringBoneSetup.Apply(root, model, physicsNodes);

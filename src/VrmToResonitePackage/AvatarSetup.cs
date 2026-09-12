@@ -101,13 +101,14 @@ internal static class AvatarSetup
         ["rightLittleDistal"] = BodyNode.RightPinky_Distal,
     };
 
-    public static void Build(Slot root, VrmModel vrm, AvatarSetupOptions options, BlendshapeResolver resolver = null)
+    public static void Build(Slot root, VrmModel vrm, AvatarSetupOptions options, BlendshapeResolver resolver = null,
+        IReadOnlyDictionary<int, Slot> nodeSlots = null)
     {
         // Capture renderer paths before rig/eye setup changes the hierarchy.
         resolver ??= new BlendshapeResolver(root, vrm);
         Dictionary<string, Slot> slotsByName = SlotIndex.Build(root);
 
-        BipedRig rig = SetupRig(root, vrm, slotsByName);
+        BipedRig rig = SetupRig(root, vrm, slotsByName, nodeSlots);
         if (rig == null || !rig.IsBiped)
         {
             UniLog.Warning("ヒューマノイドの必須ボーンが揃っていないため、アバターセットアップをスキップします。");
@@ -241,7 +242,8 @@ internal static class AvatarSetup
 
     // ---------------------------------------------------------------- rig
 
-    private static BipedRig SetupRig(Slot root, VrmModel vrm, Dictionary<string, Slot> slotsByName)
+    private static BipedRig SetupRig(Slot root, VrmModel vrm, Dictionary<string, Slot> slotsByName,
+        IReadOnlyDictionary<int, Slot> nodeSlots = null)
     {
         // The model importer may have already classified the rig heuristically.
         // Keep avatar setup components on the avatar root; only the bone targets live
@@ -290,7 +292,11 @@ internal static class AvatarSetup
                 continue;
             }
             string nodeName = vrm.GetNodeName(nodeIndex);
-            if (nodeName == null || !slotsByName.TryGetValue(nodeName, out Slot boneSlot))
+            // An explicit prefab/model reference must never fall back to a same-named bone.
+            Slot boneSlot = vrm.NodeTargets.ContainsKey(nodeIndex)
+                ? nodeSlots?.GetValueOrDefault(nodeIndex)
+                : nodeName != null ? slotsByName.GetValueOrDefault(nodeName) : null;
+            if (boneSlot == null || boneSlot.IsDestroyed)
             {
                 UniLog.Warning($"VRMボーン '{vrmBone}' のノード '{nodeName}' に対応するスロットが見つかりません。");
                 continue;

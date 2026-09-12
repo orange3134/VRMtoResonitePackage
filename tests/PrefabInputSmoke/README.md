@@ -21,6 +21,11 @@ explicit zero overrides, and strict path lookup for indexed blendshape repair.
 Repeated-model checks distinguish mesh-template provenance from an actual
 PrefabInstance of the same FBX and preserve that distinction in avatar metadata.
 
+Custom-eye checks cover same-named local transforms, FBX paths, variant reference
+overrides and placement of eyes without renderers. Bone Proxy checks preserve
+repeated prefab occurrences, their owner placements, complete target paths and
+humanoid-relative subpaths. Shared physics/proxy placements remain unique.
+
 `PrefabGraphChecks` exercises composition independently of known component types:
 base/variant ordering, separate occurrences, untouched source caches/files, nested
 fields, empty strings, integer/reference arrays, explicit zero/null, and centralized

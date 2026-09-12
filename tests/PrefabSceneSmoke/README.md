@@ -15,6 +15,11 @@ preserving models with live skin/field references, authored objects, foreign
 attachments, renderers, behavior components, or Rig registrations for moved bones.
 Ordinary model instances remain outside this cleanup's candidate set.
 
+Custom-eye rig assignment distinguishes same-named transforms and rejects missing
+or destroyed explicit references. Bone Proxy checks cover repeated accessories,
+descriptor-relative paths, avatar-root targets, humanoid targets after armature
+merging, missing references, and target paths changed by an earlier proxy move.
+
 Also verifies static-mesh import scale outside the source hierarchy, empty Animator
 bindings below the export root, and separate DynamicBoneChains on same-named bones
 in repeated model instances.

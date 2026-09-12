@@ -885,6 +885,9 @@ Transform:
     Check(face.LeftEyeBoneName == "VariantEye" && face.RightEyeBoneName == "CopyParent" &&
           face.Blink?.MeshGameObjectName == "VariantFace" && face.Blink.BlendShapeIndex == 4,
         "Descriptor overrides preserve eye settings, external references and packed eyelid array edits");
+    Check(face.LeftEyeBoneTarget is { PrefabGuid: variantGuid, TransformFileId: 903 } &&
+          face.RightEyeBoneTarget is { PrefabGuid: baseGuid, TransformFileId: 33 },
+        "Descriptor eye overrides preserve local and external transform identities");
     var cleared = Read(settings + Change("VisemeBlendShapes.Array.size", "1")
         + Change("VisemeSkinnedMesh", "{fileID: 0}", true)
         + Change("customEyeLookSettings.eyelidsBlendshapes.Array.size", "0") + localObjects);

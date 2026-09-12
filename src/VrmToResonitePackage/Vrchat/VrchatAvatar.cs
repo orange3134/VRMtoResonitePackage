@@ -50,6 +50,8 @@ public sealed class VrchatAvatar
 
     public string LeftEyeBoneName { get; set; }
     public string RightEyeBoneName { get; set; }
+    public VrchatBoneTarget LeftEyeBoneTarget { get; set; }
+    public VrchatBoneTarget RightEyeBoneTarget { get; set; }
 
     public List<VrchatViseme> Visemes { get; } = new();
 
@@ -222,6 +224,10 @@ public sealed class VrchatModularBoneProxy
 {
     public string SourceName { get; set; }
     public string TargetName { get; set; }
+    public VrchatBoneTarget SourceBoneTarget { get; set; }
+    public VrchatBoneTarget TargetBoneTarget { get; set; }
+    /// <summary>Path relative to TargetBoneTarget, or the descriptor root when it is null.</summary>
+    public string TargetPath { get; set; }
     public int AttachmentMode { get; set; }
     public bool MatchScale { get; set; }
 }

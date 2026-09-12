@@ -449,6 +449,7 @@ internal static class VrchatSceneSetup
         // Capture identities before any merge destroys their original slots.
         var mergeTargets = avatar.ModularMergeArmatures
             .SelectMany(m => new[] { m.SourceBoneTarget, m.TargetBoneTarget })
+            .Concat(avatar.ModularBoneProxies.SelectMany(p => new[] { p.SourceBoneTarget, p.TargetBoneTarget }))
             .Where(t => t != null).Distinct().ToDictionary(t => t, t => resolveTarget?.Invoke(t));
         int merged = 0;
         foreach (VrchatModularMergeArmature merge in avatar.ModularMergeArmatures)
@@ -461,9 +462,21 @@ internal static class VrchatSceneSetup
         }
 
         int proxied = 0;
-        foreach (VrchatModularBoneProxy proxy in avatar.ModularBoneProxies)
+        // Resolve paths before any proxy moves a parent used by another proxy's path.
+        var proxyTargets = avatar.ModularBoneProxies.Select(proxy =>
         {
-            if (ApplyBoneProxy(root, proxy))
+            Slot source = proxy.SourceBoneTarget != null ? mergeTargets.GetValueOrDefault(proxy.SourceBoneTarget) :
+                FindFirstSlot(root, proxy.SourceName);
+            Slot target = proxy.TargetBoneTarget != null ? mergeTargets.GetValueOrDefault(proxy.TargetBoneTarget) :
+                proxy.TargetPath != null ? descriptorRoot ?? root :
+                FindFirstSlot(root, proxy.TargetName, candidate => candidate != source);
+            if (target is { IsDestroyed: false } && proxy.TargetPath != null)
+                target = ResolveAvatarPath(target, proxy.TargetPath);
+            return (Proxy: proxy, Source: source, Target: target);
+        }).ToArray();
+        foreach (var (proxy, source, target) in proxyTargets)
+        {
+            if (ApplyBoneProxy(root, proxy, source, target))
             {
                 proxied++;
             }
@@ -639,11 +652,10 @@ internal static class VrchatSceneSetup
         }
     }
 
-    private static bool ApplyBoneProxy(Slot root, VrchatModularBoneProxy proxy)
+    private static bool ApplyBoneProxy(Slot root, VrchatModularBoneProxy proxy,
+        Slot source, Slot target)
     {
-        Slot source = FindFirstSlot(root, proxy.SourceName);
-        Slot target = FindFirstSlot(root, proxy.TargetName, candidate => candidate != source);
-        if (source == null || target == null || source == root || target == source ||
+        if (source == null || target == null || source.IsDestroyed || target.IsDestroyed || source == root || target == source ||
             IsDescendantOf(target, source))
         {
             return false;

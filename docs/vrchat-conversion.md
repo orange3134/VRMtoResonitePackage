@@ -227,6 +227,12 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   descendantに配置済みのsourceも統合できる。Revan underwearを含む複数衣装では、
   同名の別衣装に一致する骨が多くても指定された衣装だけを消費することを検証する。
 - semanticに同じbone間で子を移すときはglobalではなくlocal transformを保持する。
+- Bone Proxyは表示名で重複除外せず、各componentの所有Transformをprefab配置ごとに保持する。
+  接続先はdescriptor rootからの完全なsubPath、または主FBXのhumanoid bone参照とその相対subPathで解決する。
+  `$$AVATAR` はdescriptor rootを指す。Merge Armatureで消費された参照を更新し、
+  全Proxyの接続先を移動前に確定する。明示参照やpathの解決失敗時は同名の別objectへfallbackしない。
+  rendererやPhysBoneのない所有objectも配置を生成し、物理と共有する同一配置は重複記録しない。
+  boneReferenceの番号は[Unity HumanBodyBones](https://github.com/Unity-Technologies/UnityCsReference/blob/master/Modules/Animation/ScriptBindings/Avatar.bindings.cs)に従い、親指は既存のVRM 1命名へ正規化する。
 - primaryを含むimport wrapperは最終階層に残さない。
 
 ## FBXの単位と軸
@@ -282,6 +288,9 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
   rendererの完全なFBX pathで解決する。pathが判明している参照を名前だけの表へfallbackしない。
 
 VRChatの15 visemeはResonite enumへ対応させ、Unityの0〜100をResoniteの0〜1へ変換する。
+customEyeLookSettingsの左右の目はprefab配置・Transform fileIDまたはFBXの完全なpathを保持する。
+ローカルの目Transformも配置を生成し、Merge Armature後の参照表をAvatarSetupのリグ割り当てまで渡す。
+同名の目があっても指定されたobjectを使用し、欠落・破棄された明示参照を名前検索で置き換えない。
 瞬きは `eyelidsBlendshapes[0]` だけを使い、LookingUp / LookingDownはblinkとして扱わない。
 Blendshape repair selects original tables by imported model identity or the authored
 copy's GameObject identity. Same-named copies must not replace the primary model's

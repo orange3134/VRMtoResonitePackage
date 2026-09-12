@@ -41,5 +41,17 @@ internal static class ModularArmatureChecks
         if (Read().ModularBoneProxies.Count != 0 || Read().ModularMergeArmatures.Count != 1)
             throw new Exception("Removed Bone Proxy must stay removed without removing Merge Armature.");
         Console.WriteLine("PASS: Removed Bone Proxy stays removed while Merge Armature survives");
+        File.WriteAllText(input, text +
+            $"--- !u!1001 &200\nPrefabInstance:\n  m_SourcePrefab: {{guid: {clothing}}}\n  m_Modification:\n    m_TransformParent: {{fileID: 11}}\n    m_Modifications: []\n");
+        var repeated = Read();
+        var proxies = repeated.ModularBoneProxies;
+        if (proxies.Count != 2 || proxies.Select(p => p.SourceBoneTarget?.PrefabGuid).Distinct().Count() != 2 ||
+            proxies.Any(p => p.SourceBoneTarget?.TransformFileId != 4 || p.TargetPath != "armature/Hips"))
+            throw new Exception("Repeated Bone Proxies must retain occurrence identity and complete target paths.");
+        foreach (var proxy in proxies)
+            if (!repeated.PhysicsPlacements.SelectMany(p => p.Transforms)
+                    .Any(t => t.Key == $"{proxy.SourceBoneTarget.PrefabGuid}:4"))
+                throw new Exception("Bone Proxy owner hierarchy must be materialized even without a renderer or PhysBone.");
+        Console.WriteLine("PASS: Repeated Bone Proxies preserve both occurrence identities, target paths and owner placements");
     }
 }

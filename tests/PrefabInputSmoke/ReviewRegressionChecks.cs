@@ -84,6 +84,63 @@ internal static class ReviewRegressionChecks
             Require(resolver.BlendShapeNamesByPath["RootNode/Left/Body"].Single() == "LeftShape" &&
                 resolver.BlendShapeNamesByPath["RootNode/Right/Body"].Single() == "RightShape");
         });
+        Case("custom eyes retain distinct transform identities and authored placements", () =>
+        {
+            const string guid = "ab120000000000000000000000000012";
+            string text = "--- !u!1 &1\nGameObject:\n  m_Name: Avatar\n--- !u!4 &2\nTransform:\n  m_GameObject: {fileID: 1}\n  m_Father: {fileID: 0}\n";
+            foreach (int id in new[] { 10, 20, 30 })
+                text += $"--- !u!1 &{id}\nGameObject:\n  m_Name: Eye\n--- !u!4 &{id + 1}\nTransform:\n  m_GameObject: {{fileID: {id}}}\n  m_Father: {{fileID: 2}}\n";
+            string file = asset("Assets/RepeatedEyes.prefab", guid, text);
+            using var package = UnityPackage.Open(file);
+            var descriptor = new YamlDocument { Root = UnityYaml.ParseFlatDocument(
+                "enableEyeLook: 1\ncustomEyeLookSettings:\n  leftEye: {fileID: 21}\n  rightEye: {fileID: 31}\n") };
+            var avatar = new VrchatAvatar();
+            Call("ParseDescriptor", package, package.ReadScene(package.InputPrefab), descriptor, avatar, guid);
+            Call("ParsePhysics", package, guid, avatar, null);
+            var model = VrchatModelAdapter.ToVrmModel(avatar);
+            Require(model.HumanBones["leftEye"] != model.HumanBones["rightEye"] &&
+                model.NodeTargets[model.HumanBones["leftEye"]] is { PrefabGuid: guid, TransformFileId: 21 } &&
+                model.NodeTargets[model.HumanBones["rightEye"]] is { PrefabGuid: guid, TransformFileId: 31 });
+            Require(new[] { 21, 31 }.All(id => avatar.PhysicsPlacements.SelectMany(p => p.Transforms)
+                .Any(t => t.Key == $"{guid}:{id}")));
+        });
+        Case("custom FBX eyes and humanoid Bone Proxy retain model paths", () =>
+        {
+            using var package = UnityPackage.Open(baseFile);
+            long Id(string branch) => (long)typeof(UnityModelFileIdResolver)
+                .GetMethod("Compute", BindingFlags.NonPublic | BindingFlags.Static)!
+                .Invoke(null, new object[] { "Transform", $"//RootNode/{branch}/Shared/Transform", 0 })!;
+            var descriptor = new YamlDocument { Root = UnityYaml.ParseFlatDocument(
+                $"enableEyeLook: 1\ncustomEyeLookSettings:\n  leftEye: {{fileID: {Id("Left")}, guid: {branchesGuid}}}\n  rightEye: {{fileID: {Id("Right")}, guid: {branchesGuid}}}\n") };
+            var avatar = new VrchatAvatar { FbxGuid = branchesGuid };
+            Call("ParseDescriptor", package, package.ReadScene(package.InputPrefab), descriptor, avatar, baseGuid);
+            var model = VrchatModelAdapter.ToVrmModel(avatar);
+            Require(model.NodeTargets[model.HumanBones["leftEye"]] is { } left && left.FbxGuid == branchesGuid &&
+                left.Path == "RootNode/Left/Shared" &&
+                model.NodeTargets[model.HumanBones["rightEye"]].Path == "RootNode/Right/Shared");
+            const string proxyGuid = "ab120000000000000000000000000013";
+            string file = asset("Assets/HumanoidProxy.prefab", proxyGuid,
+                "--- !u!1 &1\nGameObject:\n  m_Name: Accessory\n--- !u!4 &2\nTransform:\n  m_GameObject: {fileID: 1}\n  m_Father: {fileID: 0}\n" +
+                "--- !u!114 &3\nMonoBehaviour:\n  m_GameObject: {fileID: 1}\n  m_Script: {guid: 42581d8044b64899834d3d515ab3a144}\n  boneReference: 10\n  subPath: Shared\n");
+            using var proxyPackage = UnityPackage.Open(file);
+            avatar.HumanBones["head"] = "Left";
+            Call("ParseModularAvatarComponents", proxyPackage, proxyGuid, avatar, null);
+            var proxy = avatar.ModularBoneProxies.Single();
+            Require(proxy.TargetBoneTarget.FbxGuid == branchesGuid && proxy.TargetBoneTarget.Path == "RootNode/Left" &&
+                proxy.TargetPath == "Shared");
+            string proxyText = File.ReadAllText(file);
+            foreach (var (bone, name) in new[] { (24, "leftThumbMetacarpal"), (53, "rightLittleDistal") })
+            {
+                File.WriteAllText(file, proxyText.Replace("boneReference: 10", $"boneReference: {bone}")
+                    .Replace("subPath: Shared", "subPath: ' '"));
+                using var fingers = UnityPackage.Open(file);
+                var fingerAvatar = new VrchatAvatar { FbxGuid = branchesGuid };
+                fingerAvatar.HumanBones[name] = "Left";
+                Call("ParseModularAvatarComponents", fingers, proxyGuid, fingerAvatar, null);
+                var fingerProxy = fingerAvatar.ModularBoneProxies.Single();
+                Require(fingerProxy.TargetBoneTarget.Path == "RootNode/Left" && fingerProxy.TargetPath == "");
+            }
+        });
         Case("FBX default weights preserve renderer ownership through parsing", () => DefaultBlendShapeChecks.Run(asset));
         Case("authored lowercase root excludes only its own branch", () =>
         {
