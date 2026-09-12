@@ -18,6 +18,11 @@ different models and shared geometry. Reversing object/connection order must kee
 the same defaults. It checks the model resolver, avatar metadata, renamed copies,
 explicit zero overrides, and strict path lookup for indexed blendshape repair.
 
+`FbxRendererRemovalChecks` covers direct FBX MeshRenderer, SkinnedMeshRenderer and
+MeshFilter removals through direct, omitted and explicit stripped references.
+Exclusions retain occurrence and full path, discard removed-renderer overrides,
+and distinguish renderer components from other types in hashed and metadata IDs.
+
 Repeated-model checks distinguish mesh-template provenance from an actual
 PrefabInstance of the same FBX and preserve that distinction in avatar metadata.
 

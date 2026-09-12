@@ -365,15 +365,30 @@ internal static class VrchatSceneSetup
     /// </summary>
     public static void RemoveDeletedMeshes(Slot root, VrchatAvatar avatar,
         IReadOnlyDictionary<Slot, string> importedMeshSources,
-        IReadOnlyDictionary<string, Slot> authoredObjects = null)
+        IReadOnlyDictionary<string, Slot> authoredObjects = null,
+        IReadOnlyDictionary<Slot, string> importedPaths = null)
     {
-        if (avatar.PrefabGameObjectNames.Count == 0 && avatar.PrefabRendererStates.Count == 0)
+        if (avatar.PrefabGameObjectNames.Count == 0 && avatar.PrefabRendererStates.Count == 0 &&
+            avatar.RemovedModelRenderers.Count == 0)
         {
             return;
         }
         // Authored copies already passed prefab exclusions and may have variant names
         // absent from the imported renderer-name records. Retain their exact identities.
         var authoredSlots = authoredObjects?.Values.ToHashSet() ?? new HashSet<Slot>();
+        int removed = 0;
+        foreach (MeshRenderer renderer in root.GetComponentsInChildren<MeshRenderer>())
+        {
+            Slot slot = renderer.Slot;
+            if (authoredSlots.Contains(slot) || importedPaths == null ||
+                !importedPaths.TryGetValue(slot, out string path) ||
+                !importedMeshSources.TryGetValue(slot, out string guid) ||
+                !avatar.RemovedModelRenderers.Contains(new(guid, path))) continue;
+            // Component removal leaves the Transform, bones, attachments and child renderers alive.
+            UniLog.Log($"Removing prefab-deleted renderer component: {path} (fbx={guid})");
+            renderer.Destroy();
+            removed++;
+        }
         string SourceGuid(Slot slot) => FbxGuidForSlot(root, slot, avatar, importedMeshSources);
         bool Keep(Slot slot) => authoredSlots.Contains(slot) || avatar.ShouldKeepRenderer(SourceGuid(slot), slot.Name);
 
@@ -388,7 +403,6 @@ internal static class VrchatSceneSetup
             }
         }
 
-        int removed = 0;
         foreach (Slot slot in extras.Distinct())
         {
             if (slot.IsDestroyed)

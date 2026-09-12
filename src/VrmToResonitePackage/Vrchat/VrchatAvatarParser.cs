@@ -2092,6 +2092,14 @@ public static class VrchatAvatarParser
         int materialAssignments = 0;
         int activeAssignments = 0;
 
+        // FBXs have no YAML scene documents. Consume their removed component identities
+        // directly, retaining the model occurrence and exact owner path through import.
+        foreach (var removed in package.PrefabGraph.Removed)
+        {
+            if (package.ByGuid(removed.Occurrence)?.Extension != ".fbx") continue;
+            string path = package.ModelFileIds(removed.Occurrence).ResolveRendererComponentPath(removed.FileId);
+            if (path != null) avatar.RemovedModelRenderers.Add(new(removed.Occurrence, path));
+        }
         var componentScenes = package.PrefabGraph.RendererTemplateScenes.ToList();
         var inheritedScenes = componentScenes.Select(entry => (entry.Guid, entry.Scene)).ToList();
         var removedRenderers = new HashSet<(string Guid, long Id)>();
@@ -2269,6 +2277,8 @@ public static class VrchatAvatarParser
                     (copy.PrefabGuid, copy.RendererFileId) == targetIdentity);
                 string objectKey = targetCopy == null ? null : $"{targetCopy.PrefabGuid}:{targetCopy.GameObjectFileId}";
                 string sourcePath = targetCopy?.SourcePath ?? package.ModelFileIds(targetIdentity.Guid)?.ResolveNodePath(targetIdentity.Id);
+                if (targetCopy == null && avatar.RemovedModelRenderers.Contains(new(rendererReference.FbxGuid, sourcePath)))
+                    continue;
                 var rendererKey = (rendererReference.FbxGuid, rendererName, objectKey, sourcePath);
                 if (!renderers.TryGetValue(rendererKey, out VrchatRendererMaterials renderer))
                 {

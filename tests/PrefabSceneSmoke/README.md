@@ -6,6 +6,11 @@ They verify embedded assets and the overridden hierarchy name. This uses the tes
 isolated engine data/cache directories and `NoAvatar` mode; no Unity Editor or
 Library folder is needed. Full humanoid setup is outside this end-to-end fixture.
 
+A second production conversion removes a renderer component directly from the FBX;
+the saved package must omit that renderer while retaining its GameObject. Scene
+checks also retain child renderers, bone/field references, other same-named branches
+and model instances, authored copies and objects with unknown imported paths.
+
 Default-weight checks distinguish same-named imported branches using captured
 paths after reparenting and renaming, include authored copies, preserve explicit
 zero overrides, and leave namesakes unchanged when a source path is missing.

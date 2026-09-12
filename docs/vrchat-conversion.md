@@ -250,6 +250,11 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - `m_RemovedComponents` は共通のinstance別component collectorで継承順に畳む。
   static MeshRendererまたはMeshFilterの削除は描画を除き、authored objectと子の階層を残す。
   元FBXのテンプレートrendererも復活させず、削除componentのmaterial/weight overrideは無視する。
+  FBX上のcomponent削除はYAML sceneの列挙には現れないため、graphの削除identityを別途取り出す。
+  fileID resolverでRenderer／SkinnedMeshRenderer／MeshFilterの型と所有nodeの完全なpathを確認し、
+  FBX配置IDとpathの組でインポート後まで保持する。hash生成IDとmetaの型付きID・旧recycle IDを扱う。
+  削除するのは該当rendererだけで、同じobjectのTransform・骨参照・子rendererや別配置・authored copyは残す。
+  pathが解決できない参照を同名node全体の削除へ置き換えない。
   outer variantのexplicit/omitted stripped aliasを解決し、同じprefabの別instanceへ削除を伝播しない。
 - `m_RemovedGameObjects` とprefabに存在しないrendererを除去する。
 - `m_IsActive`、material、初期blendshapeはbaseからderivedの順に畳み、外側overrideを最後に適用する。

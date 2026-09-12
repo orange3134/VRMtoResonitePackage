@@ -438,6 +438,7 @@ Transform:
     }
     ReviewRegressionChecks.Run(Asset, regularCopy, branchesGuid);
     RendererRemovalChecks.Run(Asset, regularCopy);
+    FbxRendererRemovalChecks.Run(Asset, regularCopy, branchesGuid);
     LoggingRegressionChecks.Run();
     CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);
     CheckDuplicateSourceBones(Asset);

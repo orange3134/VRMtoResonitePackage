@@ -109,6 +109,8 @@ public sealed class VrchatAvatar
     /// <summary>Variant renderer inclusion, scoped by source model so clothing cannot delete a
     /// same-named renderer in the avatar's body model. False entries retain explicit exclusions.</summary>
     public Dictionary<VrchatGameObjectReference, bool> PrefabRendererStates { get; } = new();
+    /// <summary>Removed FBX renderer/MeshFilter components. Preserve their objects and children.</summary>
+    public HashSet<VrchatModelRendererReference> RemovedModelRenderers { get; } = new();
     /// <summary>Whole excluded models; never import their geometry or skeletons.</summary>
     public HashSet<string> EditorOnlyFbxGuids { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Excluded model nodes, including bones and non-rendering objects.</summary>

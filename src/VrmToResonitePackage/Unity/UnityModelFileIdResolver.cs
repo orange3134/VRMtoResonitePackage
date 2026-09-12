@@ -13,6 +13,7 @@ public sealed class UnityModelFileIdResolver
     private readonly Dictionary<long, string> _names = new();
     private string _authoredRootPath;
     private readonly Dictionary<long, HashSet<string>> _nodePathsById = new();
+    private readonly HashSet<long> _rendererComponentIds = new();
     private readonly Dictionary<string, HashSet<string>> _pathsByName = new(StringComparer.Ordinal);
     public Dictionary<string, string[]> MeshBoneNames { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, string[]> MeshBoneNamesByPath { get; } = new(StringComparer.Ordinal);
@@ -88,6 +89,9 @@ public sealed class UnityModelFileIdResolver
             ? paths.Count == 1 ? paths.Single() : null
             : UniquePath(ResolveName(fileId));
     public bool IsUniqueNodeName(string name) => UniquePath(name) != null;
+    /// <summary>Owner path for a renderer or MeshFilter component; never a whole subtree.</summary>
+    public string ResolveRendererComponentPath(long fileId)
+        => _rendererComponentIds.Contains(fileId) ? ResolveNodePath(fileId) : null;
     private string UniquePath(string name)
         => name != null && _pathsByName.TryGetValue(name, out var paths) && paths.Count == 1 ? paths.Single() : null;
     private static string NodeName(string path) => path[(path.LastIndexOf('/') + 1)..];
@@ -112,6 +116,9 @@ public sealed class UnityModelFileIdResolver
                 if (fileId != 0 && !string.IsNullOrEmpty(name))
                 {
                     _names[fileId] = NormalizeName(name);
+                    if (int.TryParse(entry["first"].Map.Keys.FirstOrDefault(), out int classId) &&
+                        classId is 23 or 33 or 137)
+                        _rendererComponentIds.Add(fileId);
                 }
             }
         }
@@ -125,6 +132,8 @@ public sealed class UnityModelFileIdResolver
                         System.Globalization.CultureInfo.InvariantCulture, out long fileId))
                 {
                     _names[fileId] = NormalizeName(value.AsString());
+                    // Legacy imported file IDs encode the class in their leading digits.
+                    if (fileId / 100000 is 23 or 33 or 137) _rendererComponentIds.Add(fileId);
                 }
             }
         }
@@ -360,6 +369,8 @@ public sealed class UnityModelFileIdResolver
     {
         byte[] bytes = encoding.GetBytes($"Type:{type}->{objectPath}{suffix}");
         long fileId = unchecked((long)XxHash64(bytes));
+        if (type is "MeshRenderer" or "SkinnedMeshRenderer" or "MeshFilter")
+            _rendererComponentIds.Add(fileId);
         _names.TryAdd(fileId, NormalizeName(name));
         if (!_nodePathsById.TryGetValue(fileId, out var paths))
             _nodePathsById[fileId] = paths = new HashSet<string>(StringComparer.Ordinal);

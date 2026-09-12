@@ -236,6 +236,42 @@ static async Task Run(string fbxPath, string rendererName)
         Check(!renamedCopy.IsDestroyed && renamedCopy.GetComponent<MeshRenderer>() != null && !renamedChild.IsDestroyed,
             "Mesh filtering preserves renamed authored renderer identities and their children");
         Check(excludedNamesake.IsDestroyed, "Mesh filtering still removes an unauthored namesake");
+        {
+            var componentRoot = root.AddSlot("FBX component removals");
+            var componentModel = componentRoot.AddSlot("Model");
+            var removedOwner = componentModel.AddSlot("Left").AddSlot("Body");
+            var removedRenderer = removedOwner.AttachComponent<SkinnedMeshRenderer>();
+            var retainedField = removedOwner.AttachComponent<ValueField<float>>();
+            var retainedChild = removedOwner.AddSlot("Attachment");
+            var childRenderer = retainedChild.AttachComponent<MeshRenderer>();
+            var rightOwner = componentModel.AddSlot("Right").AddSlot("Body");
+            var rightRenderer = rightOwner.AttachComponent<SkinnedMeshRenderer>();
+            rightRenderer.Bones.Add(removedOwner);
+            var otherModel = componentRoot.AddSlot("Other instance");
+            var otherOwner = otherModel.AddSlot("Left").AddSlot("Body");
+            var otherRenderer = otherOwner.AttachComponent<MeshRenderer>();
+            var componentModels = new Dictionary<string, Slot> { ["removed-instance"] = componentModel, ["other-instance"] = otherModel };
+            var componentSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", componentModels);
+            var componentPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", componentModels);
+            var authoredCopy = componentRoot.AddSlot("Authored copy");
+            var authoredRenderer = authoredCopy.AttachComponent<MeshRenderer>();
+            componentSources[authoredCopy] = "removed-instance";
+            componentPaths[authoredCopy] = "Left/Body";
+            var unknownOwner = componentRoot.AddSlot("Body");
+            var unknownRenderer = unknownOwner.AttachComponent<MeshRenderer>();
+            componentSources[unknownOwner] = "removed-instance";
+            removedOwner.Name = "Renamed after capture";
+            removedOwner.Parent = componentRoot;
+            var componentAvatar = new VrchatAvatar();
+            componentAvatar.RemovedModelRenderers.Add(new("removed-instance", "RootNode/Left/Body"));
+            Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "RemoveDeletedMeshes", componentRoot,
+                componentAvatar, componentSources, new Dictionary<string, Slot> { ["copy"] = authoredCopy }, componentPaths);
+            Check(removedRenderer.IsDestroyed && !removedOwner.IsDestroyed && !retainedField.IsDestroyed &&
+                retainedChild.Parent == removedOwner && !childRenderer.IsDestroyed && rightRenderer.Bones[0] == removedOwner,
+                "FBX component removal strips only the renderer after reparenting, preserving owner, child renderer and bone references");
+            Check(!rightRenderer.IsDestroyed && !otherRenderer.IsDestroyed && !authoredRenderer.IsDestroyed && !unknownRenderer.IsDestroyed,
+                "FBX component removal preserves same-named branches, repeated instances, authored copies and unknown paths");
+        }
         var authoredEmpty = cleanupRoot.AddSlot("Authored empty");
         var referencedBone = cleanupRoot.AddSlot("Referenced bone");
         var referencedField = cleanupRoot.AddSlot("Referenced field");
@@ -999,6 +1035,49 @@ static async Task Run(string fbxPath, string rendererName)
     Check(saved.MainRecord.Name == "ConversionVariant" && saved.AssetCount > 1 &&
           savedTree.TryGetNode("Object") is DataTreeDictionary savedRoot && ContainsSlot(savedRoot, "ResolvedConversion"),
         "Saved package retains the selected prefab name, overridden hierarchy and embedded model assets");
+
+    // Exercise the new removal through the production parser/importer and saved output.
+    string removalPath;
+    using (var project = UnityPackage.Open(variantPath))
+        removalPath = new UnityModelFileIdResolver(project.ByGuid(modelGuid)).RendererPathsUnder(0)
+            .Single(path => path.Split('/')[^1] == rendererName);
+    long removedComponent = (long)typeof(UnityModelFileIdResolver)
+        .GetMethod("Compute", BindingFlags.Static | BindingFlags.NonPublic)!
+        .Invoke(null, new object[] { "SkinnedMeshRenderer", "//" + removalPath + "/SkinnedMeshRenderer", 0 })!;
+    File.AppendAllText(variantPath, $"\n    m_RemovedComponents:\n    - {{guid: {modelGuid}, fileID: {removedComponent}}}\n");
+    optionsType.GetProperty("OutputDirectory")!.SetValue(options, Path.Combine(temp, "RemovedOutput"));
+    string removedOutput = await (Task<string>)Call("VrmToResonitePackage.Converter", "ConvertVrchat", world, variantPath, options);
+    using var removedPackage = Elements.Assets.RecordPackage.Decode(removedOutput);
+    using var removedAsset = removedPackage.ReadAsset(Elements.Assets.RecordPackage.GetAssetSignature(new Uri(removedPackage.MainRecord.AssetURI)));
+    using var removedData = new MemoryStream();
+    removedAsset.CopyTo(removedData);
+    removedData.Position = 0;
+    var removedTree = DataTreeConverter.LoadAuto(removedData);
+    (int Objects, int Renderers) CountRendererObjects(DataTreeDictionary tree)
+    {
+        var types = ((DataTreeList)tree.TryGetNode("Types")).Children
+            .Select(node => ((DataTreeValue)node).Extract<string>()).ToList();
+        int objects = 0, renderers = 0;
+        void Walk(DataTreeDictionary slot)
+        {
+            var name = slot.TryGetNode("Name");
+            if (name is DataTreeDictionary field) name = field.TryGetNode("Data");
+            if ((name as DataTreeValue)?.Extract<string>() == rendererName)
+            {
+                objects++;
+                var componentTypes = (List<string>)Call("VrmToResonitePackage.PackageInspector", "ComponentTypeNames", slot, types);
+                renderers += componentTypes.Count(type => type.Contains("MeshRenderer"));
+            }
+            if (slot.TryGetNode("Children") is DataTreeList children)
+                foreach (var child in children.Children.OfType<DataTreeDictionary>()) Walk(child);
+        }
+        Walk((DataTreeDictionary)tree.TryGetNode("Object"));
+        return (objects, renderers);
+    }
+    var beforeRemoval = CountRendererObjects(savedTree);
+    var afterRemoval = CountRendererObjects(removedTree);
+    Check(beforeRemoval.Renderers > 0 && afterRemoval.Renderers == 0 && afterRemoval.Objects == beforeRemoval.Objects,
+        "Production conversion honors a direct FBX renderer removal while the saved package retains its GameObject");
 }
 
 static object Call(string type, string method, params object[] args)
