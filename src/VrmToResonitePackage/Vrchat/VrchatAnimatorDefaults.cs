@@ -139,12 +139,7 @@ internal static class VrchatAnimatorDefaults
         bool Matches(YamlNode condition)
         {
             if (!parameters.TryGetValue(condition["m_ConditionEvent"]?.AsString() ?? "", out float value)) return false;
-            float threshold = condition["m_EventTreshold"]?.AsFloat() ?? 0;
-            return condition["m_ConditionMode"]?.AsInt() switch
-            {
-                1 => value != 0, 2 => value == 0, 3 => value > threshold, 4 => value < threshold,
-                6 => value == threshold, 7 => value != threshold, _ => false,
-            };
+            return VrchatAnimatorGraph.Matches(condition, value);
         }
     }
 }

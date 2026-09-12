@@ -46,6 +46,7 @@ static void Run()
     string otherGuid = new('b', 32);
     string materialGuid = new('c', 32);
     string selected = Asset("Assets/Selected.prefab", selectedGuid, Avatar("Selected"));
+    PrefabGraphChecks.Run(Asset);
     Asset("Assets/Other.prefab", otherGuid, Avatar("Other"));
     Asset("Library/PackageCache/com.example.materials@123/Surface.mat", materialGuid, "Material:\n  m_Name: Surface\n");
     Asset("Library/PackageCache/com.example.materials@stale/Surface.mat", materialGuid, "STALE");
@@ -306,7 +307,7 @@ Connections: {
             RendererPrefab(branchesGuid, "Untagged").Replace("4300000", meshId.ToString()));
         using var copyPackage = UnityPackage.Open(pathCopy);
         var copyAvatar = ReadFilter(pathCopy);
-        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides",
+        typeof(VrchatAvatarParser).GetMethod("ParseRenderers",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
             .Invoke(null, new object[] { copyPackage, copyPackage.InputPrefab.Guid, copyAvatar });
         Check(copyAvatar.MeshCopies.Single().SourcePath.EndsWith("/Right/Shared/Body"),
@@ -394,7 +395,7 @@ Transform:
     using (UnityPackage package = UnityPackage.Open(copyPrefab))
     {
         var avatar = ReadFilter(copyPrefab);
-        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides",
+        typeof(VrchatAvatarParser).GetMethod("ParseRenderers",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
             .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
         Check(avatar.MeshCopies.Single().SourceName == "Body_Base" && avatar.MeshCopies.Single().Name == "Body_Base_pants",
@@ -407,7 +408,7 @@ Transform:
             "Copied renderer retains authored parent, position, rotation and scale");
         avatar.MeshCopies.Clear();
         avatar.PrefabRendererStates[new VrchatGameObjectReference("88000000000000000000000000000001", "Body_Base_pants")] = false;
-        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides",
+        typeof(VrchatAvatarParser).GetMethod("ParseRenderers",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
             .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
         Check(avatar.MeshCopies.Count == 0, "Excluded renderer copies are not recreated");
@@ -417,7 +418,7 @@ Transform:
     using (var package = UnityPackage.Open(sameNameCopy))
     {
         var avatar = ReadFilter(sameNameCopy);
-        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides",
+        typeof(VrchatAvatarParser).GetMethod("ParseRenderers",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
             .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
         Check(avatar.MeshCopies.Single().Name == "Body_Base" && avatar.MeshCopies.Single().RendererFileId == 2,
@@ -477,7 +478,7 @@ PrefabInstance:
     using (var package = UnityPackage.Open(staticVariant))
     {
         var avatar = ReadFilter(staticVariant);
-        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides",
+        typeof(VrchatAvatarParser).GetMethod("ParseRenderers",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
             .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
         Check(!avatar.MeshCopies.Single().IsSkinned && avatar.MeshCopies.Single().Enabled &&
@@ -560,7 +561,7 @@ PrefabInstance:
     using (var package = UnityPackage.Open(movedCopy))
     {
         var avatar = ReadFilter(movedCopy);
-        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
+        typeof(VrchatAvatarParser).GetMethod("ParseRenderers", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
         Check(avatar.MeshCopies.Single().Transform.LocalPosition.X == 9, "Variant overrides copied renderer position");
         var copy = avatar.MeshCopies.Single();
         Check(copy.Transform.LocalPosition.Y == 2 && copy.Transform.LocalScale.Z == 2 &&
@@ -603,7 +604,7 @@ PrefabInstance:
 """);
         using var package = UnityPackage.Open(stateCopy);
         var avatar = ReadFilter(stateCopy);
-        typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+        typeof(VrchatAvatarParser).GetMethod("ParseRenderers", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
             .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
         var copy = avatar.MeshCopies.Single();
         Check(copy.Active == !initial, $"Variant overrides copied GameObject active state {initial} -> {!initial}");
@@ -629,7 +630,7 @@ PrefabInstance:
     using (UnityPackage package = UnityPackage.Open(composed))
     {
         var avatar = new VrchatAvatar();
-        typeof(VrchatAvatarParser).GetMethod("CollectVariantPrefabGameObjectNames",
+        typeof(VrchatAvatarParser).GetMethod("CollectPrefabVisibility",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
             new[] { typeof(UnityPackage), typeof(string), typeof(VrchatAvatar) })!
             .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
@@ -1067,7 +1068,7 @@ MonoBehaviour:
     using (var package = UnityPackage.Open(input))
     {
         var sceneAvatar = new VrchatAvatar();
-        foreach (string method in new[] { "ParseVariantPhysBones", "ParseVariantModularAvatar" })
+        foreach (string method in new[] { "ParsePhysics", "ParseModularAvatarComponents" })
             typeof(VrchatAvatarParser).GetMethod(method, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
                 .Invoke(null, new object?[] { package, sceneGuid, sceneAvatar, null });
         Check(sceneAvatar.PhysBones.Single().RootBoneName == "HairRoot" && sceneAvatar.ModularBoneProxies.Count == 1,
@@ -1163,29 +1164,31 @@ Transform:
         var target = Resolve(package, variantGuid, 21)!;
         Check(target.FbxGuid == modelGuid && target.Path!.EndsWith("/Right/Shared"),
             "FBX bone aliases retain source model and full path for duplicate node names");
-        var copy = new VrchatMeshCopy(modelGuid, "Body", "Copy", true, true);
-        copy.SourceBoneNames.Add("SourceHips");
-        var apply = typeof(VrchatAvatarParser).GetMethod("ApplyCopiedBoneOverride",
-            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        // Exercise serialized composition rather than a renderer-specific override helper.
+        File.AppendAllText(prefab, $"\n--- !u!137 &30\nSkinnedMeshRenderer:\n  m_GameObject: {{fileID: 1}}\n  m_Bones:\n  - {{fileID: 6}}\n  - {{fileID: {modelId}, guid: {modelGuid}}}\n");
+        string variantText = File.ReadAllText(variant);
+        var targets = new Dictionary<int, VrchatBoneTarget>();
         void Override(long id, string? referenceGuid = null)
         {
-            var modification = UnityYaml.ParseFlatDocument("propertyPath: m_Bones.Array.data[0]\nobjectReference: {fileID: " + id +
-                (referenceGuid == null ? "" : ", guid: " + referenceGuid) + "}\n");
-            apply.Invoke(null, new object[] { package, copy, variantGuid, modification, primaryGuid,
-                new Dictionary<string, UnityModelFileIdResolver>() });
+            string modification = $"  m_Modification:\n    m_Modifications:\n    - target: {{guid: {prefabGuid}, fileID: 30}}\n      propertyPath: m_Bones.Array.data[0]\n      objectReference: {{fileID: {id}" +
+                (referenceGuid == null ? "" : ", guid: " + referenceGuid) + "}\n";
+            File.WriteAllText(variant, variantText.Replace("--- !u!4 &20", modification + "--- !u!4 &20"));
+            using var input = UnityPackage.Open(variant);
+            using var view = (UnityPackage)typeof(UnityPackage).Assembly.GetType("VrmToResonitePackage.Unity.UnityPrefabInstances")!
+                .GetMethod("CreateView")!.Invoke(null, new object[] { input, variantGuid, null })!;
+            var bones = view.ReadScene(view.ByGuid(prefabGuid)).Doc(30).Root["m_Bones"].Seq;
+            for (int i = 0; i < bones.Count; i++) targets[i] = Resolve(view, bones[i].Guid ?? prefabGuid, bones[i].FileID ?? 0)!;
         }
         Override(20);
-        Check(copy.BoneTargets[0].Path == "Right/Hips" && copy.BoneTargets[0].FbxGuid == primaryGuid,
+        Check(targets[0].Path == "Right/Hips" && targets[0].FbxGuid == primaryGuid,
             "Variant bone override resolves local objectReference in the overriding scene");
         Override(modelId, modelGuid);
-        Check(copy.BoneTargets[0].FbxGuid == modelGuid && copy.BoneTargets[0].Path!.EndsWith("/Right/Shared"),
+        Check(targets[0].FbxGuid == modelGuid && targets[0].Path!.EndsWith("/Right/Shared"),
             "Variant bone override preserves explicit external model identity");
         Override(0);
-        Check(copy.BoneTargets[0].Name == null, "Variant bone override can explicitly clear a binding");
-        copy.SourceBoneNames.Add("SourceHips");
-        copy.BoneTargets[1] = target;
+        Check(targets[0].Name == null, "Variant bone override can explicitly clear a binding");
         Override(20);
-        Check(copy.BoneTargets[0].Path == "Right/Hips" && copy.BoneTargets[1] == target,
+        Check(targets[0].Path == "Right/Hips" && targets[1] == target,
             "An indexed Variant override leaves another same-named source bone untouched");
     }
 }
@@ -1311,7 +1314,7 @@ MeshRenderer:
     var placement = Activator.CreateInstance(placementType)!;
     typeof(VrchatAvatarParser).GetMethod("CaptureLocalPlacementParents", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
         .Invoke(null, new object[] { accessoryPackage, accessoryScene, accessoryPackage.InputPrefab.Guid, 151L,
-            placement, guid, new Dictionary<string, UnityModelFileIdResolver> { [guid] = resolver }, false });
+            placement, guid, new Dictionary<string, UnityModelFileIdResolver> { [guid] = resolver }, false, null });
     var parents = (List<VrchatPrefabTransform>)placementType.GetProperty("ParentTransforms")!.GetValue(placement)!;
     Check(parents.Count == 2 && parents[0].ImportedBone?.Path == "Left/Shared" &&
           parents[0].ImportedBone.TransformFileId == 121 && parents[1].Name == "Attachment",
@@ -1343,7 +1346,7 @@ MonoBehaviour:
     using (var physicsPackage = UnityPackage.Open(physicsFile))
     {
         var physicsAvatar = new VrchatAvatar { FbxGuid = guid };
-        typeof(VrchatAvatarParser).GetMethod("ParseVariantPhysBones", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+        typeof(VrchatAvatarParser).GetMethod("ParsePhysics", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
             .Invoke(null, new object[] { physicsPackage, physicsPackage.InputPrefab.Guid, physicsAvatar, null });
         var bone = physicsAvatar.PhysBones.Single();
         Check(bone.RootBoneTarget.FbxGuid == guid && bone.Colliders.Single().AttachBoneTarget.FbxGuid == guid,
@@ -1374,7 +1377,7 @@ MonoBehaviour:
         InvokeParser("ResolveFbx", bakedPackage, bakedScene, bakedScene.Doc(100),
             bakedScene.GameObjects.Select(go => go.FileId).ToHashSet(), bakedAvatar);
         Check(bakedAvatar.FbxGuid == guid, "Baked mesh prefab selects its root Animator humanoid FBX");
-        InvokeParser("ParseVariantPhysBones", bakedPackage, bakedPackage.InputPrefab.Guid, bakedAvatar, null);
+        InvokeParser("ParsePhysics", bakedPackage, bakedPackage.InputPrefab.Guid, bakedAvatar, null);
         bool importedSkeleton = bakedAvatar.PhysicsPlacements.SelectMany(p => p.Transforms)
             .Any(t => t.ImportedBone is { } bone && bone.FbxGuid == guid && bone.Path == "Left/Shared");
         Console.WriteLine($"Baked physics retains imported skeleton: {importedSkeleton}");
@@ -1428,7 +1431,7 @@ MonoBehaviour:
     using (var mergePackage = UnityPackage.Open(mergeFile))
     {
         var mergeAvatar = new VrchatAvatar { FbxGuid = guid };
-        typeof(VrchatAvatarParser).GetMethod("ParseVariantModularAvatar", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+        typeof(VrchatAvatarParser).GetMethod("ParseModularAvatarComponents", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
             .Invoke(null, new object[] { mergePackage, mergePackage.InputPrefab.Guid, mergeAvatar, null });
         var merge = mergeAvatar.ModularMergeArmatures.Single();
         Check(merge.SourceBoneTarget.FbxGuid == null && merge.TargetBoneTarget.FbxGuid == null,
@@ -1460,7 +1463,7 @@ MeshRenderer:
     using (var physicsPackage = UnityPackage.Open(multipleModelPhysics))
     {
         var physicsAvatar = new VrchatAvatar { FbxGuid = guid };
-        typeof(VrchatAvatarParser).GetMethod("ParseVariantPhysBones", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+        typeof(VrchatAvatarParser).GetMethod("ParsePhysics", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
             .Invoke(null, new object[] { physicsPackage, physicsPackage.InputPrefab.Guid, physicsAvatar, null });
         var transforms = physicsAvatar.PhysicsPlacements.SelectMany(p => p.Transforms).ToList();
         Check(transforms.Any(t => t.ImportedBone is { } bone && bone.FbxGuid == guid && bone.Path == "Left/Shared"),
@@ -1988,7 +1991,7 @@ static VrchatAvatar ReadFilter(string path)
 {
     using UnityPackage package = UnityPackage.Open(path);
     var avatar = new VrchatAvatar();
-    typeof(VrchatAvatarParser).GetMethod("CollectVariantPrefabGameObjectNames",
+    typeof(VrchatAvatarParser).GetMethod("CollectPrefabVisibility",
         System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
         new[] { typeof(UnityPackage), typeof(string), typeof(VrchatAvatar) })!
         .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });

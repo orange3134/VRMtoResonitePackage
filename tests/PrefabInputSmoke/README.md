@@ -13,6 +13,14 @@ branches indexed by file ID/path, and exclusion of whole model/object hierarchie
 without starting the engine. Fixtures remain in the printed temp directory for
 inspection. This does not verify an end-to-end avatar conversion.
 
+`PrefabGraphChecks` exercises composition independently of known component types:
+base/variant ordering, separate occurrences, untouched source caches/files, nested
+fields, empty strings, integer/reference arrays, explicit zero/null, and centralized
+component/subtree removal including components added in an outer prefab. It also
+checks that hierarchy extraction follows an outer variant's local parent reference.
+Animator layer-conflict checks distinguish reachable competing motions from
+disconnected states for both visemes and blink.
+
 Copied-bone checks cover local transform paths and primary skeleton scope,
 explicit/omitted stripped references, FBX paths with duplicate node names, and
 Variant bone overrides (local references, external references, and null).

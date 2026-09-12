@@ -71,11 +71,11 @@ MonoBehaviour:
             using var view = (UnityPackage)typeof(UnityPackage).Assembly.GetType("VrmToResonitePackage.Unity.UnityPrefabInstances")!
                 .GetMethod("CreateView")!.Invoke(null, new object?[] { package, outerGuid, null })!;
             var avatar = new VrchatAvatar();
-            foreach (string method in new[] { "CollectVariantPrefabGameObjectNames", "ParseVariantRendererOverrides" })
+            foreach (string method in new[] { "CollectPrefabVisibility", "ParseRenderers" })
                 typeof(VrchatAvatarParser).GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
                     .Single(m => m.Name == method && m.GetParameters().Length == 3)
                     .Invoke(null, new object[] { view, outerGuid, avatar });
-            typeof(VrchatAvatarParser).GetMethod("ParseVariantPhysBones", BindingFlags.NonPublic | BindingFlags.Static)!
+            typeof(VrchatAvatarParser).GetMethod("ParsePhysics", BindingFlags.NonPublic | BindingFlags.Static)!
                 .Invoke(null, new object?[] { view, outerGuid, avatar, null });
             if (avatar.MeshCopies.Count != 2 || avatar.RendererMaterials.Count != 2 || avatar.PhysBones.Count != 1)
                 throw new Exception($"GameObject subtree removal failed via {alias}: copies={avatar.MeshCopies.Count}, materials={avatar.RendererMaterials.Count}, physics={avatar.PhysBones.Count}");
@@ -102,7 +102,7 @@ MonoBehaviour:
             using var view = (UnityPackage)typeof(UnityPackage).Assembly.GetType("VrmToResonitePackage.Unity.UnityPrefabInstances")!
                 .GetMethod("CreateView")!.Invoke(null, new object?[] { package, outerGuid, null })!;
             var avatar = new VrchatAvatar();
-            typeof(VrchatAvatarParser).GetMethod("ParseVariantRendererOverrides", BindingFlags.NonPublic | BindingFlags.Static)!
+            typeof(VrchatAvatarParser).GetMethod("ParseRenderers", BindingFlags.NonPublic | BindingFlags.Static)!
                 .Invoke(null, new object[] { view, outerGuid, avatar });
             if (avatar.MeshCopies.Count != 4 || avatar.MeshCopies.Count(c => c.RendererRemoved) != 1 ||
                 avatar.MeshCopies.Single(c => c.RendererRemoved).Name != "ParentRenderer" ||

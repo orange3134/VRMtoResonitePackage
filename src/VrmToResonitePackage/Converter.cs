@@ -628,14 +628,14 @@ internal static class Converter
             }
             UniLog.Log($"prefab階層を適用: {instanceRoot.Name} -> {parent.Name}");
         }
-        authoredObjects = Vrchat.VrchatSceneSetup.CreateMeshCopies(avatar, importedMeshSources, copy =>
+        var meshBuild = Vrchat.VrchatSceneSetup.InstantiateMeshCopies(avatar, importedMeshSources, copy =>
             ResolvePrefabParent(importRoot, copy.ParentFbxGuid, copy.ParentName, copy.ParentTransforms,
-                importedFbxRoots, slots, importedMeshSources, importedNodePaths), importedNodePaths, slots, () =>
-            {
-                foreach (var placement in avatar.PhysicsPlacements)
-                    ResolvePrefabParent(importRoot, placement.ParentFbxGuid, placement.ParentName, placement.Transforms,
-                        importedFbxRoots, slots, importedMeshSources, importedNodePaths);
-            }, replacedTemplateSlots);
+                importedFbxRoots, slots, importedMeshSources, importedNodePaths), importedNodePaths, slots, replacedTemplateSlots);
+        authoredObjects = meshBuild.AuthoredObjects;
+        foreach (var placement in avatar.PhysicsPlacements)
+            ResolvePrefabParent(importRoot, placement.ParentFbxGuid, placement.ParentName, placement.Transforms,
+                importedFbxRoots, slots, importedMeshSources, importedNodePaths);
+        meshBuild.Bind();
         return authoredObjects.GetValueOrDefault(avatar.DescriptorRootKey ?? "") ??
             avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms).Where(t => t.GameObjectKey == avatar.DescriptorRootKey)
                 .Select(t => slots.GetValueOrDefault(t.Key)).FirstOrDefault(slot => slot != null) ??

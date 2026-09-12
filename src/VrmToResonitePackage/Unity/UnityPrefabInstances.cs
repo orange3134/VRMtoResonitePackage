@@ -17,6 +17,7 @@ internal static class UnityPrefabInstances
         var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         int count = 0;
         Visit(sourceGuid, sourceGuid, new(StringComparer.OrdinalIgnoreCase), subtree);
+        view.ResolvePrefabGraph(sourceGuid);
         return view;
 
         Dictionary<string, string> Visit(string guid, string path, HashSet<string> ancestors,
@@ -32,7 +33,8 @@ internal static class UnityPrefabInstances
             if (identity != guid && (source.ByGuid(identity) != null || !claimed.Add(identity)))
                 throw new InvalidDataException("Prefab instance identity collision.");
             mapping.Add(guid, identity);
-            var alias = new UnityAsset { Guid = identity, LogicalPath = asset.LogicalPath,
+            var alias = new UnityAsset { Guid = identity, SourceGuid = asset.SourceGuid ?? asset.Guid,
+                OccurrencePath = path, LogicalPath = asset.LogicalPath,
                 DiskPath = asset.DiskPath, MetaPath = asset.MetaPath };
             if (asset.Extension == ".fbx")
             {
@@ -43,9 +45,7 @@ internal static class UnityPrefabInstances
             UnityScene scene = source.ReadScene(asset);
             if (scene == null) return mapping;
             var instances = scene.Documents.Values.Where(d => d.ClassId == 1001 &&
-                (included == null || included.Contains(scene.Doc(
-                    d.Root?["m_Modification"]?["m_TransformParent"]?.FileID ?? 0)?
-                    .Root?["m_GameObject"]?.FileID ?? 0))).ToList();
+                scene.IncludesInstance(d, included)).ToList();
             var instanceMaps = new Dictionary<long, Dictionary<string, string>>();
             foreach (var instance in instances)
             {

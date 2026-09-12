@@ -24,7 +24,7 @@ internal static class ModularArmatureChecks
         {
             using var package = UnityPackage.Open(input);
             var avatar = new VrchatAvatar();
-            typeof(VrchatAvatarParser).GetMethod("ParseVariantModularAvatar", BindingFlags.NonPublic | BindingFlags.Static)!
+            typeof(VrchatAvatarParser).GetMethod("ParseModularAvatarComponents", BindingFlags.NonPublic | BindingFlags.Static)!
                 .Invoke(null, new object[] { package, avatarGuid, avatar, null });
             return avatar;
         }

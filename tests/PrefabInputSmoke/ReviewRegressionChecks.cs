@@ -186,7 +186,7 @@ internal static class ReviewRegressionChecks
         {
             using var package = UnityPackage.Open(file);
             var avatar = new VrchatAvatar();
-            Call("ParseVariantRendererOverrides", package, package.InputPrefab.Guid, avatar);
+            Call("ParseRenderers", package, package.InputPrefab.Guid, avatar);
             return avatar;
         }
         Case("unpacked variant replaces same-named template", () =>
@@ -198,7 +198,15 @@ internal static class ReviewRegressionChecks
             string modelGuid = scene.RendererMesh(scene.MeshRenderers.Single()).Guid;
             string composed = asset("Assets/ReviewOuter.prefab", outerGuid, variantText +
                 $"\n--- !u!1001 &101\nPrefabInstance:\n  m_SourcePrefab: {{guid: {modelGuid}}}\n");
-            Require(!Copies(composed).MeshCopies.Single().ReplaceSourceRenderer);
+            using var package = UnityPackage.Open(composed);
+            using var view = (UnityPackage)typeof(UnityPackage).Assembly.GetType("VrmToResonitePackage.Unity.UnityPrefabInstances")!
+                .GetMethod("CreateView")!.Invoke(null, new object[] { package, outerGuid, null })!;
+            var parsed = new VrchatAvatar();
+            Call("ParseRenderers", view, outerGuid, parsed);
+            var copy = parsed.MeshCopies.Single();
+            string intactModel = view.ReadScene(view.InputPrefab).Doc(101).Root["m_SourcePrefab"].Guid;
+            Require(copy.FbxGuid != intactModel && view.ByGuid(copy.FbxGuid).SourceGuid == modelGuid &&
+                view.ByGuid(intactModel).SourceGuid == modelGuid);
         });
 
         Case("scene-local copied bone reference", () =>
@@ -260,10 +268,10 @@ PrefabInstance:
 """);
                 using var taggedPackage = UnityPackage.Open(taggedWrapper);
                 var tagged = new VrchatAvatar();
-                typeof(VrchatAvatarParser).GetMethod("CollectVariantPrefabGameObjectNames", BindingFlags.NonPublic | BindingFlags.Static,
+                typeof(VrchatAvatarParser).GetMethod("CollectPrefabVisibility", BindingFlags.NonPublic | BindingFlags.Static,
                     new[] { typeof(UnityPackage), typeof(string), typeof(VrchatAvatar) })!
                     .Invoke(null, new object[] { taggedPackage, taggedPackage.InputPrefab.Guid, tagged });
-                Call("ParseVariantRendererOverrides", taggedPackage, taggedPackage.InputPrefab.Guid, tagged);
+                Call("ParseRenderers", taggedPackage, taggedPackage.InputPrefab.Guid, tagged);
                 Require(tagged.MeshCopies.Count == (bothExcluded ? 0 : 1) &&
                     tagged.ShouldKeepRenderer(mesh.Guid, "Shared") == !bothExcluded &&
                     tagged.RendererMaterials.Count == (bothExcluded ? 0 : 1) &&
@@ -342,7 +350,7 @@ PrefabInstance:
 """);
             using var package = UnityPackage.Open(tags);
             var avatar = new VrchatAvatar();
-            typeof(VrchatAvatarParser).GetMethod("CollectVariantPrefabGameObjectNames", BindingFlags.NonPublic | BindingFlags.Static,
+            typeof(VrchatAvatarParser).GetMethod("CollectPrefabVisibility", BindingFlags.NonPublic | BindingFlags.Static,
                 new[] { typeof(UnityPackage), typeof(string), typeof(VrchatAvatar) })!.Invoke(null, new object[] { package, outerGuid, avatar });
             Require(avatar.EditorOnlyModelPaths.TryGetValue(branchesGuid, out var paths) &&
                 paths.Any(p => p.EndsWith("Left/Shared")) && paths.All(p => !p.Contains("Right/Shared")));
@@ -364,7 +372,7 @@ MonoBehaviour:
             using var view = (UnityPackage)typeof(UnityPackage).Assembly.GetType("VrmToResonitePackage.Unity.UnityPrefabInstances")!
                 .GetMethod("CreateView")!.Invoke(null, new object[] { source, outerGuid, null })!;
             var avatar = new VrchatAvatar();
-            Call("ParseVariantPhysBones", view, outerGuid, avatar, null!);
+            Call("ParsePhysics", view, outerGuid, avatar, null!);
             var model = VrchatModelAdapter.ToVrmModel(avatar);
             Require(model.SpringChains.Count == 2 && model.SpringChains.SelectMany(c => c.RootNodes).Distinct().Count() == 2);
         });

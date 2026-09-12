@@ -8,6 +8,10 @@ public sealed class UnityAsset
 {
     public string Guid { get; init; }
 
+    /// <summary>Original asset GUID, retained when Guid identifies a parsing occurrence.</summary>
+    public string SourceGuid { get; init; }
+    public string OccurrencePath { get; init; }
+
     /// <summary>Logical project-relative path, e.g. "Assets/Foo/Bar.prefab" (from the entry's "pathname").</summary>
     public string LogicalPath { get; init; }
 
@@ -34,6 +38,14 @@ public sealed class UnityPackage : IDisposable
     private readonly Dictionary<string, string> _textByGuid = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UnityScene> _sceneByGuid = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UnityModelFileIdResolver> _modelIds = new(StringComparer.OrdinalIgnoreCase);
+
+    internal UnityPrefabGraph PrefabGraph { get; private set; }
+    private UnityObjectResolver _objectIds;
+    internal UnityObjectResolver ObjectIds => _objectIds ??= new(this, guid =>
+        ByGuid(guid)?.Extension is ".prefab" or ".unity" ? ReadScene(ByGuid(guid)) : null);
+
+    internal void ResolvePrefabGraph(string rootGuid)
+        => PrefabGraph = UnityPrefabGraph.Resolve(this, rootGuid);
 
     private UnityPackage(string root, Dictionary<string, UnityAsset> byGuid)
     {
@@ -159,6 +171,7 @@ public sealed class UnityPackage : IDisposable
         {
             return null;
         }
+        if (PrefabGraph?.Scene(asset.Guid) is {} resolved) return resolved;
         if (!_sceneByGuid.TryGetValue(asset.Guid, out UnityScene scene))
         {
             scene = UnityScene.Parse(ReadText(asset));

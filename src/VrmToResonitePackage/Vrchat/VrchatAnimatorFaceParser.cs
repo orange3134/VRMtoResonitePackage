@@ -35,16 +35,8 @@ public static class VrchatAnimatorFaceParser
                 };
             }
             var initialStates = VrchatAnimatorDefaults.Resolve(controller, settings, defaults);
-            var owners = new Dictionary<YamlNode, YamlNode>();
-            foreach (var document in controller.Documents.Values.Where(d => d.ClassId == 1107))
-            {
-                foreach (string key in new[] { "m_ChildStates", "m_ChildStateMachines" })
-                    foreach (var child in document.Root?[key]?.Seq ?? new())
-                    {
-                        var node = controller.Doc(child[key == "m_ChildStates" ? "m_State" : "m_StateMachine"]?.FileID ?? 0)?.Root;
-                        if (node != null) owners[node] = document.Root;
-                    }
-            }
+            var graph = new VrchatAnimatorGraph(controller);
+            var owners = graph.Owners;
             var animatorLayers = settings?["m_AnimatorLayers"]?.Seq ?? new();
             var layerBindings = animatorLayers.Select((item, index) =>
                 index == 0 || (item["m_DefaultWeight"]?.AsFloat() ?? 0) != 0
@@ -56,9 +48,7 @@ public static class VrchatAnimatorFaceParser
                 // cannot be represented without changing the deformation.
                 if (layerIndex++ > 0 && ((animatorLayer["m_DefaultWeight"]?.AsFloat() ?? 0) != 1f ||
                     animatorLayer["m_BlendingMode"]?.AsInt() == 1)) continue;
-                var reachable = new HashSet<long>();
-                var reachedValues = new Dictionary<long, HashSet<int>>();
-                Gather(animatorLayer["m_StateMachine"]?.FileID ?? 0);
+                var reachable = graph.Reachable(animatorLayer["m_StateMachine"]?.FileID ?? 0);
                 // Permanent drivers cannot preserve a toggle/parameter gate, even when
                 // its startup default is enabled. Reject such layers conservatively.
                 bool gated = reachable.Any(id => (controller.Doc(id)?.Root?["m_Conditions"]?.Seq ?? new())
@@ -128,7 +118,7 @@ public static class VrchatAnimatorFaceParser
                     {
                         YamlNode entry = controller.Doc(reference.FileID ?? 0)?.Root;
                         if (!(entry?["m_Conditions"]?.Seq ?? new()).All(condition =>
-                            condition["m_ConditionEvent"]?.AsString() == "Viseme" && MatchesViseme(condition, viseme))) continue;
+                            condition["m_ConditionEvent"]?.AsString() == "Viseme" && VrchatAnimatorGraph.Matches(condition, viseme))) continue;
                         return Destination(entry, viseme, visited);
                     }
                     return controller.Doc(node?["m_DefaultState"]?.FileID ?? 0)?.Root;
@@ -142,7 +132,7 @@ public static class VrchatAnimatorFaceParser
                     {
                         YamlNode departure = controller.Doc(reference.FileID ?? 0)?.Root;
                         if (departure == null || (departure["m_Conditions"]?.Seq ?? new()).All(condition =>
-                            condition["m_ConditionEvent"]?.AsString() != "Viseme" || MatchesViseme(condition, viseme)))
+                            condition["m_ConditionEvent"]?.AsString() != "Viseme" || VrchatAnimatorGraph.Matches(condition, viseme)))
                             return new();
                     }
                     var visited = new HashSet<YamlNode>();
@@ -154,7 +144,7 @@ public static class VrchatAnimatorFaceParser
                             var departure = controller.Doc(reference.FileID ?? 0)?.Root;
                             if (departure == null) return new();
                             if (!(departure["m_Conditions"]?.Seq ?? new()).All(condition =>
-                                condition["m_ConditionEvent"]?.AsString() != "Viseme" || MatchesViseme(condition, viseme))) continue;
+                                condition["m_ConditionEvent"]?.AsString() != "Viseme" || VrchatAnimatorGraph.Matches(condition, viseme))) continue;
                             bool self = controller.Doc(departure["m_DstState"]?.FileID ?? 0)?.Root == state;
                             if (!self) return new();
                             if (departure["m_CanTransitionToSelf"]?.AsBool() == false) continue;
@@ -171,71 +161,15 @@ public static class VrchatAnimatorFaceParser
                     return shapes;
                 }
 
-                void Gather(long id, IEnumerable<int> eligibleValues = null)
-                {
-                    if (id == 0) return;
-                    var incoming = (eligibleValues ?? Enumerable.Range(0, 15)).ToHashSet();
-                    if (!reachedValues.TryGetValue(id, out var seen)) reachedValues[id] = seen = new();
-                    incoming.ExceptWith(seen);
-                    if (incoming.Count == 0) return;
-                    seen.UnionWith(incoming);
-                    reachable.Add(id);
-                    YamlNode node = controller.Doc(id)?.Root;
-                    foreach (string key in new[] { "m_DstState", "m_DstStateMachine" })
-                        Gather(node?[key]?.FileID ?? 0, incoming);
-                    foreach (string key in new[] { "m_Transitions", "m_EntryTransitions", "m_AnyStateTransitions" })
-                    {
-                        // Entry routing happens immediately with the incoming parameter value.
-                        // State/Any State transitions can run later, after Viseme changes.
-                        var remaining = key == "m_EntryTransitions" ? incoming.ToHashSet() : Enumerable.Range(0, 15).ToHashSet();
-                        foreach (YamlNode transition in VrchatAnimatorDefaults.ActiveTransitions(controller, node?[key]?.Seq))
-                        {
-                            YamlNode candidate = controller.Doc(transition.FileID ?? 0)?.Root;
-                            var conditions = candidate?["m_Conditions"]?.Seq ?? new();
-                            IEnumerable<int> eligible = remaining.ToArray();
-                            if (conditions.All(c => c["m_ConditionEvent"]?.AsString() == "Viseme"))
-                            {
-                                eligible = remaining.Where(value => conditions.All(c => MatchesViseme(c, value))).ToArray();
-                                if (!eligible.Any()) continue;
-                                // Timed transitions do not always win before later siblings.
-                                if (candidate?["m_HasExitTime"]?.AsBool() != true) remaining.ExceptWith(eligible);
-                            }
-                            Gather(transition.FileID ?? 0, eligible);
-                        }
-                        // Default is the fallback only for values not routed by Entry.
-                        if (key == "m_EntryTransitions" && remaining.Count > 0)
-                            Gather(node?["m_DefaultState"]?.FileID ?? 0, remaining);
-                    }
-                }
             }
 
             HashSet<(string, string)> LayerBindings(YamlNode animatorLayer)
             {
                 var bindings = new HashSet<(string, string)>();
                 var visited = new HashSet<long>();
-                Visit(animatorLayer["m_StateMachine"]?.FileID ?? 0);
+                foreach (long id in graph.Reachable(animatorLayer["m_StateMachine"]?.FileID ?? 0))
+                    if (controller.Doc(id) is { ClassId: 1102 } state) VisitMotion(state.Root?["m_Motion"]);
                 return bindings;
-
-                void Visit(long id)
-                {
-                    if (id == 0 || !visited.Add(id)) return;
-                    var node = controller.Doc(id)?.Root;
-                    VisitMotion(node?["m_Motion"]);
-                    foreach (string key in new[] { "m_DefaultState", "m_DstState", "m_DstStateMachine" })
-                        Visit(node?[key]?.FileID ?? 0);
-                    foreach (string key in new[] { "m_ChildStates", "m_ChildStateMachines", "m_Children" })
-                        foreach (var child in node?[key]?.Seq ?? new())
-                        {
-                            // BlendTree children carry motions rather than states.
-                            if (key == "m_Children")
-                                VisitMotion(child["m_Motion"]);
-                            else Visit(child[key == "m_ChildStates" ? "m_State" : "m_StateMachine"]?.FileID ?? 0);
-                        }
-                    foreach (string key in new[] { "m_Transitions", "m_EntryTransitions", "m_AnyStateTransitions" })
-                        foreach (var reference in VrchatAnimatorDefaults.ActiveTransitions(controller, node?[key]?.Seq))
-                            Visit(reference.FileID ?? 0);
-                }
-
                 void VisitMotion(YamlNode motion)
                 {
                     foreach (var curve in Clip(motion)?["m_FloatCurves"]?.Seq ?? new())
@@ -245,7 +179,9 @@ public static class VrchatAnimatorFaceParser
                             attribute?.StartsWith("blendShape.", StringComparison.Ordinal) == true)
                             bindings.Add((path, attribute["blendShape.".Length..]));
                     }
-                    if (motion?.Guid == null) Visit(motion?.FileID ?? 0);
+                    if (motion?.Guid == null && motion?.FileID is long id && id != 0 && visited.Add(id))
+                        foreach (var child in controller.Doc(id)?.Root?["m_Children"]?.Seq ?? new())
+                            VisitMotion(child["m_Motion"]);
                 }
             }
         }
@@ -290,16 +226,6 @@ public static class VrchatAnimatorFaceParser
         }
     }
 
-    private static bool MatchesViseme(YamlNode condition, int value)
-    {
-        float threshold = condition["m_EventTreshold"]?.AsFloat() ?? 0;
-        return condition["m_ConditionMode"]?.AsInt() switch
-        {
-            1 => value != 0, 2 => value == 0, 3 => value > threshold, 4 => value < threshold,
-            6 => value == threshold, 7 => value != threshold, _ => false,
-        };
-    }
-
     private static List<Shape> ActiveShapes(YamlNode clip, bool requireConstant = false, bool requireOpen = false)
     {
         var result = new List<Shape>();
@@ -328,8 +254,8 @@ public static class VrchatAnimatorFaceParser
                         (keys[i + 1]["inSlope"]?.AsFloat() ?? 0) != 0) return new();
             }
             float peak = keys?.Select(key => key["value"]?.AsFloat() ?? 0).DefaultIfEmpty().Max() ?? 0;
-            // Neutral curves are requirements too: prefab/FBX initial weights are
-            // collected after inference and may be nonzero. Keep every face curve
+            // Neutral curves are requirements too: prefab/FBX initial weights may
+            // be nonzero. Keep every face curve
             // so the single-shape check rejects motions requiring additional resets.
             result.Add(new Shape(path, attribute["blendShape.".Length..], peak));
         }

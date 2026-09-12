@@ -8,6 +8,39 @@ VRChatパーサはUnityアセットを解析し、共通の `VrmModel` とVRChat
 リグ、視点、表情、揺れものはVRM経路の `AvatarSetup` / `SpringBoneSetup` を再利用し、
 prefab合成、初期状態、マテリアルはVRChat専用処理で補う。
 
+### Prefab解決と変換の責務
+
+Unity Editorを起動せず、プロジェクトの保存済みYAML・meta・FBXから次の順序で変換する。
+UnityのLibraryやVRChat SDKの実行環境は不要。
+
+1. `UnityPrefabInstances` が選択範囲を切り出し、各配置に固有の識別子を割り当てる。
+   `UnityAsset.SourceGuid` は元アセット、`OccurrencePath` は配置経路を表す。
+   既存の `Guid` フィールドは変換中の配置識別子としても使うため、元アセットのGUIDとは区別する。
+2. `UnityObjectResolver` が通常のfileID、明示されたstripped参照、省略されたstripped参照を
+   共通の `UnityObjectId`（配置識別子とfileID）へ解決する。名前はオブジェクトの識別に使わない。
+3. `UnityPrefabGraph` がソース文書を複製し、内側のPrefabから外側のVariantへ上書きを合成する。
+   `UnityPropertyOverrides` はコンポーネント型に依存せず、フィールド、配列サイズ・要素、
+   明示的な0・空文字・null参照を適用する。上書きで追加されたローカル参照は宣言元の配置に属する。
+   コンポーネント削除とGameObjectの子孫削除もここで処理し、外側に記録された追加コンポーネントへ伝播する。
+   元のキャッシュ・ファイルは変更しない。
+4. Descriptor、Renderer、PhysBone、Modular Avatarの抽出は同じ合成済みシーンを読む。
+   新しいコンポーネントを実装するときに、Variantの走査や削除判定を再実装しない。
+   YAML文書を持たないFBX内部への上書きは、正規化した対象参照をモデル変換側へ渡す。
+5. 出力側は `InstantiateMeshCopies` でオブジェクトを生成・登録し、物理用の階層も生成してから
+   `MeshCopyBuild.Bind` でskinの参照を接続する。生成中のコールバックで参照先を追加しない。
+
+削除されたRendererの元メッシュは、生存するGameObjectと子の配置を復元するためのテンプレートとして
+必要になる場合がある。`RendererTemplateScenes` はその用途だけに削除前の文書を提供する。
+Renderer自身やマテリアルを復活させてはいけない。
+
+Animatorの表情推定と他レイヤーとの競合判定は `VrchatAnimatorGraph` の到達可能性を共有する。
+未接続のstateに競合するclipがあるだけでは表情を除外しない。到達可能な競合は保守的に除外する。
+Prefab・FBXの初期ウェイトを収集した後に表情を推定する。
+
+これは保存済みデータと対応機能の合成器であり、Unityの実行結果全体を再現するものではない。
+任意スクリプト、NDMFのビルド処理、Animator全機能は実行しない。FBX内部のfileID/path対応には
+引き続きモデル解決器の対応範囲がある。これらを追加するときも共通の参照・合成処理を利用する。
+
 GUIとCLIはいずれも `.unitypackage` を入力として受理する。複数アバターを含む場合はGUIで選択するか、
 CLIの `--avatar` を使う。出力名は入力package名ではなく選択したprefab名を使い、子プロセスは
 `RESOPON_OUTPUT:` で実出力パスを通知する。
@@ -153,12 +186,12 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   nonzero interpolation slopes cannot become a permanent full-weight binding. Blink
   inference still uses the peak of its animated curve.
   Before accepting a viseme or blink, check its renderer path and blendshape against bindings
-  in other nonzero-weight Animator layers, including zero-valued curves and BlendTree
+  in reachable states of other nonzero-weight Animator layers, including zero-valued curves and BlendTree
   motions. Reject overlapping bindings conservatively because permanent drivers cannot
   reproduce the combined layer result; unrelated bindings do not block inference.
   Retain zero-valued curves when counting viseme and blink shape requirements. Initial prefab
-  and FBX weights are collected after face inference, so a neutral curve cannot be
-  assumed redundant. Reject multi-curve face motions conservatively: a single-shape driver
+  and FBX weights are collected before face inference, but a neutral curve cannot be
+  assumed redundant across Animator states. Reject multi-curve face motions conservatively: a single-shape driver
   cannot also clear another authored shape, even when its required value is zero.
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。

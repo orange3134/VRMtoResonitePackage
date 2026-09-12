@@ -47,6 +47,10 @@ public sealed class UnityScene
 
     public YamlDocument Doc(long fileId) => fileId != 0 && _byFileId.TryGetValue(fileId, out YamlDocument d) ? d : null;
 
+    internal bool IncludesInstance(YamlDocument instance, IReadOnlySet<long> subtree)
+        => subtree == null || subtree.Contains(Doc(instance.Root?["m_Modification"]?["m_TransformParent"]?.FileID ?? 0)?
+            .Root?["m_GameObject"]?.FileID ?? 0);
+
     public IEnumerable<YamlDocument> GameObjects => _byFileId.Values.Where(d => d.ClassId == ClassGameObject);
 
     public IEnumerable<YamlDocument> SkinnedMeshRenderers =>

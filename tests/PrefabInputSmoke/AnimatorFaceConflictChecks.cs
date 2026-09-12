@@ -10,7 +10,8 @@ internal static class AnimatorFaceConflictChecks
         const string resetGuid = "abcd1300000000000000000000000003";
         var failures = new List<string>();
         foreach (string mode in new[] { "blink override", "blink partial override", "blink unrelated", "blink zero weight", "neutral viseme", "single viseme", "blink additive", "viseme additive", "disconnected gate", "connected gate",
-            "hidden renderer", "enabled renderer", "inactive object", "inactive ancestor", "inactive root", "inactive sibling", "inactive child", "enabled ancestor renderer", "blink hidden renderer" })
+            "hidden renderer", "enabled renderer", "inactive object", "inactive ancestor", "inactive root", "inactive sibling", "inactive child", "enabled ancestor renderer", "blink hidden renderer",
+            "blink disconnected conflict", "blink reachable conflict", "viseme disconnected conflict", "viseme reachable conflict" })
         {
             bool blink = mode.StartsWith("blink");
             string Curve(string name, int value) =>
@@ -34,9 +35,9 @@ internal static class AnimatorFaceConflictChecks
                 (blink ? Curve("blink", 100).Replace("      - value: 100", "      - value: 0\n      - value: 100\n      - value: 0") : Curve("mouth", 100)) +
                 (mode == "neutral viseme" ? Curve("Smile", 0) : "") + visibilityCurve);
             asset("Assets/ConflictReset.anim", resetGuid,
-                "--- !u!74 &7400000\nAnimationClip:\n  m_FloatCurves:\n" + Curve(mode is "blink unrelated" or "blink hidden renderer" ? "Smile" : "blink", 0));
+                "--- !u!74 &7400000\nAnimationClip:\n  m_FloatCurves:\n" + Curve(mode is "blink unrelated" or "blink hidden renderer" ? "Smile" : mode.StartsWith("viseme") ? "mouth" : "blink", 0));
             string controller = "--- !u!91 &91\nAnimatorController:\n  m_AnimatorLayers:\n  - m_StateMachine: {fileID: 100}\n" +
-                (blink ? "  - m_StateMachine: {fileID: 300}\n    m_DefaultWeight: " + (mode == "blink zero weight" ? "0" : mode == "blink partial override" ? "0.5" : "1") + "\n" : "") +
+                (blink || mode.EndsWith("conflict") ? "  - m_StateMachine: {fileID: 300}\n    m_DefaultWeight: " + (mode == "blink zero weight" ? "0" : mode == "blink partial override" ? "0.5" : "1") + "\n" : "") +
                 "--- !u!1107 &100\nAnimatorStateMachine:\n  m_DefaultState: {fileID: 200}\n  m_EntryTransitions:\n  - {fileID: 101}\n" +
                 "--- !u!1109 &101\nAnimatorTransition:\n  m_DstState: {fileID: 200}\n  m_Conditions:\n  - m_ConditionEvent: Viseme\n    m_ConditionMode: 6\n    m_EventTreshold: 10\n" +
                 "--- !u!1102 &200\nAnimatorState:\n  m_Motion: {fileID: 7400000, guid: " + clipGuid + "}\n" +
@@ -45,6 +46,10 @@ internal static class AnimatorFaceConflictChecks
                 controller = controller.Replace("  - m_StateMachine: {fileID: 100}\n",
                     "  - m_StateMachine: {fileID: 999}\n  - m_StateMachine: {fileID: 100}\n    m_DefaultWeight: 1\n    m_BlendingMode: 1\n")
                     .Replace("    m_DefaultWeight: 1\n--- !u!1107 &100", "    m_DefaultWeight: 0\n--- !u!1107 &100");
+            if (mode.EndsWith("conflict"))
+                controller = controller.Replace("  m_DefaultState: {fileID: 400}\n", "  m_DefaultState: {fileID: 600}\n  m_ChildStates:\n  - m_State: {fileID: 400}\n  - m_State: {fileID: 600}\n") +
+                    "--- !u!1102 &600\nAnimatorState:\n  m_WriteDefaultValues: 0\n" +
+                    (mode.Contains("reachable") ? "  m_Transitions:\n  - {fileID: 601}\n--- !u!1101 &601\nAnimatorStateTransition:\n  m_DstState: {fileID: 400}\n  m_Conditions: []\n" : "");
             if (mode.EndsWith("gate"))
             {
                 controller = controller.Replace("--- !u!1107 &100\nAnimatorStateMachine:\n",
@@ -67,7 +72,8 @@ internal static class AnimatorFaceConflictChecks
                 $"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {controllerGuid}}}\n"), avatar);
             bool inferred = blink ? avatar.Blink != null : avatar.Visemes.Count != 0;
             bool expected = mode is "blink unrelated" or "blink zero weight" or "single viseme" or "disconnected gate"
-                or "inactive sibling" or "inactive child" or "enabled ancestor renderer";
+                or "inactive sibling" or "inactive child" or "enabled ancestor renderer"
+                or "blink disconnected conflict" or "viseme disconnected conflict";
             if (inferred != expected) failures.Add($"{mode}: expected inference={expected}, got {inferred}");
             else Console.WriteLine($"PASS: Animator face conflict ({mode})");
         }

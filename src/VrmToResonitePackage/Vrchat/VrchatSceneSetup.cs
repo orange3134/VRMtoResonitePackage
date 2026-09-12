@@ -10,9 +10,27 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static class VrchatSceneSetup
 {
-    public static Dictionary<string, Slot> CreateMeshCopies(VrchatAvatar avatar, Dictionary<Slot, string> sources,
+    internal sealed class MeshCopyBuild
+    {
+        private Action _bind;
+        public Dictionary<string, Slot> AuthoredObjects { get; }
+        internal MeshCopyBuild(Dictionary<string, Slot> objects, Action bind)
+        {
+            AuthoredObjects = objects;
+            _bind = bind;
+        }
+
+        public void Bind()
+        {
+            var bind = _bind ?? throw new InvalidOperationException("Mesh copies have already been bound.");
+            _bind = null;
+            bind();
+        }
+    }
+
+    public static MeshCopyBuild InstantiateMeshCopies(VrchatAvatar avatar, Dictionary<Slot, string> sources,
         Func<VrchatMeshCopy, Slot> resolveParent, IReadOnlyDictionary<Slot, string> importedPaths,
-        Dictionary<string, Slot> prefabSlots = null, Action createPhysicsHierarchy = null,
+        Dictionary<string, Slot> prefabSlots = null,
         HashSet<Slot> replacedTemplateSlots = null)
     {
         prefabSlots ??= new(StringComparer.Ordinal);
@@ -101,58 +119,58 @@ internal static class VrchatSceneSetup
                 staticScaleCorrections[slot] = correction;
             }
         }
-        // Physics-only bones must share identity with skins, including unpacked prefabs
-        // with multiple FBX sources where no single imported skeleton can be inferred.
-        // Create these after renderer placement but before skin binding and compensation.
-        createPhysicsHierarchy?.Invoke();
-        // Parent creation and renderer registration can provide authored bone identities.
-        // Resolve skins only after all of those slots are available.
-        var capturedSources = importedSources.ToDictionary(entry => entry.Key, entry => entry.Value);
-        foreach (var (copy, slot) in copies)
+        // Return the placed objects before resolving skin references. The converter creates
+        // all remaining authored hierarchy, then explicitly finishes the binding phase.
+        return new MeshCopyBuild(authoredObjects, Bind);
+
+        void Bind()
         {
-            var renderer = slot.GetComponent<SkinnedMeshRenderer>();
-            for (int i = 0; i < (renderer?.Bones.Count ?? 0); i++)
+            var capturedSources = importedSources.ToDictionary(entry => entry.Key, entry => entry.Value);
+            foreach (var (copy, slot) in copies)
             {
-                if (!copy.BoneTargets.TryGetValue(i, out var target)) continue;
-                if (target.Name == null)
+                var renderer = slot.GetComponent<SkinnedMeshRenderer>();
+                for (int i = 0; i < (renderer?.Bones.Count ?? 0); i++)
                 {
-                    renderer.Bones[i] = null;
-                    continue;
+                    if (!copy.BoneTargets.TryGetValue(i, out var target)) continue;
+                    if (target.Name == null)
+                    {
+                        renderer.Bones[i] = null;
+                        continue;
+                    }
+                    Slot bone = ResolveImportedTarget(target, capturedSources, importedPaths, prefabSlots);
+                    if (bone != null)
+                    {
+                        renderer.Bones[i] = bone;
+                        continue;
+                    }
+                    // Unpacking loses the FBX identity of local transforms. A renamed bone's
+                    // authored path cannot identify its original imported slot. Retain the
+                    // copied skin's existing binding instead of guessing by name or aborting.
+                    if (target.PrefabGuid != null && target.TransformFileId != 0 && renderer.Bones[i] != null)
+                    {
+                        UniLog.Warning($"Prefab bone keeps imported skin binding: {copy.Name} / {target.Name}");
+                        continue;
+                    }
+                    throw new InvalidDataException($"複製メッシュのボーン参照を特定できません: {copy.Name} / {target.Name}");
                 }
-                Slot bone = ResolveImportedTarget(target, capturedSources, importedPaths, prefabSlots);
-                if (bone != null)
+            }
+            // Import units correct this renderer's mesh only. Unity-authored child transforms
+            // must not inherit the extra factor, including attachments created before the copy.
+            foreach (var (slot, correction) in staticScaleCorrections)
+                foreach (Slot child in slot.Children)
                 {
-                    renderer.Bones[i] = bone;
-                    continue;
+                    child.LocalPosition /= correction;
+                    child.LocalScale /= correction;
                 }
-                // Unpacking loses the FBX identity of local transforms. A renamed bone's
-                // authored path cannot identify its original imported slot. Retain the
-                // copied skin's existing binding instead of guessing by name or aborting.
-                if (target.PrefabGuid != null && target.TransformFileId != 0 && renderer.Bones[i] != null)
-                {
-                    UniLog.Warning($"Prefab bone keeps imported skin binding: {copy.Name} / {target.Name}");
-                    continue;
-                }
-                throw new InvalidDataException($"複製メッシュのボーン参照を特定できません: {copy.Name} / {target.Name}");
+            // Unpacked prefabs explicitly describe their renderers. Keep imported bones and
+            // slots as references, but do not also render the FBX template at its old location.
+            foreach (var renderer in replacedRenderers)
+            {
+                for (Slot slot = renderer.Slot; slot != null && importedPaths.ContainsKey(slot); slot = slot.Parent)
+                    replacedTemplateSlots?.Add(slot);
+                renderer.Destroy();
             }
         }
-        // Import units correct this renderer's mesh only. Unity-authored child transforms
-        // must not inherit the extra factor, including attachments created before the copy.
-        foreach (var (slot, correction) in staticScaleCorrections)
-            foreach (Slot child in slot.Children)
-            {
-                child.LocalPosition /= correction;
-                child.LocalScale /= correction;
-            }
-        // Unpacked prefabs explicitly describe their renderers. Keep imported bones and
-        // slots as references, but do not also render the FBX template at its old location.
-        foreach (var renderer in replacedRenderers)
-        {
-            for (Slot slot = renderer.Slot; slot != null && importedPaths.ContainsKey(slot); slot = slot.Parent)
-                replacedTemplateSlots?.Add(slot);
-            renderer.Destroy();
-        }
-        return authoredObjects;
 
         float ImportScale(string guid) => guid == null ? 1f : guid == avatar.FbxGuid ? avatar.FbxImportScale :
             avatar.AdditionalFbxs.FirstOrDefault(model => model.Guid == guid)?.ImportScale ?? 1f;

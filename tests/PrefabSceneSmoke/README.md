@@ -1,5 +1,11 @@
 # Prefab scene regression checks
 
+The final checks build a temporary Unity project containing the supplied FBX and a
+Prefab Variant, invoke the production converter, and decode the saved package.
+They verify embedded assets and the overridden hierarchy name. This uses the test's
+isolated engine data/cache directories and `NoAvatar` mode; no Unity Editor or
+Library folder is needed. Full humanoid setup is outside this end-to-end fixture.
+
 Also verifies static-mesh import scale outside the source hierarchy, empty Animator
 bindings below the export root, and separate DynamicBoneChains on same-named bones
 in repeated model instances.

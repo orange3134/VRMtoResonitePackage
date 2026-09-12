@@ -223,7 +223,7 @@ static async Task Run(string fbxPath, string rendererName)
         var cleanupPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", cleanupRoots);
         var cleanupCandidates = new HashSet<Slot>();
         var cleanupObjects = (Dictionary<string, Slot>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CreateMeshCopies", cleanupAvatar, cleanupSources,
-            (Func<VrchatMeshCopy, Slot>)(_ => cleanupRoot), cleanupPaths, null, null, cleanupCandidates);
+            (Func<VrchatMeshCopy, Slot>)(_ => cleanupRoot), cleanupPaths, null, cleanupCandidates);
         cleanupAvatar.PrefabGameObjectNames.Add("underwear");
         var renamedCopy = cleanupObjects["clothing:2"];
         var renamedChild = renamedCopy.AddSlot("Authored attachment");
@@ -761,13 +761,85 @@ static async Task Run(string fbxPath, string rendererName)
               rightSource.GetComponent<MeshRenderer>() == null && !rightSource.IsDestroyed,
             "Removed renderer leaves its authored object and child placement intact and cannot reappear as an imported template");
     });
+
+    // Exercise the production parser/importer/exporter in this isolated engine instance.
+    // No Unity Editor, generated Library folder, or user application data is required.
+    const string modelGuid = "abcdefabcdefabcdefabcdefabcdefab";
+    const string baseGuid = "bcdefabcdefabcdefabcdefabcdefabc";
+    string modelPath = Path.Combine(temp, "Assets/Model.fbx");
+    File.Copy(fbxPath, modelPath);
+    File.WriteAllText(modelPath + ".meta", "guid: " + modelGuid);
+    string basePath = Path.Combine(temp, "Assets/ConversionBase.prefab");
+    File.WriteAllText(basePath, $$"""
+        --- !u!1 &1
+        GameObject:
+          m_Name: ConversionBase
+        --- !u!4 &2
+        Transform:
+          m_GameObject: {fileID: 1}
+          m_Father: {fileID: 0}
+        --- !u!114 &3
+        MonoBehaviour:
+          m_GameObject: {fileID: 1}
+          m_Script: {fileID: 11500000, guid: 67cc4cb7839cd3741b63733d5adf0442}
+        --- !u!1001 &4
+        PrefabInstance:
+          m_SourcePrefab: {guid: {{modelGuid}}}
+          m_Modification:
+            m_TransformParent: {fileID: 2}
+            m_Modifications: []
+        """);
+    File.WriteAllText(basePath + ".meta", "guid: " + baseGuid);
+    string variantPath = Path.Combine(temp, "Assets/ConversionVariant.prefab");
+    File.WriteAllText(variantPath, $$"""
+        --- !u!1001 &10
+        PrefabInstance:
+          m_SourcePrefab: {guid: {{baseGuid}}}
+          m_Modification:
+            m_Modifications:
+            - target: {guid: {{baseGuid}}, fileID: 1}
+              propertyPath: m_Name
+              value: ResolvedConversion
+              objectReference: {fileID: 0}
+        """);
+    File.WriteAllText(variantPath + ".meta", "guid: cdefabcdefabcdefabcdefabcdefabcd");
+    var optionsType = typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.CliOptions")!;
+    object options = Activator.CreateInstance(optionsType)!;
+    optionsType.GetProperty("NoAvatar")!.SetValue(options, true);
+    optionsType.GetProperty("OutputDirectory")!.SetValue(options, Path.Combine(temp, "Output"));
+    string output = await (Task<string>)Call("VrmToResonitePackage.Converter", "ConvertVrchat", world, variantPath, options);
+    Check(File.Exists(output) && (int)Call("VrmToResonitePackage.PackageInspector", "Inspect", output, false) == 0,
+        "A project Prefab Variant converts with the production pipeline and its saved package can be decoded");
+    using var saved = Elements.Assets.RecordPackage.Decode(output);
+    string signature = Elements.Assets.RecordPackage.GetAssetSignature(new Uri(saved.MainRecord.AssetURI));
+    using var assetStream = saved.ReadAsset(signature);
+    using var data = new MemoryStream();
+    assetStream.CopyTo(data);
+    data.Position = 0;
+    var savedTree = DataTreeConverter.LoadAuto(data);
+    bool ContainsSlot(DataTreeDictionary slot, string expected)
+    {
+        var name = slot.TryGetNode("Name");
+        if (name is DataTreeDictionary field) name = field.TryGetNode("Data");
+        if ((name as DataTreeValue)?.Extract<string>() == expected) return true;
+        return slot.TryGetNode("Children") is DataTreeList children &&
+            children.Children.OfType<DataTreeDictionary>().Any(child => ContainsSlot(child, expected));
+    }
+    Check(saved.MainRecord.Name == "ConversionVariant" && saved.AssetCount > 1 &&
+          savedTree.TryGetNode("Object") is DataTreeDictionary savedRoot && ContainsSlot(savedRoot, "ResolvedConversion"),
+        "Saved package retains the selected prefab name, overridden hierarchy and embedded model assets");
 }
 
 static object Call(string type, string method, params object[] args)
 {
+    bool bindMeshes = method == "CreateMeshCopies";
+    if (bindMeshes) method = "InstantiateMeshCopies";
     var info = typeof(VrchatAvatar).Assembly.GetType(type)!
         .GetMethod(method, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!;
-    return info.Invoke(null, args.Concat(info.GetParameters().Skip(args.Length).Select(p => p.DefaultValue)).ToArray())!;
+    var result = info.Invoke(null, args.Concat(info.GetParameters().Skip(args.Length).Select(p => p.DefaultValue)).ToArray())!;
+    if (!bindMeshes) return result;
+    result.GetType().GetMethod("Bind")!.Invoke(result, null);
+    return result.GetType().GetProperty("AuthoredObjects")!.GetValue(result)!;
 }
 static void Check(bool condition, string label)
 {
