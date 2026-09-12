@@ -25,6 +25,11 @@ or destroyed explicit references. Bone Proxy checks cover repeated accessories,
 descriptor-relative paths, avatar-root targets, humanoid targets after armature
 merging, missing references, and target paths changed by an earlier proxy move.
 
+Humanoid head checks put clothing Head/Hips namesakes first, then verify primary
+model selection for alignment, rig assignment and first-person erase-bone indices.
+First-person fallback rejects clothing rigs and missing/destroyed explicit heads;
+the VRM node-name resolution behavior remains unchanged.
+
 Also verifies static-mesh import scale outside the source hierarchy, empty Animator
 bindings below the export root, and separate DynamicBoneChains on same-named bones
 in repeated model instances.

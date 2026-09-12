@@ -294,6 +294,9 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
 
 VRChatの15 visemeはResonite enumへ対応させ、Unityの0〜100をResoniteの0〜1へ変換する。
 customEyeLookSettingsの左右の目はprefab配置・Transform fileIDまたはFBXの完全なpathを保持する。
+通常のhumanoid骨も主FBXの配置IDとnode pathを保持し、向き補正・リグ設定で同じ参照解決を使う。
+VRChatのFirstPerson Autoはavatar rootのBipedRigが使うHeadを優先し、リグにHeadがない場合は
+解決済みnode参照だけを使う。衣装の同名Headや子階層の別BipedRigをfallbackにしない。
 ローカルの目Transformも配置を生成し、Merge Armature後の参照表をAvatarSetupのリグ割り当てまで渡す。
 同名の目があっても指定されたobjectを使用し、欠落・破棄された明示参照を名前検索で置き換えない。
 瞬きは `eyelidsBlendshapes[0]` だけを使い、LookingUp / LookingDownはblinkとして扱わない。

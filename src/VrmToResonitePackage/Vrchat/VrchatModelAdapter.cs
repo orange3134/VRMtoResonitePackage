@@ -39,7 +39,9 @@ public static class VrchatModelAdapter
         // Humanoid bones.
         foreach ((string vrmBone, string boneName) in avatar.HumanBones)
         {
-            int node = NodeFor(boneName);
+            var target = avatar.HumanBoneTargets.GetValueOrDefault(vrmBone)
+                ?? (avatar.FbxGuid != null ? new VrchatBoneTarget(avatar.FbxGuid, boneName) : null);
+            int node = NodeFor(boneName, target);
             if (node >= 0)
             {
                 model.HumanBones[vrmBone] = node;

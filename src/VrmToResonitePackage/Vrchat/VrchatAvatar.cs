@@ -44,6 +44,8 @@ public sealed class VrchatAvatar
 
     /// <summary>VRM-style humanoid bone name (camelCase) -> bone GameObject/transform name.</summary>
     public Dictionary<string, string> HumanBones { get; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Humanoid references scoped to the selected body model and its original node paths.</summary>
+    public Dictionary<string, VrchatBoneTarget> HumanBoneTargets { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>VRChat ViewPosition, avatar-root-local, Unity coordinates (meters).</summary>
     public Vec3? ViewPosition { get; set; }

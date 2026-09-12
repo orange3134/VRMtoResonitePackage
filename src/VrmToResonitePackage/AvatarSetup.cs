@@ -292,10 +292,7 @@ internal static class AvatarSetup
                 continue;
             }
             string nodeName = vrm.GetNodeName(nodeIndex);
-            // An explicit prefab/model reference must never fall back to a same-named bone.
-            Slot boneSlot = vrm.NodeTargets.ContainsKey(nodeIndex)
-                ? nodeSlots?.GetValueOrDefault(nodeIndex)
-                : nodeName != null ? slotsByName.GetValueOrDefault(nodeName) : null;
+            Slot boneSlot = ResolveModelNode(vrm, nodeIndex, slotsByName, nodeSlots);
             if (boneSlot == null || boneSlot.IsDestroyed)
             {
                 UniLog.Warning($"VRMボーン '{vrmBone}' のノード '{nodeName}' に対応するスロットが見つかりません。");
@@ -846,7 +843,8 @@ internal static class AvatarSetup
         }
     }
 
-    public static async Task ApplyFirstPersonAutoAsync(Slot root, VrmModel vrm)
+    public static async Task ApplyFirstPersonAutoAsync(Slot root, VrmModel vrm,
+        IReadOnlyDictionary<int, Slot> nodeSlots = null)
     {
         List<VrmFirstPersonMeshAnnotation> autoAnnotations = vrm.FirstPersonMeshAnnotations
             .Where(a => a.Flag == VrmFirstPersonFlag.Auto)
@@ -865,7 +863,7 @@ internal static class AvatarSetup
         ImportAvatarRootIdentification(root);
 
         Dictionary<string, Slot> slotsByName = SlotIndex.Build(root);
-        Slot firstPersonBone = ResolveFirstPersonBone(root, vrm, slotsByName);
+        Slot firstPersonBone = ResolveFirstPersonBone(root, vrm, slotsByName, nodeSlots);
         if (firstPersonBone == null)
         {
             UniLog.Warning("VRM FirstPerson Auto skipped: head bone was not found.");
@@ -1008,17 +1006,28 @@ internal static class AvatarSetup
         return eraseBones.ToArray();
     }
 
-    private static Slot ResolveFirstPersonBone(Slot root, VrmModel vrm, Dictionary<string, Slot> slotsByName)
+    internal static Slot ResolveModelNode(VrmModel model, int index, Dictionary<string, Slot> slotsByName,
+        IReadOnlyDictionary<int, Slot> nodeSlots = null)
     {
-        if (vrm.HumanBones.TryGetValue("head", out int headIndex))
-        {
-            string headName = vrm.GetNodeName(headIndex);
-            if (headName != null && slotsByName.TryGetValue(headName, out Slot headSlot))
-            {
-                return headSlot;
-            }
-        }
+        // Explicit references never fall back to a same-named bone in another model.
+        Slot slot = model.NodeTargets.ContainsKey(index) ? nodeSlots?.GetValueOrDefault(index) :
+            model.GetNodeName(index) is string name ? slotsByName.GetValueOrDefault(name) : null;
+        return slot is { IsDestroyed: false } ? slot : null;
+    }
 
+    private static Slot ResolveFirstPersonBone(Slot root, VrmModel vrm, Dictionary<string, Slot> slotsByName,
+        IReadOnlyDictionary<int, Slot> nodeSlots = null)
+    {
+        if (vrm.Source == ModelSource.VrchatFbx)
+        {
+            // Build owns the avatar-root rig. Imported clothing rigs are not authoritative.
+            Slot rigHead = root.GetComponent<BipedRig>()?.TryGetBone(BodyNode.Head);
+            if (rigHead is { IsDestroyed: false }) return rigHead;
+            return vrm.HumanBones.TryGetValue("head", out int node) && vrm.NodeTargets.ContainsKey(node)
+                ? ResolveModelNode(vrm, node, slotsByName, nodeSlots) : null;
+        }
+        if (vrm.HumanBones.TryGetValue("head", out int headIndex) &&
+            ResolveModelNode(vrm, headIndex, slotsByName, nodeSlots) is {} head) return head;
         return root.GetComponentInChildren<BipedRig>()?.TryGetBone(BodyNode.Head);
     }
 

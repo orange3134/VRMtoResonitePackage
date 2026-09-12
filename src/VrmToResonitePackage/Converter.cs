@@ -449,7 +449,10 @@ internal static class Converter
                 Slot descriptorRoot = ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots,
                     importedMeshSources, importedNodePaths, out var authoredObjects, out var prefabSlots,
                     replacedTemplateSlots);
-                AlignVrchatImportUp(importRoot, model);
+                var alignmentNodes = model.HumanBones.Values.Distinct().Where(model.NodeTargets.ContainsKey)
+                    .ToDictionary(index => index, index => Vrchat.VrchatSceneSetup.ResolveImportedTarget(
+                        model.NodeTargets[index], importedMeshSources, importedNodePaths, prefabSlots));
+                AlignVrchatImportUp(importRoot, model, alignmentNodes);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
                 RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
                 CollapseAssimpFbxTransformBones(root);
@@ -507,7 +510,7 @@ internal static class Converter
                     }
                     AvatarSetup.Build(root, model, setupOptions, faceResolver, physicsNodes);
                     await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths);
-                    await AvatarSetup.ApplyFirstPersonAutoAsync(root, model);
+                    await AvatarSetup.ApplyFirstPersonAutoAsync(root, model, physicsNodes);
                     SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
 
@@ -816,7 +819,8 @@ internal static class Converter
         importedFbxRoots[avatar.FbxGuid] = importRoot;
     }
 
-    private static void AlignVrchatImportUp(Slot importRoot, VrmModel model)
+    private static void AlignVrchatImportUp(Slot importRoot, VrmModel model,
+        IReadOnlyDictionary<int, Slot> nodeSlots = null)
     {
         if (!model.HumanBones.TryGetValue("hips", out int hipsIndex) ||
             !model.HumanBones.TryGetValue("head", out int headIndex))
@@ -825,8 +829,9 @@ internal static class Converter
         }
 
         Dictionary<string, Slot> slots = SlotIndex.Build(importRoot);
-        if (!slots.TryGetValue(model.GetNodeName(hipsIndex), out Slot hips) ||
-            !slots.TryGetValue(model.GetNodeName(headIndex), out Slot head))
+        Slot hips = AvatarSetup.ResolveModelNode(model, hipsIndex, slots, nodeSlots);
+        Slot head = AvatarSetup.ResolveModelNode(model, headIndex, slots, nodeSlots);
+        if (hips == null || head == null)
         {
             return;
         }

@@ -1490,6 +1490,13 @@ public static class VrchatAvatarParser
         {
             ParseHumanoidFromSkeleton(meta, avatar);
         }
+        var humanoidModel = package.ModelFileIds(avatar.FbxGuid);
+        foreach (var (bone, name) in avatar.HumanBones)
+        {
+            var paths = humanoidModel.NodePathsUnder(0).Where(path => path.Split('/')[^1] == name).ToArray();
+            avatar.HumanBoneTargets[bone] = new VrchatBoneTarget(avatar.FbxGuid, name,
+                paths.Length == 1 ? paths[0] : null);
+        }
         UniLog.Log($"ヒューマノイドボーンを {avatar.HumanBones.Count} 個取得しました。");
     }
 

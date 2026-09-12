@@ -142,6 +142,22 @@ internal static class ReviewRegressionChecks
             }
         });
         Case("FBX default weights preserve renderer ownership through parsing", () => DefaultBlendShapeChecks.Run(asset));
+        Case("humanoid bones retain primary model identity through adaptation", () =>
+        {
+            using var source = UnityPackage.Open(baseFile);
+            const string guid = "ab120000000000000000000000000014";
+            string file = asset("Assets/HumanoidIdentity.fbx", guid, File.ReadAllText(source.ByGuid(branchesGuid).DiskPath));
+            File.AppendAllText(file + ".meta", "\nModelImporter:\n  humanDescription:\n    human:\n    - boneName: Left\n      humanName: Head\n    - boneName: Shared\n      humanName: Neck\n");
+            using var package = UnityPackage.Open(baseFile);
+            var avatar = new VrchatAvatar { FbxGuid = guid };
+            Call("ParseHumanoid", package, avatar);
+            var model = VrchatModelAdapter.ToVrmModel(avatar);
+            Require(model.NodeTargets[model.HumanBones["head"]] is { FbxGuid: guid, Path: "RootNode/Left" } &&
+                model.NodeTargets[model.HumanBones["neck"]] is { FbxGuid: guid, Name: "Shared", Path: null });
+            avatar.HumanBoneTargets.Clear();
+            model = VrchatModelAdapter.ToVrmModel(avatar);
+            Require(model.NodeTargets[model.HumanBones["head"]] is { FbxGuid: guid, Name: "Left" });
+        });
         Case("authored lowercase root excludes only its own branch", () =>
         {
             using var source = UnityPackage.Open(baseFile);

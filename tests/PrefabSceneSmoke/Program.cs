@@ -391,6 +391,55 @@ static async Task Run(string fbxPath, string rendererName)
               clothingHelper.Parent == bodyArmature,
             "Merge Armature consumes its scoped source even when another same-name clothing has more matching bones");
         var eyeReviewRoot = root.AddSlot("Custom eye identity");
+        {
+            var headRoot = root.AddSlot("First-person humanoid identity");
+            var clothingRoot = headRoot.AddSlot("Clothing");
+            var wrongHips = clothingRoot.AddSlot("Hips");
+            var wrongHead = clothingRoot.AddSlot("Head");
+            wrongHead.LocalPosition = new float3(2, 0, 0);
+            var bodyRoot = headRoot.AddSlot("Body model");
+            var trueHips = bodyRoot.AddSlot("Hips");
+            var trueHead = bodyRoot.AddSlot("Head");
+            trueHead.LocalPosition = new float3(0, 2, 0);
+            var trueJaw = trueHead.AddSlot("Jaw");
+            var headAvatar = new VrchatAvatar { FbxGuid = "body" };
+            headAvatar.HumanBones["hips"] = "Hips";
+            headAvatar.HumanBones["head"] = "Head";
+            var headModel = VrchatModelAdapter.ToVrmModel(headAvatar);
+            var headSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects",
+                new Dictionary<string, Slot> { ["clothing"] = clothingRoot, ["body"] = bodyRoot });
+            var headPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths",
+                new Dictionary<string, Slot> { ["clothing"] = clothingRoot, ["body"] = bodyRoot });
+            var headNodes = headModel.NodeTargets.ToDictionary(pair => pair.Key, pair => (Slot)Call(
+                "VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget", pair.Value, headSources, headPaths));
+            var headNames = (Dictionary<string, Slot>)Call("VrmToResonitePackage.SlotIndex", "Build", headRoot);
+            Call("VrmToResonitePackage.Converter", "AlignVrchatImportUp", headRoot, headModel, headNodes);
+            var headRig = (BipedRig)Call("VrmToResonitePackage.AvatarSetup", "SetupRig", headRoot, headModel, headNames, headNodes);
+            var firstPersonHead = (Slot)Call("VrmToResonitePackage.AvatarSetup", "ResolveFirstPersonBone", headRoot, headModel, headNames, headNodes);
+            Check(headNames["Head"] == wrongHead && headRoot.LocalRotation == floatQ.Identity &&
+                headRig.TryGetBone(BodyNode.Head) == trueHead && headRig.TryGetBone(BodyNode.Hips) == trueHips && firstPersonHead == trueHead,
+                "Alignment, humanoid rig and first-person head use the primary model despite earlier clothing namesakes");
+            var headSkin = headRoot.AddSlot("Skin").AttachComponent<SkinnedMeshRenderer>();
+            headSkin.Bones.Add(wrongHead);
+            headSkin.Bones.Add(trueHead);
+            headSkin.Bones.Add(trueJaw);
+            headSkin.Bones.Add(trueHips);
+            var erase = (int[])Call("VrmToResonitePackage.AvatarSetup", "GetFirstPersonEraseBoneIndices", headSkin, firstPersonHead);
+            Check(erase.SequenceEqual(new[] { 1, 2 }), "First-person removal selects the actual head subtree and preserves clothing/body bones");
+            headRig.Bones.Clear();
+            clothingRoot.AttachComponent<BipedRig>()[BodyNode.Head] = wrongHead;
+            Check(Call("VrmToResonitePackage.AvatarSetup", "ResolveFirstPersonBone", headRoot, headModel, headNames, headNodes) == trueHead &&
+                Call("VrmToResonitePackage.AvatarSetup", "ResolveFirstPersonBone", headRoot, headModel, headNames) == null,
+                "First-person fallback uses explicit node identity and never an imported clothing rig or a name lookup");
+            trueHead.Destroy();
+            Check(Call("VrmToResonitePackage.AvatarSetup", "ResolveFirstPersonBone", headRoot, headModel, headNames, headNodes) == null,
+                "Destroyed explicit first-person head cannot fall back to a namesake");
+            var vrmHeadModel = new VrmToResonitePackage.Vrm.VrmModel();
+            vrmHeadModel.NodeNames.Add("Head");
+            vrmHeadModel.HumanBones["head"] = 0;
+            Check(Call("VrmToResonitePackage.AvatarSetup", "ResolveFirstPersonBone", headRoot, vrmHeadModel, headNames) == wrongHead,
+                "VRM first-person resolution retains its existing node-name behavior");
+        }
         var eyeDecoy = eyeReviewRoot.AddSlot("Eye");
         var eyeLeft = eyeReviewRoot.AddSlot("Eye");
         var eyeRight = eyeReviewRoot.AddSlot("Eye");

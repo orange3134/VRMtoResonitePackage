@@ -30,6 +30,8 @@ Custom-eye checks cover same-named local transforms, FBX paths, variant referenc
 overrides and placement of eyes without renderers. Bone Proxy checks preserve
 repeated prefab occurrences, their owner placements, complete target paths and
 humanoid-relative subpaths. Shared physics/proxy placements remain unique.
+Humanoid adaptation preserves the primary model and full paths from its metadata;
+ambiguous bone names retain model scope instead of allowing a global name lookup.
 
 `PrefabGraphChecks` exercises composition independently of known component types:
 base/variant ordering, separate occurrences, untouched source caches/files, nested
