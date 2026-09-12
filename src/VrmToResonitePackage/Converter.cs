@@ -517,6 +517,12 @@ internal static class Converter
                 Vrchat.VrchatSceneSetup.RemoveEmptyMeshTemplates(root, replacedTemplateSlots,
                     prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values)
                         .Append(descriptorRoot));
+                Vrchat.VrchatSceneSetup.RemoveUnusedMeshTemplateModels(root,
+                    avatar.AdditionalFbxs.Where(model => model.IsMeshTemplate && model.Guid != avatar.FbxGuid &&
+                            importedFbxRoots.ContainsKey(model.Guid))
+                        .ToDictionary(model => model.Guid, model => importedFbxRoots[model.Guid]),
+                    importedMeshSources, importedNodePaths,
+                    prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values).Append(descriptorRoot));
 
                 await MeshLoadingSetup.Apply(root);
 

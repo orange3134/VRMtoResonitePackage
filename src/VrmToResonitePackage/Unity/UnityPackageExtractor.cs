@@ -11,6 +11,8 @@ public sealed class UnityAsset
     /// <summary>Original asset GUID, retained when Guid identifies a parsing occurrence.</summary>
     public string SourceGuid { get; init; }
     public string OccurrencePath { get; init; }
+    /// <summary>Imported solely to supply meshes authored outside a model PrefabInstance.</summary>
+    public bool IsMeshTemplate { get; init; }
 
     /// <summary>Logical project-relative path, e.g. "Assets/Foo/Bar.prefab" (from the entry's "pathname").</summary>
     public string LogicalPath { get; init; }

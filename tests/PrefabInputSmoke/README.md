@@ -18,6 +18,9 @@ different models and shared geometry. Reversing object/connection order must kee
 the same defaults. It checks the model resolver, avatar metadata, renamed copies,
 explicit zero overrides, and strict path lookup for indexed blendshape repair.
 
+Repeated-model checks distinguish mesh-template provenance from an actual
+PrefabInstance of the same FBX and preserve that distinction in avatar metadata.
+
 `PrefabGraphChecks` exercises composition independently of known component types:
 base/variant ordering, separate occurrences, untouched source caches/files, nested
 fields, empty strings, integer/reference arrays, explicit zero/null, and centralized

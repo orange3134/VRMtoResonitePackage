@@ -207,7 +207,10 @@ internal static class ReviewRegressionChecks
             var copy = parsed.MeshCopies.Single();
             string intactModel = view.ReadScene(view.InputPrefab).Doc(101).Root["m_SourcePrefab"].Guid;
             Require(copy.FbxGuid != intactModel && view.ByGuid(copy.FbxGuid).SourceGuid == modelGuid &&
-                view.ByGuid(intactModel).SourceGuid == modelGuid);
+                view.ByGuid(intactModel).SourceGuid == modelGuid && view.ByGuid(copy.FbxGuid).IsMeshTemplate &&
+                !view.ByGuid(intactModel).IsMeshTemplate);
+            Call("AddAdditionalFbx", view, parsed, copy.FbxGuid, null);
+            Require(parsed.AdditionalFbxs.Single().IsMeshTemplate);
         });
 
         Case("scene-local copied bone reference", () =>

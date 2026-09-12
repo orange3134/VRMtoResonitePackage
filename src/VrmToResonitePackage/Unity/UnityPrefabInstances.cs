@@ -21,7 +21,7 @@ internal static class UnityPrefabInstances
         return view;
 
         Dictionary<string, string> Visit(string guid, string path, HashSet<string> ancestors,
-            HashSet<long> included = null)
+            HashSet<long> included = null, bool isMeshTemplate = false)
         {
             var mapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             UnityAsset asset = source.ByGuid(guid);
@@ -34,7 +34,7 @@ internal static class UnityPrefabInstances
                 throw new InvalidDataException("Prefab instance identity collision.");
             mapping.Add(guid, identity);
             var alias = new UnityAsset { Guid = identity, SourceGuid = asset.SourceGuid ?? asset.Guid,
-                OccurrencePath = path, LogicalPath = asset.LogicalPath,
+                OccurrencePath = path, IsMeshTemplate = isMeshTemplate, LogicalPath = asset.LogicalPath,
                 DiskPath = asset.DiskPath, MetaPath = asset.MetaPath };
             if (asset.Extension == ".fbx")
             {
@@ -70,7 +70,7 @@ internal static class UnityPrefabInstances
                          .Where(g => source.ByGuid(g)?.Extension == ".fbx").Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 foreach (var entry in Visit(model, path + "/mesh/" + model,
-                             new HashSet<string>(ancestors, StringComparer.OrdinalIgnoreCase)))
+                             new HashSet<string>(ancestors, StringComparer.OrdinalIgnoreCase), isMeshTemplate: true))
                     mapping[entry.Key] = entry.Value;
             }
             view.SetViewAsset(alias, UnityScene.FromDocuments(documents.Select(d =>

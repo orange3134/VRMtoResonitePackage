@@ -234,6 +234,44 @@ internal static class VrchatSceneSetup
         }
     }
 
+    public static void RemoveUnusedMeshTemplateModels(Slot root, IReadOnlyDictionary<string, Slot> templateRoots,
+        IReadOnlyDictionary<Slot, string> importedSources, IReadOnlyDictionary<Slot, string> importedPaths,
+        IEnumerable<Slot> authoredSlots)
+    {
+        // Template imports can leave a complete skeleton after copies bind to another
+        // model. Empty-slot pruning cannot remove that self-contained hierarchy: its Rig
+        // registers its own bones. Only explicitly identified mesh-template imports qualify.
+        var authored = authoredSlots.Where(slot => slot != null).ToHashSet();
+        foreach (var (guid, template) in templateRoots)
+        {
+            if (template == null || template.IsDestroyed || template == root || !IsDescendantOf(template, root)) continue;
+            var slots = EnumerateSlots(template).ToHashSet();
+            if (slots.Any(slot => authored.Contains(slot) || !importedPaths.ContainsKey(slot) ||
+                    !importedSources.TryGetValue(slot, out string source) || source != guid)) continue;
+            var components = template.GetComponentsInChildren<Component>().ToArray();
+            // Live renderers and any behavior beyond import registries remain meaningful.
+            if (components.Any(component => component is not (Rig or MeshRendererMaterialRelay))) continue;
+            if (components.OfType<Rig>().Any(rig => rig.Bones.Any(bone =>
+                    bone != null && !bone.IsDestroyed && !slots.Contains(bone))) ||
+                components.OfType<MeshRendererMaterialRelay>().Any(relay => relay.Renderers.Any(renderer =>
+                    renderer != null && !renderer.IsDestroyed))) continue;
+
+            var references = new List<IWorldElement>();
+            foreach (var component in root.GetComponentsInChildren<Component>())
+                if (!slots.Contains(component.Slot))
+                    component.GetReferencedObjects(references, assetRefOnly: false, persistentOnly: false);
+            bool referenced = references.Any(reference =>
+            {
+                for (IWorldElement element = reference; element != null; element = element.Parent)
+                    if (element is Slot slot) return slots.Contains(slot);
+                return false;
+            });
+            if (referenced) continue;
+            UniLog.Log($"Removing unused mesh-template model: {template.Name} (fbx={guid}, slots={slots.Count})");
+            template.Destroy();
+        }
+    }
+
     public static Slot ResolveImportedTarget(VrchatBoneTarget target, IReadOnlyDictionary<Slot, string> sources,
         IReadOnlyDictionary<Slot, string> paths, IReadOnlyDictionary<string, Slot> prefabSlots = null)
     {

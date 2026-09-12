@@ -1597,6 +1597,7 @@ public static class VrchatAvatarParser
         var additional = new VrchatFbxAsset
         {
             Guid = guid,
+            IsMeshTemplate = fbx.IsMeshTemplate,
             Path = fbx.DiskPath,
             ImportScale = GetFbxImportScale(fbx, meta),
             InstanceName = placement?.InstanceName ?? Path.GetFileNameWithoutExtension(fbx.LogicalPath),

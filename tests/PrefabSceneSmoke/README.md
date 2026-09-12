@@ -10,6 +10,11 @@ Default-weight checks distinguish same-named imported branches using captured
 paths after reparenting and renaming, include authored copies, preserve explicit
 zero overrides, and leave namesakes unchanged when a source path is missing.
 
+Mesh-template cleanup checks remove a whole unused imported skeleton, while
+preserving models with live skin/field references, authored objects, foreign
+attachments, renderers, behavior components, or Rig registrations for moved bones.
+Ordinary model instances remain outside this cleanup's candidate set.
+
 Also verifies static-mesh import scale outside the source hierarchy, empty Animator
 bindings below the export root, and separate DynamicBoneChains on same-named bones
 in repeated model instances.

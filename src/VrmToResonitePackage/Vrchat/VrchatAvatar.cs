@@ -134,6 +134,7 @@ public sealed class VrchatFbxAsset
 {
     public string Path { get; set; }
     public string Guid { get; set; }
+    public bool IsMeshTemplate { get; set; }
     public float ImportScale { get; set; } = 1f;
     public string InstanceName { get; set; }
     public string ParentFbxGuid { get; set; }

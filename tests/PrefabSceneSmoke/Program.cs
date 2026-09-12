@@ -264,6 +264,38 @@ static async Task Run(string fbxPath, string rendererName)
             "Merged clothing helper registrations move to the containing body rig before the empty wrapper is removed");
         Check(fallbackClothing.IsDestroyed && cleanupRoot.GetComponent<Rig>().Bones.Contains(rootHelper),
             "Clothing helpers remain registered after the primary import wrapper and its rig have been collapsed");
+        foreach (string condition in new[] { "unused", "skin", "field", "authored", "foreign", "renderer", "behavior", "moved bone", "instance" })
+        {
+            Slot caseRoot = root.AddSlot("Template skeleton cleanup " + condition);
+            Slot bodyBone = caseRoot.AddSlot("RootNode").AddSlot("Hips");
+            Slot templateModel = caseRoot.AddSlot("clonka");
+            Slot templateBone = templateModel.AddSlot("RootNode").AddSlot("armature").AddSlot("Hips");
+            var templateRig = templateModel.AttachComponent<Rig>();
+            templateRig.Bones.Add(templateBone);
+            templateModel.AttachComponent<MeshRendererMaterialRelay>();
+            var modelRoots = new Dictionary<string, Slot> { ["template"] = templateModel };
+            var captured = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup",
+                "CaptureImportedObjects", modelRoots);
+            var capturedPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup",
+                "CaptureImportedPaths", modelRoots);
+            var authored = new List<Slot>();
+            switch (condition)
+            {
+                case "skin": caseRoot.AttachComponent<SkinnedMeshRenderer>().Bones.Add(templateBone); break;
+                case "field": caseRoot.AttachComponent<ReferenceField<IWorldElement>>().Reference.Target = templateBone.GetSyncMember("Position"); break;
+                case "authored": authored.Add(templateBone); break;
+                case "foreign": templateBone.AddSlot("Authored attachment"); break;
+                case "renderer": templateBone.AttachComponent<MeshRenderer>(); break;
+                case "behavior": templateBone.AttachComponent<ValueField<float>>(); break;
+                case "moved bone": templateRig.Bones.Add(bodyBone); break;
+                case "instance": modelRoots.Clear(); break;
+            }
+            Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "RemoveUnusedMeshTemplateModels", caseRoot,
+                modelRoots, captured, capturedPaths, authored);
+            Check(templateModel.IsDestroyed == (condition == "unused") && !bodyBone.IsDestroyed,
+                "Unused mesh-template skeleton cleanup respects " + condition);
+            caseRoot.Destroy();
+        }
         var targetHips = mergeRoot.AddSlot("AvatarArmature").AddSlot("Hips");
         var sourceHips = mergeRoot.AddSlot("ClothingArmature").AddSlot("Hips");
         var untouchedHips = mergeRoot.AddSlot("OtherArmature").AddSlot("Hips");

@@ -100,6 +100,13 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   primary wrapperとそのRigが既に畳まれている場合はアバターrootにRigを作成して登録を保持する。
   アバター外のboneを含む場合や旧Rigが外部参照されている場合は旧wrapperを保持する。
   名前や空であることだけを条件に、アバター全体のスロットを削除しない。
+  外側で追加されたメッシュ用に同じFBXを再importした場合、その骨格が本体とは別に残ることがある。
+  `UnityAsset.IsMeshTemplate` を `VrchatFbxAsset` へ引き継ぎ、追加モデルの用途を明示する。
+  `RemoveUnusedMeshTemplateModels` はコピーの接続・骨格統合・アバター設定後に、用途がtemplateである
+  追加モデルだけを調べる。全子孫が元importに属し、Prefab由来のobject・使用中のrenderer・外部からの
+  bone/field参照・任意の動作componentがなく、Rig登録も内部で完結する場合だけモデル全体を削除する。
+  空のSlotだけの削除では、Rigが自身の骨を登録している不要な骨格全体を除去できない。
+  clonka Variantに追加したBody_Base_pants/nudeのコピー元骨格が具体例。本体のRootNodeと使用中の骨は保持する。
   Authored mesh templates have a separate model identity from PrefabInstances of the
   same FBX, so an EditorOnly instance cannot exclude visible local geometry. Create
   separate template identities only from authored MeshFilter/SkinnedMeshRenderer mesh
