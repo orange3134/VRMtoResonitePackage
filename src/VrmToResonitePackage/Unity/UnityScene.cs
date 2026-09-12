@@ -20,9 +20,12 @@ public sealed class UnityScene
     public IReadOnlyDictionary<long, YamlDocument> Documents => _byFileId;
 
     public static UnityScene Parse(string text)
+        => FromDocuments(UnityYaml.ParseDocuments(text));
+
+    internal static UnityScene FromDocuments(IEnumerable<YamlDocument> documents)
     {
         var scene = new UnityScene();
-        foreach (YamlDocument doc in UnityYaml.ParseDocuments(text))
+        foreach (YamlDocument doc in documents)
         {
             scene._byFileId[doc.FileId] = doc;
         }
@@ -44,10 +47,28 @@ public sealed class UnityScene
 
     public YamlDocument Doc(long fileId) => fileId != 0 && _byFileId.TryGetValue(fileId, out YamlDocument d) ? d : null;
 
+    internal bool IncludesInstance(YamlDocument instance, IReadOnlySet<long> subtree)
+        => subtree == null || subtree.Contains(Doc(instance.Root?["m_Modification"]?["m_TransformParent"]?.FileID ?? 0)?
+            .Root?["m_GameObject"]?.FileID ?? 0);
+
     public IEnumerable<YamlDocument> GameObjects => _byFileId.Values.Where(d => d.ClassId == ClassGameObject);
 
     public IEnumerable<YamlDocument> SkinnedMeshRenderers =>
         _byFileId.Values.Where(d => d.ClassId == ClassSkinnedMeshRenderer);
+
+    public IEnumerable<YamlDocument> MeshRenderers =>
+        _byFileId.Values.Where(d => d.ClassId is ClassSkinnedMeshRenderer or 23);
+
+    /// <summary>Static renderers store their mesh on the MeshFilter of the same GameObject.</summary>
+    public YamlNode RendererMesh(YamlDocument renderer)
+    {
+        if (renderer?.ClassId == ClassSkinnedMeshRenderer) return renderer.Root?["m_Mesh"];
+        if (renderer?.ClassId != 23) return null;
+        long owner = renderer.Root?["m_GameObject"]?.FileID ?? 0;
+        if (owner == 0) return null;
+        return _byFileId.Values.FirstOrDefault(d => d.ClassId == 33 &&
+            d.Root?["m_GameObject"]?.FileID == owner)?.Root?["m_Mesh"];
+    }
 
     public IEnumerable<YamlDocument> MonoBehaviours =>
         _byFileId.Values.Where(d => d.ClassId == ClassMonoBehaviour);

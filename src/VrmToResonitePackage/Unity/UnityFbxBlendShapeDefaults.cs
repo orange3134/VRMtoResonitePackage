@@ -9,7 +9,7 @@ namespace VrmToResonitePackage.Unity;
 /// </summary>
 internal static class UnityFbxBlendShapeDefaults
 {
-    internal readonly record struct Channel(string Name, float Weight);
+    internal readonly record struct Channel(string Name, float Weight, string RendererPath);
 
     public static IReadOnlyList<Channel> Read(string path)
     {
@@ -45,34 +45,53 @@ internal static class UnityFbxBlendShapeDefaults
 
         public IReadOnlyList<Channel> ReadChannels()
         {
-            var result = new List<Channel>();
-            while (TryReadNode(out Node node))
+            var nodes = new List<Node>();
+            void Collect(Node node)
             {
-                Collect(node, null, result);
+                nodes.Add(node);
+                foreach (var child in node.Children) Collect(child);
+            }
+            while (TryReadNode(out Node node)) Collect(node);
+            var objects = nodes.Where(n => n.Name is "Model" or "Geometry" or "Deformer" &&
+                n.Properties.Count >= 3 && n.Properties[0] is long).ToDictionary(n => (long)n.Properties[0]);
+            var parents = nodes.Where(n => n.Name == "C" && n.Properties.Count >= 3 &&
+                n.Properties[0] as string == "OO" && n.Properties[1] is long && n.Properties[2] is long)
+                .GroupBy(n => (long)n.Properties[1]).ToDictionary(g => g.Key,
+                    g => g.Select(n => (long)n.Properties[2]).Distinct().ToArray());
+            var result = new List<Channel>();
+            foreach (var entry in objects.Where(e => e.Value.Name == "Deformer" &&
+                         e.Value.Properties[2] as string == "BlendShapeChannel"))
+            {
+                var channel = entry.Value;
+                double percent = channel.Children.FirstOrDefault(child => child.Name == "DeformPercent")
+                    ?.Properties.FirstOrDefault() as double? ?? 0d;
+                double endWeight = GetEndFrameWeight(channel);
+                float weight = endWeight > 0 ? (float)(percent / endWeight * 100d) : (float)percent;
+                foreach (long model in ModelsAbove(entry.Key, new()))
+                    if (ModelPath(model, new()) is string path)
+                        result.Add(new Channel(NormalizeObjectName(channel.Properties[1] as string), weight, path));
             }
             return result;
-        }
 
-        private static void Collect(Node node, string channelName, List<Channel> result)
-        {
-            if (node.Name == "Deformer" && node.Properties.Count >= 3 &&
-                string.Equals(node.Properties[2] as string, "BlendShapeChannel",
-                    StringComparison.Ordinal))
+            HashSet<long> ModelsAbove(long id, HashSet<long> visited)
             {
-                channelName = NormalizeObjectName(node.Properties[1] as string);
-                double deformPercent = node.Children
-                    .FirstOrDefault(child => child.Name == "DeformPercent")
-                    ?.Properties.FirstOrDefault() as double? ?? 0d;
-                double endFrameWeight = GetEndFrameWeight(node);
-                float normalizedPercent = endFrameWeight > 0d
-                    ? (float)(deformPercent / endFrameWeight * 100d)
-                    : (float)deformPercent;
-                result.Add(new Channel(channelName, normalizedPercent));
-                return;
+                var models = new HashSet<long>();
+                if (!visited.Add(id) || !objects.TryGetValue(id, out var current)) return models;
+                if (current.Name == "Model") { models.Add(id); return models; }
+                foreach (long parent in parents.GetValueOrDefault(id) ?? Array.Empty<long>())
+                    models.UnionWith(ModelsAbove(parent, visited));
+                return models;
             }
-            foreach (Node child in node.Children)
+
+            string ModelPath(long id, HashSet<long> visited)
             {
-                Collect(child, channelName, result);
+                if (!visited.Add(id)) return null;
+                var modelParents = (parents.GetValueOrDefault(id) ?? Array.Empty<long>())
+                    .Where(parent => objects.GetValueOrDefault(parent)?.Name == "Model").ToArray();
+                if (modelParents.Length > 1) return null;
+                string parentPath = modelParents.Length == 0 ? "RootNode" : ModelPath(modelParents[0], visited);
+                string name = NormalizeObjectName(objects[id].Properties[1] as string);
+                return parentPath == null || string.IsNullOrEmpty(name) ? null : parentPath + "/" + name;
             }
         }
 

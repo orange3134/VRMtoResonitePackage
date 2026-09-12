@@ -28,13 +28,14 @@ internal static class Converter
         string logPath = Path.Combine(AppContext.BaseDirectory, "Logs", $"convert_{DateTime.Now:yyyyMMdd_HHmmss}.log");
         Directory.CreateDirectory(Path.GetDirectoryName(logPath));
         using var logWriter = new StreamWriter(logPath) { AutoFlush = true };
+        TextWriter synchronizedLog = TextWriter.Synchronized(logWriter);
         TextWriter originalOut = Console.Out;
         TextWriter originalError = Console.Error;
-        using var teeOut = new TeeTextWriter(originalOut, logWriter);
-        using var teeError = new TeeTextWriter(originalError, logWriter);
+        using var teeOut = new TeeTextWriter(originalOut, synchronizedLog);
+        using var teeError = new TeeTextWriter(originalError, synchronizedLog);
         Console.SetOut(teeOut);
         Console.SetError(teeError);
-        Action unhookLogging = HookLogging(logWriter);
+        Action unhookLogging = HookLogging(synchronizedLog);
         try
         {
 
@@ -90,8 +91,8 @@ internal static class Converter
                 Console.WriteLine($"=== 変換中: {Path.GetFileName(inputFile)} ===");
                 try
                 {
-                    bool isUnityPackage = string.Equals(Path.GetExtension(inputFile), ".unitypackage",
-                        StringComparison.OrdinalIgnoreCase);
+                    bool isUnityPackage = string.Equals(Path.GetExtension(inputFile), ".prefab", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(Path.GetExtension(inputFile), ".unitypackage", StringComparison.OrdinalIgnoreCase);
                     string output = isUnityPackage
                         ? await ConvertVrchat(world, inputFile, options).ConfigureAwait(false)
                         : await ConvertOne(world, inputFile, options).ConfigureAwait(false);
@@ -110,20 +111,13 @@ internal static class Converter
         finally
         {
             Console.WriteLine();
-            Console.WriteLine("エンジンを終了しています...");
-            try
-            {
-                Task shutdown = runner.Shutdown();
-                if (await Task.WhenAny(shutdown, Task.Delay(TimeSpan.FromSeconds(15))).ConfigureAwait(false) != shutdown)
-                {
-                    UniLog.Warning("エンジンの終了がタイムアウトしました。プロセスを終了します。");
-                }
-            }
-            catch (Exception ex)
-            {
-                UniLog.Warning("Engine shutdown failed: " + ex.Message);
-            }
-            LocalDbMaintenance.ReleaseRunDataDirectory(dataDirectory);
+            // The CLI (also used by the GUI child) owns this engine for its entire lifetime.
+            // Shutdown disposes WorkProcessor while async asset jobs can still schedule work,
+            // causing an unhandled ThrowAsync exception on a thread-pool thread. All exports
+            // above have completed; Program exits the process after flushing the result/log.
+            // Keep the live DB locked and let the next run sweep it after this process exits.
+            Console.WriteLine("変換処理を終了します。");
+            LocalDbMaintenance.PreserveRunIdentity(dataDirectory);
         }
         return new ConversionRunResult(failures == 0 ? 0 : 1, outputs, logPath, failures);
         }
@@ -152,14 +146,16 @@ internal static class Converter
         }
     }
 
-    private static Action HookLogging(StreamWriter writer)
+    private static Action HookLogging(TextWriter writer)
     {
         object gate = new();
+        bool active = true;
         void WriteLine(string prefix, object message, bool toConsole)
         {
             string line = $"[{DateTime.Now:HH:mm:ss.fff}] {prefix}{message}";
             lock (gate)
             {
+                if (!active) return;
                 writer.WriteLine(line);
                 if (toConsole)
                 {
@@ -175,6 +171,9 @@ internal static class Converter
         UniLog.OnError += error;
         return () =>
         {
+            // An event invocation may already have captured the delegates. Drain it before
+            // disposing the log, and make any later captured invocation a no-op.
+            lock (gate) active = false;
             UniLog.OnLog -= log;
             UniLog.OnWarning -= warning;
             UniLog.OnError -= error;
@@ -324,7 +323,7 @@ internal static class Converter
     /// </summary>
     private static async Task<string> ConvertVrchat(World world, string packagePath, CliOptions options)
     {
-        using Unity.UnityPackage package = Unity.UnityPackage.Extract(packagePath);
+        using Unity.UnityPackage package = Unity.UnityPackage.Open(packagePath);
         Vrchat.VrchatDiagnostics.LogPackageSummary(package, packagePath);
         Vrchat.VrchatAvatar avatar = null;
         try
@@ -441,30 +440,56 @@ internal static class Converter
                     await additionalImport;
                 }
 
-                ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots);
-                AlignVrchatImportUp(importRoot, model);
-                CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots);
-                RemoveImportAlignment(importRoot, root);
+                // Capture model identity before wrappers are collapsed or moved. Instance names
+                // are not unique (different clothing models may both be named "armature.1").
+                var importedMeshSources = Vrchat.VrchatSceneSetup.CaptureImportedObjects(importedFbxRoots);
+                var importedNodePaths = Vrchat.VrchatSceneSetup.CaptureImportedPaths(importedFbxRoots);
+
+                var replacedTemplateSlots = new HashSet<Slot>();
+                Slot descriptorRoot = ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots,
+                    importedMeshSources, importedNodePaths, out var authoredObjects, out var prefabSlots,
+                    replacedTemplateSlots);
+                var alignmentNodes = model.HumanBones.Values.Distinct().Where(model.NodeTargets.ContainsKey)
+                    .ToDictionary(index => index, index => Vrchat.VrchatSceneSetup.ResolveImportedTarget(
+                        model.NodeTargets[index], importedMeshSources, importedNodePaths, prefabSlots));
+                AlignVrchatImportUp(importRoot, model, alignmentNodes);
+                CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
+                RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
                 CollapseAssimpFbxTransformBones(root);
 
                 Console.WriteLine("アセットの読み込みを待機中...");
                 await WaitForAssets(assetsSlot);
 
-                int repairedBlendshapeMeshes = await Vrchat.VrchatBlendShapeRepair.Apply(root, avatar);
+                int repairedBlendshapeMeshes = await Vrchat.VrchatBlendShapeRepair.Apply(root, avatar,
+                    importedMeshSources, authoredObjects, importedNodePaths);
                 if (repairedBlendshapeMeshes > 0)
                 {
                     await WaitForAssets(assetsSlot);
                 }
-                Vrchat.VrchatSceneSetup.ApplyInitialBlendShapes(root, avatar);
+                Vrchat.VrchatSceneSetup.ApplyInitialBlendShapes(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
 
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
-                Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar);
-                Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar);
+                // Finish asset reloads first: deleting their last renderer can unload providers.
+                Vrchat.VrchatSceneSetup.RemoveEditorOnlyObjects(avatar, importedMeshSources, importedNodePaths);
+                Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
+                var physicsNodes = model.NodeTargets.ToDictionary(entry => entry.Key, entry =>
+                    Vrchat.VrchatSceneSetup.ResolveImportedTarget(entry.Value, importedMeshSources, importedNodePaths, prefabSlots));
+                if (descriptorRoot is { IsDestroyed: false })
+                {
+                    var parts = new Stack<string>();
+                    for (Slot slot = descriptorRoot; slot != null && slot != root; slot = slot.Parent) parts.Push(slot.Name);
+                    model.MeshBindingRootPath = string.Join("/", parts);
+                }
+                // Retain authored paths before Merge Armature or eye pivots move renderers.
+                var faceResolver = new BlendshapeResolver(root, model, physicsNodes);
+                Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes,
+                    target => Vrchat.VrchatSceneSetup.ResolveImportedTarget(target, importedMeshSources,
+                        importedNodePaths, prefabSlots), descriptorRoot is { IsDestroyed: false } ? descriptorRoot : root);
 
                 if (options.NoAvatar)
                 {
-                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package);
-                    SpringBoneSetup.Apply(root, model);
+                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths);
+                    SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
                 else
                 {
@@ -483,13 +508,24 @@ internal static class Converter
                     {
                         setupOptions.NearClip = options.NearClip.Value;
                     }
-                    AvatarSetup.Build(root, model, setupOptions);
-                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package);
-                    SpringBoneSetup.Apply(root, model);
+                    AvatarSetup.Build(root, model, setupOptions, faceResolver, physicsNodes);
+                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths);
+                    await AvatarSetup.ApplyFirstPersonAutoAsync(root, model, physicsNodes);
+                    SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
 
                 // Reflect prefab-authored scene state (inactive GameObjects, initial blendshape weights).
-                Vrchat.VrchatSceneSetup.Apply(root, avatar);
+                Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
+
+                Vrchat.VrchatSceneSetup.RemoveEmptyMeshTemplates(root, replacedTemplateSlots,
+                    prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values)
+                        .Append(descriptorRoot));
+                Vrchat.VrchatSceneSetup.RemoveUnusedMeshTemplateModels(root,
+                    avatar.AdditionalFbxs.Where(model => model.IsMeshTemplate && model.Guid != avatar.FbxGuid &&
+                            importedFbxRoots.ContainsKey(model.Guid))
+                        .ToDictionary(model => model.Guid, model => importedFbxRoots[model.Guid]),
+                    importedMeshSources, importedNodePaths,
+                    prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values).Append(descriptorRoot));
 
                 await MeshLoadingSetup.Apply(root);
 
@@ -534,11 +570,14 @@ internal static class Converter
         return outputPath;
     }
 
-    private static void ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
-        Dictionary<string, Slot> importedFbxRoots)
+    private static Slot ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
+        Dictionary<string, Slot> importedFbxRoots, Dictionary<Slot, string> importedMeshSources,
+        Dictionary<Slot, string> importedNodePaths, out Dictionary<string, Slot> authoredObjects,
+        out Dictionary<string, Slot> prefabSlots, HashSet<Slot> replacedTemplateSlots = null)
     {
-        var prefabSlots = new Dictionary<string, Slot>(StringComparer.Ordinal);
-        ApplyPrimaryFbxPlacement(importRoot, avatar, importedFbxRoots, prefabSlots);
+        var slots = new Dictionary<string, Slot>(StringComparer.Ordinal);
+        prefabSlots = slots;
+        ApplyPrimaryFbxPlacement(importRoot, avatar, importedFbxRoots, slots);
 
         foreach (Vrchat.VrchatFbxAsset additional in avatar.AdditionalFbxs)
         {
@@ -547,7 +586,7 @@ internal static class Converter
                 continue;
             }
             Slot parent = ResolvePrefabParent(importRoot, additional.ParentFbxGuid,
-                additional.ParentNodeName, additional.ParentTransforms, importedFbxRoots, prefabSlots);
+                additional.ParentNodeName, additional.ParentTransforms, importedFbxRoots, slots);
             instanceRoot.Parent = parent;
             float3 position = new(
                 additional.LocalPosition.X, additional.LocalPosition.Y, additional.LocalPosition.Z);
@@ -578,6 +617,9 @@ internal static class Converter
                 sourceRootNode.LocalPosition = position;
                 sourceRootNode.LocalRotation = rotation;
                 sourceRootNode.LocalScale = scale;
+                Vrchat.VrchatSceneSetup.RemapImportedRoot(instanceRoot, sourceRootNode,
+                    importedMeshSources, importedNodePaths);
+                importedFbxRoots[additional.Guid] = sourceRootNode;
                 CollapseAdditionalFbxWrapper(instanceRoot, sourceRootNode, parent, additional.InstanceName,
                     resetSinglePayloadTransform: true);
                 continue;
@@ -595,6 +637,18 @@ internal static class Converter
             }
             UniLog.Log($"prefab階層を適用: {instanceRoot.Name} -> {parent.Name}");
         }
+        var meshBuild = Vrchat.VrchatSceneSetup.InstantiateMeshCopies(avatar, importedMeshSources, copy =>
+            ResolvePrefabParent(importRoot, copy.ParentFbxGuid, copy.ParentName, copy.ParentTransforms,
+                importedFbxRoots, slots, importedMeshSources, importedNodePaths), importedNodePaths, slots, replacedTemplateSlots);
+        authoredObjects = meshBuild.AuthoredObjects;
+        foreach (var placement in avatar.PhysicsPlacements)
+            ResolvePrefabParent(importRoot, placement.ParentFbxGuid, placement.ParentName, placement.Transforms,
+                importedFbxRoots, slots, importedMeshSources, importedNodePaths);
+        meshBuild.Bind();
+        return authoredObjects.GetValueOrDefault(avatar.DescriptorRootKey ?? "") ??
+            avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms).Where(t => t.GameObjectKey == avatar.DescriptorRootKey)
+                .Select(t => slots.GetValueOrDefault(t.Key)).FirstOrDefault(slot => slot != null) ??
+            Vrchat.VrchatSceneSetup.ResolveImportedTarget(avatar.DescriptorRootTarget, importedMeshSources, importedNodePaths, slots);
     }
 
     private static bool IsUnityRootNode(string nodeName)
@@ -603,7 +657,8 @@ internal static class Converter
 
     private static Slot ResolvePrefabParent(Slot importRoot, string parentFbxGuid,
         string parentNodeName, IReadOnlyList<Vrchat.VrchatPrefabTransform> parentTransforms,
-        Dictionary<string, Slot> importedFbxRoots, Dictionary<string, Slot> prefabSlots)
+        Dictionary<string, Slot> importedFbxRoots, Dictionary<string, Slot> prefabSlots,
+        IReadOnlyDictionary<Slot, string> importedSources = null, IReadOnlyDictionary<Slot, string> importedPaths = null)
     {
         Slot parent = importRoot;
         if (!string.IsNullOrEmpty(parentFbxGuid) &&
@@ -615,6 +670,15 @@ internal static class Converter
 
         foreach (Vrchat.VrchatPrefabTransform transform in parentTransforms)
         {
+            if (transform.ImportedBone != null && importedSources != null && importedPaths != null)
+            {
+                parent = Vrchat.VrchatSceneSetup.ResolveImportedTarget(transform.ImportedBone,
+                    importedSources, importedPaths) ?? throw new InvalidDataException(
+                        $"Cannot resolve unpacked skeleton parent: {transform.ImportedBone.Path}");
+                parent.ActiveSelf = transform.Active;
+                if (!string.IsNullOrEmpty(transform.Key)) prefabSlots[transform.Key] = parent;
+                continue;
+            }
             if (!string.IsNullOrEmpty(transform.Key) &&
                 prefabSlots.TryGetValue(transform.Key, out Slot existing))
             {
@@ -622,6 +686,7 @@ internal static class Converter
                 continue;
             }
             Slot slot = parent.AddSlot(transform.Name ?? "GameObject");
+            slot.ActiveSelf = transform.Active;
             slot.LocalPosition = new float3(
                 transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z);
             slot.LocalRotation = new floatQ(
@@ -728,7 +793,8 @@ internal static class Converter
     }
 
     private static void CollapsePrimaryFbxWrapper(Slot importRoot, Vrchat.VrchatAvatar avatar,
-        Dictionary<string, Slot> importedFbxRoots)
+        Dictionary<string, Slot> importedFbxRoots, Dictionary<Slot, string> sources,
+        Dictionary<Slot, string> paths)
     {
         if (!importedFbxRoots.TryGetValue(avatar.FbxGuid, out Slot primaryRoot) ||
             primaryRoot == importRoot ||
@@ -748,11 +814,13 @@ internal static class Converter
             child.GlobalScale = scale;
         }
         UniLog.Log($"primary FBX wrapper collapsed: {primaryRoot.Name}");
+        Vrchat.VrchatSceneSetup.RemapImportedRoot(primaryRoot, importRoot, sources, paths);
         primaryRoot.Destroy();
         importedFbxRoots[avatar.FbxGuid] = importRoot;
     }
 
-    private static void AlignVrchatImportUp(Slot importRoot, VrmModel model)
+    private static void AlignVrchatImportUp(Slot importRoot, VrmModel model,
+        IReadOnlyDictionary<int, Slot> nodeSlots = null)
     {
         if (!model.HumanBones.TryGetValue("hips", out int hipsIndex) ||
             !model.HumanBones.TryGetValue("head", out int headIndex))
@@ -761,8 +829,9 @@ internal static class Converter
         }
 
         Dictionary<string, Slot> slots = SlotIndex.Build(importRoot);
-        if (!slots.TryGetValue(model.GetNodeName(hipsIndex), out Slot hips) ||
-            !slots.TryGetValue(model.GetNodeName(headIndex), out Slot head))
+        Slot hips = AvatarSetup.ResolveModelNode(model, hipsIndex, slots, nodeSlots);
+        Slot head = AvatarSetup.ResolveModelNode(model, headIndex, slots, nodeSlots);
+        if (hips == null || head == null)
         {
             return;
         }
@@ -793,7 +862,8 @@ internal static class Converter
                    $"from ({from.X:F3}, {from.Y:F3}, {from.Z:F3}) to Y+");
     }
 
-    private static void RemoveImportAlignment(Slot importRoot, Slot root)
+    private static void RemoveImportAlignment(Slot importRoot, Slot root, Dictionary<Slot, string> sources,
+        Dictionary<Slot, string> paths)
     {
         foreach (Slot child in importRoot.Children.ToList())
         {
@@ -805,6 +875,7 @@ internal static class Converter
             child.GlobalRotation = rotation;
             child.GlobalScale = scale;
         }
+        Vrchat.VrchatSceneSetup.RemapImportedRoot(importRoot, root, sources, paths);
         importRoot.Destroy();
     }
 
@@ -937,6 +1008,10 @@ internal static class Converter
 
     private static async Task ExportPackage(World world, Slot root, string outputPath)
     {
+        var avatarRootVariable = root.GetComponents<DynamicReferenceVariable<Slot>>()
+            .FirstOrDefault(v => v.VariableName.Value == "modular_avatar/AvatarRoot");
+        if (avatarRootVariable != null)
+            UniLog.Log($"Export AvatarRoot reference: linked={avatarRootVariable.Reference.Target == root}");
         SavedGraph graph = root.SaveObject(DependencyHandling.CollectAssets);
         string ownerId = world.LocalUser.UserID ?? world.LocalUser.MachineID;
         SkyFrost.Base.Record record = RecordHelper.CreateForObject<SkyFrost.Base.Record>(root.Name, ownerId, null);
@@ -963,7 +1038,8 @@ internal sealed record ConversionRunResult(int ExitCode, IReadOnlyList<string> O
 internal sealed class TeeTextWriter : TextWriter
 {
     private readonly TextWriter _primary;
-    private readonly TextWriter _secondary;
+    private TextWriter _secondary;
+    private readonly object _gate = new();
 
     public TeeTextWriter(TextWriter primary, TextWriter secondary)
     {
@@ -975,25 +1051,45 @@ internal sealed class TeeTextWriter : TextWriter
 
     public override void Write(char value)
     {
-        _primary.Write(value);
-        _secondary.Write(value);
+        lock (_gate)
+        {
+            _primary.Write(value);
+            _secondary?.Write(value);
+        }
     }
 
     public override void Write(string value)
     {
-        _primary.Write(value);
-        _secondary.Write(value);
+        lock (_gate)
+        {
+            _primary.Write(value);
+            _secondary?.Write(value);
+        }
     }
 
     public override void WriteLine(string value)
     {
-        _primary.WriteLine(value);
-        _secondary.WriteLine(value);
+        lock (_gate)
+        {
+            _primary.WriteLine(value);
+            _secondary?.WriteLine(value);
+        }
     }
 
     public override void Flush()
     {
-        _primary.Flush();
-        _secondary.Flush();
+        lock (_gate)
+        {
+            _primary.Flush();
+            _secondary?.Flush();
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        // Console callers may still hold a reference to this tee after Console.SetOut.
+        // Keep forwarding to the original console, but never touch the closed log again.
+        lock (_gate) _secondary = null;
+        base.Dispose(disposing);
     }
 }

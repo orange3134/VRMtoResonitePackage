@@ -8,6 +8,12 @@ public sealed class UnityAsset
 {
     public string Guid { get; init; }
 
+    /// <summary>Original asset GUID, retained when Guid identifies a parsing occurrence.</summary>
+    public string SourceGuid { get; init; }
+    public string OccurrencePath { get; init; }
+    /// <summary>Imported solely to supply meshes authored outside a model PrefabInstance.</summary>
+    public bool IsMeshTemplate { get; init; }
+
     /// <summary>Logical project-relative path, e.g. "Assets/Foo/Bar.prefab" (from the entry's "pathname").</summary>
     public string LogicalPath { get; init; }
 
@@ -33,6 +39,15 @@ public sealed class UnityPackage : IDisposable
     private readonly Dictionary<string, UnityAsset> _byGuid;
     private readonly Dictionary<string, string> _textByGuid = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UnityScene> _sceneByGuid = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, UnityModelFileIdResolver> _modelIds = new(StringComparer.OrdinalIgnoreCase);
+
+    internal UnityPrefabGraph PrefabGraph { get; private set; }
+    private UnityObjectResolver _objectIds;
+    internal UnityObjectResolver ObjectIds => _objectIds ??= new(this, guid =>
+        ByGuid(guid)?.Extension is ".prefab" or ".unity" ? ReadScene(ByGuid(guid)) : null);
+
+    internal void ResolvePrefabGraph(string rootGuid)
+        => PrefabGraph = UnityPrefabGraph.Resolve(this, rootGuid);
 
     private UnityPackage(string root, Dictionary<string, UnityAsset> byGuid)
     {
@@ -42,8 +57,93 @@ public sealed class UnityPackage : IDisposable
 
     public IReadOnlyDictionary<string, UnityAsset> Assets => _byGuid;
 
+    /// <summary>When reading a project, only this prefab is an avatar input.</summary>
+    public UnityAsset InputPrefab { get; private set; }
+
+    public IEnumerable<UnityAsset> AvatarSources => InputPrefab != null
+        ? new[] { InputPrefab }
+        : ByExtension(".prefab").Concat(ByExtension(".unity"));
+
+    public static UnityPackage Open(string path) =>
+        string.Equals(Path.GetExtension(path), ".prefab", StringComparison.OrdinalIgnoreCase)
+            ? OpenProjectPrefab(path) : Extract(path);
+
+    private static UnityPackage OpenProjectPrefab(string path)
+    {
+        path = Path.GetFullPath(path);
+        if (!File.Exists(path))
+            throw new FileNotFoundException("Prefabが見つかりません。", path);
+        DirectoryInfo project = new FileInfo(path).Directory;
+        while (project != null && !(Directory.Exists(Path.Combine(project.FullName, "Assets")) &&
+                                   Directory.Exists(Path.Combine(project.FullName, "ProjectSettings"))))
+            project = project.Parent;
+        if (project == null)
+            throw new InvalidDataException("Unityプロジェクト内のPrefabを指定してください（AssetsとProjectSettingsが必要です）。");
+
+        var assets = new Dictionary<string, UnityAsset>(StringComparer.OrdinalIgnoreCase);
+        var cacheDirectories = UnityPackageCache.Select(project.FullName);
+        var enumeration = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = false,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+        };
+        // Assets plus embedded and resolved registry packages. Project files are read-only;
+        // _root stays null so Dispose never deletes any of them.
+        foreach (string folder in new[] { "Assets", "Packages", "Library/PackageCache" })
+        {
+            string directory = Path.Combine(project.FullName, folder);
+            if (!Directory.Exists(directory)) continue;
+            var directories = folder == "Library/PackageCache"
+                ? cacheDirectories.Select(name => Path.Combine(directory, name)) : new[] { directory };
+            foreach (string meta in directories.SelectMany(d => Directory.EnumerateFiles(d, "*.meta", enumeration)))
+            {
+                string diskPath = meta[..^5];
+                if (!File.Exists(diskPath)) continue;
+                string guid = File.ReadLines(meta).FirstOrDefault(line => line.StartsWith("guid: ", StringComparison.Ordinal))?[6..].Trim();
+                if (guid == null || guid.Length != 32 || !guid.All(Uri.IsHexDigit)) continue;
+                string logicalPath = Path.GetRelativePath(project.FullName, diskPath).Replace('\\', '/');
+                if (folder == "Library/PackageCache")
+                {
+                    string relative = Path.GetRelativePath(directory, diskPath).Replace('\\', '/');
+                    int slash = relative.IndexOf('/');
+                    string packageName = slash < 0 ? relative : relative[..slash];
+                    int version = packageName.IndexOf('@');
+                    if (version >= 0) packageName = packageName[..version];
+                    logicalPath = "Packages/" + packageName + (slash < 0 ? "" : relative[slash..]);
+                }
+                var asset = new UnityAsset { Guid = guid, LogicalPath = logicalPath, DiskPath = diskPath, MetaPath = meta };
+                if (!assets.TryAdd(guid, asset))
+                    throw new InvalidDataException($"GUIDが重複しています: {assets[guid].LogicalPath}, {logicalPath}");
+            }
+        }
+        UnityAsset input = assets.Values.FirstOrDefault(asset =>
+            string.Equals(asset.DiskPath, path, StringComparison.OrdinalIgnoreCase));
+        if (input == null)
+            throw new InvalidDataException("Prefabの.metaが存在しないか、有効なGUIDがありません。");
+        return new UnityPackage(null, assets) { InputPrefab = input };
+    }
+
     public UnityAsset ByGuid(string guid)
         => guid != null && _byGuid.TryGetValue(guid, out UnityAsset a) ? a : null;
+
+    internal UnityModelFileIdResolver ModelFileIds(string guid)
+    {
+        if (!_modelIds.TryGetValue(guid, out var resolver))
+            _modelIds.Add(guid, resolver = new UnityModelFileIdResolver(ByGuid(guid)));
+        return resolver;
+    }
+
+    // A non-owning parsing view. Source files and the caller's cached scenes stay unchanged.
+    internal UnityPackage CreateView(string sourceGuid)
+        => new(null, new Dictionary<string, UnityAsset>(_byGuid, StringComparer.OrdinalIgnoreCase))
+        { InputPrefab = ByGuid(sourceGuid) };
+
+    internal void SetViewAsset(UnityAsset asset, UnityScene scene = null)
+    {
+        _byGuid[asset.Guid] = asset;
+        if (scene != null) _sceneByGuid[asset.Guid] = scene;
+    }
 
     public IEnumerable<UnityAsset> ByExtension(string extensionWithDot)
         => _byGuid.Values.Where(a => a.Extension == extensionWithDot.ToLowerInvariant());
@@ -73,6 +173,7 @@ public sealed class UnityPackage : IDisposable
         {
             return null;
         }
+        if (PrefabGraph?.Scene(asset.Guid) is {} resolved) return resolved;
         if (!_sceneByGuid.TryGetValue(asset.Guid, out UnityScene scene))
         {
             scene = UnityScene.Parse(ReadText(asset));

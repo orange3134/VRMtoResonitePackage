@@ -47,12 +47,13 @@ internal static class GuiApp
         return 0;
     }
 
-    /// <summary>True for the input file types the converter accepts (VRM or a VRChat .unitypackage).</summary>
+    /// <summary>True for VRM, VRChat .unitypackage, and project .prefab inputs.</summary>
     internal static bool IsSupportedInput(string path)
     {
         string ext = Path.GetExtension(path);
         return string.Equals(ext, ".vrm", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(ext, ".unitypackage", StringComparison.OrdinalIgnoreCase);
+            || string.Equals(ext, ".unitypackage", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(ext, ".prefab", StringComparison.OrdinalIgnoreCase);
     }
 }
 
@@ -469,7 +470,8 @@ internal sealed class MainWindow : Window
                 }
             }
 
-            if (string.Equals(extension, ".unitypackage", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(extension, ".unitypackage", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(extension, ".prefab", StringComparison.OrdinalIgnoreCase))
             {
                 ShowConverting(AppLocalization.Format("AnalyzingFile", Path.GetFileName(file)));
                 IReadOnlyList<VrchatAvatarChoice> avatars = await Task.Run(() => ListPackageAvatars(file));
@@ -540,7 +542,7 @@ internal sealed class MainWindow : Window
     {
         try
         {
-            using Unity.UnityPackage package = Unity.UnityPackage.Extract(path);
+            using Unity.UnityPackage package = Unity.UnityPackage.Open(path);
             return Vrchat.VrchatAvatarParser.ListAvatars(package);
         }
         catch

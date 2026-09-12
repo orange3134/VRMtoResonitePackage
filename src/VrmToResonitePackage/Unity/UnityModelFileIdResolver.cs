@@ -11,15 +11,24 @@ namespace VrmToResonitePackage.Unity;
 public sealed class UnityModelFileIdResolver
 {
     private readonly Dictionary<long, string> _names = new();
+    private string _authoredRootPath;
+    private readonly Dictionary<long, HashSet<string>> _nodePathsById = new();
+    private readonly HashSet<long> _rendererComponentIds = new();
+    private readonly Dictionary<string, HashSet<string>> _pathsByName = new(StringComparer.Ordinal);
+    public Dictionary<string, string[]> MeshBoneNames { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, string[]> MeshBoneNamesByPath { get; } = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNames =
         new(StringComparer.Ordinal);
-    private readonly Dictionary<string, IReadOnlyList<float>> _blendShapeDefaultWeights =
+    private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNamesByPath =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<float>> _blendShapeDefaultWeightsByPath =
         new(StringComparer.Ordinal);
     private readonly HashSet<string> _rendererNames = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string>> _subtreeRenderers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string>> _subtreeNodes = new(StringComparer.Ordinal);
     private readonly List<ModelMaterial> _materials = new();
     private IReadOnlyList<UnityFbxBlendShapeDefaults.Channel> _defaultWeightChannels =
         Array.Empty<UnityFbxBlendShapeDefaults.Channel>();
-    private bool[] _usedDefaultWeightChannels = Array.Empty<bool>();
 
     public UnityModelFileIdResolver(UnityAsset model)
     {
@@ -36,12 +45,56 @@ public sealed class UnityModelFileIdResolver
     }
 
     public string ResolveName(long fileId)
-        => fileId != 0 && _names.TryGetValue(fileId, out string name) ? name : null;
+        => fileId == 0 ? null : IsRootFileId(fileId) ? "RootNode" :
+           _names.TryGetValue(fileId, out string name) ? name : null;
 
     public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNames => _blendShapeNames;
-    public IReadOnlyDictionary<string, IReadOnlyList<float>> BlendShapeDefaultWeights =>
-        _blendShapeDefaultWeights;
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNamesByPath => _blendShapeNamesByPath;
+    public IReadOnlyDictionary<string, IReadOnlyList<float>> BlendShapeDefaultWeightsByPath =>
+        _blendShapeDefaultWeightsByPath;
     public IReadOnlyCollection<string> RendererNames => _rendererNames;
+    public IEnumerable<string> RendererNamesUnder(string nodeName)
+        => UniquePath(nodeName) is string path && _subtreeRenderers.TryGetValue(path, out var paths)
+            ? paths.Select(NodeName) : Array.Empty<string>();
+    public IEnumerable<string> RendererNamesUnder(long fileId)
+    {
+        // Unity can fold the model into a synthetic root which Assimp names after a child
+        // armature. Identify that root by its ID, not the heuristic display-name mapping.
+        if (IsRootFileId(fileId))
+            return RendererNames;
+        return RendererPathsUnder(fileId).Select(NodeName);
+    }
+    private static bool IsLowercaseRootId(long fileId)
+        => fileId == Compute("GameObject", "//RootNode/root", 0) ||
+           fileId == Compute("Transform", "//RootNode/root/Transform", 0);
+
+    public bool IsRootFileId(long fileId)
+        => fileId == 0 || fileId == Compute("GameObject", "//RootNode", 0) ||
+           fileId == Compute("Transform", "//RootNode/Transform", 0) ||
+           (_authoredRootPath == null && IsLowercaseRootId(fileId));
+
+    public IEnumerable<string> NodeNamesUnder(long fileId)
+        => NodePathsUnder(fileId).Select(NodeName);
+    public IEnumerable<string> NodePathsUnder(long fileId)
+        => IsRootFileId(fileId) ? _subtreeNodes.Keys :
+           ResolveNodePath(fileId) is string path && _subtreeNodes.TryGetValue(path, out var nodes)
+               ? nodes : Array.Empty<string>();
+    public IEnumerable<string> RendererPathsUnder(long fileId)
+        => IsRootFileId(fileId) ? _subtreeRenderers.Values.SelectMany(paths => paths).Distinct() :
+           ResolveNodePath(fileId) is string path && _subtreeRenderers.TryGetValue(path, out var nodes)
+               ? nodes : Array.Empty<string>();
+    public string ResolveNodePath(long fileId)
+        => _authoredRootPath != null && IsLowercaseRootId(fileId) ? _authoredRootPath :
+           _nodePathsById.TryGetValue(fileId, out var paths)
+            ? paths.Count == 1 ? paths.Single() : null
+            : UniquePath(ResolveName(fileId));
+    public bool IsUniqueNodeName(string name) => UniquePath(name) != null;
+    /// <summary>Owner path for a renderer or MeshFilter component; never a whole subtree.</summary>
+    public string ResolveRendererComponentPath(long fileId)
+        => _rendererComponentIds.Contains(fileId) ? ResolveNodePath(fileId) : null;
+    private string UniquePath(string name)
+        => name != null && _pathsByName.TryGetValue(name, out var paths) && paths.Count == 1 ? paths.Single() : null;
+    private static string NodeName(string path) => path[(path.LastIndexOf('/') + 1)..];
     public IReadOnlyList<ModelMaterial> Materials => _materials;
 
     public readonly record struct ModelMaterial(string Name, string MainTexturePath);
@@ -63,6 +116,9 @@ public sealed class UnityModelFileIdResolver
                 if (fileId != 0 && !string.IsNullOrEmpty(name))
                 {
                     _names[fileId] = NormalizeName(name);
+                    if (int.TryParse(entry["first"].Map.Keys.FirstOrDefault(), out int classId) &&
+                        classId is 23 or 33 or 137)
+                        _rendererComponentIds.Add(fileId);
                 }
             }
         }
@@ -76,6 +132,8 @@ public sealed class UnityModelFileIdResolver
                         System.Globalization.CultureInfo.InvariantCulture, out long fileId))
                 {
                     _names[fileId] = NormalizeName(value.AsString());
+                    // Legacy imported file IDs encode the class in their leading digits.
+                    if (fileId / 100000 is 23 or 33 or 137) _rendererComponentIds.Add(fileId);
                 }
             }
         }
@@ -95,7 +153,6 @@ public sealed class UnityModelFileIdResolver
             }
             using var context = new AssimpContext();
             _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath);
-            _usedDefaultWeightChannels = new bool[_defaultWeightChannels.Count];
             Scene scene = context.ImportFile(importPath, PostProcessSteps.None);
             if (scene?.RootNode == null)
             {
@@ -111,6 +168,58 @@ public sealed class UnityModelFileIdResolver
 
             var roots = new List<(Node Node, List<string> Path)>();
             CollectNodes(scene.RootNode, new List<string>(), roots);
+            // An actual top-level "root" owns this generation-2 path. Other top-level
+            // nodes must not claim it through the synthetic-root path variants.
+            var authoredRoot = roots.FirstOrDefault(entry =>
+                entry.Node.Parent == scene.RootNode && entry.Node.Name == "root");
+            if (authoredRoot.Node != null)
+            {
+                _authoredRootPath = string.Join("/", authoredRoot.Path.Select(NormalizeName));
+                _names[Compute("GameObject", "//RootNode/root", 0)] = "root";
+                _names[Compute("Transform", "//RootNode/root/Transform", 0)] = "root";
+            }
+            // Material splitting repeats (and can omit unused) clusters in each submesh.
+            // Read the unsplit geometry to recover the original skin index table, including
+            // distinct clusters whose bones have identical names and bind poses.
+            var unsplitBones = new Dictionary<string, string[]>(StringComparer.Ordinal);
+            if (roots.Any(entry => entry.Node.MeshCount > 1 &&
+                entry.Node.MeshIndices.Any(i => scene.Meshes[i].HasBones)))
+            {
+                using var skinContext = new AssimpContext();
+                skinContext.SetConfig(new Assimp.Configs.FBXImportMaterialsConfig(false));
+                Scene skinScene = skinContext.ImportFile(importPath, PostProcessSteps.None);
+                var skinNodes = new List<(Node Node, List<string> Path)>();
+                CollectNodes(skinScene.RootNode, new List<string>(), skinNodes);
+                foreach (var entry in skinNodes.Where(entry => entry.Node.MeshCount > 0))
+                    unsplitBones[string.Join("/", entry.Path.Select(NormalizeName))] =
+                        entry.Node.MeshIndices.SelectMany(i => skinScene.Meshes[i].Bones)
+                            .Select(b => b.Name).ToArray();
+            }
+            foreach ((Node node, List<string> nodePath) in roots)
+            {
+                string pathKey = string.Join("/", nodePath.Select(NormalizeName));
+                string nodeName = NormalizeName(node.Name);
+                if (!_pathsByName.TryGetValue(nodeName, out var namedPaths))
+                    _pathsByName[nodeName] = namedPaths = new HashSet<string>(StringComparer.Ordinal);
+                namedPaths.Add(pathKey);
+                for (int depth = 1; depth <= nodePath.Count; depth++)
+                {
+                    string ancestor = string.Join("/", nodePath.Take(depth).Select(NormalizeName));
+                    if (!_subtreeNodes.TryGetValue(ancestor, out var names))
+                        _subtreeNodes[ancestor] = names = new HashSet<string>(StringComparer.Ordinal);
+                    names.Add(pathKey);
+                }
+            }
+            foreach ((Node node, List<string> nodePath) in roots.Where(entry => entry.Node.MeshCount > 0))
+            {
+                for (int depth = 1; depth <= nodePath.Count; depth++)
+                {
+                    string ancestor = string.Join("/", nodePath.Take(depth).Select(NormalizeName));
+                    if (!_subtreeRenderers.TryGetValue(ancestor, out var names))
+                        _subtreeRenderers[ancestor] = names = new HashSet<string>(StringComparer.Ordinal);
+                    names.Add(string.Join("/", nodePath.Select(NormalizeName)));
+                }
+            }
             foreach ((Node node, List<string> nodePath) in roots)
             {
                 AddPathVariants("GameObject", nodePath, node.Name);
@@ -121,6 +230,10 @@ public sealed class UnityModelFileIdResolver
                 if (node.MeshCount > 0)
                 {
                     _rendererNames.Add(node.Name);
+                    MeshBoneNames[node.Name] = unsplitBones.GetValueOrDefault(string.Join("/", nodePath.Select(NormalizeName)))
+                        ?? node.MeshIndices.SelectMany(i => scene.Meshes[i].Bones).Select(b => b.Name).ToArray();
+                    MeshBoneNamesByPath[string.Join("/", nodePath.Select(NormalizeName))] = MeshBoneNames[node.Name];
+                    AddPathVariants("Mesh", nodePath, node.Name);
                     // Unity's FBX importer can classify a mesh differently from Assimp when skin
                     // data is optimized or stripped. Stable fileID resolution is exact, so include
                     // both possible renderer component types as candidates.
@@ -128,7 +241,7 @@ public sealed class UnityModelFileIdResolver
                     AddPathVariants("MeshRenderer", nodePath, node.Name);
                     if (skinned)
                     {
-                        AddBlendShapeNames(scene, node);
+                        AddBlendShapeNames(scene, node, string.Join("/", nodePath.Select(NormalizeName)));
                     }
                     else
                     {
@@ -151,7 +264,7 @@ public sealed class UnityModelFileIdResolver
         }
     }
 
-    private void AddBlendShapeNames(Scene scene, Node node)
+    private void AddBlendShapeNames(Scene scene, Node node, string path)
     {
         Mesh mesh = node.MeshIndices
             .Where(index => index >= 0 && index < scene.MeshCount)
@@ -174,30 +287,21 @@ public sealed class UnityModelFileIdResolver
             names.Add(name);
         }
         _blendShapeNames.TryAdd(node.Name, names);
+        _blendShapeNamesByPath[path] = names;
         var defaults = new float[names.Count];
         for (int i = 0; i < names.Count; i++)
         {
             string attachmentName = names[i];
-            for (int channelIndex = 0; channelIndex < _defaultWeightChannels.Count; channelIndex++)
-            {
-                if (_usedDefaultWeightChannels[channelIndex])
-                {
-                    continue;
-                }
-                UnityFbxBlendShapeDefaults.Channel channel = _defaultWeightChannels[channelIndex];
-                if (string.Equals(attachmentName, channel.Name, StringComparison.Ordinal) ||
-                    string.Equals(attachmentName, $"{channel.Name}.{channel.Name}",
-                        StringComparison.Ordinal))
-                {
-                    defaults[i] = channel.Weight;
-                    _usedDefaultWeightChannels[channelIndex] = true;
-                    break;
-                }
-            }
+            var channels = _defaultWeightChannels.Where(channel => channel.RendererPath == path &&
+                (string.Equals(attachmentName, channel.Name, StringComparison.Ordinal) ||
+                 string.Equals(attachmentName, $"{channel.Name}.{channel.Name}", StringComparison.Ordinal))).ToArray();
+            // A channel belongs to a connected model object, not to the next same-named
+            // attachment visited by Assimp. Ambiguous ownership must not select a neighbor.
+            if (channels.Length == 1) defaults[i] = channels[0].Weight;
         }
         if (defaults.Any(weight => MathF.Abs(weight) > 0.001f))
         {
-            _blendShapeDefaultWeights.TryAdd(node.Name, defaults);
+            _blendShapeDefaultWeightsByPath[path] = defaults;
         }
     }
 
@@ -223,7 +327,7 @@ public sealed class UnityModelFileIdResolver
         for (int duplicateIndex = 0; duplicateIndex < 16; duplicateIndex++)
         {
             AddHashCandidate(type, name, duplicateIndex.ToString(
-                System.Globalization.CultureInfo.InvariantCulture), name, Encoding.UTF8);
+                System.Globalization.CultureInfo.InvariantCulture), name, Encoding.UTF8, rawPath);
         }
 
         // Assimp can expose an artificial FBX root, while Unity always starts the imported path at
@@ -255,17 +359,22 @@ public sealed class UnityModelFileIdResolver
                 for (int duplicateIndex = 0; duplicateIndex < 16; duplicateIndex++)
                 {
                     AddHashCandidate(type, objectPath, duplicateIndex.ToString(
-                        System.Globalization.CultureInfo.InvariantCulture), name, Encoding.UTF8);
+                        System.Globalization.CultureInfo.InvariantCulture), name, Encoding.UTF8, rawPath);
                 }
             }
         }
     }
 
-    private void AddHashCandidate(string type, string objectPath, string suffix, string name, Encoding encoding)
+    private void AddHashCandidate(string type, string objectPath, string suffix, string name, Encoding encoding, List<string> rawPath)
     {
         byte[] bytes = encoding.GetBytes($"Type:{type}->{objectPath}{suffix}");
         long fileId = unchecked((long)XxHash64(bytes));
+        if (type is "MeshRenderer" or "SkinnedMeshRenderer" or "MeshFilter")
+            _rendererComponentIds.Add(fileId);
         _names.TryAdd(fileId, NormalizeName(name));
+        if (!_nodePathsById.TryGetValue(fileId, out var paths))
+            _nodePathsById[fileId] = paths = new HashSet<string>(StringComparer.Ordinal);
+        paths.Add(string.Join("/", rawPath.Select(NormalizeName)));
     }
 
     private static string NormalizeName(string name)

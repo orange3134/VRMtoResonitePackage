@@ -181,6 +181,10 @@ internal static class VrchatConstants
     /// Decodes Unity's compact int-array serialization (e.g. "f1000000ffffffffffffffff" -> [241, -1, -1]).
     /// Used for VRCAvatarDescriptor.customEyeLookSettings.eyelidsBlendshapes.
     /// </summary>
+    public static int[] DecodeIntArray(Unity.YamlNode node) => node?.Seq != null
+        ? node.Seq.Select(item => item?.AsInt() ?? 0).ToArray()
+        : DecodeIntArrayHex(node?.AsString());
+
     public static int[] DecodeIntArrayHex(string hex)
     {
         if (string.IsNullOrEmpty(hex) || hex.Length % 8 != 0)

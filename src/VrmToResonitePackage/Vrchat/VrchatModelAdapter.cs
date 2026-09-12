@@ -5,9 +5,8 @@ namespace VrmToResonitePackage.Vrchat;
 
 /// <summary>
 /// Adapts a parsed <see cref="VrchatAvatar"/> into the <see cref="VrmModel"/> shape the downstream
-/// avatar/rig/spring setup consumes. Everything resolves by bone/mesh GameObject name (the slot
-/// names after FBX import) and by blendshape name/index, so synthetic glTF-style node/mesh indices
-/// are just an indirection layer over those names.
+/// avatar/rig/spring setup consumes. Synthetic node/mesh indices retain prefab object and model
+/// identities where available, alongside GameObject names, Animator paths and shape names/indices.
 /// </summary>
 public static class VrchatModelAdapter
 {
@@ -17,18 +16,22 @@ public static class VrchatModelAdapter
 
         // Intern bone/mesh names into a synthetic node table (index -> name).
         var nodeIndexByName = new Dictionary<string, int>(StringComparer.Ordinal);
-        int NodeFor(string name)
+        int NodeFor(string name, VrchatBoneTarget target = null)
         {
             if (string.IsNullOrEmpty(name))
             {
                 return -1;
             }
-            if (!nodeIndexByName.TryGetValue(name, out int index))
+            bool prefabIdentity = target?.PrefabGuid != null && target.TransformFileId != 0;
+            string key = prefabIdentity ? $"prefab:{target.PrefabGuid}:{target.TransformFileId}" :
+                target?.FbxGuid != null ? $"fbx:{target.FbxGuid}:{target.Path ?? name}" : name;
+            if (!nodeIndexByName.TryGetValue(key, out int index))
             {
                 index = model.NodeNames.Count;
                 model.NodeNames.Add(name);
                 model.NodeMeshIndices.Add(-1);
-                nodeIndexByName[name] = index;
+                nodeIndexByName[key] = index;
+                if (prefabIdentity || target?.FbxGuid != null) model.NodeTargets[index] = target;
             }
             return index;
         }
@@ -36,27 +39,36 @@ public static class VrchatModelAdapter
         // Humanoid bones.
         foreach ((string vrmBone, string boneName) in avatar.HumanBones)
         {
-            int node = NodeFor(boneName);
+            var target = avatar.HumanBoneTargets.GetValueOrDefault(vrmBone)
+                ?? (avatar.FbxGuid != null ? new VrchatBoneTarget(avatar.FbxGuid, boneName) : null);
+            int node = NodeFor(boneName, target);
             if (node >= 0)
             {
                 model.HumanBones[vrmBone] = node;
             }
         }
+        // The descriptor may reference eye bones absent from, or different to, the humanoid map.
+        if (!string.IsNullOrEmpty(avatar.LeftEyeBoneName))
+            model.HumanBones["leftEye"] = NodeFor(avatar.LeftEyeBoneName, avatar.LeftEyeBoneTarget);
+        if (!string.IsNullOrEmpty(avatar.RightEyeBoneName))
+            model.HumanBones["rightEye"] = NodeFor(avatar.RightEyeBoneName, avatar.RightEyeBoneTarget);
 
         // One synthetic mesh per face/eyelid GameObject that owns blendshapes.
-        var meshIndexByGameObject = new Dictionary<string, int>(StringComparer.Ordinal);
-        int MeshFor(string gameObjectName)
+        var meshIndexByGameObject = new Dictionary<(string Name, string Path, VrchatBoneTarget Target), int>();
+        int MeshFor(string gameObjectName, string bindingPath = null, VrchatBoneTarget target = null)
         {
+            gameObjectName ??= target?.Name;
             // A null/empty name (variant-of-FBX stripped mesh) maps to a mesh with no node hint, so
             // the blendshape resolver falls back to matching by name across every imported renderer.
-            string key = gameObjectName ?? "";
+            var key = (gameObjectName ?? "", bindingPath, target);
             if (!meshIndexByGameObject.TryGetValue(key, out int meshIndex))
             {
                 meshIndex = model.MeshTargetNames.Count;
                 model.MeshTargetNames.Add(new List<string>());
+                if (bindingPath != null) model.MeshBindingPaths[meshIndex] = bindingPath;
                 model.MeshToNodes[meshIndex] = string.IsNullOrEmpty(gameObjectName)
                     ? new List<int>()
-                    : new List<int> { NodeFor(gameObjectName) };
+                    : new List<int> { NodeFor(gameObjectName, target) };
                 meshIndexByGameObject[key] = meshIndex;
             }
             return meshIndex;
@@ -65,7 +77,7 @@ public static class VrchatModelAdapter
         // Visemes (resolved by blendshape name on the viseme mesh).
         foreach (VrchatViseme viseme in avatar.Visemes)
         {
-            int meshIndex = MeshFor(viseme.MeshGameObjectName);
+            int meshIndex = MeshFor(viseme.MeshGameObjectName, viseme.MeshGameObjectPath, viseme.MeshTarget);
             List<string> targetNames = model.MeshTargetNames[meshIndex];
             int morphIndex = targetNames.Count;
             targetNames.Add(viseme.BlendShapeName);
@@ -77,12 +89,35 @@ public static class VrchatModelAdapter
         // Blink (resolved by blendshape index on the eyelid mesh; VRChat stores an index, not a name).
         if (avatar.Blink != null)
         {
-            int meshIndex = MeshFor(avatar.Blink.MeshGameObjectName);
+            string shapeName = avatar.Blink.BlendShapeName;
+            if (shapeName == null && avatar.Blink.MeshGameObjectName != null &&
+                avatar.FbxBlendShapeNames.TryGetValue(avatar.Blink.MeshGameObjectName, out var shapes) &&
+                avatar.Blink.BlendShapeIndex >= 0 && avatar.Blink.BlendShapeIndex < shapes.Count)
+                shapeName = shapes[avatar.Blink.BlendShapeIndex];
+            int meshIndex;
+            int morphIndex;
+            if (shapeName != null)
+            {
+                meshIndex = MeshFor(avatar.Blink.MeshGameObjectName, avatar.Blink.MeshGameObjectPath, avatar.Blink.MeshTarget);
+                morphIndex = model.MeshTargetNames[meshIndex].Count;
+                model.MeshTargetNames[meshIndex].Add(shapeName);
+            }
+            else
+            {
+                // Raw Unity indices must not index the synthetic viseme-name table on this mesh.
+                meshIndex = model.MeshTargetNames.Count;
+                model.MeshTargetNames.Add(new List<string>());
+                if (avatar.Blink.MeshGameObjectPath != null)
+                    model.MeshBindingPaths[meshIndex] = avatar.Blink.MeshGameObjectPath;
+                int node = NodeFor(avatar.Blink.MeshGameObjectName, avatar.Blink.MeshTarget);
+                model.MeshToNodes[meshIndex] = node >= 0 ? new List<int> { node } : new List<int>();
+                morphIndex = avatar.Blink.BlendShapeIndex;
+            }
             var blink = new VrmExpression { Preset = "blink", Name = "blink" };
             blink.Binds.Add(new VrmExpressionBind
             {
                 MeshIndex = meshIndex,
-                MorphIndex = avatar.Blink.BlendShapeIndex,
+                MorphIndex = morphIndex,
                 Weight = 1f,
             });
             model.Expressions.Add(blink);
@@ -93,16 +128,16 @@ public static class VrchatModelAdapter
         var colliderIndexBySignature = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (VrchatPhysBone pb in avatar.PhysBones)
         {
-            int rootNode = NodeFor(pb.RootBoneName);
+            int rootNode = NodeFor(pb.RootBoneName, pb.RootBoneTarget);
             if (rootNode < 0)
             {
                 continue;
             }
             var chain = new VrmSpringChain { Name = pb.RootBoneName, HitRadius = MathX.Max(0.001f, pb.Radius) };
             chain.RootNodes.Add(rootNode);
-            foreach (string ignoredBoneName in pb.IgnoreBoneNames)
+            foreach (var (ignoredBoneName, ignoredIndex) in pb.IgnoreBoneNames.Select((name, index) => (name, index)))
             {
-                int ignoredNode = NodeFor(ignoredBoneName);
+                int ignoredNode = NodeFor(ignoredBoneName, pb.IgnoreBoneTargets.ElementAtOrDefault(ignoredIndex));
                 if (ignoredNode >= 0 && !chain.ExcludedRootNodes.Contains(ignoredNode))
                 {
                     chain.ExcludedRootNodes.Add(ignoredNode);
@@ -110,7 +145,7 @@ public static class VrchatModelAdapter
             }
             foreach (VrchatPhysBoneCollider collider in pb.Colliders)
             {
-                int node = NodeFor(collider.AttachBoneName);
+                int node = NodeFor(collider.AttachBoneName, collider.AttachBoneTarget);
                 if (node < 0)
                 {
                     continue;

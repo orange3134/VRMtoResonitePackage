@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["completed", "summary", "findings"],
+  "properties": {
+    "completed": { "type": "boolean" },
+    "summary": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["priority", "file", "line", "title", "body"],
+        "properties": {
+          "priority": { "type": "integer", "minimum": 0, "maximum": 3 },
+          "file": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 },
+          "title": { "type": "string" },
+          "body": { "type": "string" }
+        }
+      }
+    }
+  }
+}

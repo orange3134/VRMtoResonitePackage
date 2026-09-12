@@ -10,7 +10,9 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static class VrchatBlendShapeRepair
 {
-    public static async Task<int> Apply(Slot root, VrchatAvatar avatar)
+    public static async Task<int> Apply(Slot root, VrchatAvatar avatar,
+        IReadOnlyDictionary<Slot, string> sources, IReadOnlyDictionary<string, Slot> authoredObjects,
+        IReadOnlyDictionary<Slot, string> importedPaths = null)
     {
         int repaired = await NormalizeRepeatedBlendShapeNames(root);
         if (repaired > 0)
@@ -28,8 +30,11 @@ internal static class VrchatBlendShapeRepair
 
         foreach (SkinnedMeshRenderer renderer in root.GetComponentsInChildren<SkinnedMeshRenderer>())
         {
-            if (!avatar.FbxBlendShapeNames.TryGetValue(renderer.Slot.Name, out IReadOnlyList<string> expected) ||
-                expected.Count == 0 || renderer.Mesh.Target == null || renderer.Mesh.Asset?.Data == null)
+            string objectKey = authoredObjects.FirstOrDefault(entry => entry.Value == renderer.Slot).Key;
+            string guid = VrchatSceneSetup.FbxGuidForSlot(root, renderer.Slot, avatar, sources);
+            var expected = avatar.BlendShapeNamesFor(guid, renderer.Slot.Name, objectKey,
+                importedPaths?.GetValueOrDefault(renderer.Slot));
+            if (expected == null || expected.Count == 0 || renderer.Mesh.Target == null || renderer.Mesh.Asset?.Data == null)
             {
                 continue;
             }

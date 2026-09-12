@@ -164,6 +164,7 @@ public static class UnityYaml
         {
             int start = amp + 1;
             int end = start;
+            if (end < header.Length && header[end] == '-') end++;
             while (end < header.Length && char.IsDigit(header[end])) end++;
             long.TryParse(header.AsSpan(start, end - start), out fileId);
         }

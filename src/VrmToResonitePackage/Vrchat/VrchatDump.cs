@@ -19,7 +19,7 @@ internal static class VrchatDump
         UniLog.OnError += Log;
         try
         {
-            using UnityPackage package = UnityPackage.Extract(packagePath);
+            using UnityPackage package = UnityPackage.Open(packagePath);
             Console.WriteLine($"アセット数: {package.Assets.Count}  " +
                               $"(prefab {package.ByExtension(".prefab").Count()}, " +
                               $"fbx {package.ByExtension(".fbx").Count()}, " +
@@ -39,6 +39,8 @@ internal static class VrchatDump
             VrchatAvatarParser.DiagnoseCandidates(package);
 
             VrchatAvatar avatar = VrchatAvatarParser.Parse(package, avatarOverride);
+            foreach (var merge in avatar.ModularMergeArmatures)
+                Console.WriteLine($"Merge Armature: {merge.SourceBoneTarget} -> {merge.TargetBoneTarget}, path={merge.TargetPath}");
 
             Console.WriteLine();
             Console.WriteLine($"アバター: {avatar.Name}");

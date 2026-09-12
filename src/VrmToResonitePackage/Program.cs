@@ -77,8 +77,8 @@ internal static class Program
         {
             int result = RunConverter(options, resonitePath);
             PauseIfInteractive();
-            // The engine's update loop runs on a foreground thread; make sure the
-            // process actually terminates even if engine shutdown timed out.
+            // The engine belongs to this conversion process. Exports and logs are complete;
+            // terminate its foreground loop without racing asynchronous engine disposal.
             Environment.Exit(result);
             return result;
         }
@@ -300,9 +300,10 @@ internal sealed class CliOptions
     public static void PrintUsage()
     {
         Console.WriteLine("使い方:");
-        Console.WriteLine("  ResoPon.exe <model.vrm> [...] [オプション]");
+        Console.WriteLine("  ResoPon.exe <model.vrm|avatar.unitypackage|avatar.prefab> [...] [オプション]");
         Console.WriteLine();
-        Console.WriteLine("  VRM をこのexeにドラッグ&ドロップするだけでも変換できます。");
+        Console.WriteLine("  VRM / .unitypackage / .prefab をこのexeにドラッグ&ドロップするだけでも変換できます。");
+        Console.WriteLine("  .prefab はUnityプロジェクト内のファイルを指定してください（関連アセットと.metaが必要です）。");
         Console.WriteLine("  出力は入力ファイルと同じ場所に <名前>.resonitepackage として保存されます。");
         Console.WriteLine();
         Console.WriteLine("オプション:");

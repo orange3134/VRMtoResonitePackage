@@ -45,6 +45,8 @@ public sealed class VrmModel
 
     /// <summary>glTF node index -> node name.</summary>
     public List<string> NodeNames { get; } = new();
+    public Dictionary<int, Vrchat.VrchatBoneTarget> NodeTargets { get; } = new();
+    public string MeshBindingRootPath { get; set; }
 
     /// <summary>glTF node index -> mesh index (or -1).</summary>
     public List<int> NodeMeshIndices { get; } = new();
@@ -54,6 +56,9 @@ public sealed class VrmModel
 
     /// <summary>glTF mesh index -> node indices that reference the mesh.</summary>
     public Dictionary<int, List<int>> MeshToNodes { get; } = new();
+
+    /// <summary>Unity animation binding paths for synthetic meshes; these must not fall back to other renderers.</summary>
+    public Dictionary<int, string> MeshBindingPaths { get; } = new();
 
     /// <summary>glTF texture index -> image index.</summary>
     public List<int> TextureToImage { get; } = new();

@@ -101,11 +101,14 @@ internal static class AvatarSetup
         ["rightLittleDistal"] = BodyNode.RightPinky_Distal,
     };
 
-    public static void Build(Slot root, VrmModel vrm, AvatarSetupOptions options)
+    public static void Build(Slot root, VrmModel vrm, AvatarSetupOptions options, BlendshapeResolver resolver = null,
+        IReadOnlyDictionary<int, Slot> nodeSlots = null)
     {
+        // Capture renderer paths before rig/eye setup changes the hierarchy.
+        resolver ??= new BlendshapeResolver(root, vrm);
         Dictionary<string, Slot> slotsByName = SlotIndex.Build(root);
 
-        BipedRig rig = SetupRig(root, vrm, slotsByName);
+        BipedRig rig = SetupRig(root, vrm, slotsByName, nodeSlots);
         if (rig == null || !rig.IsBiped)
         {
             UniLog.Warning("ヒューマノイドの必須ボーンが揃っていないため、アバターセットアップをスキップします。");
@@ -143,7 +146,7 @@ internal static class AvatarSetup
             SetupToolAnchors(leftRef, leftHand);
             SetupToolAnchors(rightRef, rightHand);
 
-            SetupEyesAndBlink(root, rig, vrm, headsetRef, slotsByName);
+            SetupEyesAndBlink(root, rig, vrm, headsetRef, slotsByName, resolver);
 
             VRIKAvatar avatar = root.AttachComponent<VRIKAvatar>();
             avatar.Setup(ik, rig, headsetRef, leftRef, rightRef, null, null, null);
@@ -221,7 +224,7 @@ internal static class AvatarSetup
         // that misassigns blendshapes on many models, so the voice output is set up
         // here and visemes are wired exclusively from the VRM expression data.
         SetupVoiceOutput(root);
-        SetupVisemesFromVrm(root, vrm);
+        SetupVisemesFromVrm(root, vrm, resolver);
         if (options.FaceTracking)
         {
             AvatarCreator.TrySetupFaceTracking(root);
@@ -239,7 +242,8 @@ internal static class AvatarSetup
 
     // ---------------------------------------------------------------- rig
 
-    private static BipedRig SetupRig(Slot root, VrmModel vrm, Dictionary<string, Slot> slotsByName)
+    private static BipedRig SetupRig(Slot root, VrmModel vrm, Dictionary<string, Slot> slotsByName,
+        IReadOnlyDictionary<int, Slot> nodeSlots = null)
     {
         // The model importer may have already classified the rig heuristically.
         // Keep avatar setup components on the avatar root; only the bone targets live
@@ -288,7 +292,8 @@ internal static class AvatarSetup
                 continue;
             }
             string nodeName = vrm.GetNodeName(nodeIndex);
-            if (nodeName == null || !slotsByName.TryGetValue(nodeName, out Slot boneSlot))
+            Slot boneSlot = ResolveModelNode(vrm, nodeIndex, slotsByName, nodeSlots);
+            if (boneSlot == null || boneSlot.IsDestroyed)
             {
                 UniLog.Warning($"VRMボーン '{vrmBone}' のノード '{nodeName}' に対応するスロットが見つかりません。");
                 continue;
@@ -496,7 +501,7 @@ internal static class AvatarSetup
     // ---------------------------------------------------------------- eyes & blink
 
     private static void SetupEyesAndBlink(Slot root, BipedRig rig, VrmModel vrm, Slot headsetRef,
-        Dictionary<string, Slot> slotsByName)
+        Dictionary<string, Slot> slotsByName, BlendshapeResolver resolver)
     {
         Slot head = rig[BodyNode.Head];
         Slot leftEye = rig.TryGetBone(BodyNode.LeftEye);
@@ -524,7 +529,7 @@ internal static class AvatarSetup
             EyeRotationDriver rotationDriver = managerSlot.AttachComponent<EyeRotationDriver>();
             rotationDriver.EyeManager.Target = eyeManager;
             // The default (15) lets eyes swing far enough to clip through VRM face meshes.
-            rotationDriver.MaxSwing.Value = 4f;
+            rotationDriver.MaxSwing.Value = vrm.Source == ModelSource.VrchatFbx ? 15f : 4f;
             EyeRotationDriver.Eye left = rotationDriver.Eyes.Add();
             EyeRotationDriver.Eye right = rotationDriver.Eyes.Add();
             left.Root.Target = leftPivot;
@@ -533,12 +538,12 @@ internal static class AvatarSetup
             right.Root.Target = rightPivot;
             right.Side.Value = EyeSide.Right;
             right.SetupFromRoot();
+            UniLog.Log($"EyeRotationDriver: {leftEye.Name}, {rightEye.Name}; swing={rotationDriver.MaxSwing.Value}; linked={left.IsValidEye && right.IsValidEye}");
         }
 
         EyeLinearDriver linearDriver = managerSlot.AttachComponent<EyeLinearDriver>();
         linearDriver.EyeManager.Target = eyeManager;
 
-        var resolver = new BlendshapeResolver(root, vrm);
         List<(IField<float> field, float weight)> blinkLeft = ResolveBinds(resolver, vrm, "blinkLeft");
         List<(IField<float> field, float weight)> blinkRight = ResolveBinds(resolver, vrm, "blinkRight");
         List<(IField<float> field, float weight)> blinkBoth = ResolveBinds(resolver, vrm, "blink");
@@ -552,6 +557,7 @@ internal static class AvatarSetup
         {
             AddBlinkEyes(linearDriver, blinkBoth, EyeSide.Combined);
         }
+        UniLog.Log($"EyeLinearDriver: {linearDriver.Eyes.Count} blink binding(s)");
 
         if (linearDriver.Eyes.Count == 0 && rotationDriverMissing(managerSlot))
         {
@@ -681,9 +687,8 @@ internal static class AvatarSetup
     /// auto-assignment is bypassed entirely, so only blendshapes the source explicitly declares get
     /// linked. VRM provides the five vowels; VRChat provides up to all 15 visemes.
     /// </summary>
-    private static void SetupVisemesFromVrm(Slot root, VrmModel vrm)
+    private static void SetupVisemesFromVrm(Slot root, VrmModel vrm, BlendshapeResolver resolver)
     {
-        var resolver = new BlendshapeResolver(root, vrm);
         var drivers = new List<DirectVisemeDriver>();
 
         foreach ((string preset, Viseme viseme) in VisemePresets)
@@ -704,6 +709,7 @@ internal static class AvatarSetup
                 DirectVisemeDriver driver = skin.Slot.GetComponent<DirectVisemeDriver>()
                                             ?? skin.Slot.AttachComponent<DirectVisemeDriver>();
                 driver[viseme].ForceLink(field);
+                UniLog.Log($"DirectVisemeDriver: {skin.Slot.Name} / {viseme} -> {field.Name}");
                 if (!drivers.Contains(driver))
                 {
                     drivers.Add(driver);
@@ -837,12 +843,14 @@ internal static class AvatarSetup
         }
     }
 
-    public static async Task ApplyFirstPersonAutoAsync(Slot root, VrmModel vrm)
+    public static async Task ApplyFirstPersonAutoAsync(Slot root, VrmModel vrm,
+        IReadOnlyDictionary<int, Slot> nodeSlots = null)
     {
         List<VrmFirstPersonMeshAnnotation> autoAnnotations = vrm.FirstPersonMeshAnnotations
             .Where(a => a.Flag == VrmFirstPersonFlag.Auto)
             .ToList();
-        if (autoAnnotations.Count == 0)
+        bool autoVrchat = vrm.Source == ModelSource.VrchatFbx;
+        if (autoAnnotations.Count == 0 && !autoVrchat)
         {
             return;
         }
@@ -855,7 +863,7 @@ internal static class AvatarSetup
         ImportAvatarRootIdentification(root);
 
         Dictionary<string, Slot> slotsByName = SlotIndex.Build(root);
-        Slot firstPersonBone = ResolveFirstPersonBone(root, vrm, slotsByName);
+        Slot firstPersonBone = ResolveFirstPersonBone(root, vrm, slotsByName, nodeSlots);
         if (firstPersonBone == null)
         {
             UniLog.Warning("VRM FirstPerson Auto skipped: head bone was not found.");
@@ -871,8 +879,9 @@ internal static class AvatarSetup
         // Resolve and deduplicate the source renderers before creating any headless children.
         // Otherwise a later annotation for the same slot can discover a child created by an
         // earlier annotation and recursively apply another material override to it.
-        List<MeshRenderer> renderers = autoAnnotations
-            .SelectMany(annotation => ResolveAnnotatedRenderers(vrm, slotsByName, annotation))
+        List<MeshRenderer> renderers = (autoVrchat
+            ? root.GetComponentsInChildren<MeshRenderer>()
+            : autoAnnotations.SelectMany(annotation => ResolveAnnotatedRenderers(vrm, slotsByName, annotation)))
             .Distinct()
             .ToList();
         foreach (MeshRenderer renderer in renderers)
@@ -883,6 +892,7 @@ internal static class AvatarSetup
                     if (await TrySetupAutoSkinnedRenderer(skinned, firstPersonBone, firstPersonMeshAssets,
                             invisibleMaterial))
                     {
+                        UniLog.Log($"FirstPerson RenderMaterialOverride: {renderer.Slot.Name}");
                         configured++;
                     }
                     break;
@@ -936,7 +946,8 @@ internal static class AvatarSetup
             AddVisibility(renderer, VrmFirstPersonFlag.ThirdPersonOnly, invisibleMaterial);
             return true;
         }
-        source.ClearBlendShapes();
+        // Triangle removal preserves vertex indices, so retain morph data and follow the
+        // source weights instead of reverting the first-person body to its undeformed mesh.
 
         Uri uri = await renderer.Engine.LocalDB.SaveAssetAsync(source).ConfigureAwait(false);
         await default(ToWorld);
@@ -947,10 +958,19 @@ internal static class AvatarSetup
 
         Slot headlessSlot = renderer.Slot.AddSlot("_headless_" + renderer.Slot.Name);
         SkinnedMeshRenderer headless = headlessSlot.AttachComponent<SkinnedMeshRenderer>();
+        headless.Enabled = renderer.Enabled;
+        headless.EnabledField.DriveFrom(renderer.EnabledField);
         headless.Mesh.Target = meshAssetSlot.AttachStaticMesh(uri, getExisting: false);
         headless.BoundsComputeMethod.Value = renderer.BoundsComputeMethod.Value;
         headless.ExplicitLocalBounds.Value = renderer.ExplicitLocalBounds.Value;
         headless.ProxyBoundsSource.Target = renderer.ProxyBoundsSource.Target;
+        for (int i = 0; i < source.BlendShapeCount; i++)
+        {
+            while (renderer.BlendShapeWeights.Count <= i) renderer.BlendShapeWeights.Add();
+            var weight = headless.BlendShapeWeights.Add();
+            weight.Value = renderer.BlendShapeWeights[i];
+            weight.DriveFrom(renderer.BlendShapeWeights.GetElement(i));
+        }
         foreach (Slot bone in renderer.Bones)
         {
             headless.Bones.Add().Target = bone;
@@ -986,17 +1006,28 @@ internal static class AvatarSetup
         return eraseBones.ToArray();
     }
 
-    private static Slot ResolveFirstPersonBone(Slot root, VrmModel vrm, Dictionary<string, Slot> slotsByName)
+    internal static Slot ResolveModelNode(VrmModel model, int index, Dictionary<string, Slot> slotsByName,
+        IReadOnlyDictionary<int, Slot> nodeSlots = null)
     {
-        if (vrm.HumanBones.TryGetValue("head", out int headIndex))
-        {
-            string headName = vrm.GetNodeName(headIndex);
-            if (headName != null && slotsByName.TryGetValue(headName, out Slot headSlot))
-            {
-                return headSlot;
-            }
-        }
+        // Explicit references never fall back to a same-named bone in another model.
+        Slot slot = model.NodeTargets.ContainsKey(index) ? nodeSlots?.GetValueOrDefault(index) :
+            model.GetNodeName(index) is string name ? slotsByName.GetValueOrDefault(name) : null;
+        return slot is { IsDestroyed: false } ? slot : null;
+    }
 
+    private static Slot ResolveFirstPersonBone(Slot root, VrmModel vrm, Dictionary<string, Slot> slotsByName,
+        IReadOnlyDictionary<int, Slot> nodeSlots = null)
+    {
+        if (vrm.Source == ModelSource.VrchatFbx)
+        {
+            // Build owns the avatar-root rig. Imported clothing rigs are not authoritative.
+            Slot rigHead = root.GetComponent<BipedRig>()?.TryGetBone(BodyNode.Head);
+            if (rigHead is { IsDestroyed: false }) return rigHead;
+            return vrm.HumanBones.TryGetValue("head", out int node) && vrm.NodeTargets.ContainsKey(node)
+                ? ResolveModelNode(vrm, node, slotsByName, nodeSlots) : null;
+        }
+        if (vrm.HumanBones.TryGetValue("head", out int headIndex) &&
+            ResolveModelNode(vrm, headIndex, slotsByName, nodeSlots) is {} head) return head;
         return root.GetComponentInChildren<BipedRig>()?.TryGetBone(BodyNode.Head);
     }
 
@@ -1140,6 +1171,21 @@ internal static class AvatarSetup
 
     private static void ImportAvatarRootIdentification(Slot root)
     {
+        // The imported identification graph consumes this reference to determine whether
+        // the avatar is worn. Keep its value driven so dynamic-variable linking cannot clear it.
+        const string variableName = ModularAvatarNamespace + "/AvatarRoot";
+        var variable = root.GetComponents<DynamicReferenceVariable<Slot>>()
+            .FirstOrDefault(v => v.VariableName.Value == variableName)
+            ?? root.AttachComponent<DynamicReferenceVariable<Slot>>();
+        variable.VariableName.Value = variableName;
+        if (variable.Reference.Target != root)
+        {
+            var reference = root.AttachComponent<ReferenceField<Slot>>();
+            reference.Reference.Target = root;
+            variable.Reference.Target = root;
+            variable.Reference.DriveFrom(reference.Reference);
+        }
+        UniLog.Log($"DynamicReferenceVariable: {variableName} -> avatar root (linked={variable.Reference.Target == root})");
         if (root.FindChild("Avatar Root Identification") != null)
         {
             return;
@@ -1278,12 +1324,30 @@ internal sealed class BlendshapeResolver
     private readonly VrmModel _vrm;
     private readonly List<SkinnedMeshRenderer> _renderers;
     private readonly Dictionary<string, Slot> _slotsByName;
+    private readonly Dictionary<SkinnedMeshRenderer, string> _rendererPaths;
+    private readonly Dictionary<int, SkinnedMeshRenderer[]> _identityRenderers = new();
 
-    public BlendshapeResolver(Slot root, VrmModel vrm)
+    public BlendshapeResolver(Slot root, VrmModel vrm) : this(root, vrm, null) { }
+
+    public BlendshapeResolver(Slot root, VrmModel vrm, IReadOnlyDictionary<int, Slot> resolvedNodes)
     {
         _vrm = vrm;
         _renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>();
         _slotsByName = SlotIndex.Build(root);
+        _rendererPaths = _renderers.ToDictionary(skin => skin, skin => RelativePath(skin.Slot));
+        foreach (int node in vrm.NodeTargets.Keys)
+        {
+            Slot slot = null;
+            resolvedNodes?.TryGetValue(node, out slot);
+            _identityRenderers[node] = _renderers.Where(skin => skin.Slot == slot).ToArray();
+        }
+
+        string RelativePath(Slot slot)
+        {
+            var parts = new Stack<string>();
+            for (; slot != null && slot != root; slot = slot.Parent) parts.Push(slot.Name);
+            return string.Join("/", parts);
+        }
     }
 
     public IField<float> Resolve(VrmExpressionBind bind)
@@ -1316,6 +1380,11 @@ internal sealed class BlendshapeResolver
         }
         foreach (SkinnedMeshRenderer skin in EnumerateCandidates(bind))
         {
+            // Animator morph indices address the synthetic name table, not the FBX's
+            // shape order. A missing named shape cannot safely fall back to that index.
+            if (targetName != null && (_vrm.MeshBindingPaths.ContainsKey(bind.MeshIndex) ||
+                (_vrm.MeshToNodes.TryGetValue(bind.MeshIndex, out var targetNodes) &&
+                 targetNodes.Any(_vrm.NodeTargets.ContainsKey)))) break;
             if (bind.MorphIndex >= 0 && bind.MorphIndex < skin.MeshBlendshapeCount)
             {
                 return (skin, skin.BlendShapeWeights.GetElement(bind.MorphIndex));
@@ -1327,6 +1396,31 @@ internal sealed class BlendshapeResolver
 
     private IEnumerable<SkinnedMeshRenderer> EnumerateCandidates(VrmExpressionBind bind)
     {
+        if (_vrm.MeshToNodes.TryGetValue(bind.MeshIndex, out var identityNodes) &&
+            identityNodes.Any(_vrm.NodeTargets.ContainsKey))
+        {
+            foreach (int node in identityNodes)
+                if (_identityRenderers.TryGetValue(node, out var renderers))
+                    foreach (var skin in renderers)
+                        if (!skin.IsDestroyed) yield return skin;
+            yield break;
+        }
+        if (_vrm.MeshBindingPaths.TryGetValue(bind.MeshIndex, out string bindingPath))
+        {
+            if (_vrm.MeshBindingRootPath != null)
+            {
+                string path = string.Join("/", new[] { _vrm.MeshBindingRootPath, bindingPath }.Where(p => p.Length > 0));
+                var exact = _renderers.Where(skin => _rendererPaths[skin] == path).ToArray();
+                if (exact.Length == 1) yield return exact[0];
+                yield break;
+            }
+            // Import wrappers can add ancestors, but every segment of the authored path
+            // must match. Ambiguous or missing paths must never target a namesake mesh.
+            var matches = _renderers.Where(skin => _rendererPaths[skin] == bindingPath ||
+                (bindingPath.Length > 0 && _rendererPaths[skin].EndsWith("/" + bindingPath, StringComparison.Ordinal))).ToArray();
+            if (matches.Length == 1) yield return matches[0];
+            yield break;
+        }
         // Renderers under slots named like the glTF nodes that reference the mesh come first.
         if (_vrm.MeshToNodes.TryGetValue(bind.MeshIndex, out List<int> nodes))
         {

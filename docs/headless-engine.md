@@ -40,11 +40,20 @@ Resonite本体とResoPon、または複数のResoPonプロセスでDataディレ
 `DoNotAutoLoadHome=true` のヘッドレス環境では、`Userspace.ExitWorld` や `RunAction` がフォーカス移譲先を
 待ち続けることがある。そのため変換用ワールドを1つ作って全入力で使い回し、個別には閉じない。
 
-終了時は `runner.Shutdown()` にタイムアウトを設ける。FrooxEngineの更新ループはフォアグラウンド
-スレッドなので、Shutdownが戻らない場合でも最後は `Environment.Exit` でプロセスを終了させる。
+変換エンジンはCLI専用プロセス（GUIも子プロセス）に所有させる。全入力の出力処理を await し、
+結果とログを確定した後、`Program.Main` の `Environment.Exit` で終了する。`runner.Shutdown()` は
+呼ばない。非同期のGatherJob等が残る間にWorkProcessorを破棄すると、`ToBackground.OnCompleted` の
+例外が `ThrowAsync` 経由で別スレッドに届き、Windowsの0xe0434352ダイアログと異常終了になる。
+Shutdown呼び出し元のtry/catchでは捕捉できない。
 
-パッケージ出力後にバックグラウンドのGatherJobが残っていると、終了中に `ObjectDisposedException` が
-記録されることがある。出力完了前の例外と混同せず、`RESOPON_OUTPUT`、完了行、生成物の再読込で成否を判断する。
+Windowsの同じ `0xe0434352` 表示はテストの未処理例外でも発生する。Applicationログの
+イベント1000/1026で実行ファイル名とスタックを確認し、変換本体の終了エラーと区別する。
+`PrefabInputSmoke` は修正前の回帰確認で意図的にassertionを失敗させるため、入口で例外を捕捉し、
+詳細を標準エラーへ出して終了コード1を返す。テスト失敗の検出は維持し、WERへ未処理例外を渡さない。
+
+終了前にLocalKeyだけを保存し、LocalDBのロックはプロセス終了まで保つ。一時Dataは次回起動時に
+孤児として掃除する。ログイベントの解除では実行中のコールバックを待ち、解除済みの呼び出しを
+無効化する。Consoleの古いTee参照が残っても、閉じたログへ書き込まない。
 
 ## パッケージ出力
 
