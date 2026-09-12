@@ -84,6 +84,7 @@ internal static class ReviewRegressionChecks
             Require(resolver.BlendShapeNamesByPath["RootNode/Left/Body"].Single() == "LeftShape" &&
                 resolver.BlendShapeNamesByPath["RootNode/Right/Body"].Single() == "RightShape");
         });
+        Case("FBX default weights preserve renderer ownership through parsing", () => DefaultBlendShapeChecks.Run(asset));
         Case("authored lowercase root excludes only its own branch", () =>
         {
             using var source = UnityPackage.Open(baseFile);

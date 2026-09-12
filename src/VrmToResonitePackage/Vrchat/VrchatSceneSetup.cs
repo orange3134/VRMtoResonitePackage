@@ -313,10 +313,10 @@ internal static class VrchatSceneSetup
     }
 
     public static void Apply(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
-        IReadOnlyDictionary<string, Slot> authoredObjects = null)
+        IReadOnlyDictionary<string, Slot> authoredObjects = null, IReadOnlyDictionary<Slot, string> importedPaths = null)
     {
         ApplyInactiveStates(root, avatar, sources);
-        ApplyInitialBlendShapes(root, avatar, sources, authoredObjects);
+        ApplyInitialBlendShapes(root, avatar, sources, authoredObjects, importedPaths);
     }
 
     /// <summary>
@@ -718,8 +718,21 @@ internal static class VrchatSceneSetup
         return avatar.FbxGuid;
     }
 
+    internal static bool MatchesRenderer(Slot root, Slot slot, VrchatRendererMaterials record, VrchatAvatar avatar,
+        IReadOnlyDictionary<Slot, string> sources, IReadOnlyDictionary<string, Slot> authoredObjects,
+        IReadOnlyDictionary<Slot, string> importedPaths)
+    {
+        if (record.PrefabObjectKey != null)
+            return authoredObjects?.GetValueOrDefault(record.PrefabObjectKey) == slot;
+        if (record.FbxGuid != null && !string.Equals(FbxGuidForSlot(root, slot, avatar, sources),
+                record.FbxGuid, StringComparison.OrdinalIgnoreCase)) return false;
+        if (record.SourcePath != null)
+            return importedPaths?.TryGetValue(slot, out string path) == true && ImportedPathMatches(path, record.SourcePath);
+        return slot.Name == record.RendererGameObjectName;
+    }
+
     public static void ApplyInitialBlendShapes(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
-        IReadOnlyDictionary<string, Slot> authoredObjects = null)
+        IReadOnlyDictionary<string, Slot> authoredObjects = null, IReadOnlyDictionary<Slot, string> importedPaths = null)
     {
         List<SkinnedMeshRenderer> renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>().ToList();
         var assignedRendererSlots = new HashSet<Slot>();
@@ -729,11 +742,7 @@ internal static class VrchatSceneSetup
         {
             SkinnedMeshRenderer renderer = renderers.FirstOrDefault(candidate =>
                 !assignedRendererSlots.Contains(candidate.Slot) &&
-                (rm.PrefabObjectKey == null || authoredObjects?.GetValueOrDefault(rm.PrefabObjectKey) == candidate.Slot) &&
-                string.Equals(candidate.Slot.Name, rm.RendererGameObjectName, StringComparison.Ordinal) &&
-                (string.IsNullOrEmpty(rm.FbxGuid) || string.Equals(
-                    FbxGuidForSlot(root, candidate.Slot, avatar, sources), rm.FbxGuid,
-                    StringComparison.OrdinalIgnoreCase)));
+                MatchesRenderer(root, candidate.Slot, rm, avatar, sources, authoredObjects, importedPaths));
             if (renderer == null)
             {
                 continue;

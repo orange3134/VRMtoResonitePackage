@@ -13,6 +13,11 @@ branches indexed by file ID/path, and exclusion of whole model/object hierarchie
 without starting the engine. Fixtures remain in the printed temp directory for
 inspection. This does not verify an end-to-end avatar conversion.
 
+`DefaultBlendShapeChecks` reads a binary FBX fixture with same-named channels on
+different models and shared geometry. Reversing object/connection order must keep
+the same defaults. It checks the model resolver, avatar metadata, renamed copies,
+explicit zero overrides, and strict path lookup for indexed blendshape repair.
+
 `PrefabGraphChecks` exercises composition independently of known component types:
 base/variant ordering, separate occurrences, untouched source caches/files, nested
 fields, empty strings, integer/reference arrays, explicit zero/null, and centralized

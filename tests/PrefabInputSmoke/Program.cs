@@ -1755,8 +1755,8 @@ static void CheckFbxDefaultOccurrences()
 {
     var avatar = new VrchatAvatar();
     foreach (string guid in new[] { "first", "second" })
-        avatar.FbxBlendShapeDefaultWeights[new VrchatGameObjectReference(guid, "Body")] = new float[] { 75, 25 };
-    var explicitRenderer = new VrchatRendererMaterials { FbxGuid = "first", RendererGameObjectName = "Body" };
+        avatar.FbxBlendShapeDefaultWeights[new VrchatModelRendererReference(guid, "RootNode/Body")] = new float[] { 75, 25 };
+    var explicitRenderer = new VrchatRendererMaterials { FbxGuid = "first", RendererGameObjectName = "Body", SourcePath = "RootNode/Body" };
     explicitRenderer.InitialBlendShapes.Add((0, 0));
     avatar.RendererMaterials.Add(explicitRenderer);
     typeof(VrchatAvatarParser).GetMethod("ApplyFbxDefaultBlendShapeWeights",
@@ -1766,9 +1766,9 @@ static void CheckFbxDefaultOccurrences()
         "Repeated model occurrences each retain their FBX default deformation");
     Check(explicitRenderer.InitialBlendShapes.Contains((0, 0)) && explicitRenderer.InitialBlendShapes.Contains((1, 25)),
         "Explicit zero overrides win while missing weights inherit FBX defaults");
-    var copy = new VrchatRendererMaterials { FbxGuid = "first", RendererGameObjectName = "Body" };
+    var copy = new VrchatRendererMaterials { FbxGuid = "first", RendererGameObjectName = "Body", SourcePath = "RootNode/Body" };
     avatar.RendererMaterials.Add(copy);
-    avatar.FbxBlendShapeDefaultWeights[new VrchatGameObjectReference("second", "Body")] = new float[] { 90, 10 };
+    avatar.FbxBlendShapeDefaultWeights[new VrchatModelRendererReference("second", "RootNode/Body")] = new float[] { 90, 10 };
     avatar.RendererMaterials.Single(r => r.FbxGuid == "second").InitialBlendShapes.Clear();
     typeof(VrchatAvatarParser).GetMethod("ApplyFbxDefaultBlendShapeWeights",
         System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.Invoke(null, new object[] { avatar });

@@ -37,6 +37,14 @@ Animatorの表情推定と他レイヤーとの競合判定は `VrchatAnimatorGr
 未接続のstateに競合するclipがあるだけでは表情を除外しない。到達可能な競合は保守的に除外する。
 Prefab・FBXの初期ウェイトを収集した後に表情を推定する。
 
+FBXの初期ブレンドシェイプ値は、同名Rendererをまとめず、配置識別子とモデル内の完全なパスで保持する。
+`UnityFbxBlendShapeDefaults` はFBXの `Connections` をたどり、channel → blendshape → geometry → modelの
+所属を解決する。チャンネル名やAssimpの走査順では割り当てない。同じgeometryを共有するmodelにも値を保持する。
+コピーしたRendererには元の `SourcePath` から値を継承し、Prefabの明示的な0を優先する。
+出力への適用はauthored object identity、またはimport直後に捕捉したmodel/pathで照合するため、
+移動・改名後も対象を区別できる。指定パスが見つからない場合、別の同名Rendererへ適用しない。
+ブレンドシェイプ順序の補修とマテリアル適用にも同じパス情報を渡す。
+
 これは保存済みデータと対応機能の合成器であり、Unityの実行結果全体を再現するものではない。
 任意スクリプト、NDMFのビルド処理、Animator全機能は実行しない。FBX内部のfileID/path対応には
 引き続きモデル解決器の対応範囲がある。これらを追加するときも共通の参照・合成処理を利用する。

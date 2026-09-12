@@ -222,16 +222,18 @@ public static class VrchatAvatarParser
             {
                 continue;
             }
-            var resolver = new UnityModelFileIdResolver(asset);
+            var resolver = package.ModelFileIds(guid);
             foreach ((string rendererName, IReadOnlyList<string> names) in resolver.BlendShapeNames)
             {
                 avatar.FbxBlendShapeNames.TryAdd(rendererName, names);
                 avatar.ModelBlendShapeNames[new VrchatGameObjectReference(guid, rendererName)] = names;
             }
-            foreach ((string rendererName, IReadOnlyList<float> weights) in
-                     resolver.BlendShapeDefaultWeights)
+            foreach (var (path, names) in resolver.BlendShapeNamesByPath)
+                avatar.ModelBlendShapeNamesByPath[new(guid, path)] = names;
+            foreach ((string path, IReadOnlyList<float> weights) in
+                     resolver.BlendShapeDefaultWeightsByPath)
             {
-                avatar.FbxBlendShapeDefaultWeights[new VrchatGameObjectReference(guid, rendererName)] = weights;
+                avatar.FbxBlendShapeDefaultWeights[new(guid, path)] = weights;
             }
         }
         if (avatar.FbxBlendShapeNames.Count > 0)
@@ -242,20 +244,34 @@ public static class VrchatAvatarParser
 
     private static void ApplyFbxDefaultBlendShapeWeights(VrchatAvatar avatar)
     {
-        foreach ((VrchatGameObjectReference source, IReadOnlyList<float> weights) in
+        foreach ((VrchatModelRendererReference source, IReadOnlyList<float> weights) in
                  avatar.FbxBlendShapeDefaultWeights)
         {
+            // A copy without materials or serialized weights still needs its own default
+            // record. It may have been renamed or moved since its model was imported.
+            foreach (var copy in avatar.MeshCopies.Where(copy => !copy.RendererRemoved &&
+                         string.Equals(copy.FbxGuid, source.FbxGuid, StringComparison.OrdinalIgnoreCase) && copy.SourcePath == source.Path))
+            {
+                string key = copy.Transform?.GameObjectKey;
+                if (key == null || avatar.RendererMaterials.Any(r => r.PrefabObjectKey == key)) continue;
+                avatar.RendererMaterials.Add(new VrchatRendererMaterials
+                {
+                    FbxGuid = source.FbxGuid, SourcePath = source.Path,
+                    RendererGameObjectName = copy.Name, PrefabObjectKey = key,
+                });
+            }
             var renderers = avatar.RendererMaterials.Where(candidate =>
                 string.Equals(candidate.FbxGuid, source.FbxGuid, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(candidate.PrefabObjectKey == null ? candidate.RendererGameObjectName :
-                    avatar.MeshCopies.FirstOrDefault(copy => copy.Transform?.GameObjectKey == candidate.PrefabObjectKey)?.SourceName
-                        ?? candidate.RendererGameObjectName, source.Name, StringComparison.Ordinal)).ToList();
-            if (renderers.Count == 0)
+                (candidate.PrefabObjectKey == null ? candidate.SourcePath :
+                    avatar.MeshCopies.FirstOrDefault(copy => copy.Transform?.GameObjectKey == candidate.PrefabObjectKey)?.SourcePath)
+                    == source.Path).ToList();
+            if (!renderers.Any(r => r.PrefabObjectKey == null))
             {
                 var renderer = new VrchatRendererMaterials
                 {
                     FbxGuid = source.FbxGuid,
-                    RendererGameObjectName = source.Name,
+                    RendererGameObjectName = source.Path.Split('/')[^1],
+                    SourcePath = source.Path,
                 };
                 avatar.RendererMaterials.Add(renderer);
                 renderers.Add(renderer);
@@ -2064,7 +2080,7 @@ public static class VrchatAvatarParser
         // Avatar Descriptor. Compositions can keep body and clothing in sibling instances, each
         // with renderer overrides. The collector emits each base before its instance overrides.
         CollectModelOverrides(package, sourceGuid, modificationBlocks, visited);
-        var renderers = new Dictionary<(string FbxGuid, string Name, string ObjectKey), VrchatRendererMaterials>();
+        var renderers = new Dictionary<(string FbxGuid, string Name, string ObjectKey, string Path), VrchatRendererMaterials>();
         var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(
             StringComparer.OrdinalIgnoreCase);
         var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
@@ -2113,7 +2129,8 @@ public static class VrchatAvatarParser
                 }
                 string objectKey = avatar.MeshCopies.Any(copy => copy.PrefabGuid == sceneGuid && copy.RendererFileId == smr.FileId)
                     ? $"{sceneGuid}:{smr.Root?["m_GameObject"]?.FileID}" : null;
-                var rendererKey = (fbxGuid, rendererName, objectKey);
+                string sourcePath = avatar.MeshCopies.FirstOrDefault(copy => copy.Transform?.GameObjectKey == objectKey)?.SourcePath;
+                var rendererKey = (fbxGuid, rendererName, objectKey, sourcePath);
                 if (!renderers.TryGetValue(rendererKey, out VrchatRendererMaterials renderer))
                 {
                     renderer = new VrchatRendererMaterials
@@ -2121,6 +2138,7 @@ public static class VrchatAvatarParser
                         FbxGuid = fbxGuid,
                         RendererGameObjectName = rendererName,
                         PrefabObjectKey = objectKey,
+                        SourcePath = sourcePath,
                     };
                     renderers.Add(rendererKey, renderer);
                 }
@@ -2245,7 +2263,8 @@ public static class VrchatAvatarParser
                 var targetCopy = avatar.MeshCopies.FirstOrDefault(copy =>
                     (copy.PrefabGuid, copy.RendererFileId) == targetIdentity);
                 string objectKey = targetCopy == null ? null : $"{targetCopy.PrefabGuid}:{targetCopy.GameObjectFileId}";
-                var rendererKey = (rendererReference.FbxGuid, rendererName, objectKey);
+                string sourcePath = targetCopy?.SourcePath ?? package.ModelFileIds(targetIdentity.Guid)?.ResolveNodePath(targetIdentity.Id);
+                var rendererKey = (rendererReference.FbxGuid, rendererName, objectKey, sourcePath);
                 if (!renderers.TryGetValue(rendererKey, out VrchatRendererMaterials renderer))
                 {
                     renderer = new VrchatRendererMaterials
@@ -2253,6 +2272,7 @@ public static class VrchatAvatarParser
                         FbxGuid = rendererReference.FbxGuid,
                         RendererGameObjectName = rendererName,
                         PrefabObjectKey = objectKey,
+                        SourcePath = sourcePath,
                     };
                     renderers.Add(rendererKey, renderer);
                 }

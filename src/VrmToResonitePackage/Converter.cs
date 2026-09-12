@@ -458,12 +458,12 @@ internal static class Converter
                 await WaitForAssets(assetsSlot);
 
                 int repairedBlendshapeMeshes = await Vrchat.VrchatBlendShapeRepair.Apply(root, avatar,
-                    importedMeshSources, authoredObjects);
+                    importedMeshSources, authoredObjects, importedNodePaths);
                 if (repairedBlendshapeMeshes > 0)
                 {
                     await WaitForAssets(assetsSlot);
                 }
-                Vrchat.VrchatSceneSetup.ApplyInitialBlendShapes(root, avatar, importedMeshSources, authoredObjects);
+                Vrchat.VrchatSceneSetup.ApplyInitialBlendShapes(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
 
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
                 // Finish asset reloads first: deleting their last renderer can unload providers.
@@ -485,7 +485,7 @@ internal static class Converter
 
                 if (options.NoAvatar)
                 {
-                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects);
+                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths);
                     SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
                 else
@@ -506,13 +506,13 @@ internal static class Converter
                         setupOptions.NearClip = options.NearClip.Value;
                     }
                     AvatarSetup.Build(root, model, setupOptions, faceResolver);
-                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects);
+                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths);
                     await AvatarSetup.ApplyFirstPersonAutoAsync(root, model);
                     SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
 
                 // Reflect prefab-authored scene state (inactive GameObjects, initial blendshape weights).
-                Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources, authoredObjects);
+                Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
 
                 Vrchat.VrchatSceneSetup.RemoveEmptyMeshTemplates(root, replacedTemplateSlots,
                     prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values)

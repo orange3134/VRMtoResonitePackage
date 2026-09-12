@@ -5,8 +5,8 @@ namespace VrmToResonitePackage.Vrchat;
 
 /// <summary>
 /// Engine-independent representation of a VRChat avatar parsed from a .unitypackage, mirroring
-/// the role <see cref="Vrm.VrmModel"/> plays for VRM. Everything references bones/meshes by their
-/// GameObject name, which is the slot name the model importer assigns after FBX import.
+/// the role <see cref="Vrm.VrmModel"/> plays for VRM. Model paths and authored object identities
+/// distinguish same-named objects; display names are retained for diagnostics and legacy input.
 /// </summary>
 public sealed class VrchatAvatar
 {
@@ -67,19 +67,23 @@ public sealed class VrchatAvatar
     public Dictionary<string, IReadOnlyList<string>> FbxBlendShapeNames { get; } =
         new(StringComparer.Ordinal);
     public Dictionary<VrchatGameObjectReference, IReadOnlyList<string>> ModelBlendShapeNames { get; } = new();
+    public Dictionary<VrchatModelRendererReference, IReadOnlyList<string>> ModelBlendShapeNamesByPath { get; } = new();
 
-    public IReadOnlyList<string> BlendShapeNamesFor(string fbxGuid, string rendererName, string objectKey = null)
+    public IReadOnlyList<string> BlendShapeNamesFor(string fbxGuid, string rendererName, string objectKey = null,
+        string rendererPath = null)
     {
         if (objectKey != null)
         {
             var copy = MeshCopies.FirstOrDefault(c => c.Transform?.GameObjectKey == objectKey);
             if (copy != null) return copy.BlendShapeNames;
         }
+        if (rendererPath != null)
+            return ModelBlendShapeNamesByPath.GetValueOrDefault(new(fbxGuid, rendererPath));
         return fbxGuid != null
             ? ModelBlendShapeNames.GetValueOrDefault(new VrchatGameObjectReference(fbxGuid, rendererName))
             : FbxBlendShapeNames.GetValueOrDefault(rendererName);
     }
-    public Dictionary<VrchatGameObjectReference, IReadOnlyList<float>> FbxBlendShapeDefaultWeights { get; } = new();
+    public Dictionary<VrchatModelRendererReference, IReadOnlyList<float>> FbxBlendShapeDefaultWeights { get; } = new();
 
     /// <summary>
     /// FBX embedded material name -> Unity .mat guid, from ModelImporter.externalObjects or
@@ -163,6 +167,20 @@ public sealed class VrchatPhysicsPlacement
 }
 
 public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
+
+/// <summary>A renderer in one imported model occurrence, using its full source path.</summary>
+public sealed record VrchatModelRendererReference
+{
+    public string FbxGuid { get; }
+    public string Path { get; }
+    public VrchatModelRendererReference(string fbxGuid, string path)
+    {
+        FbxGuid = fbxGuid?.ToLowerInvariant();
+        path = path?.TrimStart('/');
+        Path = path == null || path == "RootNode" || path.StartsWith("RootNode/", StringComparison.Ordinal)
+            ? path : path.Length == 0 ? "RootNode" : "RootNode/" + path;
+    }
+}
 
 public sealed record VrchatMeshCopy(string FbxGuid, string SourceName, string Name, bool Active, bool Enabled)
 {
@@ -270,6 +288,8 @@ public sealed class VrchatPhysBoneCollider
 public sealed class VrchatRendererMaterials
 {
     public string PrefabObjectKey { get; set; }
+    /// <summary>Original imported renderer path; authored copies resolve by PrefabObjectKey first.</summary>
+    public string SourcePath { get; set; }
     /// <summary>
     /// FBX that owns this renderer. Null keeps name-only matching for prefab-authored renderers
     /// that cannot be traced back to a model asset.
@@ -278,6 +298,6 @@ public sealed class VrchatRendererMaterials
     public string RendererGameObjectName { get; set; }
     public List<string> MaterialGuids { get; } = new();
 
-    /// <summary>Initial blendshape weights that are non-zero in the prefab (index, Unity 0-100 weight).</summary>
+    /// <summary>Initial blendshape weights, including explicit zero overrides (index, Unity 0-100 weight).</summary>
     public List<(int Index, float Weight)> InitialBlendShapes { get; } = new();
 }

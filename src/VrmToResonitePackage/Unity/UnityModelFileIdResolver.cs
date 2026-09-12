@@ -20,7 +20,7 @@ public sealed class UnityModelFileIdResolver
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNamesByPath =
         new(StringComparer.Ordinal);
-    private readonly Dictionary<string, IReadOnlyList<float>> _blendShapeDefaultWeights =
+    private readonly Dictionary<string, IReadOnlyList<float>> _blendShapeDefaultWeightsByPath =
         new(StringComparer.Ordinal);
     private readonly HashSet<string> _rendererNames = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HashSet<string>> _subtreeRenderers = new(StringComparer.Ordinal);
@@ -28,7 +28,6 @@ public sealed class UnityModelFileIdResolver
     private readonly List<ModelMaterial> _materials = new();
     private IReadOnlyList<UnityFbxBlendShapeDefaults.Channel> _defaultWeightChannels =
         Array.Empty<UnityFbxBlendShapeDefaults.Channel>();
-    private bool[] _usedDefaultWeightChannels = Array.Empty<bool>();
 
     public UnityModelFileIdResolver(UnityAsset model)
     {
@@ -50,8 +49,8 @@ public sealed class UnityModelFileIdResolver
 
     public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNames => _blendShapeNames;
     public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNamesByPath => _blendShapeNamesByPath;
-    public IReadOnlyDictionary<string, IReadOnlyList<float>> BlendShapeDefaultWeights =>
-        _blendShapeDefaultWeights;
+    public IReadOnlyDictionary<string, IReadOnlyList<float>> BlendShapeDefaultWeightsByPath =>
+        _blendShapeDefaultWeightsByPath;
     public IReadOnlyCollection<string> RendererNames => _rendererNames;
     public IEnumerable<string> RendererNamesUnder(string nodeName)
         => UniquePath(nodeName) is string path && _subtreeRenderers.TryGetValue(path, out var paths)
@@ -145,7 +144,6 @@ public sealed class UnityModelFileIdResolver
             }
             using var context = new AssimpContext();
             _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath);
-            _usedDefaultWeightChannels = new bool[_defaultWeightChannels.Count];
             Scene scene = context.ImportFile(importPath, PostProcessSteps.None);
             if (scene?.RootNode == null)
             {
@@ -285,26 +283,16 @@ public sealed class UnityModelFileIdResolver
         for (int i = 0; i < names.Count; i++)
         {
             string attachmentName = names[i];
-            for (int channelIndex = 0; channelIndex < _defaultWeightChannels.Count; channelIndex++)
-            {
-                if (_usedDefaultWeightChannels[channelIndex])
-                {
-                    continue;
-                }
-                UnityFbxBlendShapeDefaults.Channel channel = _defaultWeightChannels[channelIndex];
-                if (string.Equals(attachmentName, channel.Name, StringComparison.Ordinal) ||
-                    string.Equals(attachmentName, $"{channel.Name}.{channel.Name}",
-                        StringComparison.Ordinal))
-                {
-                    defaults[i] = channel.Weight;
-                    _usedDefaultWeightChannels[channelIndex] = true;
-                    break;
-                }
-            }
+            var channels = _defaultWeightChannels.Where(channel => channel.RendererPath == path &&
+                (string.Equals(attachmentName, channel.Name, StringComparison.Ordinal) ||
+                 string.Equals(attachmentName, $"{channel.Name}.{channel.Name}", StringComparison.Ordinal))).ToArray();
+            // A channel belongs to a connected model object, not to the next same-named
+            // attachment visited by Assimp. Ambiguous ownership must not select a neighbor.
+            if (channels.Length == 1) defaults[i] = channels[0].Weight;
         }
         if (defaults.Any(weight => MathF.Abs(weight) > 0.001f))
         {
-            _blendShapeDefaultWeights.TryAdd(node.Name, defaults);
+            _blendShapeDefaultWeightsByPath[path] = defaults;
         }
     }
 

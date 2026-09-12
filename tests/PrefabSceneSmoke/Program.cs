@@ -708,6 +708,45 @@ static async Task Run(string fbxPath, string rendererName)
             (Func<VrchatMeshCopy, Slot>)(_ => primary), sourcePaths);
         Check(Math.Abs(primary.FindChild("RightCopy").GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] - 0.89f) < 0.001f,
             "Captured source path selects the second same-named renderer after reparenting");
+        {
+            var defaults = new VrchatAvatar();
+            defaults.FbxBlendShapeDefaultWeights[new("model", "Left/" + rendererName)] = new float[] { 25 };
+            defaults.FbxBlendShapeDefaultWeights[new("model", "Right/" + rendererName)] = new float[] { 75 };
+            defaults.MeshCopies.Add(new VrchatMeshCopy("model", rendererName, "RightCopy", true, true)
+            {
+                SourcePath = "RootNode/Right/" + rendererName,
+                Transform = new VrchatPrefabTransform { GameObjectKey = "default-copy" },
+            });
+            var explicitZero = new VrchatRendererMaterials { FbxGuid = "model", RendererGameObjectName = rendererName,
+                SourcePath = "RootNode/Left/" + rendererName };
+            explicitZero.InitialBlendShapes.Add((0, 0));
+            defaults.RendererMaterials.Add(explicitZero);
+            Call("VrmToResonitePackage.Vrchat.VrchatAvatarParser", "ApplyFbxDefaultBlendShapeWeights", defaults);
+            defaults.RendererMaterials.Reverse();
+            Slot copySlot = primary.FindChild("RightCopy");
+            var defaultObjects = new Dictionary<string, Slot> { ["default-copy"] = copySlot };
+            rightSource.Name = "Moved renderer";
+            Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyInitialBlendShapes",
+                root, defaults, pathSources, defaultObjects, sourcePaths);
+            Check(leftSource.GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] == 0 &&
+                  Math.Abs(rightSource.GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] - 0.75f) < 0.001f &&
+                  Math.Abs(copySlot.GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] - 0.75f) < 0.001f &&
+                  Math.Abs(topLevelSource.GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] - 0.25f) < 0.001f,
+                "Per-path defaults and explicit zero reach moved, renamed and authored renderers without changing a namesake");
+            var missing = new VrchatRendererMaterials { FbxGuid = "model", RendererGameObjectName = rendererName,
+                SourcePath = "RootNode/Missing/" + rendererName };
+            missing.InitialBlendShapes.Add((0, 99));
+            defaults.RendererMaterials.Clear();
+            defaults.RendererMaterials.Add(missing);
+            Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyInitialBlendShapes",
+                root, defaults, pathSources, defaultObjects, sourcePaths);
+            Check(leftSource.GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] == 0 &&
+                  Math.Abs(topLevelSource.GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] - 0.25f) < 0.001f,
+                "An unresolved source path never falls back to a same-named renderer");
+            rightSource.Name = rendererName;
+            leftSource.GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] = 0.12f;
+            rightSource.GetComponent<SkinnedMeshRenderer>().BlendShapeWeights[0] = 0.89f;
+        }
         var hierarchyAvatar = new VrchatAvatar { FbxGuid = "model", FbxImportScale = 2f };
         foreach (string name in new[] { "AuthoredChild", "AuthoredRoot" })
             hierarchyAvatar.MeshCopies.Add(new VrchatMeshCopy("model", rendererName, name, true, true)
