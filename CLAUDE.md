@@ -58,6 +58,9 @@ Resonite DLLを `ResonitePath` に指定して再ビルドする。配布版も�
 
 ## 実行と検証
 
+- ユーザーから渡された実アバターのテストケースは `.local/avatar-tests.json` に記録し、
+  別の修正でも関連ケースを再利用する。環境固有パス・報告ログ・検証結果はコミットしない。
+  登録形式と実行コマンドは [ローカルアバター回帰テスト](docs/local-avatar-tests.md) を参照する。
 - 自動実行では `RESOPON_NOPAUSE=1` を設定し、キー入力待ちを無効にする。
 - 変換ログはEXEと同じディレクトリの `Logs/convert_*.log` に出力される。
 - エンジンを起動せず生成物を確認する場合は `--inspect` / `--inspect-verbose` を使う。

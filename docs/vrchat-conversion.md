@@ -61,6 +61,11 @@ CLIの `--avatar` を使う。出力名は入力package名ではなく選択し�
 - `VRCAvatarDescriptor` はscript GUIDだけでなくフィールド署名でも検出する。
 - prefab、prefab variant、composition、`.unity` scene内のprefab instanceを候補に含める。
 - 候補一覧では重いFBX配置・material解決を遅延し、選択された候補だけを詳細解析する。
+- `m_RemovedGameObjects` があっても継承した Descriptor の候補を除外しない。
+  選択後の合成済みビューで再探索し、Descriptor の所有者自体が削除された場合は変換を拒否する。
+- 直下の PrefabInstance が1つでも、その参照先が複数モデルを合成している場合がある。
+  composition の候補探索はこの外側の Variant も扱う。Descriptor の元FBX数と全体のFBX数が
+  異なることだけで、衣装を追加した Variant を変換不可にしない。
 
 ## prefab参照とstable fileID
 
