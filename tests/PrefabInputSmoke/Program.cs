@@ -444,11 +444,13 @@ Transform:
     ReviewRegressionChecks.Run(Asset, regularCopy, branchesGuid);
     RendererRemovalChecks.Run(Asset, regularCopy);
     InheritedVariantRemovalChecks.Run(Asset, regularCopy);
+    SceneInstanceSelectionChecks.Run(Asset, regularCopy);
     FbxRendererRemovalChecks.Run(Asset, regularCopy, branchesGuid);
     LoggingRegressionChecks.Run();
     CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);
     CheckDuplicateSourceBones(Asset);
     CheckDuplicateSourceBones(Asset, true);
+    ShortenedSkinBoneChecks.Run(Asset);
     CheckNestedComponents(Asset, regularCopy);
     CheckDescriptorWrapper(Asset, regularCopy, "88000000000000000000000000000001");
     CheckDescriptorOverrides(Asset, regularCopy, controllerGuid);

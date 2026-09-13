@@ -17,6 +17,7 @@ public sealed class UnityModelFileIdResolver
     private readonly Dictionary<string, HashSet<string>> _pathsByName = new(StringComparer.Ordinal);
     public Dictionary<string, string[]> MeshBoneNames { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, string[]> MeshBoneNamesByPath { get; } = new(StringComparer.Ordinal);
+    internal Dictionary<string, bool[]> MeshWeightedBonesByPath { get; } = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNames =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNamesByPath =
@@ -89,6 +90,7 @@ public sealed class UnityModelFileIdResolver
             ? paths.Count == 1 ? paths.Single() : null
             : UniquePath(ResolveName(fileId));
     public bool IsUniqueNodeName(string name) => UniquePath(name) != null;
+    internal string UniqueNodePath(string name) => UniquePath(NormalizeName(name));
     /// <summary>Owner path for a renderer or MeshFilter component; never a whole subtree.</summary>
     public string ResolveRendererComponentPath(long fileId)
         => _rendererComponentIds.Contains(fileId) ? ResolveNodePath(fileId) : null;
@@ -181,7 +183,7 @@ public sealed class UnityModelFileIdResolver
             // Material splitting repeats (and can omit unused) clusters in each submesh.
             // Read the unsplit geometry to recover the original skin index table, including
             // distinct clusters whose bones have identical names and bind poses.
-            var unsplitBones = new Dictionary<string, string[]>(StringComparer.Ordinal);
+            var unsplitBones = new Dictionary<string, Bone[]>(StringComparer.Ordinal);
             if (roots.Any(entry => entry.Node.MeshCount > 1 &&
                 entry.Node.MeshIndices.Any(i => scene.Meshes[i].HasBones)))
             {
@@ -192,8 +194,7 @@ public sealed class UnityModelFileIdResolver
                 CollectNodes(skinScene.RootNode, new List<string>(), skinNodes);
                 foreach (var entry in skinNodes.Where(entry => entry.Node.MeshCount > 0))
                     unsplitBones[string.Join("/", entry.Path.Select(NormalizeName))] =
-                        entry.Node.MeshIndices.SelectMany(i => skinScene.Meshes[i].Bones)
-                            .Select(b => b.Name).ToArray();
+                        entry.Node.MeshIndices.SelectMany(i => skinScene.Meshes[i].Bones).ToArray();
             }
             foreach ((Node node, List<string> nodePath) in roots)
             {
@@ -230,9 +231,13 @@ public sealed class UnityModelFileIdResolver
                 if (node.MeshCount > 0)
                 {
                     _rendererNames.Add(node.Name);
-                    MeshBoneNames[node.Name] = unsplitBones.GetValueOrDefault(string.Join("/", nodePath.Select(NormalizeName)))
-                        ?? node.MeshIndices.SelectMany(i => scene.Meshes[i].Bones).Select(b => b.Name).ToArray();
-                    MeshBoneNamesByPath[string.Join("/", nodePath.Select(NormalizeName))] = MeshBoneNames[node.Name];
+                    string meshPath = string.Join("/", nodePath.Select(NormalizeName));
+                    var bones = unsplitBones.GetValueOrDefault(meshPath)
+                        ?? node.MeshIndices.SelectMany(i => scene.Meshes[i].Bones).ToArray();
+                    MeshBoneNames[node.Name] = bones.Select(b => b.Name).ToArray();
+                    MeshBoneNamesByPath[meshPath] = MeshBoneNames[node.Name];
+                    MeshWeightedBonesByPath[meshPath] = bones
+                        .Select(b => b.VertexWeights.Any(weight => weight.Weight != 0)).ToArray();
                     AddPathVariants("Mesh", nodePath, node.Name);
                     // Unity's FBX importer can classify a mesh differently from Assimp when skin
                     // data is optimized or stripped. Stable fileID resolution is exact, so include

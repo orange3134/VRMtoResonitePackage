@@ -53,6 +53,7 @@ public static class VrchatAvatarParser
         public YamlDocument Root;        // avatar root GameObject (null for a variant-of-FBX avatar)
         public YamlDocument Descriptor;  // VRCAvatarDescriptor MonoBehaviour
         public HashSet<long> Subtree;    // GameObject fileIds belonging to this avatar (empty for variant-of-FBX)
+        public long SceneInstanceId;     // selected scene placement when the root is stripped
         public string Name;              // resolved avatar/display name
         public List<string> FbxGuidOverrides; // FBX models composed by a prefab variant
         public Dictionary<string, FbxPlacement> FbxPlacements;
@@ -132,8 +133,9 @@ public static class VrchatAvatarParser
         {
             // All collectors must see the same selected hierarchy and instance identities.
             // Re-discover the descriptor in the view so inherited references use its scenes too.
-            using var view = UnityPrefabInstances.CreateView(package, selected.Source.Guid,
-                selected.Root != null ? selected.Subtree : null);
+            using var view = selected.SceneInstanceId != 0
+                ? UnityPrefabInstances.CreateSceneInstanceView(package, selected.Source.Guid, selected.SceneInstanceId)
+                : UnityPrefabInstances.CreateView(package, selected.Source.Guid, selected.Root != null ? selected.Subtree : null);
             return Parse(view, selected.Name, true);
         }
         YamlDocument effectiveDescriptor = selected.Descriptor;
@@ -412,6 +414,7 @@ public static class VrchatAvatarParser
                         Scene = scene,
                         Descriptor = descriptor,
                         Subtree = new HashSet<long>(),
+                        SceneInstanceId = source.Extension == ".unity" ? VariantPrefabInstance(scene, descriptor)?.FileId ?? 0 : 0,
                         FbxGuidOverrides = fbxGuids,
                         Name = VariantAvatarName(scene, descriptor, source),
                         HasOwnDescriptor = true,
@@ -1991,15 +1994,15 @@ public static class VrchatAvatarParser
                 if (originalBones != null) copy.SourceBoneNames.AddRange(originalBones);
                 if (bones != null && originalBones != null)
                 {
-                    if (bones.Count != originalBones.Length)
-                        throw new InvalidDataException($"複製メッシュのボーン数が一致しません: {rendererName}");
+                    int[] sourceIndices = bones.Count == originalBones.Length ? null :
+                        ResolveShortenedBoneArray(package, sceneGuid, bones, copy, resolver);
                     for (int i = 0; i < bones.Count; i++)
                     {
                         var bone = ResolveCopiedBoneTarget(package, bones[i].Guid ?? sceneGuid,
                             bones[i].FileID ?? 0, avatar.FbxGuid, modelResolvers, new());
                         if ((bones[i].FileID ?? 0) != 0 && bone?.Name == null)
                             throw new InvalidDataException($"複製メッシュのボーン参照を解決できません: {rendererName} / {i}");
-                        copy.BoneTargets[i] = bone;
+                        copy.BoneTargets[sourceIndices?[i] ?? i] = bone;
                     }
                 }
                 avatar.MeshCopies.Add(copy);
@@ -2013,6 +2016,41 @@ public static class VrchatAvatarParser
                 }
             }
         }
+    }
+
+    private static int[] ResolveShortenedBoneArray(UnityPackage package, string sceneGuid,
+        IReadOnlyList<YamlNode> bones, VrchatMeshCopy copy, UnityModelFileIdResolver resolver)
+    {
+        // A saved renderer can predate unused bones added to its FBX. Only recover a
+        // subset proven by model object identities; local names and positional
+        // guesses cannot distinguish stale entries from authored retargeting overrides.
+        var model = package.ByGuid(copy.FbxGuid);
+        var original = copy.SourceBoneNames;
+        if (bones.Count >= original.Count || copy.SourcePath == null ||
+            !resolver.MeshWeightedBonesByPath.TryGetValue(copy.SourcePath, out var weighted))
+            throw Mismatch();
+        var originalPaths = original.Select(resolver.UniqueNodePath).ToArray();
+        var indices = new int[bones.Count];
+        var included = new HashSet<int>();
+        for (int i = 0; i < bones.Count; i++)
+        {
+            var identity = ResolveObjectIdentity(package, bones[i].Guid ?? sceneGuid, bones[i].FileID ?? 0);
+            var asset = package.ByGuid(identity.Guid);
+            if (asset?.Extension != ".fbx" || (asset.SourceGuid ?? asset.Guid) != (model.SourceGuid ?? model.Guid))
+                throw Mismatch();
+            string path = resolver.ResolveNodePath(identity.Id);
+            int index = path == null ? -1 : Array.IndexOf(originalPaths, path);
+            if (index < 0 || Array.LastIndexOf(originalPaths, path) != index || !included.Add(index))
+                throw Mismatch();
+            indices[i] = index;
+        }
+        if (weighted.Where((used, index) => used && !included.Contains(index)).Any()) throw Mismatch();
+        UniLog.Warning($"Prefab skin bone table restored: {copy.Name}, {bones.Count} -> {original.Count}; " +
+                       $"{original.Count - bones.Count} omitted bone(s) have no vertex weights.");
+        return indices;
+
+        InvalidDataException Mismatch() => new(
+            $"複製メッシュのボーン数が一致しません: {copy.Name} (Prefab={bones.Count}, FBX={original.Count})");
     }
 
     private static VrchatBoneTarget ResolveCopiedBoneTarget(UnityPackage package, string guid, long fileId,

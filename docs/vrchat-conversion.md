@@ -16,6 +16,10 @@ UnityのLibraryやVRChat SDKの実行環境は不要。
 1. `UnityPrefabInstances` が選択範囲を切り出し、各配置に固有の識別子を割り当てる。
    `UnityAsset.SourceGuid` は元アセット、`OccurrencePath` は配置経路を表す。
    既存の `Guid` フィールドは変換中の配置識別子としても使うため、元アセットのGUIDとは区別する。
+   `.unity`内でDescriptorの所有ルートがstrippedの場合は、選択したPrefabInstanceを起点に
+   所属・親参照を辿って範囲を決める。兄弟アバターを除外し、配下の追加オブジェクト・
+   コンポーネント・Prefabは保持する。省略されたstripped親も配置ごとのfileIDで解決する。
+   選択ルートはシーン側の親から切り離し、元のPrefabやシーンは変更しない。
 2. `UnityObjectResolver` が通常のfileID、明示されたstripped参照、省略されたstripped参照を
    共通の `UnityObjectId`（配置識別子とfileID）へ解決する。名前はオブジェクトの識別に使わない。
 3. `UnityPrefabGraph` がソース文書を複製し、内側のPrefabから外側のVariantへ上書きを合成する。
@@ -294,6 +298,12 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   接続されて形状が反転するケースがある。照合には参照先の名前ではなく元のbone名を使い、
   改名・別骨へのoverride・明示nullも元indexで適用する。配列が同一なら同名boneもindexを
   保持し、配列変更後に元indexが曖昧な場合は誤接続せず変換エラーにする。
+- 保存済みPrefabのbone配列が現行FBXより短い場合、各参照が同じソースFBXの一意なboneを
+  指すことをobject identityと完全pathで検証して、現行FBXのindexへ対応付け直す。
+  FBX更新で未使用boneが増えたり並びが変わったケースに対応するが、省かれたboneに
+  頂点weightがある場合、null・ローカル骨・別モデル・重複などで対応を確定できない場合は
+  変換を止める。weightの有無もmaterial分割前のgeometryから取得する。
+  同じ長さの配列は従来どおりindex指定のoverrideとして扱う。
 - 同名のauthored rendererの一方がEditorOnlyでも、残るobjectのmodel/nameをkeep-listに残す。
   除外objectのmaterialと外側overrideは取り込まず、残るrendererへ流用しない。
 - outer variant自身の変更を読むときは、descriptorの親sceneではなく選択候補のsourceを再読込する。
