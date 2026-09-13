@@ -2894,7 +2894,9 @@ public static class VrchatAvatarParser
     {
         var root = avatar.DescriptorRootTarget;
         if (root?.PrefabGuid == null || root.TransformFileId == 0 || package.PrefabGraph == null) return null;
-        if (path == "$$AVATAR") return root;
+        // Keep the avatar-root sentinel on the runtime path. Capturing the whole
+        // descriptor subtree can mix distinct FBX skeletons into authored slots.
+        if (path == "$$AVATAR") return null;
         var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0 || string.IsNullOrWhiteSpace(path)) return null;
         var current = package.PrefabGraph.Identity(root.PrefabGuid, root.TransformFileId);
@@ -3058,7 +3060,11 @@ public static class VrchatAvatarParser
                     .Select(r => entry.Scene.RendererMesh(r)?.Guid)
                     .Where(g => package.ByGuid(g)?.Extension == ".fbx").Distinct().ToArray();
                 if (skinModels.Length == 1) skeletonModel = skinModels[0];
-                else if (skinModels.Length > 1) skeletonModel = null;
+                // Clothing meshes can share the body's authored bones while coming
+                // from another FBX. Keep the primary skeleton when it also uses this
+                // subtree; placement capture still verifies bone membership and path.
+                else if (skinModels.Length > 1)
+                    skeletonModel = skinModels.Contains(avatar.FbxGuid) ? avatar.FbxGuid : null;
             }
             foreach (var transform in entry.Scene.Documents.Values.Where(d => d.ClassId == 4 &&
                          included.Contains(d.Root?["m_GameObject"]?.FileID ?? 0) &&
