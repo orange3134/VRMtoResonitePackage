@@ -355,6 +355,16 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
 
 - headless変換ではUnity editor bakerを実行できない。直接表現できるpropertyとtexture transformを保持し、
   必要なmaskやchannel合成だけを画像処理する。
+- `_Main2ndTex` / `_Main3rdTex` はXiexeToonに対応slotがないため、静的UV0レイヤーを
+  `VrchatMainTextureBaker` でmain → 2nd → 3rdの順に焼き込む。lilToonの `lilBlendColor` と
+  Resonite.UnitySDKのmain texture bakeを参考に、Normal/Add/Screen/Multiply、color、texture alpha、
+  blend mask、scale/offset/angle、cutout/transparentのlayer alpha modeを反映する。
+  RGBはlinear空間で合成してsRGBへ戻し、alphaはgamma変換しない。
+  maskはshaderと同じmain UVを使う。TextureImporterのsRGB・wrap・point/bilinear設定を読む。
+  出力はUV0の1タイルを表し、ColorとMainTextureのSTを焼き込むため割当先は白・identityへ戻す。
+  元の画像と共有マテリアルを変更しない。無効レイヤーは無視し、variantの差分・明示nullを保持する。
+  別UV、decal、view/time依存や個別lightingなど静的画像で再現できないレイヤーは警告して除外する。
+  UDIMやUV0の1タイル外へ異なる絵柄を配置する用途は、この画像合成では再現しない。
 - legacy `VRChat/Mobile/Toon Lit` はvertex colorを使わないため、XiexeToonでも無効にする。
 - ShadowRampMaskがない場合は白を使い、生成rampは縦方向に白から本来のrampへ変化させる。
 - MatCapはAdd modeかつblend maskなしの場合だけ変換し、color alphaとtexture alphaをRGBへ焼き込む。

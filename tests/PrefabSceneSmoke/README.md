@@ -1,5 +1,10 @@
 # Prefab scene regression checks
 
+`MaterialLayerChecks` creates small PNG fixtures and verifies lilToon 2nd/3rd
+texture baking: linear-light alpha blending, transparent pixels, ordered blend
+modes, mask UVs, offsets/wrapping, alpha modes, material variant inheritance,
+explicit texture clearing, unsupported UV diagnostics and saving to LocalDB.
+
 `MixedScaleSkinChecks` builds synthetic skinned meshes and checks actual vertex
 positions (including a blendshape) before and after Merge Armature. It covers
 meter/centimeter units in either direction, equal units, nonuniform scale and

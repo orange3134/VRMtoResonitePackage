@@ -19,6 +19,8 @@ public sealed class LilToonInfo
     public string MainTexGuid { get; set; }
     public Vec2 MainTexScale { get; set; } = Vec2.One;
     public Vec2 MainTexOffset { get; set; }
+    public LilToonMainLayer Main2nd { get; set; } = new();
+    public LilToonMainLayer Main3rd { get; set; } = new();
     public string NormalMapGuid { get; set; }
     public bool UseNormalMap { get; set; } = true;
     public Vec2 NormalMapScale { get; set; } = Vec2.One;
@@ -163,6 +165,45 @@ public static class LilToonConverter
         Vec2 TexScale(string name, Vec2 fallback) => ReadVector2(texEnvs?[name]?["m_Scale"], fallback);
         Vec2 TexOffset(string name, Vec2 fallback) => ReadVector2(texEnvs?[name]?["m_Offset"], fallback);
 
+        LilToonMainLayer Layer(string suffix, LilToonMainLayer inherited)
+        {
+            inherited ??= new();
+            string prefix = "_Main" + suffix;
+            string tex = prefix + "Tex";
+            // Features depending on mesh attributes, time or viewing direction cannot be
+            // represented by a static UV0 image. Keep their reason for a conversion warning.
+            string[] unsupported = { tex + "_UVMode", tex + "IsDecal", tex + "IsLeftOnly",
+                tex + "IsRightOnly", tex + "ShouldCopy", tex + "ShouldFlipMirror",
+                tex + "ShouldFlipCopy", tex + "IsMSDF", tex + "_Cull", "_AudioLink2Main" + suffix };
+            var features = new HashSet<string>(inherited.UnsupportedFeatures);
+            foreach (string property in unsupported)
+                if (floats?[property] != null)
+                {
+                    if (F(property) != 0) features.Add(property); else features.Remove(property);
+                }
+            foreach (var (property, active) in new[] {
+                (prefix + "DissolveParams", C(prefix + "DissolveParams", Vec4.Zero).X != 0),
+                (prefix + "DistanceFade", C(prefix + "DistanceFade", Vec4.Zero).Z != 0),
+                (tex + "_ScrollRotate", C(tex + "_ScrollRotate", Vec4.Zero) != Vec4.Zero) })
+                if (colors?[property] != null)
+                {
+                    if (active) features.Add(property); else features.Remove(property);
+                }
+            return new LilToonMainLayer
+            {
+                Enabled = B("_UseMain" + suffix + "Tex", inherited.Enabled),
+                TextureGuid = TexOrParent(tex, inherited.TextureGuid),
+                MaskGuid = TexOrParent(prefix + "BlendMask", inherited.MaskGuid),
+                Color = C("_Color" + suffix, inherited.Color),
+                Scale = TexScale(tex, inherited.Scale), Offset = TexOffset(tex, inherited.Offset),
+                Angle = F(tex + "Angle", inherited.Angle),
+                BlendMode = (int)F(tex + "BlendMode", inherited.BlendMode),
+                AlphaMode = (int)F(tex + "AlphaMode", inherited.AlphaMode),
+                Lighting = F(prefix + "EnableLighting", inherited.Lighting),
+                UnsupportedFeatures = features.ToArray(),
+            };
+        }
+
         // Material Variants often serialize only the overridden outline values and omit
         // _UseOutline. Treat those overrides as enabling the feature, while preserving an
         // explicitly serialized _UseOutline value. lilToon's dedicated Outline shaders enable
@@ -182,6 +223,8 @@ public static class LilToonConverter
             IsFakeShadow = isFakeShadowShader || parent?.IsFakeShadow == true,
             Color = C("_Color", parent?.Color ?? new Vec4(1f, 1f, 1f, 1f)),
             MainTexGuid = TexAnyOrParent(parent?.MainTexGuid, "_MainTex", "_BaseMap", "_BaseColorMap"),
+            Main2nd = Layer("2nd", parent?.Main2nd),
+            Main3rd = Layer("3rd", parent?.Main3rd),
             MainTexScale = TexScale("_MainTex", parent?.MainTexScale ?? Vec2.One),
             MainTexOffset = TexOffset("_MainTex", parent?.MainTexOffset ?? Vec2.Zero),
             NormalMapGuid = B("_UseBumpMap", parent?.NormalMapGuid != null)
