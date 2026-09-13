@@ -470,8 +470,10 @@ public static class VrchatAvatarParser
             CollectFbxGuidsFromSource(package, source.Guid, 0, fbxGuids,
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             int inheritedFbxCount = descriptorSource.FbxGuidOverrides?.Count ?? 0;
-            if (fbxGuids.Count == 0 || (inheritedFbxCount > 0 && fbxGuids.Count != inheritedFbxCount) ||
-                HasRemovedGameObjects(package, source))
+            // A removal does not imply that the inherited descriptor was removed.
+            // The selected instance view applies deletions and re-discovers the surviving
+            // descriptor before parsing, including removal of its owner or ancestors.
+            if (fbxGuids.Count == 0 || (inheritedFbxCount > 0 && fbxGuids.Count != inheritedFbxCount))
             {
                 continue;
             }
@@ -567,7 +569,9 @@ public static class VrchatAvatarParser
         List<YamlDocument> sourceInstances = sourceScene.Documents.Values
             .Where(document => document.ClassId == ClassPrefabInstance)
             .ToList();
-        if (sourceInstances.Count < 2)
+        // A single source can itself compose multiple models (for example a Variant
+        // of a dressed avatar). Count at this level does not describe its contents.
+        if (sourceInstances.Count == 0)
         {
             return null;
         }
@@ -596,26 +600,6 @@ public static class VrchatAvatarParser
             HasOwnDescriptor = false,
             IsComposedPrefab = true,
         };
-    }
-
-    private static bool HasRemovedGameObjects(UnityPackage package, UnityAsset source)
-    {
-        string text = package.ReadText(source);
-        if (text == null)
-        {
-            return false;
-        }
-        try
-        {
-            UnityScene scene = package.ReadScene(source);
-            return scene.Documents.Values
-                .Where(d => d.ClassId == ClassPrefabInstance)
-                .Any(instance => instance.Root?["m_Modification"]?["m_RemovedGameObjects"]?.Seq?.Count > 0);
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private static Candidate FindNestedDescriptorCandidate(UnityPackage package, string guid, HashSet<string> visited)

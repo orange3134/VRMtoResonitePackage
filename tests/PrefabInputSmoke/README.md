@@ -100,6 +100,12 @@ transforms, explicit/omitted aliases in outer variants, independent model tags,
 partial Animator layer rejection, and per-instance physics node identities.
 Logging checks exercise captured callbacks and console writers after log disposal.
 
+`InheritedVariantRemovalChecks` exercises public avatar listing and parsing for
+Variants with removed GameObjects, nested inherited descriptors and Variants of
+multi-model compositions. It verifies surviving body geometry and descriptor
+overrides, accessory/descendant removal, rejection of a deleted descriptor root,
+and preservation of source scenes/files through repeated parsing.
+
 Renderer-removal checks cover MeshRenderer and MeshFilter removals through direct,
 explicit stripped and omitted stripped references across nested instances. They
 retain surviving child/sibling renderers, discard removed material records and
@@ -136,3 +142,19 @@ through adaptation. Explicitly cleared viseme references produce no expression b
 Repeated unpacked skins retain their owning model's bone targets. Visible authored
 geometry keeps an independent mesh template when the same FBX also appears beneath
 an EditorOnly parent, and remains eligible as the primary model.
+# Material bake decisions
+
+`MaterialBakePlanChecks` verifies the SDK-derived main-texture bake policy without
+starting the engine: independent 2nd/3rd UV choices, color-only layers, disabled
+layers, alpha-only and color bakes, HSVG/gradation triggers, and material variant
+inheritance with explicit zero/null overrides.
+
+`MaterialBakeResolutionChecks` composites generated point-filtered stripe textures
+without starting the engine. It checks positive/negative main tiling with a transparent
+overlay, rotated rectangular 2nd/3rd layers, blend/color-adjust mask density, composed
+alpha-mask tiling, unchanged identity sampling, and rejection of excessive/nonfinite
+density. Image fixtures remain under `.tmp_verify/bake-resolution/`.
+It also checks tint alpha before all four alpha-mask modes, matching output with
+an invisible layer, and independent RGB/alpha material tint reset. Alpha, blend
+and color-adjust masks must inherit main-texture wrap on both axes and point/bilinear
+filtering despite conflicting mask import settings, while preserving mask color space.

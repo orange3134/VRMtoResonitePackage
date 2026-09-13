@@ -29,6 +29,10 @@ catch (Exception error)
 [MethodImpl(MethodImplOptions.NoInlining)]
 static void Run()
 {
+    MaterialBakePlanChecks.Run();
+    VrmToResonitePackage.ResoniteLocator.InstallAssemblyResolver(
+        Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite");
+    MaterialBakeResolutionChecks.Run();
     System.Runtime.InteropServices.NativeLibrary.Load(Path.Combine(
         Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite",
         "runtimes", "win-x64", "native", "assimp.dll"));
@@ -438,6 +442,7 @@ Transform:
     }
     ReviewRegressionChecks.Run(Asset, regularCopy, branchesGuid);
     RendererRemovalChecks.Run(Asset, regularCopy);
+    InheritedVariantRemovalChecks.Run(Asset, regularCopy);
     FbxRendererRemovalChecks.Run(Asset, regularCopy, branchesGuid);
     LoggingRegressionChecks.Run();
     CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);

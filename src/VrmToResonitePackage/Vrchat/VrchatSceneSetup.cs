@@ -457,7 +457,7 @@ internal static class VrchatSceneSetup
         }
     }
 
-    public static void ApplyModularAvatar(Slot root, VrchatAvatar avatar, IDictionary<int, Slot> physicsNodes = null,
+    public static async Task ApplyModularAvatar(Slot root, VrchatAvatar avatar, IDictionary<int, Slot> physicsNodes = null,
         Func<VrchatBoneTarget, Slot> resolveTarget = null, Slot descriptorRoot = null)
     {
         // Capture identities before any merge destroys their original slots.
@@ -465,16 +465,18 @@ internal static class VrchatSceneSetup
             .SelectMany(m => new[] { m.SourceBoneTarget, m.TargetBoneTarget })
             .Concat(avatar.ModularBoneProxies.SelectMany(p => new[] { p.SourceBoneTarget, p.TargetBoneTarget }))
             .Where(t => t != null).Distinct().ToDictionary(t => t, t => resolveTarget?.Invoke(t));
+        var skins = new VrchatSkinRetargeter();
         int merged = 0;
         foreach (VrchatModularMergeArmature merge in avatar.ModularMergeArmatures)
         {
             int rewritten = ApplyMergeArmature(root, merge, physicsNodes,
-                t => mergeTargets.GetValueOrDefault(t), descriptorRoot, mergeTargets);
+                t => mergeTargets.GetValueOrDefault(t), descriptorRoot, mergeTargets, skins);
             merged += rewritten;
             UniLog.Log($"Modular Avatar Merge Armature: {merge.SourceName} -> {merge.TargetName}, " +
                        $"{rewritten} bone reference(s) rewritten.");
         }
 
+        await skins.SaveMeshes();
         int proxied = 0;
         // Resolve paths before any proxy moves a parent used by another proxy's path.
         var proxyTargets = avatar.ModularBoneProxies.Select(proxy =>
@@ -503,7 +505,8 @@ internal static class VrchatSceneSetup
     }
 
     private static int ApplyMergeArmature(Slot root, VrchatModularMergeArmature merge, IDictionary<int, Slot> physicsNodes,
-        Func<VrchatBoneTarget, Slot> resolveTarget, Slot descriptorRoot, IDictionary<VrchatBoneTarget, Slot> mergeTargets)
+        Func<VrchatBoneTarget, Slot> resolveTarget, Slot descriptorRoot, IDictionary<VrchatBoneTarget, Slot> mergeTargets,
+        VrchatSkinRetargeter skins)
     {
         Slot target = merge.TargetBoneTarget != null ? resolveTarget?.Invoke(merge.TargetBoneTarget) :
             descriptorRoot != null && merge.TargetPath != null ? ResolveAvatarPath(descriptorRoot, merge.TargetPath) :
@@ -539,7 +542,7 @@ internal static class VrchatSceneSetup
         // The component also merges its owner, including bones bound directly to the
         // armature root and unmatched helper branches immediately beneath it.
         mappings[source] = target;
-        int rewritten = RewriteSkinnedMeshBones(root, mappings);
+        int rewritten = skins.Retarget(root, mappings);
         // Resolve identities before merging, then remap every physics role (root, ignore,
         // collider) with the same mapping as the skin. Updating each merge also handles
         // destinations that become sources of a later Merge Armature component.
@@ -627,24 +630,6 @@ internal static class VrchatSceneSetup
         return name.Substring(prefix.Length, name.Length - prefix.Length - suffix.Length);
     }
 
-    private static int RewriteSkinnedMeshBones(Slot root, Dictionary<Slot, Slot> mappings)
-    {
-        int rewritten = 0;
-        foreach (SkinnedMeshRenderer renderer in root.GetComponentsInChildren<SkinnedMeshRenderer>())
-        {
-            for (int i = 0; i < renderer.Bones.Count; i++)
-            {
-                Slot bone = renderer.Bones[i];
-                if (bone != null && mappings.TryGetValue(bone, out Slot mapped))
-                {
-                    renderer.Bones[i] = mapped;
-                    rewritten++;
-                }
-            }
-        }
-        return rewritten;
-    }
-
     private static void MoveUnmappedChildren(Slot source, Slot target, Dictionary<Slot, Slot> mappings)
     {
         foreach (Slot child in source.Children.ToList())
@@ -653,16 +638,9 @@ internal static class VrchatSceneSetup
             {
                 continue;
             }
-            // Source and target represent the same semantic bone. Preserve the authored local
-            // pose of accessory children when moving between them; preserving world pose bakes
-            // any source/target armature coordinate-system difference into the accessory chain.
-            float3 position = child.LocalPosition;
-            floatQ rotation = child.LocalRotation;
-            float3 scale = child.LocalScale;
-            child.Parent = target;
-            child.LocalPosition = position;
-            child.LocalRotation = rotation;
-            child.LocalScale = scale;
+            // Like Modular Avatar, keep the authored world pose when removing an intermediate
+            // bone. Source and target local units/axes can differ even for the same bone name.
+            child.SetParent(target, keepGlobalTransform: true);
         }
     }
 

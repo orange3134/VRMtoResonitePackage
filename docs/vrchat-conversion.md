@@ -61,6 +61,11 @@ CLIの `--avatar` を使う。出力名は入力package名ではなく選択し�
 - `VRCAvatarDescriptor` はscript GUIDだけでなくフィールド署名でも検出する。
 - prefab、prefab variant、composition、`.unity` scene内のprefab instanceを候補に含める。
 - 候補一覧では重いFBX配置・material解決を遅延し、選択された候補だけを詳細解析する。
+- `m_RemovedGameObjects` があっても継承した Descriptor の候補を除外しない。
+  選択後の合成済みビューで再探索し、Descriptor の所有者自体が削除された場合は変換を拒否する。
+- 直下の PrefabInstance が1つでも、その参照先が複数モデルを合成している場合がある。
+  composition の候補探索はこの外側の Variant も扱う。Descriptor の元FBX数と全体のFBX数が
+  異なることだけで、衣装を追加した Variant を変換不可にしない。
 
 ## prefab参照とstable fileID
 
@@ -226,7 +231,14 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   Bone Proxyも同じ削除集合を使い、outer variantで削除された操作を再生成しない。
   descendantに配置済みのsourceも統合できる。Revan underwearを含む複数衣装では、
   同名の別衣装に一致する骨が多くても指定された衣装だけを消費することを検証する。
-- semanticに同じbone間で子を移すときはglobalではなくlocal transformを保持する。
+- Merge Armature の bind pose は Modular Avatar の `Editor/MeshRetargeter.cs` と同じ式
+  `新しい骨のworldToLocal * 元の骨のlocalToWorld * 元のbindPose` で補正する。
+  骨の参照だけを置換すると、単位が異なる衣装の頂点が骨へ潰れる。
+  `VrchatSkinRetargeter` が骨を破棄する前に行列を記録し、連続した統合の補正を順に合成する。
+  最後にRendererごとにMeshXを複製して保存し、共有元のmesh/providerや別の配置を変更しない。
+  再読込と初期blendshape weightの復元が終わってからアバター設定・FirstPerson生成へ進む。
+- 未統合の補助骨・子オブジェクトは、Modular Avatar の `SetParent(..., true)` と同様に
+  global transformを保持して移動する。同名骨でもlocalの単位・軸・姿勢は一致するとは限らない。
 - Bone Proxyは表示名で重複除外せず、各componentの所有Transformをprefab配置ごとに保持する。
   接続先はdescriptor rootからの完全なsubPath、または主FBXのhumanoid bone参照とその相対subPathで解決する。
   `$$AVATAR` はdescriptor rootを指す。Merge Armatureで消費された参照を更新し、
@@ -239,6 +251,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 
 - Unityのscaleは `globalScale * UnitScaleFactor / 100` をroot hierarchyへ適用する。
   `ModelImportSettings.Scale` でmeshだけを拡縮しない。
+- 追加FBXを別FBX内へ配置するときは、local scaleに `追加モデルのImportScale / 親モデルのImportScale`、
+  Unityで保存されたlocal positionに `1 / 親モデルのImportScale` を掛ける。
+  親の実測global scaleでは割らない。ユーザーが設定した親の拡縮は子へ引き継ぐ。
 - `UnitScaleFactor=100` かつtop-level wrapperのuniform 0.01は、Unity生成scaleとの二重適用を避ける。
 - `UpAxis` メタデータだけで事前回転せず、import後のHipsからHeadの実方向をY+へ最小回転で合わせる。
 - `FBX Import Alignment` は一時スロットであり、global transformを保持して畳む。
@@ -340,6 +355,54 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
 
 - headless変換ではUnity editor bakerを実行できない。直接表現できるpropertyとtexture transformを保持し、
   必要なmaskやchannel合成だけを画像処理する。
+- `_Main2ndTex` / `_Main3rdTex` はXiexeToonに対応slotがないため、静的UV0レイヤーを
+  `VrchatMainTextureBaker` でmain → 2nd → 3rdの順に焼き込む。lilToonの `lilBlendColor` と
+  Resonite.UnitySDKのmain texture bakeを参考に、Normal/Add/Screen/Multiply、color、texture alpha、
+  blend mask、scale/offset/angle、cutout/transparentのlayer alpha modeを反映する。
+  RGBはlinear空間で合成してsRGBへ戻し、alphaはgamma変換しない。
+  maskはshaderと同じmain UVを使う。TextureImporterのsRGB・wrap・point/bilinear設定を読む。
+  Alpha, blend and color-adjust masks share the main texture's wrap U/V and point/bilinear
+  sampler settings (`sampler_MainTex`), while retaining each mask's own sRGB decode.
+  Layer textures retain their own samplers; the gradation lookup uses linear clamp.
+  出力はUV0の1タイルを表す。MainTextureのSTを焼き込んだ場合、割当先はidentityへ戻す。
+  Bake resolution follows transformed texel density, including negative tiling and layer rotation.
+  For a W×H layer scaled by (sx, sy) then rotated by angle a, the UV0-axis densities are
+  |sx| (W |cos a| + H |sin a|) and |sy| (W |sin a| + H |cos a|).
+  Take the maximum density per axis across sampled inputs and round up (minimum 1).
+  Blend/color-adjust masks use main ST; alpha masks use main ST composed with mask ST.
+  Gradation lookup dimensions do not describe spatial UV density. If required density is
+  nonfinite or exceeds 8192 texels on either axis, reject the bake with a warning and retain
+  the original main texture, tint and ST via the existing failure path, rather than downsampling.
+  元の画像と共有マテリアルを変更しない。無効レイヤーは無視し、variantの差分・明示nullを保持する。
+  別UV、decal、view/time依存や個別lightingなど静的画像で再現できないレイヤーは警告して除外する。
+  UDIMやUV0の1タイル外へ異なる絵柄を配置する用途は、この画像合成では再現しない。
+- ベイクの要否は `LilToonMainTextureBakePlan` で判定する。参照は
+  `Resonite.UnitySDK/Assets/ResoniteSDK/MaterialConverters/Custom/lilToon/LilToonXiexeConverter.cs`
+  の `GetMainTexture`。処理単位を独立して選び、対象外のレイヤーがあっても他の処理を妨げない。
+
+  | 設定 | ベイク判定とColorの扱い |
+  |---|---|
+  | 1stの `_Color` のみ | ベイクせずXiexeToon.Colorに保持する |
+  | HSVGが既定値以外／gradation強度が非0 | 1stの色補正をベイクする。color-adjust maskも適用する |
+  | 2nd／3rd無効 | そのレイヤーの画像・カラーをベイクしない |
+  | 2nd／3rd有効、画像あり | UV0のみベイクする。別UVは警告して除外する |
+  | 2nd／3rd有効、画像なし | UV指定によらず白画像×レイヤーカラーとしてベイクする |
+  | AlphaMaskのmodeが非0、画像あり | 色のベイクとは独立してアルファをベイクする |
+  | AlphaMaskのmodeが0／画像なし | アルファマスク処理を行わない |
+  | 色ベイクあり | 1st／対象2nd／対象3rdのカラーを一度だけ合成し、XiexeToon.Colorは白へ戻す |
+  | アルファのみベイク | Color.aをマスク前に焼き込み、XiexeToon.ColorのRGBを保持してalphaだけ1へ戻す |
+
+  アルファマスクは色処理後の独立した処理として適用する。Replace/Multiply/Add/Subtract、
+  `_AlphaMaskScale` / `_AlphaMaskValue`、main UVに対するmask STを反映する。
+  Tint alpha must precede the mask even without a color bake: texture alpha 0.8,
+  tint alpha 0.5 and an Add mask of 0.3 produce 0.7. Applying tint after the mask
+  instead produces 0.5; Replace/Add/Subtract do not commute with tint multiplication.
+  Alpha-onlyのときは空の2nd/3rd配列でも処理でき、mask解像度も出力解像度の選択に使う。
+  HSVG・gradation・mask・UVModeはmaterial variantで継承し、明示0/nullで無効化できる。
+  GUIDが残っていても実ファイルがない参照は、SDKの `Material.GetTexture` が返すnullと同じ扱いにする。
+  欠落alpha maskは警告してその処理だけを除外し、有効な色ベイクを止めない。
+  欠落したmain/layer画像は警告してshader既定の白として扱う。
+  ベイク失敗時は元のtexture・Color・STへ戻し、白への変更だけが残らないようにする。
 - legacy `VRChat/Mobile/Toon Lit` はvertex colorを使わないため、XiexeToonでも無効にする。
 - ShadowRampMaskがない場合は白を使い、生成rampは縦方向に白から本来のrampへ変化させる。
 - MatCapはAdd modeかつblend maskなしの場合だけ変換し、color alphaとtexture alphaをRGBへ焼き込む。

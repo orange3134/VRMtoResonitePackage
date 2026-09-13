@@ -18,7 +18,7 @@ namespace VrmToResonitePackage.Vrchat;
 /// these are created here rather than tuned in place. The conversion targets the same XiexeToon
 /// look the VRM path produces.
 /// </summary>
-internal static class VrchatMaterialBuilder
+internal static partial class VrchatMaterialBuilder
 {
     public static async Task Apply(Slot root, Slot assetsSlot, VrchatAvatar avatar, UnityPackage package,
         IReadOnlyDictionary<Slot, string> sources, IReadOnlyDictionary<string, Slot> authoredObjects = null,
@@ -224,7 +224,18 @@ internal static class VrchatMaterialBuilder
         material.Color.Value = ToColor(info.Color, ColorProfile.sRGB);
         material.MainTextureScale.Value = ToFloat2(info.MainTexScale);
         material.MainTextureOffset.Value = ToFloat2(info.MainTexOffset);
-        StaticTexture2D mainTex = await GetTexture(assetsSlot, package, info.MainTexGuid, textureCache, "MainTex");
+        var bakePlan = LilToonMainTextureBakePlan.Create(info, guid => package.ByGuid(guid)?.HasContent == true);
+        StaticTexture2D mainTex = await BakeMainLayers(assetsSlot, package, info, bakePlan);
+        if (mainTex != null)
+        {
+            material.Color.Value = ToColor(bakePlan.MaterialColorAfterBake(info.Color), ColorProfile.sRGB);
+            material.MainTextureScale.Value = float2.One;
+            material.MainTextureOffset.Value = float2.Zero;
+        }
+        else
+        {
+            mainTex = await GetTexture(assetsSlot, package, info.MainTexGuid, textureCache, "MainTex");
+        }
         if (mainTex != null)
         {
             material.MainTexture.Target = mainTex;
