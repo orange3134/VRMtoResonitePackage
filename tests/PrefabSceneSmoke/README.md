@@ -95,6 +95,9 @@ share their authored bones with copied skins when multiple FBX sources are prese
 and retain unit position and scale under a static renderer with a 0.01 import correction.
 
 This integration check boots Resonite's headless engine and imports a local FBX containing a skinned mesh with at least one blendshape. It copies the renderer from an additional model under a primary model, then checks explicit material overrides, FBX default material mappings, initial blendshape weights, inactive state, and isolation from an identically named primary-model renderer.
+`SkinBoneIndexChecks` also copies each imported skin using the unsplit FBX bone
+table and checks bone identities and every weighted vertex. An FBX with unused
+bones removed by `LimitBoneWeights` exercises source/imported index differences.
 It also verifies that copied skins, physics placements, and humanoid name lookup
 share the same primary imported skeleton.
 

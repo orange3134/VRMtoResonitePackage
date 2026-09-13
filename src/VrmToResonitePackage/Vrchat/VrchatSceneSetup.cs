@@ -37,6 +37,7 @@ internal static class VrchatSceneSetup
         var importedSources = sources.ToArray();
         var authoredObjects = new Dictionary<string, Slot>();
         var copies = new List<(VrchatMeshCopy Copy, Slot Slot)>();
+        var sourceBoneIndices = new Dictionary<Slot, int[]>();
         var staticScaleCorrections = new Dictionary<Slot, float>();
         var replacedRenderers = new HashSet<MeshRenderer>();
         foreach (VrchatMeshCopy copy in avatar.MeshCopies)
@@ -63,6 +64,16 @@ internal static class VrchatSceneSetup
                 SlotFilter = slot => slot == source,
             });
             copies.Add((copy, duplicate));
+            if (copy.IsSkinned && !copy.RendererRemoved && copy.SourceBoneNames.Count > 0)
+            {
+                // LimitBoneWeights can discard unused bones, and material merging can
+                // reorder them. Mesh indices address the imported mesh's table, whereas
+                // prefab m_Bones addresses the original, unsplit FBX table.
+                var mesh = source.GetComponent<SkinnedMeshRenderer>().Mesh.Asset?.Data
+                    ?? throw new InvalidDataException($"Prefab skin mesh is not loaded: {copy.Name}");
+                sourceBoneIndices[duplicate] = MapSourceBoneIndices(copy.SourceBoneNames,
+                    Enumerable.Range(0, mesh.BoneCount).Select(i => mesh.GetBone(i).Name).ToArray());
+            }
             duplicate.Name = copy.Name;
             if (copy.Transform?.GameObjectKey != null) authoredObjects[copy.Transform.GameObjectKey] = duplicate;
             duplicate.ActiveSelf = copy.Active;
@@ -131,7 +142,8 @@ internal static class VrchatSceneSetup
                 var renderer = slot.GetComponent<SkinnedMeshRenderer>();
                 for (int i = 0; i < (renderer?.Bones.Count ?? 0); i++)
                 {
-                    if (!copy.BoneTargets.TryGetValue(i, out var target)) continue;
+                    int sourceIndex = sourceBoneIndices.TryGetValue(slot, out var indices) ? indices[i] : i;
+                    if (!copy.BoneTargets.TryGetValue(sourceIndex, out var target)) continue;
                     if (target.Name == null)
                     {
                         renderer.Bones[i] = null;
@@ -174,6 +186,21 @@ internal static class VrchatSceneSetup
 
         float ImportScale(string guid) => guid == null ? 1f : guid == avatar.FbxGuid ? avatar.FbxImportScale :
             avatar.AdditionalFbxs.FirstOrDefault(model => model.Guid == guid)?.ImportScale ?? 1f;
+    }
+
+    internal static int[] MapSourceBoneIndices(IReadOnlyList<string> source, IReadOnlyList<string> imported)
+    {
+        // An unchanged table preserves distinct, identically named source bones.
+        if (source.SequenceEqual(imported)) return Enumerable.Range(0, source.Count).ToArray();
+        var byName = source.Select((name, index) => (name, index))
+            .GroupBy(entry => entry.name, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Select(entry => entry.index).ToArray(), StringComparer.Ordinal);
+        return imported.Select(name =>
+        {
+            if (!byName.TryGetValue(name, out var matches) || matches.Length != 1)
+                throw new InvalidDataException($"Cannot identify original prefab skin bone after import: {name}");
+            return matches[0];
+        }).ToArray();
     }
 
     public static void RemoveEmptyMeshTemplates(Slot root, IEnumerable<Slot> candidates,

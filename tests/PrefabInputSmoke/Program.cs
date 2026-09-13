@@ -29,6 +29,7 @@ catch (Exception error)
 [MethodImpl(MethodImplOptions.NoInlining)]
 static void Run()
 {
+    SkinBoneIndexChecks.Run();
     MaterialBakePlanChecks.Run();
     VrmToResonitePackage.ResoniteLocator.InstallAssemblyResolver(
         Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite");

@@ -288,6 +288,12 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - 複数materialのskinned FBXはAssimpでsubmeshへ分割され、bone配列も重複・部分化する。
   bone index表はmaterial読込を無効にした別importの未分割geometryから取得する。
   名前による重複除去は同名の別boneを失うため行わない。通常importのmaterial情報は保持する。
+- コピーへのbone参照適用時は、インポート済みMeshXのbone表から元のFBX indexへ対応付ける。
+  `LimitBoneWeights`は未使用boneを除去するため、Prefabの`m_Bones[i]`をインポート後の
+  `Bones[i]`へ直接代入してはいけない。服やベールだけbone数が減り、肩・裾が別の骨に
+  接続されて形状が反転するケースがある。照合には参照先の名前ではなく元のbone名を使い、
+  改名・別骨へのoverride・明示nullも元indexで適用する。配列が同一なら同名boneもindexを
+  保持し、配列変更後に元indexが曖昧な場合は誤接続せず変換エラーにする。
 - 同名のauthored rendererの一方がEditorOnlyでも、残るobjectのmodel/nameをkeep-listに残す。
   除外objectのmaterialと外側overrideは取り込まず、残るrendererへ流用しない。
 - outer variant自身の変更を読むときは、descriptorの親sceneではなく選択候補のsourceを再読込する。
