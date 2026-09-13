@@ -104,13 +104,14 @@ internal static class MaterialLayerChecks
 
         var alphaOnly = new LilToonInfo { MainTexGuid = redGuid, Color = new Vector4(0.2f, 0.3f, 0.4f, 0.5f),
             AlphaMaskGuid = maskGuid, AlphaMaskScale = 0.5f, AlphaMaskValue = 0.1f };
-        foreach (var (mode, first, second) in new[] { (1, 0.6f, 0.1f), (2, 0.24f, 0.04f), (3, 1f, 0.5f), (4, 0f, 0.3f) })
+        // Source alpha 0.4 is tinted by 0.5 before the mask values 0.6 / 0.1.
+        foreach (var (mode, first, second) in new[] { (1, 0.6f, 0.1f), (2, 0.12f, 0.02f), (3, 0.8f, 0.3f), (4, 0f, 0.1f) })
         {
             alphaOnly.AlphaMaskMode = mode;
             baked = Bake(alphaOnly);
             Check(Near(baked.GetPixel(0, 0).r, 1) && Near(baked.GetPixel(0, 0).g, 0) &&
                   Near(baked.GetPixel(0, 0).a, first) && Near(baked.GetPixel(1, 0).a, second),
-                $"Alpha-only mode {mode} preserves untinted RGB and applies mask scale/value once");
+                $"Alpha-only mode {mode} preserves untinted RGB and applies tint alpha before the mask");
         }
         alphaOnly.AlphaMaskMode = 1;
         alphaOnly.AlphaMaskTexOffset = new Vector2(0.5f, 0);
@@ -149,9 +150,10 @@ internal static class MaterialLayerChecks
         var tint = new colorX(0.2f, 0.3f, 0.4f, 0.5f, ColorProfile.sRGB);
         Check(tintMaterial.Color.Value == tint && tintMaterial.MainTextureScale.Value == new float2(2, 3),
             "Production no-bake path retains material tint and texture transform");
-        Check(alphaMaterial.Color.Value == tint && alphaMaterial.MainTextureScale.Value == float2.One &&
+        Check(alphaMaterial.Color.Value == new colorX(0.2f, 0.3f, 0.4f, 1f, ColorProfile.sRGB) &&
+              alphaMaterial.MainTextureScale.Value == float2.One &&
               alphaMaterial.MainTextureOffset.Value == float2.Zero,
-            "Production alpha-only path retains tint and resets baked texture transforms");
+            "Production alpha-only path retains RGB tint, resets baked alpha and texture transforms");
         Check(colorMaterial.Color.Value == new colorX(1, 1, 1, 1, ColorProfile.sRGB) &&
               colorMaterial.MainTextureScale.Value == float2.One,
             "Production color+alpha path resets tint to white, preventing double multiplication");
