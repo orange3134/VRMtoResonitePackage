@@ -1481,6 +1481,72 @@ MonoBehaviour:
                   t.ImportedBone?.FbxGuid == extraModelGuid && t.ImportedBone.Path == "Right"),
             "Unpacked merge armatures reuse skin-verified model ancestors without physics or mesh-parent placements");
     }
+    foreach (var (targetPath, explicitId, expectedId) in new[]
+             { ("Left", 0, 111), ("Left/Shared", 0, 121), ("Right/Shared", 0, 141),
+               ("Missing/Shared", 0, 0), ("Right/Shared", 110, 111), ("Left", 0, 0), ("", 0, 0),
+               ("$$AVATAR", 0, 0) })
+    {
+        string legacyFixture = mergeFixture.Replace("targetObject: {fileID: 110}",
+            $"targetObject: {{fileID: {explicitId}}}\n    referencePath: {targetPath}");
+        if (targetPath == "$$AVATAR")
+            legacyFixture = legacyFixture.Replace("m_GameObject: {fileID: 100}\n  m_Father:",
+                "m_GameObject: {fileID: 100}\n  m_Children:\n  - {fileID: 111}\n  - {fileID: 131}\n  m_Father:");
+        if (targetPath == "Left" && expectedId == 0)
+            legacyFixture += "\n--- !u!1 &600\nGameObject:\n  m_Name: Left\n--- !u!4 &601\nTransform:\n  m_GameObject: {fileID: 600}\n  m_Father: {fileID: 101}\n";
+        string legacyFile = asset("Assets/LegacyMerge.prefab", "74747474747474747474747474747483",
+            legacyFixture);
+        using var legacyPackage = UnityPackage.Open(legacyFile);
+        var legacyAvatar = new VrchatAvatar { FbxGuid = guid,
+            DescriptorRootTarget = new VrchatBoneTarget(null, "Avatar", "", legacyPackage.InputPrefab.Guid, 101) };
+        typeof(VrchatAvatarParser).GetMethod("ParseModularAvatarComponents", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { legacyPackage, legacyPackage.InputPrefab.Guid, legacyAvatar, null });
+        if (targetPath.Length == 0)
+        {
+            Check(legacyAvatar.ModularMergeArmatures.Count == 0, "Unset legacy merge target must not default to the avatar root");
+            continue;
+        }
+        var target = legacyAvatar.ModularMergeArmatures.Single().TargetBoneTarget;
+        if (targetPath == "$$AVATAR")
+        {
+            Check(!legacyAvatar.PhysicsPlacements.SelectMany(p => p.Transforms).Any(t =>
+                    t.Key == $"{legacyPackage.InputPrefab.Guid}:121" && t.ImportedBone == null),
+                "Legacy avatar-root merge must not replace the unrelated body skeleton with authored slots");
+            Check(legacyAvatar.ModularMergeArmatures.Single().TargetPath == "$$AVATAR",
+                "Legacy avatar-root merge retains runtime descriptor resolution");
+        }
+        Check((target?.TransformFileId ?? 0) == expectedId,
+            $"Legacy merge resolves descriptor-relative authored identity ({targetPath}, explicit={explicitId})");
+        if (expectedId == 111)
+            Check(legacyAvatar.PhysicsPlacements.SelectMany(p => p.Transforms).Any(t =>
+                t.Key == $"{legacyPackage.InputPrefab.Guid}:111" && t.ImportedBone?.FbxGuid == guid),
+                "Legacy merge captures its imported target skeleton outside the authored descriptor hierarchy");
+    }
+    string sharedMergeFile = asset("Assets/SharedSkeletonMerge.prefab", "74747474747474747474747474747484",
+        mergeFixture.Replace("targetObject: {fileID: 110}", "targetObject: {fileID: 0}\n    referencePath: Left") + $$"""
+
+--- !u!137 &503
+SkinnedMeshRenderer:
+  m_GameObject: {fileID: 100}
+  m_Mesh: {fileID: 4300000, guid: {{extraModelGuid}}}
+  m_Bones:
+  - {fileID: 121}
+""");
+    using (var sharedPackage = UnityPackage.Open(sharedMergeFile))
+    {
+        var sharedAvatar = new VrchatAvatar { FbxGuid = guid,
+            DescriptorRootTarget = new VrchatBoneTarget(null, "Avatar", "", sharedPackage.InputPrefab.Guid, 101) };
+        typeof(VrchatAvatarParser).GetMethod("ParseModularAvatarComponents", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { sharedPackage, sharedPackage.InputPrefab.Guid, sharedAvatar, null });
+        var transforms = sharedAvatar.PhysicsPlacements.SelectMany(p => p.Transforms).ToList();
+        foreach (int id in new[] { 111, 121 })
+            Check(transforms.Any(t => t.Key == $"{sharedPackage.InputPrefab.Guid}:{id}") &&
+                  transforms.Where(t => t.Key == $"{sharedPackage.InputPrefab.Guid}:{id}")
+                      .All(t => t.ImportedBone?.FbxGuid == guid),
+                "Legacy merge target shared by multiple FBX skins retains the imported body skeleton");
+        Check(transforms.Any(t => t.Key == $"{sharedPackage.InputPrefab.Guid}:131" &&
+                  t.ImportedBone?.FbxGuid == extraModelGuid),
+            "Shared target does not change the separate source skeleton's model ownership");
+    }
     string multipleModelPhysics = asset("Assets/MultipleModelPhysics.prefab", "74747474747474747474747474747478", physics + $$"""
 
 --- !u!1 &400
