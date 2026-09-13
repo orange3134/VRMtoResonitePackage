@@ -29,6 +29,7 @@ catch (Exception error)
 [MethodImpl(MethodImplOptions.NoInlining)]
 static void Run()
 {
+    SkinBoneIndexChecks.Run();
     MaterialBakePlanChecks.Run();
     VrmToResonitePackage.ResoniteLocator.InstallAssemblyResolver(
         Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite");
@@ -443,11 +444,15 @@ Transform:
     ReviewRegressionChecks.Run(Asset, regularCopy, branchesGuid);
     RendererRemovalChecks.Run(Asset, regularCopy);
     InheritedVariantRemovalChecks.Run(Asset, regularCopy);
+    SceneInstanceSelectionChecks.Run(Asset, regularCopy);
     FbxRendererRemovalChecks.Run(Asset, regularCopy, branchesGuid);
     LoggingRegressionChecks.Run();
     CheckCopiedBoneReferences(Asset, branchesGuid, bodyModel);
     CheckDuplicateSourceBones(Asset);
     CheckDuplicateSourceBones(Asset, true);
+    CheckDuplicateSourceBones(Asset, false, transformHelpers: true);
+    CheckDuplicateSourceBones(Asset, true, transformHelpers: true);
+    ShortenedSkinBoneChecks.Run(Asset);
     CheckNestedComponents(Asset, regularCopy);
     CheckDescriptorWrapper(Asset, regularCopy, "88000000000000000000000000000001");
     CheckDescriptorOverrides(Asset, regularCopy, controllerGuid);
@@ -1202,7 +1207,8 @@ Transform:
     }
 }
 
-static void CheckDuplicateSourceBones(Func<string, string, string, string> asset, bool multipleMaterials = false)
+static void CheckDuplicateSourceBones(Func<string, string, string, string> asset, bool multipleMaterials = false,
+    bool transformHelpers = false)
 {
     const string guid = "73737373737373737373737373737373";
     string model = asset("Assets/DuplicateBones.fbx", guid, """
@@ -1276,11 +1282,34 @@ PolygonVertexIndex: *6 { a: 0,1,-3,0,1,-3 }
             .Replace("    C: \"OO\",7,5", "    C: \"OO\",20,5\n    C: \"OO\",21,5\n    C: \"OO\",7,5");
         File.WriteAllText(model, fbx);
     }
+    if (transformHelpers)
+    {
+        string fbx = File.ReadAllText(model).Replace("\"Null\" { }", """
+"Null" {
+        Properties70: {
+            P: "PreRotation", "Vector3D", "Vector", "",90,0,0
+            P: "Lcl Rotation", "Lcl Rotation", "", "A",0,30,0
+        }
+    }
+""");
+        File.WriteAllText(model, fbx);
+        using var context = new Assimp.AssimpContext();
+        var imported = context.ImportFile(model, Assimp.PostProcessSteps.None);
+        Check(imported.RootNode.Children.Any(node => UnityModelPath.IsTransformHelper(node.Name)),
+            "Regression FBX generates actual Assimp pre-rotation helper nodes");
+    }
     File.AppendAllText(model + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: 4300000\n    second: Body\n");
     string prefab = asset("Assets/DuplicateBones.prefab", "74747474747474747474747474747474",
         RendererPrefab(guid, "Untagged") + "\n  m_Bones:\n  - {fileID: 0}\n  - {fileID: 0}\n");
     using var package = UnityPackage.Open(prefab);
     var resolver = new UnityModelFileIdResolver(package.ByGuid(guid));
+    if (transformHelpers)
+    {
+        long boneId = UnityModelFileIdResolver.Compute("Transform", "//RootNode/Left/Shared/Transform", 0);
+        Check(resolver.ResolveNodePath(boneId) == "RootNode/Left/Shared" &&
+              resolver.NodePathsUnder(0).All(path => !path.Contains("_$AssimpFbx$_")),
+            "Unity model file IDs and skeleton paths exclude generated transform helpers");
+    }
     Check(resolver.MeshBoneNames["Body"].SequenceEqual(new[] { "Shared", "Shared" }) &&
           resolver.MeshBoneNamesByPath.Values.Single().Length == 2,
         "FBX source bones retain duplicate names in bone-index order");

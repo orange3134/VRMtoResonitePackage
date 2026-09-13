@@ -12,6 +12,13 @@ namespace VrmToResonitePackage.Unity;
 internal static class UnityPrefabInstances
 {
     public static UnityPackage CreateView(UnityPackage source, string sourceGuid, HashSet<long> subtree)
+        => CreateViewCore(source, sourceGuid, subtree, 0);
+
+    public static UnityPackage CreateSceneInstanceView(UnityPackage source, string sourceGuid, long instanceId)
+        => CreateViewCore(source, sourceGuid, null, instanceId);
+
+    private static UnityPackage CreateViewCore(UnityPackage source, string sourceGuid, HashSet<long> subtree,
+        long sceneInstanceId)
     {
         var view = source.CreateView(sourceGuid);
         var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -44,6 +51,8 @@ internal static class UnityPrefabInstances
 
             UnityScene scene = source.ReadScene(asset);
             if (scene == null) return mapping;
+            bool selectedSceneInstance = path == sourceGuid && sceneInstanceId != 0;
+            if (selectedSceneInstance) scene = SelectSceneInstance(source, scene, sceneInstanceId);
             var instances = scene.Documents.Values.Where(d => d.ClassId == 1001 &&
                 scene.IncludesInstance(d, included)).ToList();
             var instanceMaps = new Dictionary<long, Dictionary<string, string>>();
@@ -80,6 +89,10 @@ internal static class UnityPrefabInstances
                 if (instanceMaps.TryGetValue(owner, out var owned))
                     foreach (var entry in owned) references[entry.Key] = entry.Value;
                 var root = Rewrite(d.Root, references);
+                if (selectedSceneInstance && d.FileId == sceneInstanceId &&
+                    root?["m_Modification"] is {} placement)
+                    placement.Map["m_TransformParent"] = new YamlNode { Map = new()
+                        { ["fileID"] = new YamlNode { ScalarValue = "0" } } };
                 // The selected descriptor becomes the parsing root. Its former ancestors
                 // are absent from this view, so local bone paths must stop here as well.
                 if (included != null && d.ClassId == 4 && root?["m_Father"]?.Guid == null &&
@@ -92,6 +105,49 @@ internal static class UnityPrefabInstances
             })));
             return mapping;
         }
+    }
+
+    private static UnityScene SelectSceneInstance(UnityPackage package, UnityScene scene, long instanceId)
+    {
+        // A stripped root has no local GameObject tree. Scope by its placement and
+        // follow ownership/parent links so added components, objects and nested
+        // prefabs stay with the avatar, while other scene placements stay outside.
+        var instances = scene.Documents.Values.Where(d => d.ClassId == 1001).ToArray();
+        var membership = new Dictionary<long, bool>();
+        bool Includes(long id, HashSet<long> visiting)
+        {
+            if (id == 0) return false;
+            if (id == instanceId) return true;
+            if (membership.TryGetValue(id, out bool included)) return included;
+            if (!visiting.Add(id)) return false;
+            var document = scene.Doc(id);
+            if (document == null)
+            {
+                // Unity can omit stripped Transform documents for attachment parents.
+                // Recover their owning occurrence via Unity's instance-local XOR IDs.
+                var owners = instances.Where(instance =>
+                {
+                    string guid = instance.Root?["m_SourcePrefab"]?.Guid;
+                    long sourceId = (id ^ instance.FileId) & long.MaxValue;
+                    return !package.ObjectIds.Resolve(guid, sourceId).IsNull ||
+                           !package.ObjectIds.Resolve(guid, sourceId | long.MinValue).IsNull;
+                }).ToArray();
+                included = owners.Length == 1 && Includes(owners[0].FileId, visiting);
+            }
+            else if (document.ClassId == 1001)
+                included = Includes(document.Root?["m_Modification"]?["m_TransformParent"]?.FileID ?? 0, visiting);
+            else if ((document.Root?["m_PrefabInstance"]?.FileID ?? 0) is long owner && owner != 0)
+                included = Includes(owner, visiting);
+            else if (document.ClassId == 1)
+                included = Includes(scene.TransformOfGameObject(id)?.FileId ?? 0, visiting);
+            else if (document.ClassId == 4 || document.TypeName == "RectTransform")
+                included = Includes(document.Root?["m_Father"]?.FileID ?? 0, visiting);
+            else
+                included = Includes(document.Root?["m_GameObject"]?.FileID ?? 0, visiting);
+            visiting.Remove(id);
+            return membership[id] = included;
+        }
+        return UnityScene.FromDocuments(scene.Documents.Values.Where(d => Includes(d.FileId, new())));
     }
 
     private static YamlNode Rewrite(YamlNode node, Dictionary<string, string> mapping)

@@ -59,6 +59,7 @@ static async Task Run(string fbxPath, string rendererName)
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
         await MaterialLayerChecks.Run(assets, temp);
         await MixedScaleSkinChecks.Run(root);
+        await FbxTransformHelperChecks.Run(root);
         {
             var exportRoot = root.AddSlot("Descriptor placement regression");
             var body = exportRoot.AddSlot("Body");
@@ -602,6 +603,7 @@ static async Task Run(string fbxPath, string rendererName)
         await ModelImporter.ImportModelAsync(fbxPath, additional, settings, assets);
         await default(ToWorld);
         await (Task)Call("VrmToResonitePackage.Converter", "WaitForAssets", assets);
+        SkinBoneIndexChecks.Run(additional, fbxPath);
         var avatar = new VrchatAvatar { FbxGuid = "primary" };
         var model = new VrchatFbxAsset { Guid = "additional", InstanceName = additional.Name };
         avatar.AdditionalFbxs.Add(model);

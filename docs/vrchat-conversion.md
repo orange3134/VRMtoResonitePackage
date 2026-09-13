@@ -16,6 +16,10 @@ UnityのLibraryやVRChat SDKの実行環境は不要。
 1. `UnityPrefabInstances` が選択範囲を切り出し、各配置に固有の識別子を割り当てる。
    `UnityAsset.SourceGuid` は元アセット、`OccurrencePath` は配置経路を表す。
    既存の `Guid` フィールドは変換中の配置識別子としても使うため、元アセットのGUIDとは区別する。
+   `.unity`内でDescriptorの所有ルートがstrippedの場合は、選択したPrefabInstanceを起点に
+   所属・親参照を辿って範囲を決める。兄弟アバターを除外し、配下の追加オブジェクト・
+   コンポーネント・Prefabは保持する。省略されたstripped親も配置ごとのfileIDで解決する。
+   選択ルートはシーン側の親から切り離し、元のPrefabやシーンは変更しない。
 2. `UnityObjectResolver` が通常のfileID、明示されたstripped参照、省略されたstripped参照を
    共通の `UnityObjectId`（配置識別子とfileID）へ解決する。名前はオブジェクトの識別に使わない。
 3. `UnityPrefabGraph` がソース文書を複製し、内側のPrefabから外側のVariantへ上書きを合成する。
@@ -285,9 +289,27 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   materialと初期blendshapeを個別に適用する。識別子を持たない従来のrendererは、空のoverrideも
   含めて出現順に1対1で消費する。
 - コピーとその親のactive stateもobject単位で保持し、従来の名前照合による非アクティブ化を重ねない。
+- Assimpが挿入する `_$AssimpFbx$_PreRotation` などの補助nodeはUnityのobjectではないため、
+  FBX fileID生成と骨格pathの収集から除き、実import階層との照合でも中間の補助nodeを無視する。
+  補助node自身のpathは親と区別し、同名boneの別branchを一意とみなさない。変換行列は保持する。
+  GameVketChanではこのpath差によりunpacked prefabの骨格が別途作られ、センチメートルの
+  bind poseをメートルの骨へ接続して数十メートルに変形していた。physicsとskinが元の骨格を
+  共有すれば単位補正も保持され、8メッシュすべての頂点が元FBXと一致する。
 - 複数materialのskinned FBXはAssimpでsubmeshへ分割され、bone配列も重複・部分化する。
   bone index表はmaterial読込を無効にした別importの未分割geometryから取得する。
   名前による重複除去は同名の別boneを失うため行わない。通常importのmaterial情報は保持する。
+- コピーへのbone参照適用時は、インポート済みMeshXのbone表から元のFBX indexへ対応付ける。
+  `LimitBoneWeights`は未使用boneを除去するため、Prefabの`m_Bones[i]`をインポート後の
+  `Bones[i]`へ直接代入してはいけない。服やベールだけbone数が減り、肩・裾が別の骨に
+  接続されて形状が反転するケースがある。照合には参照先の名前ではなく元のbone名を使い、
+  改名・別骨へのoverride・明示nullも元indexで適用する。配列が同一なら同名boneもindexを
+  保持し、配列変更後に元indexが曖昧な場合は誤接続せず変換エラーにする。
+- 保存済みPrefabのbone配列が現行FBXより短い場合、各参照が同じソースFBXの一意なboneを
+  指すことをobject identityと完全pathで検証して、現行FBXのindexへ対応付け直す。
+  FBX更新で未使用boneが増えたり並びが変わったケースに対応するが、省かれたboneに
+  頂点weightがある場合、null・ローカル骨・別モデル・重複などで対応を確定できない場合は
+  変換を止める。weightの有無もmaterial分割前のgeometryから取得する。
+  同じ長さの配列は従来どおりindex指定のoverrideとして扱う。
 - 同名のauthored rendererの一方がEditorOnlyでも、残るobjectのmodel/nameをkeep-listに残す。
   除外objectのmaterialと外側overrideは取り込まず、残るrendererへ流用しない。
 - outer variant自身の変更を読むときは、descriptorの親sceneではなく選択候補のsourceを再読込する。

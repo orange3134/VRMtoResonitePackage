@@ -18,6 +18,21 @@ different models and shared geometry. Reversing object/connection order must kee
 the same defaults. It checks the model resolver, avatar metadata, renamed copies,
 explicit zero overrides, and strict path lookup for indexed blendshape repair.
 
+`SkinBoneIndexChecks` covers discarded/reordered skin bones, unchanged duplicate
+names, ambiguous/missing source entries, and original-index renamed/null overrides.
+
+`ShortenedSkinBoneChecks` reads an FBX with an unused bone between two weighted
+bones. Short/reordered prefab arrays recover exact source indices through direct
+and stripped model references, including separate mesh-template occurrences.
+Missing weighted bones, duplicate/null references, other FBXs and local namesakes
+remain errors; full-length arrays retain indexed overrides and source files stay unchanged.
+
+`SceneInstanceSelectionChecks` selects either of two scene instances of the same
+avatar prefab through stripped descriptors or added descriptors on stripped owners.
+It excludes the sibling while retaining local helpers, added physics and attached
+prefabs, with explicit or omitted stripped parent references. Selected roots detach
+from scene ancestors, and repeated selections preserve cached scenes and files.
+
 `FbxRendererRemovalChecks` covers direct FBX MeshRenderer, SkinnedMeshRenderer and
 MeshFilter removals through direct, omitted and explicit stripped references.
 Exclusions retain occurrence and full path, discard removed-renderer overrides,
