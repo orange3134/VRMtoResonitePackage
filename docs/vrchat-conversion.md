@@ -289,6 +289,12 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   materialと初期blendshapeを個別に適用する。識別子を持たない従来のrendererは、空のoverrideも
   含めて出現順に1対1で消費する。
 - コピーとその親のactive stateもobject単位で保持し、従来の名前照合による非アクティブ化を重ねない。
+- Assimpが挿入する `_$AssimpFbx$_PreRotation` などの補助nodeはUnityのobjectではないため、
+  FBX fileID生成と骨格pathの収集から除き、実import階層との照合でも中間の補助nodeを無視する。
+  補助node自身のpathは親と区別し、同名boneの別branchを一意とみなさない。変換行列は保持する。
+  GameVketChanではこのpath差によりunpacked prefabの骨格が別途作られ、センチメートルの
+  bind poseをメートルの骨へ接続して数十メートルに変形していた。physicsとskinが元の骨格を
+  共有すれば単位補正も保持され、8メッシュすべての頂点が元FBXと一致する。
 - 複数materialのskinned FBXはAssimpでsubmeshへ分割され、bone配列も重複・部分化する。
   bone index表はmaterial読込を無効にした別importの未分割geometryから取得する。
   名前による重複除去は同名の別boneを失うため行わない。通常importのmaterial情報は保持する。

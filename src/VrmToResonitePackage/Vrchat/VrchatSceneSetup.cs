@@ -320,15 +320,7 @@ internal static class VrchatSceneSetup
     }
 
     private static bool ImportedPathMatches(string importedPath, string targetPath)
-    {
-        // Assimp may retain its synthetic root in one representation but omit it in the other.
-        static string Normalize(string path)
-        {
-            path = path.TrimStart('/');
-            return path == "RootNode" ? "" : path.StartsWith("RootNode/", StringComparison.Ordinal) ? path[9..] : path;
-        }
-        return Normalize(importedPath) == Normalize(targetPath);
-    }
+        => Unity.UnityModelPath.Normalize(importedPath) == Unity.UnityModelPath.Normalize(targetPath);
 
     public static Dictionary<Slot, string> CaptureImportedObjects(IReadOnlyDictionary<string, Slot> roots)
     {
@@ -351,7 +343,12 @@ internal static class VrchatSceneSetup
         void Visit(Slot slot, string path)
         {
             paths[slot] = path;
-            foreach (Slot child in slot.Children) Visit(child, path + "/" + child.Name);
+            // Store authored paths for all consumers, including indexed blendshape lookup.
+            // Keep the helper's own identity, but do not add it to its children's paths.
+            string childPrefix = Unity.UnityModelPath.IsTransformHelper(slot.Name)
+                ? path.Contains('/') ? path[..(path.LastIndexOf('/') + 1)] : ""
+                : path + "/";
+            foreach (Slot child in slot.Children) Visit(child, childPrefix + child.Name);
         }
     }
 

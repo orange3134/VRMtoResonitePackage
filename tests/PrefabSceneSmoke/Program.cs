@@ -59,6 +59,7 @@ static async Task Run(string fbxPath, string rendererName)
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
         await MaterialLayerChecks.Run(assets, temp);
         await MixedScaleSkinChecks.Run(root);
+        await FbxTransformHelperChecks.Run(root);
         {
             var exportRoot = root.AddSlot("Descriptor placement regression");
             var body = exportRoot.AddSlot("Body");
