@@ -53,10 +53,35 @@ internal static partial class VrchatMaterialBuilder
         var inputs = layers.Select(layer => (layer,
             texture: ReadBakeTexture(package, layer.TextureGuid),
             mask: ReadBakeTexture(package, layer.MaskGuid))).ToArray();
-        var textures = inputs.SelectMany(i => new[] { i.texture, i.mask })
-            .Concat(new[] { main, alphaMask, adjustMask }).Where(t => t != null).ToArray();
-        int width = textures.Select(t => t.Width).DefaultIfEmpty(1).Max();
-        int height = textures.Select(t => t.Height).DefaultIfEmpty(1).Max();
+        double requiredWidth = 1, requiredHeight = 1;
+        IncludeDensity(main, info.MainTexScale);
+        IncludeDensity(adjustMask, info.MainTexScale);
+        IncludeDensity(alphaMask, info.MainTexScale * info.AlphaMaskTexScale);
+        foreach (var input in inputs)
+        {
+            IncludeDensity(input.texture, input.layer.Scale, input.layer.Angle);
+            IncludeDensity(input.mask, info.MainTexScale);
+        }
+        // Never silently clamp density: the caller retains the original texture,
+        // tint and ST when a bake fails. Bound allocation before converting to int.
+        const int maxDimension = 8192;
+        if (!double.IsFinite(requiredWidth) || !double.IsFinite(requiredHeight) ||
+            requiredWidth > maxDimension || requiredHeight > maxDimension)
+            throw new InvalidOperationException($"Transformed main texture bake requires {requiredWidth}x{requiredHeight} " +
+                $"texels, exceeding the {maxDimension} per-axis limit; retaining the original main texture and transform.");
+        int width = (int)Math.Ceiling(requiredWidth), height = (int)Math.Ceiling(requiredHeight);
+
+        void IncludeDensity(BakeTexture texture, Vector2 scale, float angle = 0)
+        {
+            if (texture == null) return;
+            // Sampling applies scale, then rotation. Project both source texel axes
+            // onto each output UV axis; summing magnitudes also covers oblique detail.
+            double sin = Math.Abs(Math.Sin(angle)), cos = Math.Abs(Math.Cos(angle));
+            requiredWidth = Math.Max(requiredWidth,
+                Math.Abs((double)scale.X) * (texture.Width * cos + texture.Height * sin));
+            requiredHeight = Math.Max(requiredHeight,
+                Math.Abs((double)scale.Y) * (texture.Width * sin + texture.Height * cos));
+        }
         var output = new Bitmap2D(width, height, TextureFormat.RGBA32, mipmaps: false, ColorProfile.sRGB);
         Vector4 tint = plan.Color ? LinearColor(info.Color) : Vector4.One;
         var tints = inputs.Select(i => LinearColor(i.layer.Color)).ToArray();

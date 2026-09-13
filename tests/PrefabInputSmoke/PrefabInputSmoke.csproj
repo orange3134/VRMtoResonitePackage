@@ -10,5 +10,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/VrmToResonitePackage/VrmToResonitePackage.csproj" />
     <Reference Include="AssimpNet"><HintPath>$(ResonitePath)/AssimpNet.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Elements.Core"><HintPath>$(ResonitePath)/Elements.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Elements.Assets"><HintPath>$(ResonitePath)/Elements.Assets.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Renderite.Shared"><HintPath>$(ResonitePath)/Renderite.Shared.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 </Project>

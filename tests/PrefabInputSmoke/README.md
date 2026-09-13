@@ -148,3 +148,9 @@ an EditorOnly parent, and remains eligible as the primary model.
 starting the engine: independent 2nd/3rd UV choices, color-only layers, disabled
 layers, alpha-only and color bakes, HSVG/gradation triggers, and material variant
 inheritance with explicit zero/null overrides.
+
+`MaterialBakeResolutionChecks` composites generated point-filtered stripe textures
+without starting the engine. It checks positive/negative main tiling with a transparent
+overlay, rotated rectangular 2nd/3rd layers, blend/color-adjust mask density, composed
+alpha-mask tiling, unchanged identity sampling, and rejection of excessive/nonfinite
+density. Image fixtures remain under `.tmp_verify/bake-resolution/`.

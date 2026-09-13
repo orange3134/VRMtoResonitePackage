@@ -30,6 +30,9 @@ catch (Exception error)
 static void Run()
 {
     MaterialBakePlanChecks.Run();
+    VrmToResonitePackage.ResoniteLocator.InstallAssemblyResolver(
+        Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite");
+    MaterialBakeResolutionChecks.Run();
     System.Runtime.InteropServices.NativeLibrary.Load(Path.Combine(
         Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite",
         "runtimes", "win-x64", "native", "assimp.dll"));

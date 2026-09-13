@@ -362,6 +362,14 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
   RGBはlinear空間で合成してsRGBへ戻し、alphaはgamma変換しない。
   maskはshaderと同じmain UVを使う。TextureImporterのsRGB・wrap・point/bilinear設定を読む。
   出力はUV0の1タイルを表す。MainTextureのSTを焼き込んだ場合、割当先はidentityへ戻す。
+  Bake resolution follows transformed texel density, including negative tiling and layer rotation.
+  For a W×H layer scaled by (sx, sy) then rotated by angle a, the UV0-axis densities are
+  |sx| (W |cos a| + H |sin a|) and |sy| (W |sin a| + H |cos a|).
+  Take the maximum density per axis across sampled inputs and round up (minimum 1).
+  Blend/color-adjust masks use main ST; alpha masks use main ST composed with mask ST.
+  Gradation lookup dimensions do not describe spatial UV density. If required density is
+  nonfinite or exceeds 8192 texels on either axis, reject the bake with a warning and retain
+  the original main texture, tint and ST via the existing failure path, rather than downsampling.
   元の画像と共有マテリアルを変更しない。無効レイヤーは無視し、variantの差分・明示nullを保持する。
   別UV、decal、view/time依存や個別lightingなど静的画像で再現できないレイヤーは警告して除外する。
   UDIMやUV0の1タイル外へ異なる絵柄を配置する用途は、この画像合成では再現しない。
