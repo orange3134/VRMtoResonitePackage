@@ -46,13 +46,16 @@ internal static partial class VrchatMaterialBuilder
         if (plan.Main2nd) layers.Add(info.Main2nd);
         if (plan.Main3rd) layers.Add(info.Main3rd);
         var main = ReadBakeTexture(package, info.MainTexGuid);
-        var alphaMask = plan.Alpha ? ReadBakeTexture(package, info.AlphaMaskGuid) : null;
-        var adjustMask = plan.Main ? ReadBakeTexture(package, info.MainColorAdjustMaskGuid) : null;
+        // lilToon shares sampler_MainTex with these masks, but each texture retains
+        // its own sRGB decode. A missing main texture uses the default sampler.
+        var mainSampler = main?.Sampler ?? default;
+        var alphaMask = plan.Alpha ? ReadBakeTexture(package, info.AlphaMaskGuid, sampler: mainSampler) : null;
+        var adjustMask = plan.Main ? ReadBakeTexture(package, info.MainColorAdjustMaskGuid, sampler: mainSampler) : null;
         var gradation = plan.Main && info.MainGradationStrength != 0
             ? ReadBakeTexture(package, info.MainGradationTexGuid, linearClamp: true) : null;
         var inputs = layers.Select(layer => (layer,
             texture: ReadBakeTexture(package, layer.TextureGuid),
-            mask: ReadBakeTexture(package, layer.MaskGuid))).ToArray();
+            mask: ReadBakeTexture(package, layer.MaskGuid, sampler: mainSampler))).ToArray();
         double requiredWidth = 1, requiredHeight = 1;
         IncludeDensity(main, info.MainTexScale);
         IncludeDensity(adjustMask, info.MainTexScale);
@@ -83,7 +86,8 @@ internal static partial class VrchatMaterialBuilder
                 Math.Abs((double)scale.Y) * (texture.Width * sin + texture.Height * cos));
         }
         var output = new Bitmap2D(width, height, TextureFormat.RGBA32, mipmaps: false, ColorProfile.sRGB);
-        Vector4 tint = plan.Color ? LinearColor(info.Color) : Vector4.One;
+        // Tint alpha precedes every mask mode, even when RGB remains on the material.
+        Vector4 tint = plan.Color ? LinearColor(info.Color) : new Vector4(1, 1, 1, info.Color.W);
         var tints = inputs.Select(i => LinearColor(i.layer.Color)).ToArray();
         Parallel.For(0, height, y =>
         {
@@ -189,7 +193,8 @@ internal static partial class VrchatMaterialBuilder
         return new Vector3(Channel(1f), Channel(2f / 3f), Channel(1f / 3f));
     }
 
-    private static BakeTexture ReadBakeTexture(UnityPackage package, string guid, bool linearClamp = false)
+    private static BakeTexture ReadBakeTexture(UnityPackage package, string guid, bool linearClamp = false,
+        BakeSampler? sampler = null)
     {
         if (string.IsNullOrEmpty(guid)) return null; // Shader's default white texture.
         var asset = package.ByGuid(guid);
@@ -203,26 +208,29 @@ internal static partial class VrchatMaterialBuilder
             ? UnityYaml.ParseFlatDocument(File.ReadAllText(asset.MetaPath))?["TextureImporter"] : null;
         bool srgb = (importer?["mipmaps"]?["sRGBTexture"]?.AsInt(1) ?? 1) != 0;
         var settings = importer?["textureSettings"];
-        return new BakeTexture(bitmap, srgb, linearClamp ? 1 : settings?["wrapU"]?.AsInt() ?? 0,
-            linearClamp ? 1 : settings?["wrapV"]?.AsInt() ?? 0, !linearClamp && settings?["filterMode"]?.AsInt(1) == 0);
+        return new BakeTexture(bitmap, srgb, sampler ?? new BakeSampler(
+            linearClamp ? 1 : settings?["wrapU"]?.AsInt() ?? 0,
+            linearClamp ? 1 : settings?["wrapV"]?.AsInt() ?? 0,
+            !linearClamp && settings?["filterMode"]?.AsInt(1) == 0));
     }
 
     private static Vector4 LinearColor(Vector4 c) => new(ToLinear(c.X), ToLinear(c.Y), ToLinear(c.Z), c.W);
     private static float ToLinear(float c) => c <= 0.04045f ? c / 12.92f : MathF.Pow((c + 0.055f) / 1.055f, 2.4f);
     private static float ToSrgb(float c) => c <= 0.0031308f ? c * 12.92f : 1.055f * MathF.Pow(c, 1f / 2.4f) - 0.055f;
 
+    private readonly record struct BakeSampler(int WrapU, int WrapV, bool Point);
+
     private sealed class BakeTexture
     {
         public int Width { get; }
         public int Height { get; }
         private readonly Vector4[] _pixels;
-        private readonly int _wrapU, _wrapV;
-        private readonly bool _point;
+        public BakeSampler Sampler { get; }
 
-        public BakeTexture(Bitmap2D bitmap, bool srgb, int wrapU, int wrapV, bool point)
+        public BakeTexture(Bitmap2D bitmap, bool srgb, BakeSampler sampler)
         {
             Width = bitmap.Size.x; Height = bitmap.Size.y;
-            _wrapU = wrapU; _wrapV = wrapV; _point = point;
+            Sampler = sampler;
             _pixels = new Vector4[Width * Height];
             Parallel.For(0, Height, y =>
             {
@@ -238,13 +246,13 @@ internal static partial class VrchatMaterialBuilder
         public Vector4 Sample(Vector2 uv)
         {
             float x = uv.X * Width - 0.5f, y = uv.Y * Height - 0.5f;
-            if (_point) return Pixel((int)MathF.Floor(x + 0.5f), (int)MathF.Floor(y + 0.5f));
+            if (Sampler.Point) return Pixel((int)MathF.Floor(x + 0.5f), (int)MathF.Floor(y + 0.5f));
             int ix = (int)MathF.Floor(x), iy = (int)MathF.Floor(y);
             return Vector4.Lerp(Vector4.Lerp(Pixel(ix, iy), Pixel(ix + 1, iy), x - ix),
                 Vector4.Lerp(Pixel(ix, iy + 1), Pixel(ix + 1, iy + 1), x - ix), y - iy);
         }
 
-        private Vector4 Pixel(int x, int y) => _pixels[Wrap(y, Height, _wrapV) * Width + Wrap(x, Width, _wrapU)];
+        private Vector4 Pixel(int x, int y) => _pixels[Wrap(y, Height, Sampler.WrapV) * Width + Wrap(x, Width, Sampler.WrapU)];
         private static int Wrap(int i, int size, int mode)
         {
             if (mode == 1) return Math.Clamp(i, 0, size - 1); // Clamp

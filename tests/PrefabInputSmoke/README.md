@@ -154,3 +154,7 @@ without starting the engine. It checks positive/negative main tiling with a tran
 overlay, rotated rectangular 2nd/3rd layers, blend/color-adjust mask density, composed
 alpha-mask tiling, unchanged identity sampling, and rejection of excessive/nonfinite
 density. Image fixtures remain under `.tmp_verify/bake-resolution/`.
+It also checks tint alpha before all four alpha-mask modes, matching output with
+an invisible layer, and independent RGB/alpha material tint reset. Alpha, blend
+and color-adjust masks must inherit main-texture wrap on both axes and point/bilinear
+filtering despite conflicting mask import settings, while preserving mask color space.

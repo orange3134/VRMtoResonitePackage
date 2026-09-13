@@ -228,8 +228,7 @@ internal static partial class VrchatMaterialBuilder
         StaticTexture2D mainTex = await BakeMainLayers(assetsSlot, package, info, bakePlan);
         if (mainTex != null)
         {
-            // Alpha-only baking leaves the original tint on the material, as in the SDK.
-            if (bakePlan.Color) material.Color.Value = ToColor(Vec4.One, ColorProfile.sRGB);
+            material.Color.Value = ToColor(bakePlan.MaterialColorAfterBake(info.Color), ColorProfile.sRGB);
             material.MainTextureScale.Value = float2.One;
             material.MainTextureOffset.Value = float2.Zero;
         }

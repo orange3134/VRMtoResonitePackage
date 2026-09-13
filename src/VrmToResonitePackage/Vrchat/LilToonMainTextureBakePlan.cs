@@ -9,6 +9,10 @@ public sealed record LilToonMainTextureBakePlan(bool Main, bool Main2nd, bool Ma
     public bool Color => Main || Main2nd || Main3rd;
     public bool Required => Color || Alpha;
 
+    // Only use after a successful bake; failed bakes retain the original RGBA.
+    public Vector4 MaterialColorAfterBake(Vector4 color) => new(
+        Color ? Vector3.One : new Vector3(color.X, color.Y, color.Z), Required ? 1f : color.W);
+
     public static LilToonMainTextureBakePlan Create(LilToonInfo info, Func<string, bool> textureExists = null)
     {
         var warnings = new List<string>();
@@ -50,7 +54,7 @@ public sealed record LilToonMainTextureBakePlan(bool Main, bool Main2nd, bool Ma
         }
         // _Color alone is already expressible on XiexeToon. If RGB is baked for
         // another reason, include _Color once and return white to the material.
-        // An alpha-only bake leaves _Color (including its alpha) on the material.
+        // An alpha-only bake includes tint alpha before the mask and leaves RGB on the material.
         return new(main, second, third, alpha, warnings);
     }
 }

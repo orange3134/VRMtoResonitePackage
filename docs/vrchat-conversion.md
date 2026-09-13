@@ -361,6 +361,9 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
   blend mask、scale/offset/angle、cutout/transparentのlayer alpha modeを反映する。
   RGBはlinear空間で合成してsRGBへ戻し、alphaはgamma変換しない。
   maskはshaderと同じmain UVを使う。TextureImporterのsRGB・wrap・point/bilinear設定を読む。
+  Alpha, blend and color-adjust masks share the main texture's wrap U/V and point/bilinear
+  sampler settings (`sampler_MainTex`), while retaining each mask's own sRGB decode.
+  Layer textures retain their own samplers; the gradation lookup uses linear clamp.
   出力はUV0の1タイルを表す。MainTextureのSTを焼き込んだ場合、割当先はidentityへ戻す。
   Bake resolution follows transformed texel density, including negative tiling and layer rotation.
   For a W×H layer scaled by (sx, sy) then rotated by angle a, the UV0-axis densities are
@@ -387,10 +390,13 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
   | AlphaMaskのmodeが非0、画像あり | 色のベイクとは独立してアルファをベイクする |
   | AlphaMaskのmodeが0／画像なし | アルファマスク処理を行わない |
   | 色ベイクあり | 1st／対象2nd／対象3rdのカラーを一度だけ合成し、XiexeToon.Colorは白へ戻す |
-  | アルファのみベイク | RGBとColorを焼き込まず、XiexeToon.Colorに元のRGBAを保持する |
+  | アルファのみベイク | Color.aをマスク前に焼き込み、XiexeToon.ColorのRGBを保持してalphaだけ1へ戻す |
 
   アルファマスクは色処理後の独立した処理として適用する。Replace/Multiply/Add/Subtract、
   `_AlphaMaskScale` / `_AlphaMaskValue`、main UVに対するmask STを反映する。
+  Tint alpha must precede the mask even without a color bake: texture alpha 0.8,
+  tint alpha 0.5 and an Add mask of 0.3 produce 0.7. Applying tint after the mask
+  instead produces 0.5; Replace/Add/Subtract do not commute with tint multiplication.
   Alpha-onlyのときは空の2nd/3rd配列でも処理でき、mask解像度も出力解像度の選択に使う。
   HSVG・gradation・mask・UVModeはmaterial variantで継承し、明示0/nullで無効化できる。
   GUIDが残っていても実ファイルがない参照は、SDKの `Material.GetTexture` が返すnullと同じ扱いにする。
