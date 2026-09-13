@@ -232,6 +232,11 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   source GameObjectとtargetObjectをprefab instance・Transform・FBX pathの参照として保持し、
   名前や一致する骨の数で別の衣装を選ばない。variantのtargetObject・prefix・suffix上書きと
   component削除を反映する。targetObjectがない旧形式ではdescriptor rootからreferencePathを辿る。
+  authored Transformの旧形式pathは、合成済みPrefab上の親子identityを辿って先に参照へ解決する。
+  Legnia 4Pでは本体のimport骨格がdescriptor用Slotの外側に残るため、変換後のSlot階層だけで
+  `Armature` を探すと衣装・髪の統合が両方スキップされる。解決した統合先も配置収集へ渡し、
+  skinと同じimport骨格へ接続する。明示targetObjectを優先し、同名の別branchへ名前検索しない。
+  authored親子関係で解決できないimportモデル内のpathは、従来のruntime path解決を継続する。
   Bone Proxyも同じ削除集合を使い、outer variantで削除された操作を再生成しない。
   descendantに配置済みのsourceも統合できる。Revan underwearを含む複数衣装では、
   同名の別衣装に一致する骨が多くても指定された衣装だけを消費することを検証する。

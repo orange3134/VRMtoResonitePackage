@@ -2784,6 +2784,8 @@ public static class VrchatAvatarParser
             }
             var sourceTarget = Resolve(entry.Guid, owner?.FileId ?? 0);
             var target = Resolve(targetGuid, targetReference?.FileID ?? 0);
+            if ((targetReference?.FileID ?? 0) == 0 && targetPath != null)
+                target = ResolveAuthoredAvatarPath(package, avatar, targetPath);
             if (sourceTarget == null || ((targetReference?.FileID ?? 0) != 0 && target == null))
             {
                 UniLog.Warning($"Merge Armature reference could not be resolved: {sourceName} -> {targetPath}");
@@ -2886,6 +2888,34 @@ public static class VrchatAvatarParser
         }
         (string _, string name) = ResolveReferenceNode(package, scene, fileId, 0);
         return name;
+    }
+
+    private static VrchatBoneTarget ResolveAuthoredAvatarPath(UnityPackage package, VrchatAvatar avatar, string path)
+    {
+        var root = avatar.DescriptorRootTarget;
+        if (root?.PrefabGuid == null || root.TransformFileId == 0 || package.PrefabGraph == null) return null;
+        if (path == "$$AVATAR") return root;
+        var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || string.IsNullOrWhiteSpace(path)) return null;
+        var current = package.PrefabGraph.Identity(root.PrefabGuid, root.TransformFileId);
+        // Legacy referencePath is relative to the Unity descriptor, not the imported
+        // layout. An unpacked rig can live in an FBX template outside that descriptor.
+        // Follow exact authored parent identities before import; imported-only paths
+        // retain the existing runtime resolver. Never fall back to a global bone name.
+        foreach (string part in parts)
+        {
+            var children = package.PrefabGraph.Scenes.SelectMany(entry =>
+                entry.Scene.Documents.Values.Where(d => d.ClassId == 4 || d.TypeName == "RectTransform")
+                    .Where(d => (d.Root?["m_Father"]?.FileID ?? 0) != 0 &&
+                        package.PrefabGraph.Identity(d.Root["m_Father"].Guid ?? entry.Guid,
+                            d.Root["m_Father"].FileID.Value) == current &&
+                        ResolveSceneObjectName(package, entry.Scene, d.FileId) == part)
+                    .Select(d => package.PrefabGraph.Identity(entry.Guid, d.FileId)))
+                .Where(id => !id.IsNull).Distinct().ToArray();
+            if (children.Length != 1) return null;
+            current = children[0];
+        }
+        return ResolvePhysicsTarget(package, current.Occurrence, current.FileId, avatar.FbxGuid);
     }
 
     private static string ResolveAvatarObjectReferenceName(YamlNode reference)
