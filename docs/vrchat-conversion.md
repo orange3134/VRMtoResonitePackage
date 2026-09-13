@@ -231,7 +231,14 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   Bone Proxyも同じ削除集合を使い、outer variantで削除された操作を再生成しない。
   descendantに配置済みのsourceも統合できる。Revan underwearを含む複数衣装では、
   同名の別衣装に一致する骨が多くても指定された衣装だけを消費することを検証する。
-- semanticに同じbone間で子を移すときはglobalではなくlocal transformを保持する。
+- Merge Armature の bind pose は Modular Avatar の `Editor/MeshRetargeter.cs` と同じ式
+  `新しい骨のworldToLocal * 元の骨のlocalToWorld * 元のbindPose` で補正する。
+  骨の参照だけを置換すると、単位が異なる衣装の頂点が骨へ潰れる。
+  `VrchatSkinRetargeter` が骨を破棄する前に行列を記録し、連続した統合の補正を順に合成する。
+  最後にRendererごとにMeshXを複製して保存し、共有元のmesh/providerや別の配置を変更しない。
+  再読込と初期blendshape weightの復元が終わってからアバター設定・FirstPerson生成へ進む。
+- 未統合の補助骨・子オブジェクトは、Modular Avatar の `SetParent(..., true)` と同様に
+  global transformを保持して移動する。同名骨でもlocalの単位・軸・姿勢は一致するとは限らない。
 - Bone Proxyは表示名で重複除外せず、各componentの所有Transformをprefab配置ごとに保持する。
   接続先はdescriptor rootからの完全なsubPath、または主FBXのhumanoid bone参照とその相対subPathで解決する。
   `$$AVATAR` はdescriptor rootを指す。Merge Armatureで消費された参照を更新し、
@@ -244,6 +251,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 
 - Unityのscaleは `globalScale * UnitScaleFactor / 100` をroot hierarchyへ適用する。
   `ModelImportSettings.Scale` でmeshだけを拡縮しない。
+- 追加FBXを別FBX内へ配置するときは、local scaleに `追加モデルのImportScale / 親モデルのImportScale`、
+  Unityで保存されたlocal positionに `1 / 親モデルのImportScale` を掛ける。
+  親の実測global scaleでは割らない。ユーザーが設定した親の拡縮は子へ引き継ぐ。
 - `UnitScaleFactor=100` かつtop-level wrapperのuniform 0.01は、Unity生成scaleとの二重適用を避ける。
 - `UpAxis` メタデータだけで事前回転せず、import後のHipsからHeadの実方向をY+へ最小回転で合わせる。
 - `FBX Import Alignment` は一時スロットであり、global transformを保持して畳む。

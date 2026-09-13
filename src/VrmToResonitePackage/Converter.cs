@@ -482,7 +482,7 @@ internal static class Converter
                 }
                 // Retain authored paths before Merge Armature or eye pivots move renderers.
                 var faceResolver = new BlendshapeResolver(root, model, physicsNodes);
-                Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes,
+                await Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes,
                     target => Vrchat.VrchatSceneSetup.ResolveImportedTarget(target, importedMeshSources,
                         importedNodePaths, prefabSlots), descriptorRoot is { IsDestroyed: false } ? descriptorRoot : root);
 
@@ -595,7 +595,13 @@ internal static class Converter
                 additional.LocalRotation.Z, additional.LocalRotation.W);
             float3 scale = new(
                 additional.LocalScale.X, additional.LocalScale.Y, additional.LocalScale.Z);
-            scale *= additional.ImportScale;
+            // Unity-authored placement is in meters, while an imported parent FBX still
+            // uses its original local units. Cross that unit boundary once, without
+            // cancelling authored scales on the parent hierarchy.
+            float parentUnits = additional.ParentFbxGuid == avatar.FbxGuid ? avatar.FbxImportScale :
+                avatar.AdditionalFbxs.FirstOrDefault(model => model.Guid == additional.ParentFbxGuid)?.ImportScale ?? 1f;
+            position /= parentUnits;
+            scale *= additional.ImportScale / parentUnits;
             instanceRoot.LocalPosition = position;
             instanceRoot.LocalRotation = rotation;
             instanceRoot.LocalScale = scale;

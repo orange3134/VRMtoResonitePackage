@@ -1,5 +1,12 @@
 # Prefab scene regression checks
 
+`MixedScaleSkinChecks` builds synthetic skinned meshes and checks actual vertex
+positions (including a blendshape) before and after Merge Armature. It covers
+meter/centimeter units in either direction, equal units, nonuniform scale and
+rotation, successive merges, unmatched helper bones, shared mesh isolation and
+initial expression weights. Model placement checks also preserve authored parent
+scale while converting the child model's units and Unity-authored translation.
+
 The final checks build a temporary Unity project containing the supplied FBX and a
 Prefab Variant, invoke the production converter, and decode the saved package.
 They verify embedded assets and the overridden hierarchy name. This uses the test's

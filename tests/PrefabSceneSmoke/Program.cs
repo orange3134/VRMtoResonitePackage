@@ -57,6 +57,7 @@ static async Task Run(string fbxPath, string rendererName)
     {
         await default(ToWorld);
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
+        await MixedScaleSkinChecks.Run(root);
         {
             var exportRoot = root.AddSlot("Descriptor placement regression");
             var body = exportRoot.AddSlot("Body");
@@ -89,7 +90,7 @@ static async Task Run(string fbxPath, string rendererName)
             var slots = (Dictionary<string, Slot>)placementHierarchyArgs[6];
             Func<VrchatBoneTarget, Slot> resolve = target => (Slot)Call(
                 "VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget", target, placementSources, paths, slots);
-            Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", exportRoot, placementAvatar,
+            await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", exportRoot, placementAvatar,
                 new Dictionary<int, Slot>(), resolve, descriptorRoot ?? exportRoot);
             Check(skin.Bones[0] == bodyBone && clothingArmature.IsDestroyed,
                 "Descriptor-relative Merge Armature connects intact FBX instances without authored mesh copies");
@@ -346,7 +347,7 @@ static async Task Run(string fbxPath, string rendererName)
               [3] = sourceHips.Parent, [4] = sourceHips.Parent };
         mergeNodes[0] = (Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
             new VrchatBoneTarget("clothing", "Hips", "Hips"), mergeSources, mergePaths);
-        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", mergeRoot, mergeAvatar, mergeNodes);
+        await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", mergeRoot, mergeAvatar, mergeNodes);
         Check(Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
                 new VrchatBoneTarget("clothing", "Hips", "Hips"), mergeSources, mergePaths) == null,
             "Post-merge source identity lookup reproduces the destroyed physics target");
@@ -359,7 +360,7 @@ static async Task Run(string fbxPath, string rendererName)
         var secondMerge = new VrchatAvatar();
         secondMerge.ModularMergeArmatures.Add(new VrchatModularMergeArmature
             { SourceName = "AvatarArmature", TargetName = "FinalArmature" });
-        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", mergeRoot, secondMerge, mergeNodes);
+        await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", mergeRoot, secondMerge, mergeNodes);
         Check(targetHips.IsDestroyed && mergeNodes[0] == finalHips && mergeNodes[1] == finalHips &&
               mergeNodes[2] == untouchedHips && mergeNodes[3] == finalHips.Parent && mergeNodes[4] == finalHips.Parent,
             "Successive armature merges remap physics targets without changing another instance");
@@ -383,7 +384,7 @@ static async Task Run(string fbxPath, string rendererName)
             { SourceName = "armature", TargetName = "armature", SourceBoneTarget = sourceIdentity, TargetBoneTarget = targetIdentity });
         var scopedPhysics = new Dictionary<int, Slot> { [0] = underwearHips };
         Func<VrchatBoneTarget, Slot> resolveMerge = target => target == sourceIdentity ? underwearArmature : bodyArmature;
-        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", scopedRoot, scopedAvatar,
+        await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", scopedRoot, scopedAvatar,
             scopedPhysics, resolveMerge);
         Check(underwearHips.IsDestroyed && underwearArmature.IsDestroyed && !unrelatedArmature.IsDestroyed &&
               unrelatedArmature.Children.Single().Children.Count == 1 && scopedPhysics[0] == bodyHips &&
@@ -484,20 +485,20 @@ static async Task Run(string fbxPath, string rendererName)
                     TargetPath = "armature/Hips" });
         }
         Func<VrchatBoneTarget, Slot> proxyResolver = t => proxyIds.GetValueOrDefault(t);
-        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
+        await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
             proxyReviewRoot, proxyAvatar, null, proxyResolver, proxyDescriptor);
         Check(proxySourceA.Parent == proxyTarget && proxySourceB.Parent == proxyTarget && proxyDecoy.Children.Count == 0,
             "Both same-named Bone Proxy occurrences attach to the complete descriptor-relative target path");
         proxyAvatar.ModularBoneProxies[0].TargetPath = "Missing/Hips";
         proxyAvatar.ModularBoneProxies.RemoveAt(1);
         proxySourceA.Parent = proxyDescriptor;
-        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
+        await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
             proxyReviewRoot, proxyAvatar, null, proxyResolver, proxyDescriptor);
         Check(proxySourceA.Parent == proxyDescriptor,
             "Missing Bone Proxy target path cannot redirect the operation to a same-named bone");
         proxyAvatar.ModularBoneProxies[0].TargetPath = "";
         proxySourceA.Parent = proxyTarget;
-        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
+        await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
             proxyReviewRoot, proxyAvatar, null, proxyResolver, proxyDescriptor);
         Check(proxySourceA.Parent == proxyDescriptor, "Bone Proxy avatar target selects the descriptor root");
         var proxyTip = proxyTarget.AddSlot("Tip");
@@ -515,7 +516,7 @@ static async Task Run(string fbxPath, string rendererName)
             { SourceBoneTarget = proxyOldId, TargetBoneTarget = proxyBodyId });
         proxyAvatar.ModularBoneProxies[0].TargetBoneTarget = proxyHipsId;
         proxyAvatar.ModularBoneProxies[0].TargetPath = "Tip";
-        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
+        await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
             proxyReviewRoot, proxyAvatar, null, proxyResolver, proxyDescriptor);
         Check(proxyOldHips.IsDestroyed && proxySourceA.Parent == proxyTip,
             "Bone Proxy target follows a merged humanoid bone and then resolves its relative subpath");
@@ -524,7 +525,7 @@ static async Task Run(string fbxPath, string rendererName)
         proxyAvatar.ModularBoneProxies[0].TargetBoneTarget = null;
         proxyAvatar.ModularBoneProxies[0].TargetPath = "";
         proxyIds.Clear();
-        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
+        await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
             proxyReviewRoot, proxyAvatar, null, proxyResolver, proxyDescriptor);
         Check(proxySourceA.Parent == proxyTip && proxySourceB.Parent == proxyTarget,
             "Missing explicit Bone Proxy owner never moves another same-named accessory");
@@ -533,7 +534,7 @@ static async Task Run(string fbxPath, string rendererName)
         proxyIds[proxySecondId] = proxySourceB;
         proxyAvatar.ModularBoneProxies.Add(new VrchatModularBoneProxy
             { SourceBoneTarget = proxySecondId, TargetPath = "armature/Hips/Tip/Accessory" });
-        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
+        await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar",
             proxyReviewRoot, proxyAvatar, null, proxyResolver, proxyDescriptor);
         Check(proxySourceA.Parent == proxyDescriptor && proxySourceB.Parent == proxySourceA,
             "Later Bone Proxy retains its destination when an earlier proxy changes the destination path");
@@ -567,7 +568,7 @@ static async Task Run(string fbxPath, string rendererName)
             chainAvatar.ModularMergeArmatures.Add(new VrchatModularMergeArmature
                 { SourceBoneTarget = source, TargetBoneTarget = target });
         Func<VrchatBoneTarget, Slot> chainResolver = t => chainSlots[t].IsDestroyed ? null : chainSlots[t];
-        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", chainRoot, chainAvatar,
+        await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", chainRoot, chainAvatar,
             null, chainResolver);
         Check(chainA.IsDestroyed && chainB.IsDestroyed && chainC.IsDestroyed &&
               chainRenderer.Bones.All(b => b == chainBodyBone),
