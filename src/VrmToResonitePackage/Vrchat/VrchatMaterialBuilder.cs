@@ -224,11 +224,12 @@ internal static partial class VrchatMaterialBuilder
         material.Color.Value = ToColor(info.Color, ColorProfile.sRGB);
         material.MainTextureScale.Value = ToFloat2(info.MainTexScale);
         material.MainTextureOffset.Value = ToFloat2(info.MainTexOffset);
-        StaticTexture2D mainTex = await BakeMainLayers(assetsSlot, package, info);
+        var bakePlan = LilToonMainTextureBakePlan.Create(info, guid => package.ByGuid(guid)?.HasContent == true);
+        StaticTexture2D mainTex = await BakeMainLayers(assetsSlot, package, info, bakePlan);
         if (mainTex != null)
         {
-            // Tint and UV transforms are already included in the UV0 bake.
-            material.Color.Value = ToColor(Vec4.One, ColorProfile.sRGB);
+            // Alpha-only baking leaves the original tint on the material, as in the SDK.
+            if (bakePlan.Color) material.Color.Value = ToColor(Vec4.One, ColorProfile.sRGB);
             material.MainTextureScale.Value = float2.One;
             material.MainTextureOffset.Value = float2.Zero;
         }

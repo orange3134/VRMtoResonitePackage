@@ -29,6 +29,7 @@ catch (Exception error)
 [MethodImpl(MethodImplOptions.NoInlining)]
 static void Run()
 {
+    MaterialBakePlanChecks.Run();
     System.Runtime.InteropServices.NativeLibrary.Load(Path.Combine(
         Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite",
         "runtimes", "win-x64", "native", "assimp.dll"));

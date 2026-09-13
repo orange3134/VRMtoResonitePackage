@@ -19,6 +19,16 @@ public sealed class LilToonInfo
     public string MainTexGuid { get; set; }
     public Vec2 MainTexScale { get; set; } = Vec2.One;
     public Vec2 MainTexOffset { get; set; }
+    public Vec4 MainTexHSVG { get; set; } = new(0, 1, 1, 1);
+    public string MainColorAdjustMaskGuid { get; set; }
+    public string MainGradationTexGuid { get; set; }
+    public float MainGradationStrength { get; set; }
+    public string AlphaMaskGuid { get; set; }
+    public int AlphaMaskMode { get; set; }
+    public float AlphaMaskScale { get; set; } = 1f;
+    public float AlphaMaskValue { get; set; }
+    public Vec2 AlphaMaskTexScale { get; set; } = Vec2.One;
+    public Vec2 AlphaMaskTexOffset { get; set; }
     public LilToonMainLayer Main2nd { get; set; } = new();
     public LilToonMainLayer Main3rd { get; set; } = new();
     public string NormalMapGuid { get; set; }
@@ -172,7 +182,7 @@ public static class LilToonConverter
             string tex = prefix + "Tex";
             // Features depending on mesh attributes, time or viewing direction cannot be
             // represented by a static UV0 image. Keep their reason for a conversion warning.
-            string[] unsupported = { tex + "_UVMode", tex + "IsDecal", tex + "IsLeftOnly",
+            string[] unsupported = { tex + "IsDecal", tex + "IsLeftOnly",
                 tex + "IsRightOnly", tex + "ShouldCopy", tex + "ShouldFlipMirror",
                 tex + "ShouldFlipCopy", tex + "IsMSDF", tex + "_Cull", "_AudioLink2Main" + suffix };
             var features = new HashSet<string>(inherited.UnsupportedFeatures);
@@ -193,6 +203,7 @@ public static class LilToonConverter
             {
                 Enabled = B("_UseMain" + suffix + "Tex", inherited.Enabled),
                 TextureGuid = TexOrParent(tex, inherited.TextureGuid),
+                UVMode = (int)F(tex + "_UVMode", inherited.UVMode),
                 MaskGuid = TexOrParent(prefix + "BlendMask", inherited.MaskGuid),
                 Color = C("_Color" + suffix, inherited.Color),
                 Scale = TexScale(tex, inherited.Scale), Offset = TexOffset(tex, inherited.Offset),
@@ -227,6 +238,16 @@ public static class LilToonConverter
             Main3rd = Layer("3rd", parent?.Main3rd),
             MainTexScale = TexScale("_MainTex", parent?.MainTexScale ?? Vec2.One),
             MainTexOffset = TexOffset("_MainTex", parent?.MainTexOffset ?? Vec2.Zero),
+            MainTexHSVG = C("_MainTexHSVG", parent?.MainTexHSVG ?? new Vec4(0, 1, 1, 1)),
+            MainColorAdjustMaskGuid = TexOrParent("_MainColorAdjustMask", parent?.MainColorAdjustMaskGuid),
+            MainGradationTexGuid = TexOrParent("_MainGradationTex", parent?.MainGradationTexGuid),
+            MainGradationStrength = F("_MainGradationStrength", parent?.MainGradationStrength ?? 0f),
+            AlphaMaskGuid = TexOrParent("_AlphaMask", parent?.AlphaMaskGuid),
+            AlphaMaskMode = (int)F("_AlphaMaskMode", parent?.AlphaMaskMode ?? 0),
+            AlphaMaskScale = F("_AlphaMaskScale", parent?.AlphaMaskScale ?? 1f),
+            AlphaMaskValue = F("_AlphaMaskValue", parent?.AlphaMaskValue ?? 0f),
+            AlphaMaskTexScale = TexScale("_AlphaMask", parent?.AlphaMaskTexScale ?? Vec2.One),
+            AlphaMaskTexOffset = TexOffset("_AlphaMask", parent?.AlphaMaskTexOffset ?? Vec2.Zero),
             NormalMapGuid = B("_UseBumpMap", parent?.NormalMapGuid != null)
                 ? TexOrParent("_BumpMap", parent?.NormalMapGuid)
                 : null,

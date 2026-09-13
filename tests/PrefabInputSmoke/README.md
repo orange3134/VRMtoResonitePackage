@@ -142,3 +142,9 @@ through adaptation. Explicitly cleared viseme references produce no expression b
 Repeated unpacked skins retain their owning model's bone targets. Visible authored
 geometry keeps an independent mesh template when the same FBX also appears beneath
 an EditorOnly parent, and remains eligible as the primary model.
+# Material bake decisions
+
+`MaterialBakePlanChecks` verifies the SDK-derived main-texture bake policy without
+starting the engine: independent 2nd/3rd UV choices, color-only layers, disabled
+layers, alpha-only and color bakes, HSVG/gradation triggers, and material variant
+inheritance with explicit zero/null overrides.

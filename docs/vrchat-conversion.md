@@ -361,10 +361,34 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
   blend mask、scale/offset/angle、cutout/transparentのlayer alpha modeを反映する。
   RGBはlinear空間で合成してsRGBへ戻し、alphaはgamma変換しない。
   maskはshaderと同じmain UVを使う。TextureImporterのsRGB・wrap・point/bilinear設定を読む。
-  出力はUV0の1タイルを表し、ColorとMainTextureのSTを焼き込むため割当先は白・identityへ戻す。
+  出力はUV0の1タイルを表す。MainTextureのSTを焼き込んだ場合、割当先はidentityへ戻す。
   元の画像と共有マテリアルを変更しない。無効レイヤーは無視し、variantの差分・明示nullを保持する。
   別UV、decal、view/time依存や個別lightingなど静的画像で再現できないレイヤーは警告して除外する。
   UDIMやUV0の1タイル外へ異なる絵柄を配置する用途は、この画像合成では再現しない。
+- ベイクの要否は `LilToonMainTextureBakePlan` で判定する。参照は
+  `Resonite.UnitySDK/Assets/ResoniteSDK/MaterialConverters/Custom/lilToon/LilToonXiexeConverter.cs`
+  の `GetMainTexture`。処理単位を独立して選び、対象外のレイヤーがあっても他の処理を妨げない。
+
+  | 設定 | ベイク判定とColorの扱い |
+  |---|---|
+  | 1stの `_Color` のみ | ベイクせずXiexeToon.Colorに保持する |
+  | HSVGが既定値以外／gradation強度が非0 | 1stの色補正をベイクする。color-adjust maskも適用する |
+  | 2nd／3rd無効 | そのレイヤーの画像・カラーをベイクしない |
+  | 2nd／3rd有効、画像あり | UV0のみベイクする。別UVは警告して除外する |
+  | 2nd／3rd有効、画像なし | UV指定によらず白画像×レイヤーカラーとしてベイクする |
+  | AlphaMaskのmodeが非0、画像あり | 色のベイクとは独立してアルファをベイクする |
+  | AlphaMaskのmodeが0／画像なし | アルファマスク処理を行わない |
+  | 色ベイクあり | 1st／対象2nd／対象3rdのカラーを一度だけ合成し、XiexeToon.Colorは白へ戻す |
+  | アルファのみベイク | RGBとColorを焼き込まず、XiexeToon.Colorに元のRGBAを保持する |
+
+  アルファマスクは色処理後の独立した処理として適用する。Replace/Multiply/Add/Subtract、
+  `_AlphaMaskScale` / `_AlphaMaskValue`、main UVに対するmask STを反映する。
+  Alpha-onlyのときは空の2nd/3rd配列でも処理でき、mask解像度も出力解像度の選択に使う。
+  HSVG・gradation・mask・UVModeはmaterial variantで継承し、明示0/nullで無効化できる。
+  GUIDが残っていても実ファイルがない参照は、SDKの `Material.GetTexture` が返すnullと同じ扱いにする。
+  欠落alpha maskは警告してその処理だけを除外し、有効な色ベイクを止めない。
+  欠落したmain/layer画像は警告してshader既定の白として扱う。
+  ベイク失敗時は元のtexture・Color・STへ戻し、白への変更だけが残らないようにする。
 - legacy `VRChat/Mobile/Toon Lit` はvertex colorを使わないため、XiexeToonでも無効にする。
 - ShadowRampMaskがない場合は白を使い、生成rampは縦方向に白から本来のrampへ変化させる。
 - MatCapはAdd modeかつblend maskなしの場合だけ変換し、color alphaとtexture alphaをRGBへ焼き込む。

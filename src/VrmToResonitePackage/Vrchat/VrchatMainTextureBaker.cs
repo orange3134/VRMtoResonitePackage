@@ -10,30 +10,17 @@ namespace VrmToResonitePackage.Vrchat;
 
 internal static partial class VrchatMaterialBuilder
 {
-    private static async Task<StaticTexture2D> BakeMainLayers(Slot assets, UnityPackage package, LilToonInfo info)
+    private static async Task<StaticTexture2D> BakeMainLayers(Slot assets, UnityPackage package, LilToonInfo info,
+        LilToonMainTextureBakePlan plan)
     {
-        if (!info.IsLilToon || (!info.Main2nd.Enabled && !info.Main3rd.Enabled)) return null;
-        var layers = new List<LilToonMainLayer>();
-        foreach (var (name, layer) in new[] { ("2nd", info.Main2nd), ("3rd", info.Main3rd) })
-        {
-            if (!layer.Enabled) continue;
-            if (layer.UnsupportedFeatures.Length != 0 || layer.Lighting != 1f ||
-                layer.BlendMode is < 0 or > 3 || layer.AlphaMode is < 0 or > 4)
-            {
-                UniLog.Warning($"Cannot bake {name} main texture on {info.Name}: " +
-                    $"requires static UV0 with lighting enabled; features={string.Join(",", layer.UnsupportedFeatures)}, " +
-                    $"lighting={layer.Lighting}, blend={layer.BlendMode}, alpha={layer.AlphaMode}.");
-                continue;
-            }
-            layers.Add(layer);
-        }
-        if (layers.Count == 0) return null;
+        foreach (string warning in plan.Warnings) UniLog.Warning($"Main texture bake on {info.Name}: {warning}");
+        if (!plan.Required) return null;
         var engine = assets.Engine;
         Uri uri = null;
         try
         {
             await default(ToBackground);
-            Bitmap2D bitmap = CompositeMainLayers(package, info, layers);
+            Bitmap2D bitmap = CompositeMainLayers(package, info, plan);
             uri = await engine.LocalDB.SaveAssetAsync(bitmap);
         }
         catch (Exception ex)
@@ -44,7 +31,8 @@ internal static partial class VrchatMaterialBuilder
         if (uri == null) return null;
         var texture = assets.AddSlot($"MainTex Baked: {info.Name}").AttachComponent<StaticTexture2D>();
         texture.URL.Value = uri;
-        UniLog.Log($"Baked {layers.Count} main texture layer(s) on {info.Name}.");
+        UniLog.Log($"Baked main texture on {info.Name}: main={plan.Main}, 2nd={plan.Main2nd}, " +
+            $"3rd={plan.Main3rd}, alpha={plan.Alpha}, colorBaked={plan.Color}.");
         return texture;
     }
 
@@ -52,16 +40,25 @@ internal static partial class VrchatMaterialBuilder
     // the material tint once and retain main alpha unless a layer explicitly changes it.
     // Output covers one UV0 tile; transforms are included, so its consumer uses identity ST.
     private static Bitmap2D CompositeMainLayers(UnityPackage package, LilToonInfo info,
-        IReadOnlyList<LilToonMainLayer> layers)
+        LilToonMainTextureBakePlan plan)
     {
+        var layers = new List<LilToonMainLayer>();
+        if (plan.Main2nd) layers.Add(info.Main2nd);
+        if (plan.Main3rd) layers.Add(info.Main3rd);
         var main = ReadBakeTexture(package, info.MainTexGuid);
+        var alphaMask = plan.Alpha ? ReadBakeTexture(package, info.AlphaMaskGuid) : null;
+        var adjustMask = plan.Main ? ReadBakeTexture(package, info.MainColorAdjustMaskGuid) : null;
+        var gradation = plan.Main && info.MainGradationStrength != 0
+            ? ReadBakeTexture(package, info.MainGradationTexGuid, linearClamp: true) : null;
         var inputs = layers.Select(layer => (layer,
             texture: ReadBakeTexture(package, layer.TextureGuid),
             mask: ReadBakeTexture(package, layer.MaskGuid))).ToArray();
-        int width = Math.Max(main?.Width ?? 1, inputs.Max(i => i.texture?.Width ?? 1));
-        int height = Math.Max(main?.Height ?? 1, inputs.Max(i => i.texture?.Height ?? 1));
+        var textures = inputs.SelectMany(i => new[] { i.texture, i.mask })
+            .Concat(new[] { main, alphaMask, adjustMask }).Where(t => t != null).ToArray();
+        int width = textures.Select(t => t.Width).DefaultIfEmpty(1).Max();
+        int height = textures.Select(t => t.Height).DefaultIfEmpty(1).Max();
         var output = new Bitmap2D(width, height, TextureFormat.RGBA32, mipmaps: false, ColorProfile.sRGB);
-        Vector4 tint = LinearColor(info.Color);
+        Vector4 tint = plan.Color ? LinearColor(info.Color) : Vector4.One;
         var tints = inputs.Select(i => LinearColor(i.layer.Color)).ToArray();
         Parallel.For(0, height, y =>
         {
@@ -69,7 +66,25 @@ internal static partial class VrchatMaterialBuilder
             {
                 var uv = new Vector2((x + 0.5f) / width, (y + 0.5f) / height);
                 Vector2 mainUv = uv * info.MainTexScale + info.MainTexOffset;
-                Vector4 pixel = (main?.Sample(mainUv) ?? Vector4.One) * tint;
+                Vector4 pixel = main?.Sample(mainUv) ?? Vector4.One;
+                if (plan.Main)
+                {
+                    var original = new Vector3(pixel.X, pixel.Y, pixel.Z);
+                    Vector3 adjusted = ToneCorrect(original, info.MainTexHSVG);
+                    if (info.MainGradationStrength != 0)
+                    {
+                        // lilGradationMap indexes each channel in sRGB, then linearizes
+                        // its sampled result. The lookup uses the shader's linear-clamp sampler.
+                        var mapped = new Vector3(
+                            gradation?.Sample(new Vector2(ToSrgb(adjusted.X), 0.5f)).X ?? 1f,
+                            gradation?.Sample(new Vector2(ToSrgb(adjusted.Y), 0.5f)).Y ?? 1f,
+                            gradation?.Sample(new Vector2(ToSrgb(adjusted.Z), 0.5f)).Z ?? 1f);
+                        mapped = new Vector3(ToLinear(mapped.X), ToLinear(mapped.Y), ToLinear(mapped.Z));
+                        adjusted = Vector3.Lerp(adjusted, mapped, info.MainGradationStrength);
+                    }
+                    pixel = new Vector4(Vector3.Lerp(original, adjusted, adjustMask?.Sample(mainUv).X ?? 1f), pixel.W);
+                }
+                pixel *= tint;
                 for (int index = 0; index < inputs.Length; index++)
                 {
                     var (layer, texture, mask) = inputs[index];
@@ -104,6 +119,14 @@ internal static partial class VrchatMaterialBuilder
                     blended = Vector3.Lerp(dst, blended, overlay.W);
                     pixel = new Vector4(blended, pixel.W);
                 }
+                // SDK uses a separate alpha pass after the color bake, including when
+                // neither 2nd nor 3rd is eligible. Do not multiply RGB/tint again here.
+                if (plan.Alpha)
+                {
+                    float mask = alphaMask.Sample(mainUv * info.AlphaMaskTexScale + info.AlphaMaskTexOffset).X;
+                    mask = Math.Clamp(mask * info.AlphaMaskScale + info.AlphaMaskValue, 0f, 1f);
+                    pixel.W = ApplyAlphaMask(pixel.W, mask, info.AlphaMaskMode);
+                }
                 var result = new color(ToSrgb(pixel.X), ToSrgb(pixel.Y), ToSrgb(pixel.Z), pixel.W);
                 output.SetPixel(x, y, in result);
             }
@@ -111,17 +134,52 @@ internal static partial class VrchatMaterialBuilder
         return output;
     }
 
-    private static BakeTexture ReadBakeTexture(UnityPackage package, string guid)
+    private static float ApplyAlphaMask(float alpha, float mask, int mode) => mode switch
+    {
+        1 => mask,
+        2 => alpha * mask,
+        3 => Math.Clamp(alpha + mask, 0f, 1f),
+        4 => Math.Clamp(alpha - mask, 0f, 1f),
+        _ => alpha,
+    };
+
+    private static Vector3 ToneCorrect(Vector3 color, Vector4 hsvg)
+    {
+        // lilToneCorrection: gamma, RGB -> HSV, HSV adjustment, HSV -> RGB.
+        color = new Vector3(MathF.Pow(MathF.Abs(color.X), hsvg.W),
+            MathF.Pow(MathF.Abs(color.Y), hsvg.W), MathF.Pow(MathF.Abs(color.Z), hsvg.W));
+        float max = Math.Max(color.X, Math.Max(color.Y, color.Z));
+        float min = Math.Min(color.X, Math.Min(color.Y, color.Z)), delta = max - min;
+        float hue = delta <= 1e-10f ? 0f : max == color.X ? (color.Y - color.Z) / delta / 6f :
+            max == color.Y ? ((color.Z - color.X) / delta + 2f) / 6f : ((color.X - color.Y) / delta + 4f) / 6f;
+        float saturation = Math.Clamp(delta / (max + 1e-10f) * hsvg.Y, 0f, 1f);
+        float value = Math.Clamp(max * hsvg.Z, 0f, 1f);
+        hue += hsvg.X;
+        float Channel(float shift)
+        {
+            float h = hue + shift;
+            h -= MathF.Floor(h);
+            return value * (1f - saturation + saturation * Math.Clamp(MathF.Abs(h * 6f - 3f) - 1f, 0f, 1f));
+        }
+        return new Vector3(Channel(1f), Channel(2f / 3f), Channel(1f / 3f));
+    }
+
+    private static BakeTexture ReadBakeTexture(UnityPackage package, string guid, bool linearClamp = false)
     {
         if (string.IsNullOrEmpty(guid)) return null; // Shader's default white texture.
         var asset = package.ByGuid(guid);
-        var bitmap = DecodeBitmap(asset) ?? throw new FileNotFoundException($"Missing texture {guid}");
+        if (asset?.HasContent != true)
+        {
+            UniLog.Warning($"Bake texture {guid} was not found; using the shader's default white texture.");
+            return null;
+        }
+        var bitmap = DecodeBitmap(asset);
         var importer = asset.MetaPath != null && File.Exists(asset.MetaPath)
             ? UnityYaml.ParseFlatDocument(File.ReadAllText(asset.MetaPath))?["TextureImporter"] : null;
         bool srgb = (importer?["mipmaps"]?["sRGBTexture"]?.AsInt(1) ?? 1) != 0;
         var settings = importer?["textureSettings"];
-        return new BakeTexture(bitmap, srgb, settings?["wrapU"]?.AsInt() ?? 0,
-            settings?["wrapV"]?.AsInt() ?? 0, settings?["filterMode"]?.AsInt(1) == 0);
+        return new BakeTexture(bitmap, srgb, linearClamp ? 1 : settings?["wrapU"]?.AsInt() ?? 0,
+            linearClamp ? 1 : settings?["wrapV"]?.AsInt() ?? 0, !linearClamp && settings?["filterMode"]?.AsInt(1) == 0);
     }
 
     private static Vector4 LinearColor(Vector4 c) => new(ToLinear(c.X), ToLinear(c.Y), ToLinear(c.Z), c.W);

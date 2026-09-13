@@ -4,6 +4,9 @@
 texture baking: linear-light alpha blending, transparent pixels, ordered blend
 modes, mask UVs, offsets/wrapping, alpha modes, material variant inheritance,
 explicit texture clearing, unsupported UV diagnostics and saving to LocalDB.
+It also checks alpha-mask modes/scale/offset, all three independent tints,
+HSVG/gradation correction, and production material assignment for no bake,
+alpha-only bake and combined color/alpha bake (no double tint multiplication).
 
 `MixedScaleSkinChecks` builds synthetic skinned meshes and checks actual vertex
 positions (including a blendshape) before and after Merge Armature. It covers

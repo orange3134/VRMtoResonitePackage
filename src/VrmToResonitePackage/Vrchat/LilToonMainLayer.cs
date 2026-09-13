@@ -6,6 +6,7 @@ public sealed class LilToonMainLayer
 {
     public bool Enabled { get; set; }
     public string TextureGuid { get; set; }
+    public int UVMode { get; set; }
     public string MaskGuid { get; set; }
     public Vector4 Color { get; set; } = Vector4.One;
     public Vector2 Scale { get; set; } = Vector2.One;
