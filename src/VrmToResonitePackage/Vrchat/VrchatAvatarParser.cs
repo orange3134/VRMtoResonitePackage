@@ -208,6 +208,7 @@ public static class VrchatAvatarParser
             UniLog.Log($"Skipping EditorOnly model before import: {package.ByGuid(excluded)?.LogicalPath} (fbx={excluded})");
         ApplyFbxDefaultBlendShapeWeights(avatar);
         VrchatAnimatorFaceParser.Apply(package, effectiveDescriptor.Root, avatar);
+        avatar.Expressions = VrchatExpressionParser.Parse(package, effectiveDescriptor.Root);
         ParsePhysics(package, selected.Source.Guid, avatar);
         ParseModularAvatarComponents(package, selected.Source.Guid, avatar);
         return avatar;

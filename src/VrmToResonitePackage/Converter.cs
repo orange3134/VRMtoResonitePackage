@@ -257,7 +257,7 @@ internal static class Converter
                     {
                         FaceTracking = options.FaceTracking,
                         Protect = !options.NoProtection,
-                        ExpressionMenu = !options.NoExpressionMenu,
+                        ExpressionMenu = false,
                         DefaultUserScale = options.DefaultUserScale,
                         ViewForward = options.ViewForward,
                         ViewUp = options.ViewUp,
@@ -266,10 +266,12 @@ internal static class Converter
                     {
                         setupOptions.NearClip = options.NearClip.Value;
                     }
-                    AvatarSetup.Build(root, vrm, setupOptions);
+                    var expressionResolver = new BlendshapeResolver(root, vrm);
+                    AvatarSetup.Build(root, vrm, setupOptions, expressionResolver);
                     await MaterialTuner.Apply(root, assetsSlot, vrm, vrmPath,
                         options.MtoonTransparentCutoutMaterials);
                     await AvatarSetup.ApplyFirstPersonAutoAsync(root, vrm);
+                    await Expressions.VrmExpressionAdapter.BuildAsync(root, vrm, expressionResolver, !options.NoExpressionMenu);
                     SpringBoneSetup.Apply(root, vrm);
                 }
 
@@ -498,7 +500,7 @@ internal static class Converter
                     {
                         FaceTracking = options.FaceTracking,
                         Protect = !options.NoProtection,
-                        // VRChat expressions live in Animator/menu layers, out of scope: visemes + blink only.
+                        // The imported expression system is installed after authored baselines are restored.
                         ExpressionMenu = false,
                         DefaultUserScale = options.DefaultUserScale,
                         ViewForward = options.ViewForward,
@@ -516,6 +518,10 @@ internal static class Converter
 
                 // Reflect prefab-authored scene state (inactive GameObjects, initial blendshape weights).
                 Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
+
+                if (!options.NoAvatar)
+                    await Expressions.ExpressionSystemSetup.BuildAsync(root, avatar.Expressions, faceResolver.ResolveExpression,
+                        !options.NoExpressionMenu, faceResolver.InitialWeight);
 
                 Vrchat.VrchatSceneSetup.RemoveEmptyMeshTemplates(root, replacedTemplateSlots,
                     prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values)

@@ -1326,6 +1326,7 @@ internal sealed class BlendshapeResolver
     private readonly Dictionary<string, Slot> _slotsByName;
     private readonly Dictionary<SkinnedMeshRenderer, string> _rendererPaths;
     private readonly Dictionary<int, SkinnedMeshRenderer[]> _identityRenderers = new();
+    private readonly Dictionary<IField<float>, float> _initialWeights = new();
 
     public BlendshapeResolver(Slot root, VrmModel vrm) : this(root, vrm, null) { }
 
@@ -1335,6 +1336,12 @@ internal sealed class BlendshapeResolver
         _renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>();
         _slotsByName = SlotIndex.Build(root);
         _rendererPaths = _renderers.ToDictionary(skin => skin, skin => RelativePath(skin.Slot));
+        foreach (var skin in _renderers)
+            for (int i = 0; i < skin.MeshBlendshapeCount; i++)
+            {
+                var field = skin.BlendShapeWeights.GetElement(i);
+                _initialWeights[field] = field.Value;
+            }
         foreach (int node in vrm.NodeTargets.Keys)
         {
             Slot slot = null;
@@ -1354,6 +1361,17 @@ internal sealed class BlendshapeResolver
     {
         return ResolveWithRenderer(bind).field;
     }
+
+    public IField<float> ResolveExpression(Expressions.ExpressionBinding binding)
+    {
+        string path = string.Join("/", new[] { _vrm.MeshBindingRootPath, binding.Path }.Where(p => !string.IsNullOrEmpty(p)));
+        var matches = _renderers.Where(skin => !skin.IsDestroyed && (_rendererPaths[skin] == path ||
+            (_vrm.MeshBindingRootPath == null && binding.Path.Length > 0 &&
+             _rendererPaths[skin].EndsWith("/" + binding.Path, StringComparison.Ordinal)))).ToArray();
+        return matches.Length == 1 ? matches[0].TryGetBlendShape(binding.Shape) : null;
+    }
+
+    public float? InitialWeight(IField<float> field) => field != null && _initialWeights.TryGetValue(field, out float value) ? value : null;
 
     public (SkinnedMeshRenderer skin, IField<float> field) ResolveWithRenderer(VrmExpressionBind bind)
     {

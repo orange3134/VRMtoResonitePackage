@@ -41,6 +41,10 @@ Animatorの表情推定と他レイヤーとの競合判定は `VrchatAnimatorGr
 未接続のstateに競合するclipがあるだけでは表情を除外しない。到達可能な競合は保守的に除外する。
 Prefab・FBXの初期ウェイトを収集した後に表情を推定する。
 
+ハンドジェスチャー・ExpressionMenu・外部イベントによる表情切り替えの使い方と対応範囲は
+[表情システムの実装](expression-system.md)、元の設計は
+[表情システム設計](expression-system-design.md)を参照する。Viseme／Blink推定とは別に解析し、共通の出力へ接続する。
+
 FBXの初期ブレンドシェイプ値は、同名Rendererをまとめず、配置識別子とモデル内の完全なパスで保持する。
 `UnityFbxBlendShapeDefaults` はFBXの `Connections` をたどり、channel → blendshape → geometry → modelの
 所属を解決する。チャンネル名やAssimpの走査順では割り当てない。同じgeometryを共有するmodelにも値を保持する。

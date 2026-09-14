@@ -10,6 +10,7 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 public sealed class VrchatAvatar
 {
+    public Expressions.ExpressionModel Expressions { get; set; } = new();
     public List<VrchatPhysicsPlacement> PhysicsPlacements { get; } = new();
     /// <summary>Root prefab GameObject name (also the avatar/display name).</summary>
     public string Name { get; set; }
