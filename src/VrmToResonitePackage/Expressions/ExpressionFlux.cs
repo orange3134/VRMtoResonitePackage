@@ -15,6 +15,7 @@ internal sealed class ExpressionFlux
     private Slot _section;
     private int _sectionIndex, _nodeIndex;
     private readonly Dictionary<(Type, object), IWorldElement> _constants = new();
+    private readonly Dictionary<(Type, IWorldElement, IWorldElement), IWorldElement> _reads = new();
     private static Dictionary<string, Type[]> _types;
     public ExpressionFlux(Slot root)
     {
@@ -28,6 +29,7 @@ internal sealed class ExpressionFlux
         _nodeIndex = 0;
         // Keep constants near their consumers instead of wiring every section back to the first one.
         _constants.Clear();
+        _reads.Clear();
     }
 
     private Slot NodeSlot(Type type, string detail = null)
@@ -128,9 +130,10 @@ internal sealed class ExpressionFlux
     public IWorldElement Read<T>(IWorldElement source, string key) => Read<T>(source, Text(Path(key)));
     public IWorldElement Read<T>(IWorldElement source, IWorldElement path)
     {
+        if (_reads.TryGetValue((typeof(T), source, path), out var cached)) return cached;
         var node = Node(typeof(T).IsValueType ? "ReadDynamicValueVariable" : "ReadDynamicObjectVariable", typeof(T),
             ("Source", source), ("Path", path));
-        return Out(node, "Value");
+        return _reads[(typeof(T), source, path)] = Out(node, "Value");
     }
     public Component Write<T>(IWorldElement target, string key, IWorldElement value) => Write<T>(target, Text(Path(key)), value);
     public Component Write<T>(IWorldElement target, IWorldElement path, IWorldElement value) =>
@@ -153,8 +156,8 @@ internal sealed class ExpressionFlux
     public IWorldElement Binary<T>(string op, IWorldElement a, IWorldElement b) => Node(op, typeof(T), ("A", a), ("B", b));
     public IWorldElement Equal<T>(IWorldElement a, IWorldElement b) => Binary<T>(typeof(T).IsValueType ? "ValueEquals" : "ObjectEquals", a, b);
     public IWorldElement Not(IWorldElement a) => Node("NOT_Bool", null, ("A", a));
-    public IWorldElement And(params IWorldElement[] terms) => terms.Aggregate(Constant(true), (a, b) => Node("AND_Bool", null, ("A", a), ("B", b)));
-    public IWorldElement Or(params IWorldElement[] terms) => terms.Aggregate(Constant(false), (a, b) => Node("OR_Bool", null, ("A", a), ("B", b)));
+    public IWorldElement And(params IWorldElement[] terms) => terms.Length == 0 ? Constant(true) : terms.Aggregate((a, b) => Node("AND_Bool", null, ("A", a), ("B", b)));
+    public IWorldElement Or(params IWorldElement[] terms) => terms.Length == 0 ? Constant(false) : terms.Aggregate((a, b) => Node("OR_Bool", null, ("A", a), ("B", b)));
     public IWorldElement Add(IWorldElement a, IWorldElement b) => Binary<float>("ValueAdd", a, b);
     public IWorldElement Sub(IWorldElement a, IWorldElement b) => Binary<float>("ValueSub", a, b);
     public IWorldElement Mul(IWorldElement a, IWorldElement b) => Binary<float>("ValueMul", a, b);

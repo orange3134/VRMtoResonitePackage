@@ -8,15 +8,17 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
-    internal const string RequestTag = "ResoPon/Expression/v1/Request";
+    internal const string RequestTag = "ResoPon/Expression/v2/Gesture";
+    internal const string SelectTag = "ResoPon/Expression/v2/Select";
+    internal const string AutomaticTag = "ResoPon/Expression/v2/Automatic";
     private readonly ExpressionModel _model;
-    private readonly Slot _root, _catalog, _core, _sources, _parameters, _outputs, _layers, _api, _inputs;
+    private readonly Slot _root, _catalog, _core, _outputs, _table, _api, _inputs;
     private ExpressionFlux _g;
-    private readonly IWorldElement _now, _owner, _isOwner, _coreRef, _sourcesRef, _catalogRef, _parametersRef;
+    private readonly IWorldElement _now, _owner, _isOwner, _coreRef;
+    private GesturePairCompiler _compiled;
     private readonly Dictionary<string, Slot> _clips = new();
     private readonly Dictionary<string, Slot> _outputSlots = new();
     private readonly List<IWorldElement> _updates = new();
-    private readonly List<IWorldElement> _gestureOverrides = new();
 
     private ExpressionSystemSetup(Slot avatar, ExpressionModel model)
     {
@@ -24,29 +26,26 @@ internal sealed partial class ExpressionSystemSetup
         _root = Record(avatar, "Expressions");
         _catalog = _root.AddSlot("Catalog");
         _core = Record(_root, "Core");
-        _sources = _core.AddSlot("SourceState");
-        _parameters = Record(_core, "ParameterState");
         _outputs = _root.AddSlot("Outputs");
-        _layers = _root.AddSlot("Rules").AddSlot("ImportedAnimator");
+        _table = Record(_root, "GestureTable");
+        _table.GetComponent<DynamicVariableSpace>().OnlyDirectBinding.Value = false;
         _inputs = _root.AddSlot("Inputs");
         _api = _root.AddSlot("API").AddSlot("Receivers");
         _g = new(_core.AddSlot("Logic"));
-        _coreRef = _g.Ref(_core); _sourcesRef = _g.Ref(_sources); _catalogRef = _g.Ref(_catalog); _parametersRef = _g.Ref(_parameters);
+        _coreRef = _g.Ref(_core);
         _now = _g.Node("WorldTimeFloat");
         _owner = _g.Node("GetActiveUser", null, ("Instance", _g.Ref(_root)));
         _isOwner = _g.Node("IsLocalUser", null, ("User", _owner));
         Reference<User>(_core, "PreviousOwner", null);
-        Data(_core, "Generation", 1); Data(_core, "Order", 0); Data(_core, "LastError", "");
-        Data(_root, "Version", 1);
+        foreach (string hand in new[] { "Left", "Right" })
+        {
+            Data(_core, hand + "Gesture", 0); Reference<Slot>(_core, hand + "Input", null);
+        }
+        Reference<Slot>(_core, "Override", null); Reference<Slot>(_core, "CurrentExpression", null);
+        Data(_core, "PlaybackStart", 0f); Data(_core, "FadeDuration", 0.1f);
+        Data(_root, "Version", 2);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
-        foreach (var parameter in model.Parameters.Values)
-        {
-            Data(_parameters, "Value/" + parameter.Name, parameter.Default);
-            Data(_parameters, "Default/" + parameter.Name, parameter.Default);
-            Data(_parameters, "Type/" + parameter.Name, parameter.Type);
-            Data(_parameters, "Saved/" + parameter.Name, parameter.Saved);
-        }
         _root.AddSlot("Diagnostics");
     }
 
@@ -56,16 +55,14 @@ internal sealed partial class ExpressionSystemSetup
         if (model.Clips.Count == 0) return null;
         var setup = new ExpressionSystemSetup(avatar, model);
         await setup.BuildCatalog(resolve, initialWeight);
-        foreach (var layer in model.Layers.Where(l => l.States.Any(s => s.ClipId != null && !setup._clips.ContainsKey(s.ClipId))).ToArray())
+        for (int index = 0; index < 64; index++)
         {
-            string message = layer.Name + ": automatic layer omitted because a required clip has unresolved bindings";
-            model.Diagnostics.Add(message); UniLog.Warning("Expressions: " + message); model.Layers.Remove(layer);
+            var cell = setup._table.AddSlot($"{index:D2} Left {index / 8} - Right {index % 8}");
+            string id = setup._compiled.Pairs[index];
+            Reference(cell, "Pair." + index, id != null ? setup._clips.GetValueOrDefault(id) : null);
         }
         setup.BuildApi();
         setup.BuildInputs(menu);
-        setup.BuildParameterEvaluation();
-        setup._updates.AddRange(setup._gestureOverrides);
-        setup.BuildLayers();
         setup.BuildMixer();
         setup.BuildLifecycle();
         ExpressionFlux.Arrange(setup._root);
@@ -77,7 +74,8 @@ internal sealed partial class ExpressionSystemSetup
             template.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == "Expr/Id").Value.Value = "";
             template.GetComponents<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == "Expr/Enabled").Value.Value = false;
         }
-        Console.WriteLine($"Expression system: {setup._clips.Count} clips, {setup._outputSlots.Count} outputs, {setup._layers.Children.Count} imported layers");
+        Console.WriteLine($"Expression system: {setup._clips.Count} clips, {setup._outputSlots.Count} outputs, 64 gesture pairs, " +
+            $"{setup._root.GetComponentsInChildren<ProtoFluxNode>().Count} Flux nodes");
         return setup._root;
     }
 
@@ -105,6 +103,11 @@ internal sealed partial class ExpressionSystemSetup
             curve.Keys.Add(new(0, initialWeight?.Invoke(field) ?? field.Value, 0, 0)); neutral.Curves.Add(curve);
         }
         if (neutral.Curves.Count > 0) definitions.Add(neutral);
+        _compiled = new GesturePairCompiler(_model, definitions, binding =>
+        {
+            var field = resolve(binding); return field == null ? 0 : initialWeight?.Invoke(field) ?? field.Value;
+        });
+        definitions.AddRange(_compiled.Generated);
         foreach (var clip in definitions)
         {
             foreach (var curve in clip.Curves)
@@ -138,10 +141,7 @@ internal sealed partial class ExpressionSystemSetup
                 var writer = output.AttachComponent<ValueCopy<float>>();
                 writer.Source.Target = result.Value;
                 writer.Target.Target = field;
-                Data(output, "Snapshot", field.Value); Data(output, "FadeStart", 0f);
-                Data(output, "FadeDuration", 0.1f);
-                Reference<Slot>(output, "LastSource", null); Reference<Slot>(output, "LastExpression", null);
-                Data(output, "LastOrder", 0);
+                Data(output, "Snapshot", field.Value);
                 _outputSlots[id] = output; fields[field] = output;
             }
             // A partially resolved face must not be presented as a faithfully imported clip.
@@ -150,7 +150,7 @@ internal sealed partial class ExpressionSystemSetup
             Slot entry = Record(_catalog, clip.Name);
             Data(entry, "Id", clip.Id); Data(entry, "DisplayName", clip.Name); Data(entry, "Enabled", true);
             Data(entry, "Loop", clip.Loop); Data(entry, "Duration", Math.Max(0.001f, clip.Duration));
-            Data(entry, "FadeIn", 0.1f); Data(entry, "FadeOut", 0.1f); Data(entry, "FullFace", true);
+            Data(entry, "FadeIn", 0.1f); Data(entry, "FadeOut", 0.1f);
             Data(entry, "Source", clip.Source ?? "");
             var animation = ExpressionAnimationConverter.ConvertClip(clip);
             string temporary = _root.Engine.LocalDB.GetTempFilePath("animx");
@@ -174,25 +174,6 @@ internal sealed partial class ExpressionSystemSetup
         }
     }
 
-    private Slot Source(string name, Slot owner, string channel, int kind = 0, float priority = 100, float lease = 0)
-    {
-        var source = Record(_sources, name);
-        Reference(source, "Owner", owner); Reference<Slot>(source, "Selected", null);
-        Data(source, "Enabled", true); Data(source, "Channel", channel); Data(source, "Kind", kind);
-        Data(source, "Priority", priority); Data(source, "Lease", lease); Data(source, "Alive", 0f);
-        Data(source, "Sequence", 0); Data(source, "SelectionToken", 0); Data(source, "Order", 0);
-        Data(source, "Start", 0f); Data(source, "Weight", 1f); Data(source, "Mode", "Hold");
-        Data(source, "Gesture", 0); Data(source, "GestureWeight", 0f);
-        foreach (var parameter in _model.Parameters.Values)
-        {
-            Data(source, "Has/" + parameter.Name, false); Data(source, "Value/" + parameter.Name, parameter.Default);
-            Data(source, "Until/" + parameter.Name, 0f); Data(source, "ParameterOrder/" + parameter.Name, 0);
-        }
-        return source;
-    }
-    private IWorldElement ValidSource(IWorldElement source) => _g.And(_g.Active(source), _g.Read<bool>(source, "Enabled"),
-        _g.Active(_g.Read<Slot>(source, "Owner")), _g.Or(_g.Equal<float>(_g.Read<float>(source, "Lease"), _g.Constant(0f)),
-            _g.Greater(_g.Add(_g.Read<float>(source, "Alive"), _g.Read<float>(source, "Lease")), _now)));
     private IWorldElement ClipAsset(IWorldElement expression) => _g.Node("GetAsset", typeof(Animation),
         ("Provider", _g.Read<IAssetProvider<Animation>>(expression, "Clip")));
     private IWorldElement ValidExpression(IWorldElement expression) => _g.And(_g.Active(expression), _g.Read<bool>(expression, "Enabled"),

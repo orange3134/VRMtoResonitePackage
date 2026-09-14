@@ -8,32 +8,16 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
-    private Slot Command(Slot parent, Slot source, string channel)
+    private static readonly string[] GestureNames = { "Neutral", "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
+
+    private static Slot Command(Slot parent, int hand, int gesture)
     {
         var command = Record(parent, "Command");
-        Data(command, "Version", 1); Data(command, "Channel", channel); Reference(command, "SourceSlot", source);
-        Data(command, "Generation", 0); Data(command, "Sequence", 0); Data(command, "ReleaseGeneration", 0); Data(command, "ReleaseSequence", 0);
-        Data(command, "Operation", "Select"); Data(command, "ExpressionId", ""); Data(command, "Weight", 1f); Data(command, "Mode", "Hold");
-        Data(command, "Hand", 0); Data(command, "GestureId", 0); Data(command, "GestureWeight", 0f); Data(command, "Available", true);
-        Data(command, "ResetAfter", 0f);
-        Reference<Slot>(command, "Parameters", null);
+        Data(command, "Hand", hand); Data(command, "Gesture", gesture); Data(command, "Available", true);
         return command;
     }
-    private IWorldElement Send(IWorldElement command)
-    {
-        var source = _g.Read<Slot>(command, "SourceSlot");
-        return _g.Sequence(_g.Write<int>(command, "Generation", _g.Read<int>(_coreRef, "Generation")),
-            _g.Write<int>(command, "Sequence", Increment(_g.Read<int>(source, "Sequence"))),
-            _g.Trigger(_g.Ref(_api), RequestTag, command));
-    }
-    private IWorldElement Release(IWorldElement command)
-    {
-        var source = _g.Read<Slot>(command, "SourceSlot");
-        return _g.Sequence(_g.Write<string>(command, "Operation", _g.Text("Release")),
-            _g.Write<int>(command, "ReleaseGeneration", _g.Read<int>(_coreRef, "Generation")),
-            _g.Write<int>(command, "ReleaseSequence", _g.Read<int>(source, "SelectionToken")), Send(command));
-    }
-    private void OwnerUpdate(ExpressionFlux graph, Slot root, IWorldElement action)
+    private IWorldElement Send(IWorldElement command) => _g.Trigger(_g.Ref(_api), RequestTag, command);
+    private void OwnerUpdate(ExpressionFlux graph, IWorldElement action)
     {
         var update = graph.Node("LocalUpdate");
         Link(update, "OnUpdate", graph.If(_isOwner, action));
@@ -42,44 +26,8 @@ internal sealed partial class ExpressionSystemSetup
     {
         if (menu) BuildMenus();
         BuildKeyboard(); BuildGestures();
-        BuildGestureOverrides();
-        var external = _inputs.AddSlot("External");
-        var source = Source("External", external, "face");
-        var example = Command(_root.FindChild("API").AddSlot("Examples"), source, "face");
-        example.Name = "External request (copy SourceState for another sender)";
-        Data(external, "Instructions", "Use the avatar wearer client. Copy Core/SourceState/External for each sender; set Command.SourceSlot, Generation from Core, and increasing Sequence. Trigger API/Receivers with tag ResoPon/Expression/v1/Request and Slot payload.");
-    }
-    private void BuildGestureOverrides()
-    {
-        var root = _root.FindChild("Rules").AddSlot("GestureOverrides");
-        foreach (var (hand, priority) in new[] { ("Left", 20f), ("Right", 21f) })
-        {
-            _g.BeginSection("Gesture override - " + hand);
-            var rule = Record(root, hand); var entries = rule.AddSlot("Mappings");
-            Reference<Slot>(rule, "Previous", null);
-            for (int gesture = 0; gesture < 8; gesture++)
-            {
-                var mapping = Record(entries, gesture.ToString()); Data(mapping, "Gesture", gesture);
-                Data(mapping, "Enabled", false); Reference<Slot>(mapping, "Expression", null);
-            }
-            var source = Source("Gesture override/" + hand, rule, "face", priority: priority);
-            Data(source, "Automatic", true);
-            var command = _g.Ref(Command(rule, source, "face"));
-            var selected = _g.Local<Slot>();
-            var ruleRef = _g.Ref(rule);
-            var scan = _g.Each(_g.Ref(entries), entry => _g.If(_g.And(_g.Active(entry), _g.Read<bool>(entry, "Enabled"),
-                _g.Equal<float>(_g.Node("Cast_int_To_float", null, ("Input", _g.Read<int>(entry, "Gesture"))),
-                    _g.Read<float>(_parametersRef, "Value/Gesture" + hand)), ValidExpression(_g.Read<Slot>(entry, "Expression"))),
-                _g.Set<Slot>(selected, _g.Read<Slot>(entry, "Expression"))));
-            // Run after parameter arbitration. Every change enters the same public request receiver.
-            _gestureOverrides.Add(_g.Sequence(_g.Set<Slot>(selected, _g.Ref<Slot>(null)),
-                _g.If(_g.Active(ruleRef), scan),
-                _g.If(_g.Not(_g.Equal<Slot>(selected, _g.Read<Slot>(ruleRef, "Previous"))), _g.Sequence(
-                    _g.If(_g.Node("NotNull", typeof(Slot), ("Instance", selected)),
-                        _g.Sequence(_g.Write<string>(command, "ExpressionId", _g.Read<string>(selected, "Id")),
-                            _g.Write<string>(command, "Operation", _g.Text("Select")), Send(command)), Release(command)),
-                    _g.Write<Slot>(ruleRef, "Previous", selected)))));
-        }
+        var example = Command(_root.FindChild("API").AddSlot("Examples"), 0, 0);
+        example.Name = "Gesture request (copy for another input)";
     }
     private static ContextMenuItemSource MenuItem(Slot slot, string label)
     {
@@ -95,111 +43,84 @@ internal sealed partial class ExpressionSystemSetup
     }
     private void BuildMenus()
     {
-        _g.BeginSection("Context menu commands");
         var menu = _inputs.AddSlot("ContextMenu");
-        var rootItem = MenuItem(menu, "Expressions");
-        menu.AttachComponent<RootContextMenuItem>().Item.Target = rootItem;
+        menu.AttachComponent<RootContextMenuItem>().Item.Target = MenuItem(menu, "Expressions");
         var items = menu.AddSlot("Items");
         menu.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
+        for (int hand = 0; hand < 2; hand++)
+        {
+            var side = items.AddSlot(hand == 0 ? "Left hand" : "Right hand"); MenuItem(side, side.Name);
+            var gestures = side.AddSlot("Items"); side.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = gestures;
+            for (int gesture = 0; gesture < 8; gesture++)
+            {
+                var item = gestures.AddSlot(gesture + " " + GestureNames[gesture]); MenuItem(item, item.Name);
+                MenuTrigger(item, _api, RequestTag, Command(item, hand, gesture));
+            }
+        }
         var direct = items.AddSlot("Direct selection"); MenuItem(direct, "Select expression");
         direct.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = _catalog;
-        var source = Source("ContextMenu", menu, "face");
-        var command = Command(menu, source, "face");
-        var receiverRoot = menu.AddSlot("Adapter");
-        var graph = new ExpressionFlux(receiverRoot);
-        var receiver = graph.Receiver("ResoPon/Expression/v1/MenuSelect");
-        var entry = Out(receiver, "Value"); var cmd = _g.Ref(command);
-        Link(receiver, "OnTriggered", _g.If(_isOwner, _g.Sequence(
-            _g.Write<string>(cmd, "ExpressionId", _g.Read<string>(entry, "Id")), _g.Write<string>(cmd, "Operation", _g.Text("Select")),
-            _g.Write<string>(cmd, "Mode", _g.Text("Toggle")), Send(cmd))));
         foreach (var expression in _clips.Values)
         {
             var item = MenuItem(expression, expression.Name);
-            var display = expression.GetComponents<DynamicValueVariable<string>>().First(v => v.VariableName.Value == "Expr/DisplayName");
-            item.Label.DriveFrom(display.Value);
+            item.Label.DriveFrom(expression.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == "Expr/DisplayName").Value);
             item.EnabledField.DriveFrom(expression.GetComponents<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == "Expr/Enabled").Value);
-            MenuTrigger(expression, receiverRoot, "ResoPon/Expression/v1/MenuSelect", expression);
+            MenuTrigger(expression, _api, SelectTag, expression);
         }
-        var resetSlot = items.AddSlot("Automatic"); MenuItem(resetSlot, "Return to automatic");
-        var resetReceiver = graph.Receiver("ResoPon/Expression/v1/MenuAutomatic", false);
-        var resetButton = resetSlot.AttachComponent<ButtonDynamicImpulseTrigger>();
-        resetButton.Target.Target = receiverRoot; resetButton.ExcludeDisabled.Value = true;
-        resetButton.PressedTag.Value = "ResoPon/Expression/v1/MenuAutomatic";
-        Link(resetReceiver, "OnTriggered", _g.If(_isOwner, _g.Sequence(_g.Write<string>(cmd, "Operation", _g.Text("Reset")), Send(cmd))));
-        if (_model.Menu.Count == 0) return;
-        var imported = items.AddSlot("Imported menu"); MenuItem(imported, "Imported menu");
-        var importedItems = imported.AddSlot("Items"); imported.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = importedItems;
-        var paramSource = Source("ImportedMenu", menu, "parameters", 3);
-        var paramCommand = Command(menu, paramSource, "parameters");
-        var parameterItems = paramCommand.AddSlot("Parameters");
-        var parameterItem = Record(parameterItems, "Parameter"); Data(parameterItem, "Name", ""); Data(parameterItem, "Value", 0f);
-        paramCommand.GetComponents<DynamicReferenceVariable<Slot>>().First(v => v.VariableName.Value == "Expr/Parameters").Reference.Target = parameterItems;
-        var paramReceiver = graph.Receiver("ResoPon/Expression/v1/MenuParameter");
-        var control = Out(paramReceiver, "Value"); var pCmd = _g.Ref(paramCommand); var pItem = _g.Ref(parameterItem);
-        var parameterName = _g.Read<string>(control, "Parameter"); var target = _g.Read<float>(control, "Value");
-        var isToggle = _g.Equal<int>(_g.Read<int>(control, "Type"), _g.Constant(1));
-        var selected = _g.Equal<float>(_g.Read<float>(_parametersRef, Key("Value/", parameterName)), target);
-        Link(paramReceiver, "OnTriggered", _g.If(_isOwner, _g.Sequence(_g.Write<string>(pCmd, "Operation", _g.Text("SetParameters")),
-            _g.Write<string>(pItem, "Name", parameterName), _g.Write<float>(pItem, "Value", _g.Choose<float>(_g.And(isToggle, selected), _g.Constant(0f), target)),
-            _g.Write<float>(pCmd, "ResetAfter", _g.Choose<float>(_g.Equal<int>(_g.Read<int>(control, "Type"), _g.Constant(0)), _g.Constant(1f), _g.Constant(0f))), Send(pCmd))));
-        AddControls(importedItems, _model.Menu);
+        var automatic = items.AddSlot("Automatic"); MenuItem(automatic, "Return to gestures");
+        var button = automatic.AttachComponent<ButtonDynamicImpulseTrigger>();
+        button.Target.Target = _api; button.ExcludeDisabled.Value = true; button.PressedTag.Value = AutomaticTag;
+        if (_compiled.Menu.Count > 0)
+        {
+            var imported = items.AddSlot("Imported menu"); MenuItem(imported, imported.Name);
+            var children = imported.AddSlot("Items"); imported.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = children;
+            AddControls(children, _model.Menu);
+        }
         void AddControls(Slot parent, IEnumerable<ExpressionMenuControl> controls)
         {
-            foreach (var definition in controls)
+            foreach (var control in controls)
             {
-                if (definition.Type != 2 && !_model.Layers.SelectMany(l => l.Entry.Concat(l.Transitions))
-                    .SelectMany(t => t.Conditions).Any(c => c.Parameter == definition.Parameter))
-                {
-                    _model.Diagnostics.Add("Menu control omitted: no supported automatic layer uses " + definition.Parameter + " (" + definition.Name + ")");
-                    continue;
-                }
-                var slot = Record(parent, definition.Name); MenuItem(slot, definition.Name);
-                Data(slot, "Parameter", definition.Parameter ?? ""); Data(slot, "Value", definition.Value); Data(slot, "Type", definition.Type);
-                if (definition.Type == 2)
+                if (control.Type != 2 && !_compiled.Menu.ContainsKey(control)) continue;
+                var slot = parent.AddSlot(control.Name); MenuItem(slot, control.Name);
+                if (control.Type == 2)
                 {
                     var children = slot.AddSlot("Items"); slot.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = children;
-                    AddControls(children, definition.Children);
-                    if (!children.Children.Any()) { slot.Destroy(); continue; }
-                    if (!string.IsNullOrEmpty(definition.Parameter))
-                        _model.Diagnostics.Add("Submenu parameter open/close is not supported: " + definition.Name);
+                    AddControls(children, control.Children);
+                    if (children.Children.Count == 0) slot.Destroy();
                 }
-                else MenuTrigger(slot, receiverRoot, "ResoPon/Expression/v1/MenuParameter", slot);
+                else if (_clips.TryGetValue(_compiled.Menu[control], out var expression))
+                    MenuTrigger(slot, _api, SelectTag, expression);
             }
         }
     }
 
     private void BuildKeyboard()
     {
-        var root = _inputs.AddSlot("Keyboard");
-        int index = 0;
-        foreach (var expression in _clips.Values)
-        {
-            var shortcut = Record(root, expression.Name);
-            Data(shortcut, "Enabled", true); Data(shortcut, "Key", index < 9 ? (InputKey)((int)InputKey.Alpha1 + index) : InputKey.None);
-            Data(shortcut, "Control", true); Data(shortcut, "Alt", true); Data(shortcut, "Mode", "Toggle"); Data(shortcut, "Held", false);
-            Reference(shortcut, "Expression", expression);
-            var source = Source("Keyboard/" + expression.Name, shortcut, "face");
-            Reference(shortcut, "Command", Command(shortcut, source, "face")); index++;
-        }
+        var root = _inputs.AddSlot("Keyboard"); var bindings = root.AddSlot("Bindings");
+        for (int hand = 0; hand < 2; hand++)
+            for (int gesture = 0; gesture < 8; gesture++)
+            {
+                var shortcut = Command(bindings, hand, gesture);
+                shortcut.Name = (hand == 0 ? "Left " : "Right ") + gesture + " " + GestureNames[gesture];
+                Data(shortcut, "Enabled", true); Data(shortcut, "Key", (InputKey)((int)InputKey.Alpha1 + gesture));
+                Data(shortcut, "Shift", hand == 1); Data(shortcut, "Held", false);
+            }
         var previous = _g; _g = new(root.AddSlot("Logic"));
         try
         {
             IWorldElement Held(InputKey key) => _g.Node("KeyHeld", null, ("Key", _g.Constant(key)));
-            var control = _g.Or(Held(InputKey.LeftControl), Held(InputKey.RightControl)); var alt = _g.Or(Held(InputKey.LeftAlt), Held(InputKey.RightAlt));
-            var loop = _g.Each(_g.Ref(root), shortcut =>
+            var control = _g.Or(Held(InputKey.LeftControl), Held(InputKey.RightControl));
+            var alt = _g.Or(Held(InputKey.LeftAlt), Held(InputKey.RightAlt));
+            var shift = _g.Or(Held(InputKey.LeftShift), Held(InputKey.RightShift));
+            var loop = _g.Each(_g.Ref(bindings), shortcut =>
             {
-                var key = _g.Read<InputKey>(shortcut, "Key"); var command = _g.Read<Slot>(shortcut, "Command");
-                var held = _g.And(_g.Read<bool>(shortcut, "Enabled"), _g.Not(_g.Equal<InputKey>(key, _g.Constant(InputKey.None))),
-                    _g.Node("KeyHeld", null, ("Key", key)), _g.Or(_g.Not(_g.Read<bool>(shortcut, "Control")), control),
-                    _g.Or(_g.Not(_g.Read<bool>(shortcut, "Alt")), alt));
-                var wasHeld = _g.Read<bool>(shortcut, "Held"); var mode = _g.Read<string>(shortcut, "Mode");
-                return _g.Sequence(_g.If(_g.And(held, _g.Not(wasHeld)), _g.Sequence(
-                        _g.Write<string>(command, "ExpressionId", _g.Read<string>(_g.Read<Slot>(shortcut, "Expression"), "Id")),
-                        _g.Write<string>(command, "Operation", _g.Text("Select")), _g.Write<string>(command, "Mode", mode), Send(command))),
-                    _g.If(_g.And(wasHeld, _g.Not(held), _g.Equal<string>(mode, _g.Text("Hold"))), Release(command)),
+                var key = _g.Read<InputKey>(shortcut, "Key");
+                var held = _g.And(_g.Active(shortcut), _g.Read<bool>(shortcut, "Enabled"), control, alt,
+                    _g.Equal<bool>(shift, _g.Read<bool>(shortcut, "Shift")),
+                    _g.Not(_g.Equal<InputKey>(key, _g.Constant(InputKey.None))), _g.Node("KeyHeld", null, ("Key", key)));
+                return _g.Sequence(_g.If(_g.And(held, _g.Not(_g.Read<bool>(shortcut, "Held"))), Send(shortcut)),
                     _g.Write<bool>(shortcut, "Held", held));
             });
-            OwnerUpdate(_g, root, loop);
+            OwnerUpdate(_g, loop);
         }
         finally { _g = previous; }
     }
@@ -212,20 +133,23 @@ internal sealed partial class ExpressionSystemSetup
             var module = Record(modules, device.Replace("Controller", ""));
             Data(module, "GripThreshold", 0.55f); Data(module, "TriggerThreshold", 0.55f); Data(module, "StabilitySeconds", 0.05f);
             Data(module, "GripReleaseThreshold", 0.45f); Data(module, "TriggerReleaseThreshold", 0.45f);
-            Data(module, "Priority", 10f);
             var previous = _g; _g = new(module.AddSlot("Logic"));
             try
             {
-                foreach (var (side, kind) in new[] { (Chirality.Left, 1), (Chirality.Right, 2) })
+                foreach (var (side, kind) in new[] { (Chirality.Left, 0), (Chirality.Right, 1) })
                 {
                     _g.BeginSection(side + " controller input");
                     var hand = Record(module, side.ToString()); var handRef = _g.Ref(hand); var modRef = _g.Ref(module);
-                    var source = Source(device + "/" + side, module, side.ToString(), kind, 10, 0.5f);
-                    var priority = source.GetComponents<DynamicValueVariable<float>>().Single(v => v.VariableName.Value == "Expr/Priority");
-                    priority.Value.DriveFrom(module.GetComponents<DynamicValueVariable<float>>().Single(v => v.VariableName.Value == "Expr/Priority").Value);
-                    var sourceRef = _g.Ref(source); var command = _g.Ref(Command(hand, source, side.ToString()));
-                    Data(hand, "Candidate", -1); Data(hand, "Since", 0f); Data(hand, "LastSent", -1e20f); Data(hand, "Stable", 0);
+                    var commandSlot = Command(hand, kind, 0); var command = _g.Ref(commandSlot);
+                    Data(hand, "Candidate", -1); Data(hand, "Since", 0f); Data(hand, "Stable", -1);
                     Data(hand, "GripHeld", false); Data(hand, "TriggerHeld", false);
+                    Reference<User>(hand, "PreviousOwner", null);
+                    var initialized = _g.Node("StoredValue", typeof(bool));
+                    var reset = _g.If(_g.Or(_g.Not(initialized),
+                        _g.Not(_g.Equal<User>(_g.Read<User>(handRef, "PreviousOwner"), _owner))), _g.Sequence(
+                        _g.Write<int>(handRef, "Candidate", _g.Constant(-1)), _g.Write<int>(handRef, "Stable", _g.Constant(-1)),
+                        _g.Write<bool>(handRef, "GripHeld", _g.Constant(false)), _g.Write<bool>(handRef, "TriggerHeld", _g.Constant(false)),
+                        _g.Write<User>(handRef, "PreviousOwner", _owner), _g.Set<bool>(initialized, _g.Constant(true))));
                     var controller = _g.Node(device, null, ("User", _owner), ("Node", _g.Constant(side)));
                     var active = Out(controller, "IsActive"); var trigger = Out(controller, "Trigger");
                     IWorldElement grip = Out(controller, "Grip");
@@ -255,20 +179,19 @@ internal sealed partial class ExpressionSystemSetup
                             _g.Choose<int>(thumb, _g.Constant(3), _g.Constant(6))), _g.Constant(2))));
                     var changed = _g.Not(_g.Equal<int>(gesture, _g.Read<int>(handRef, "Candidate")));
                     var stable = _g.Not(_g.Greater(_g.Add(_g.Read<float>(handRef, "Since"), _g.Read<float>(modRef, "StabilitySeconds")), _now));
-                    var send = _g.Sequence(_g.Write<string>(command, "Operation", _g.Text("Gesture")),
-                        _g.Write<int>(command, "Hand", _g.Constant(kind)), _g.Write<int>(command, "GestureId", _g.Read<int>(handRef, "Stable")),
-                        _g.Write<float>(command, "GestureWeight", trigger), _g.Write<bool>(command, "Available", active),
-                        Send(command), _g.Write<float>(handRef, "LastSent", _now));
-                    OwnerUpdate(_g, hand, _g.If(active, _g.Sequence(
+                    var send = _g.Sequence(_g.Write<int>(command, "Gesture", gesture),
+                        _g.Write<bool>(command, "Available", _g.Constant(true)), Send(command),
+                        _g.Write<int>(handRef, "Stable", gesture));
+                    OwnerUpdate(_g, _g.Sequence(reset, _g.If(active, _g.Sequence(
                         _g.Write<bool>(handRef, "GripHeld", grip), _g.Write<bool>(handRef, "TriggerHeld", indexCurled),
                         _g.If(changed, _g.Sequence(_g.Write<int>(handRef, "Candidate", gesture), _g.Write<float>(handRef, "Since", _now))),
-                        _g.If(stable, _g.Sequence(
-                            _g.If(_g.Not(_g.Equal<int>(_g.Read<int>(handRef, "Stable"), gesture)),
-                                _g.Sequence(_g.Write<int>(handRef, "Stable", gesture), send)),
-                            _g.If(_g.Greater(_g.Sub(_now, _g.Read<float>(handRef, "LastSent")), _g.Constant(0.1f)), send)))),
-                        _g.If(_g.Greater(_g.Read<float>(handRef, "LastSent"), _g.Constant(0f)),
-                            _g.Sequence(Release(command), _g.Write<float>(handRef, "LastSent", _g.Constant(-1e20f))))));
-                    Reference(hand, "Source", source);
+                        _g.If(_g.And(stable, _g.Not(_g.Equal<int>(_g.Read<int>(handRef, "Stable"), gesture))), send)),
+                        _g.Sequence(_g.If(_g.Not(_g.Equal<int>(_g.Read<int>(handRef, "Stable"), _g.Constant(-1))),
+                            _g.Sequence(_g.Write<bool>(command, "Available", _g.Constant(false)), Send(command))),
+                            _g.Write<int>(handRef, "Candidate", _g.Constant(-1)),
+                            _g.Write<int>(handRef, "Stable", _g.Constant(-1)),
+                            _g.Write<bool>(handRef, "GripHeld", _g.Constant(false)),
+                            _g.Write<bool>(handRef, "TriggerHeld", _g.Constant(false))))));
                 }
             }
             finally { _g = previous; }
