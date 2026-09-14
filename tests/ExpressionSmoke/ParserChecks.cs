@@ -123,5 +123,26 @@ internal static class ParserChecks
             model.Clips[0].Curves[0].Keys[0].Value != 0.25f || model.Clips[0].Curves[0].Keys[0].OutSlope != 1f)
             throw new InvalidOperationException("VRChat expression parser fixture failed");
         Console.WriteLine("PASS: real Unity menu enum values, Animator gesture routes, and normalized animation curves");
+        string controllerPath = Path.Combine(root, "Assets", "Face.controller");
+        string timed = File.ReadAllText(controllerPath).Replace("m_Name: Smile", "m_Name: Smile\n  m_TimeParameterActive: 1\n  m_TimeParameter: GestureLeftWeight");
+        File.WriteAllText(controllerPath, timed);
+        using (var timedPackage = UnityPackage.Open(Path.Combine(root, "Assets", "Avatar.prefab")))
+        {
+            var timedModel = VrchatExpressionParser.Parse(timedPackage, UnityScene.Parse(descriptor).Doc(1).Root);
+            if (timedModel.Layers.Count != 1 || timedModel.Layers[0].States[1].TimeParameter != "GestureLeftWeight")
+                throw new InvalidOperationException("Gesture-weight motion time must remain importable");
+            var table = new VrmToResonitePackage.Expressions.GesturePairCompiler(timedModel, timedModel.Clips, _ => 0);
+            var pose = timedModel.Clips.Concat(table.Generated).Single(c => c.Id == table.Pairs[8]);
+            if (pose.Curves[0].Keys.Count != 1 || pose.Curves[0].Sample(0) != 0.75f || timedModel.Clips[0].Curves[0].Keys.Count != 2)
+                throw new InvalidOperationException("Discrete gesture samples full weight while preserving the original animated clip");
+        }
+        File.WriteAllText(controllerPath, timed.Replace("m_TimeParameter: GestureLeftWeight", "m_TimeParameter: CustomClock"));
+        using (var unsupported = UnityPackage.Open(Path.Combine(root, "Assets", "Avatar.prefab")))
+        {
+            var unsupportedModel = VrchatExpressionParser.Parse(unsupported, UnityScene.Parse(descriptor).Doc(1).Root);
+            if (unsupportedModel.Layers.Count != 0 || unsupportedModel.Clips.Count != 1)
+                throw new InvalidOperationException("Unknown motion-time parameters must remain diagnosed instead of guessed");
+        }
+        Console.WriteLine("PASS: gesture-weight time sampling and unsupported-clock diagnostic");
     }
 }

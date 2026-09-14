@@ -20,6 +20,19 @@ and saving/reimporting/replaying an actual `.resonitepackage`.
 It also verifies one Flux node per slot, named logic sections, and distinct node
 positions before and after package reimport.
 
+An optional second argument imports a locally converted avatar instead of the synthetic
+runtime fixture. This mode requires a fully assigned table of static gesture poses:
+
+```powershell
+dotnet run --project tests/ExpressionSmoke -c Release -- .tmp_verify/imported-gestures path/to/avatar.resonitepackage
+```
+
+It invokes the actual context-menu button triggers without modifying Command values,
+checks all 64 selected poses against their AnimX tracks and target output fields,
+and requires at least eight distinct poses. Plum v1.0.1 is the registered local regression case.
+Parser/compiler fixtures cover gesture-weight motion time, authored menu-bank defaults,
+and empty/sparse upper layers preserving lower-layer outputs.
+
 The single-user headless world explicitly enables `ForceFullUpdateCycle` so input
 and mixer updates run. This setting is not exported in the avatar. The process
 exits without running asynchronous engine shutdown callbacks.

@@ -74,7 +74,8 @@ internal sealed partial class ExpressionSystemSetup
             template.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == "Expr/Id").Value.Value = "";
             template.GetComponents<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == "Expr/Enabled").Value.Value = false;
         }
-        Console.WriteLine($"Expression system: {setup._clips.Count} clips, {setup._outputSlots.Count} outputs, 64 gesture pairs, " +
+        int assigned = setup._compiled.Pairs.Count(id => id != null && setup._clips.ContainsKey(id));
+        Console.WriteLine($"Expression system: {setup._clips.Count} clips, {setup._outputSlots.Count} outputs, {assigned}/64 gesture pairs assigned, " +
             $"{setup._root.GetComponentsInChildren<ProtoFluxNode>().Count} Flux nodes");
         return setup._root;
     }
@@ -103,10 +104,12 @@ internal sealed partial class ExpressionSystemSetup
             curve.Keys.Add(new(0, initialWeight?.Invoke(field) ?? field.Value, 0, 0)); neutral.Curves.Add(curve);
         }
         if (neutral.Curves.Count > 0) definitions.Add(neutral);
+        int previousDiagnostics = _model.Diagnostics.Count;
         _compiled = new GesturePairCompiler(_model, definitions, binding =>
         {
             var field = resolve(binding); return field == null ? 0 : initialWeight?.Invoke(field) ?? field.Value;
         });
+        foreach (string message in _model.Diagnostics.Skip(previousDiagnostics)) UniLog.Warning("Expressions: " + message);
         definitions.AddRange(_compiled.Generated);
         foreach (var clip in definitions)
         {

@@ -26,7 +26,7 @@ internal static class CompilerChecks
         for (int l = 0; l < 8; l++)
             for (int r = 0; r < 8; r++)
             {
-                float expected = ((l == 1 ? 1 : 0.2f) + (r == 1 ? 0.6f : 0.2f)) * 0.5f;
+                float expected = r == 1 ? ((l == 1 ? 1 : 0.2f) + 0.6f) * 0.5f : l == 1 ? 1 : 0.2f;
                 Check(Math.Abs(Result(table.Pairs[l * 8 + r]).Curves.Single().Sample(0) - expected) < 0.0001f,
                     "layer order, weight and Write Defaults for pair " + l + "," + r);
             }
@@ -66,6 +66,37 @@ internal static class CompilerChecks
         var combined = model.Clips.Concat(hold.Generated).Single(c => c.Id == hold.Pairs[9]);
         Check(Math.Abs(combined.Curves[0].Sample(0.5f) - 0.5f) < 0.0001f &&
             combined.Curves[0].Keys.All(k => !float.IsNaN(k.InSlope) && !float.IsNaN(k.OutSlope)), "stepped curve composition has no NaN tangents");
+        model.Layers.Clear(); model.Menu.Clear();
+        model.Parameters["FacialSet"] = new("FacialSet", 3, 0);
+        model.Menu.Add(new() { Name = "Other bank", Parameter = "FacialSet", Value = 1, Type = 1 });
+        left = Layer("GestureLeft", "Animated"); right = Layer("GestureRight", "Right");
+        left.States[1] = left.States[1] with { TimeParameter = "GestureLeftWeight" };
+        foreach (var layer in model.Layers)
+        {
+            layer.States.Add(new("Alternate bank", "MenuPose", 1, true));
+            layer.Transitions[0].Conditions.Add(new("FacialSet", 6, 0));
+            var alternate = new ExpressionTransition { Destination = 2 };
+            alternate.Conditions.Add(new(layer.Id, 6, 1)); alternate.Conditions.Add(new("FacialSet", 6, 1));
+            layer.Transitions.Add(alternate);
+        }
+        var banks = new GesturePairCompiler(model, model.Clips, _ => 0.2f);
+        float Pose(GesturePairCompiler c, int index) => model.Clips.Concat(c.Generated).Single(p => p.Id == c.Pairs[index]).Curves[0].Sample(0);
+        Check(banks.Pairs.All(p => p != null) && Pose(banks, 8) == 1 && Pose(banks, 1) == 0.6f && Pose(banks, 9) == 0.6f,
+            "declared menu default specializes both gesture layers; idle upper hand preserves lower hand; active upper hand wins");
+        model.Parameters["FacialSet"] = new("FacialSet", 3, 1);
+        var bank1 = new GesturePairCompiler(model, model.Clips, _ => 0.2f);
+        Check(Pose(bank1, 8) == 0.9f, "use authored default rather than hardcoding bank zero");
+        model.Menu.Clear();
+        var unknown = new GesturePairCompiler(model, model.Clips, _ => 0.2f);
+        Check(unknown.Pairs.All(p => p == null), "non-menu parameters are not silently frozen");
+        // Unity 2022.3: an upper WD-on state with a different binding also preserves the lower stream.
+        model.Layers.Clear(); var other = Clip("Other", "OtherShape", 0.8f);
+        left = Layer("GestureLeft", "Left"); right = Layer("GestureRight", "Right");
+        right.States[0] = new("Other property", other.Id, 1, true);
+        var sparse = new GesturePairCompiler(model, model.Clips, _ => 0.2f);
+        var sparsePose = model.Clips.Concat(sparse.Generated).Single(c => c.Id == sparse.Pairs[8]);
+        Check(sparsePose.Curves.Single(c => c.Binding.Shape == "Smile").Sample(0) == 1,
+            "unanimated property in non-empty upper state preserves lower stream");
         Console.WriteLine("Gesture pair compiler checks passed.");
     }
 

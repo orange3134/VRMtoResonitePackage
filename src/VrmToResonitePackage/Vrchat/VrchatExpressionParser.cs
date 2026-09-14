@@ -62,13 +62,16 @@ public static class VrchatExpressionParser
                     ExpressionClip clip = ReadClip(motion);
                     if ((motion?.FileID ?? 0) != 0 && clip == null) errors.Add("unsupported motion in " + state?["m_Name"]?.AsString());
                     if ((state?["m_StateMachineBehaviours"]?.Seq?.Count ?? 0) != 0) errors.Add("state behaviour");
-                    if (new[] { "m_SpeedParameterActive", "m_TimeParameterActive", "m_CycleOffsetParameterActive", "m_MirrorParameterActive" }
+                    string timeParameter = state?["m_TimeParameterActive"]?.AsBool() == true ? state["m_TimeParameter"]?.AsString() ?? "" : null;
+                    if (new[] { "m_SpeedParameterActive", "m_CycleOffsetParameterActive", "m_MirrorParameterActive" }
                         .Any(k => state?[k]?.AsBool() == true) || (state?["m_CycleOffset"]?.AsFloat() ?? 0) != 0)
                         errors.Add("parameterized playback or cycle offset");
+                    if (timeParameter != null && timeParameter is not ("GestureLeftWeight" or "GestureRightWeight"))
+                        errors.Add("unsupported motion time parameter " + timeParameter);
                     float speed = state?["m_Speed"]?.AsFloat(1) ?? 1;
                     if (!float.IsFinite(speed) || speed <= 0) errors.Add("non-positive playback speed");
                     layer.States.Add(new(state?["m_Name"]?.AsString() ?? "State", clip?.Id, speed,
-                        state?["m_WriteDefaultValues"]?.AsBool() == true));
+                        state?["m_WriteDefaultValues"]?.AsBool() == true, timeParameter));
                 }
                 layer.DefaultState = ids.IndexOf(machine["m_DefaultState"]?.FileID ?? 0);
                 if (layer.DefaultState < 0 || layer.States.Count == 0) errors.Add("missing default state");

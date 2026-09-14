@@ -14,11 +14,12 @@ AssemblyLoadContext.Default.Resolving += (_, name) =>
     return File.Exists(path) ? AssemblyLoadContext.Default.LoadFromAssemblyPath(path) : null;
 };
 string artifacts = Path.GetFullPath(args.Length > 0 ? args[0] : ".tmp_verify/expression-smoke/" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
-try { await Run(resonite, artifacts); Console.WriteLine("Expression smoke checks passed."); Environment.Exit(0); }
+string importedPackage = args.Length > 1 ? Path.GetFullPath(args[1]) : null;
+try { await Run(resonite, artifacts, importedPackage); Console.WriteLine("Expression smoke checks passed."); Environment.Exit(0); }
 catch (Exception error) { Console.Error.WriteLine(error); Environment.Exit(1); }
 
 [MethodImpl(MethodImplOptions.NoInlining)]
-static async Task Run(string resonite, string artifacts)
+static async Task Run(string resonite, string artifacts, string importedPackage)
 {
     VrmToResonitePackage.ResoniteLocator.InstallAssemblyResolver(resonite);
     Environment.CurrentDirectory = resonite;
@@ -37,6 +38,7 @@ static async Task Run(string resonite, string artifacts)
         for (int i = 0; i < 30; i++) await default(NextUpdate);
         world.LocalUser.Root ??= world.AddSlot("Wearer").AttachComponent<UserRoot>();
         await default(NextUpdate);
+        if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage); return; }
         var avatar = world.LocalUser.Root.Slot.AddSlot("Expression smoke avatar");
         var field = avatar.AttachComponent<ValueField<float>>().Value; field.Value = 0.2f;
         var tracking = avatar.AddSlot("Tracking").AttachComponent<ValueField<float>>(); tracking.Value.Value = 0.2f;
@@ -134,8 +136,11 @@ static async Task Run(string resonite, string artifacts)
         Check(Get<int>(core, "LeftGesture") == 0, "deleting controller module clears its last input");
         var menu = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Left hand").FindChild("Items");
         var menuCommand = menu.Children[1].FindChild("Command");
-        Gesture(0, 1, menuCommand); await Frames();
-        Check(Get<int>(core, "LeftGesture") == 1, "context-menu command updates common hand state");
+        Check(Get<int>(menuCommand, "Hand") == 0 && Get<int>(menuCommand, "Gesture") == 1 && Get<bool>(menuCommand, "Available"),
+            "menu Command contains authored hand and gesture without runtime initialization");
+        menu.Children[1].GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().Pressed(null, default); await Frames();
+        Check(Get<int>(core, "LeftGesture") == 1 && Math.Abs(field.Value - 1) < 0.01,
+            "actual menu button trigger updates hand state and expression using unchanged Command");
         var keyboard = expressions.FindChild("Inputs").FindChild("Keyboard").FindChild("Bindings");
         Check(keyboard.Children.Count == 16, "keyboard exposes eight gestures for each hand");
         var shortcut = keyboard.Children.First(s => Get<int>(s, "Hand") == 1 && Get<int>(s, "Gesture") == 7);

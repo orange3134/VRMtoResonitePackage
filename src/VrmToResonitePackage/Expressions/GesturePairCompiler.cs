@@ -14,12 +14,28 @@ internal sealed class GesturePairCompiler
     public GesturePairCompiler(ExpressionModel model, IEnumerable<ExpressionClip> available, Func<ExpressionBinding, float> baseline)
     {
         _model = model; _clips = available.ToDictionary(c => c.Id); _baseline = baseline;
-        var layers = model.Layers.Where(l => Supported(l, new[] { "GestureLeft", "GestureRight" })).ToArray();
+        string[] gestures = { "GestureLeft", "GestureRight" };
+        // Menu switches select a gesture bank in many stock avatars. Specialize only declared
+        // discrete menu parameters at their authored defaults; do not add runtime parameter state.
+        IEnumerable<string> MenuParameters(IEnumerable<ExpressionMenuControl> controls) => controls.SelectMany(c =>
+            (c.Type == 1 && c.Parameter != null ? new[] { c.Parameter } : Array.Empty<string>()).Concat(MenuParameters(c.Children)));
+        var defaults = MenuParameters(model.Menu).Distinct().Where(p => model.Parameters.TryGetValue(p, out var definition) &&
+            definition.Type is 3 or 4 && float.IsFinite(definition.Default) && !gestures.Contains(p)).ToArray();
+        var layers = model.Layers.Where(l => Supported(l, Parameters(l).Any(gestures.Contains) ? gestures.Concat(defaults).ToArray() : gestures)).ToArray();
+        foreach (var layer in layers)
+        {
+            var fixedParameters = Parameters(layer).Intersect(defaults).ToArray();
+            if (fixedParameters.Length > 0) Warn(layer.Name + ": gesture table uses menu defaults: " +
+                string.Join(", ", fixedParameters.Select(p => p + "=" + model.Parameters[p].Default.ToString(System.Globalization.CultureInfo.InvariantCulture))) +
+                "; runtime gesture-bank switching is not imported.");
+            if (layer.States.Any(s => s.TimeParameter != null))
+                Warn(layer.Name + ": gesture-weight motion time is sampled at full weight (1) for discrete hand signs.");
+        }
         int unresolved = 0;
         for (int left = 0; left < 8; left++)
             for (int right = 0; right < 8; right++)
             {
-                float Value(string name) => name == "GestureLeft" ? left : right;
+                float Value(string name) => name == "GestureLeft" ? left : name == "GestureRight" ? right : model.Parameters[name].Default;
                 var states = layers.Select(l => Resolve(l, Value)).ToArray();
                 if (states.Any(s => s < 0)) { unresolved++; continue; }
                 Pairs[left * 8 + right] = Compose(layers, states);
@@ -55,6 +71,7 @@ internal sealed class GesturePairCompiler
         else if (layer.Entry.Concat(layer.Transitions).Any(t => t.HasExitTime || t.Offset != 0)) reason = "requires exit time or playback offset";
         else if (layer.States.Any(s => s.ClipId != null && !_clips.ContainsKey(s.ClipId))) reason = "has unavailable clips";
         else if (layer.States.Any(s => s.Speed <= 0 || !float.IsFinite(s.Speed))) reason = "has invalid playback speed";
+        else if (layer.States.Any(s => s.TimeParameter != null && s.TimeParameter is not ("GestureLeftWeight" or "GestureRightWeight"))) reason = "has unsupported motion time parameter";
         else if (layer.States.Select(s => s.WriteDefaults).Distinct().Count() > 1) reason = "mixes Write Defaults";
         else if (layer.States.Any(s => !s.WriteDefaults))
         {
@@ -114,9 +131,18 @@ internal sealed class GesturePairCompiler
                     var c = new ExpressionCurve { Binding = binding }; c.Keys.Add(new(0, _baseline(binding), 0, 0)); return c;
                 }
                 if (!terms.TryGetValue(binding, out var list)) terms[binding] = list = new() { new(Baseline(), null, 1, 1) };
+                // An unanimated property has no upper-layer contribution (including empty
+                // motions). Its default is the lower stream, not a fresh authored baseline.
+                var curve = clip?.Curves.FirstOrDefault(c => c.Binding == binding);
+                if (curve == null) continue;
                 for (int j = 0; j < list.Count; j++) list[j] = list[j] with { Weight = list[j].Weight * (1 - layer.Weight) };
                 list.RemoveAll(t => t.Weight == 0);
-                if (layer.Weight > 0) list.Add(new(clip?.Curves.FirstOrDefault(c => c.Binding == binding) ?? Baseline(), clip, state.Speed, layer.Weight));
+                if (clip != null && state.TimeParameter != null)
+                {
+                    var pose = new ExpressionCurve { Binding = binding };
+                    pose.Keys.Add(new(0, curve.Sample(clip.Duration), 0, 0)); curve = pose;
+                }
+                if (layer.Weight > 0) list.Add(new(curve, clip, state.Speed, layer.Weight));
             }
         }
         var animated = terms.Values.SelectMany(t => t).Where(t => !Constant(t.Curve)).ToArray();
