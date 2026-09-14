@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text;
+using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.ProtoFlux;
 using ProtoFlux.Core;
@@ -11,9 +12,64 @@ namespace VrmToResonitePackage.Expressions;
 internal sealed class ExpressionFlux
 {
     private readonly Slot _root;
+    private Slot _section;
+    private int _sectionIndex, _nodeIndex;
     private readonly Dictionary<(Type, object), IWorldElement> _constants = new();
     private static Dictionary<string, Type[]> _types;
-    public ExpressionFlux(Slot root) => _root = root;
+    public ExpressionFlux(Slot root)
+    {
+        _root = root;
+        BeginSection("Shared inputs");
+    }
+
+    public void BeginSection(string name)
+    {
+        _section = _root.AddSlot($"{_sectionIndex++:D2} {name}");
+        _nodeIndex = 0;
+        // Keep constants near their consumers instead of wiring every section back to the first one.
+        _constants.Clear();
+    }
+
+    private Slot NodeSlot(Type type, string detail = null)
+    {
+        string name = type.Name.Split('`')[0];
+        if (type.IsGenericType) name += "<" + string.Join(", ", type.GetGenericArguments().Select(t => t.Name)) + ">";
+        if (!string.IsNullOrEmpty(detail)) name += " : " + detail.Replace('\n', ' ').Replace('\r', ' ');
+        return _section.AddSlot($"{_nodeIndex++:D3} {name}");
+    }
+
+    /// <summary>Lay out each logic board without changing its functional parent hierarchy.</summary>
+    public static void Arrange(Slot expressions)
+    {
+        const int columns = 8;
+        const float columnSpacing = 0.65f;
+        var sections = expressions.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent).ToArray();
+        int boardIndex = 0;
+        foreach (var board in sections.GroupBy(s => s.Key.Parent))
+        {
+            board.Key.GlobalPosition = expressions.LocalPointToGlobal(new float3(boardIndex++ * (columns * columnSpacing + 1), 0, 0));
+            float sectionOffset = 0;
+            foreach (var section in board)
+            {
+                section.Key.LocalPosition = new float3(0, -sectionOffset, 0);
+                var nodes = section.ToArray();
+                float rowOffset = 0;
+                for (int first = 0; first < nodes.Length; first += columns)
+                {
+                    float rowHeight = 0.3f;
+                    for (int column = 0; column < columns && first + column < nodes.Length; column++)
+                    {
+                        var node = nodes[first + column];
+                        node.Slot.LocalPosition = new float3(column * columnSpacing, -rowOffset, 0);
+                        // Sequence and other variable-port nodes need more vertical space.
+                        rowHeight = Math.Max(rowHeight, 0.18f + 0.045f * Math.Max(node.NodeInputCount, node.NodeOutputCount + node.NodeImpulseCount));
+                    }
+                    rowOffset += rowHeight;
+                }
+                sectionOffset += rowOffset + 0.6f;
+            }
+        }
+    }
 
     public Component Node(string name, Type generic = null, params (string Port, IWorldElement Value)[] inputs)
     {
@@ -24,7 +80,7 @@ internal sealed class ExpressionFlux
         if (!_types.TryGetValue(key, out var candidates) || candidates.Length != 1)
             throw new InvalidOperationException("Ambiguous or missing stock ProtoFlux node: " + key);
         var type = generic == null ? candidates[0] : candidates[0].MakeGenericType(generic);
-        var node = _root.AttachComponent(type);
+        var node = NodeSlot(type).AttachComponent(type);
         foreach (var (port, value) in inputs) Link(node, port, value);
         return node;
     }
@@ -42,7 +98,7 @@ internal sealed class ExpressionFlux
     public IWorldElement Constant<T>(T value) where T : unmanaged
     {
         if (_constants.TryGetValue((typeof(T), value), out var cached)) return cached;
-        var node = _root.AttachComponent<Nodes.ValueInput<T>>();
+        var node = NodeSlot(typeof(Nodes.ValueInput<T>), Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)).AttachComponent<Nodes.ValueInput<T>>();
         node.Value.Value = value;
         _constants[(typeof(T), value)] = node;
         return node;
@@ -51,14 +107,14 @@ internal sealed class ExpressionFlux
     {
         value ??= "";
         if (_constants.TryGetValue((typeof(string), value), out var cached)) return cached;
-        var node = _root.AttachComponent<Nodes.ValueObjectInput<string>>();
+        var node = NodeSlot(typeof(Nodes.ValueObjectInput<string>), value).AttachComponent<Nodes.ValueObjectInput<string>>();
         node.Value.Value = value;
         _constants[(typeof(string), value)] = node;
         return node;
     }
     public IWorldElement Ref<T>(T value) where T : class, IWorldElement
     {
-        var node = _root.AttachComponent<Nodes.RefObjectInput<T>>();
+        var node = NodeSlot(typeof(Nodes.RefObjectInput<T>), value is Slot slot ? slot.Name : typeof(T).Name).AttachComponent<Nodes.RefObjectInput<T>>();
         node.Target.Target = value;
         return node;
     }
@@ -85,7 +141,7 @@ internal sealed class ExpressionFlux
         Node(typeof(T).IsValueType ? "ValueWrite" : "ObjectWrite", typeof(T), ("Variable", variable), ("Value", value));
     public Component Sequence(params IWorldElement[] actions)
     {
-        var node = _root.AttachComponent<Nodes.Sequence>();
+        var node = NodeSlot(typeof(Nodes.Sequence)).AttachComponent<Nodes.Sequence>();
         foreach (var action in actions.Where(a => a != null)) node.Calls.Add((ISyncNodeOperation)action);
         return node;
     }
@@ -118,7 +174,7 @@ internal sealed class ExpressionFlux
     public Component Receiver(string tag, bool withSlot = true)
     {
         var node = Node(withSlot ? "DynamicImpulseReceiverWithObject" : "DynamicImpulseReceiver", withSlot ? typeof(Slot) : null);
-        var global = _root.AttachComponent<GlobalValue<string>>();
+        var global = node.Slot.AddSlot("Tag").AttachComponent<GlobalValue<string>>();
         global.Value.Value = tag;
         Link(node, "Tag", global);
         return node;

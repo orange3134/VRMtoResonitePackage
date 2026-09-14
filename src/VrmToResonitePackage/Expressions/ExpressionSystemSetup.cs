@@ -68,6 +68,7 @@ internal sealed partial class ExpressionSystemSetup
         setup.BuildLayers();
         setup.BuildMixer();
         setup.BuildLifecycle();
+        ExpressionFlux.Arrange(setup._root);
         foreach (string message in model.Diagnostics) Data(Record(setup._root.FindChild("Diagnostics"), "Import warning"), "Message", message);
         if (setup._clips.Count > 0)
         {

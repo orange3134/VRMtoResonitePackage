@@ -16,6 +16,8 @@ serialized VRChat menu enum values, gesture conditions, Hermite curves, public
 impulse validation, stale releases, both-hand conditions, removable controller
 modules, editable gesture mappings, original tracking drivers, same-wearer clones,
 and saving/reimporting/replaying an actual `.resonitepackage`.
+It also verifies one Flux node per slot, named logic sections, and distinct node
+positions before and after package reimport.
 
 The single-user headless world explicitly enables `ForceFullUpdateCycle` so input
 and mixer updates run. This setting is not exported in the avatar. The process

@@ -22,6 +22,7 @@ internal sealed partial class ExpressionSystemSetup
         foreach (var model in _model.Layers)
         {
             if (model.States.Any(s => s.ClipId != null && !_clips.ContainsKey(s.ClipId))) continue;
+            _g.BeginSection("Animator layer - " + model.Name);
             var layer = Record(_layers, model.Name);
             Data(layer, "Id", model.Id); Data(layer, "Enabled", true); Data(layer, "Weight", model.Weight);
             Data(layer, "State", -1); Data(layer, "Start", 0f); Data(layer, "Speed", 1f); Data(layer, "Empty", true);
@@ -94,6 +95,7 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildMixer()
     {
+        _g.BeginSection("Output mixer");
         // These loops enumerate records at runtime: adding/deleting/reordering definitions needs no new graph wiring.
         _updates.Add(_g.Each(_g.Ref(_outputs), output =>
         {

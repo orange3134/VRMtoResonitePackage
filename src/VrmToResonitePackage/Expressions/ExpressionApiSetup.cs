@@ -21,6 +21,7 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildApi()
     {
+        _g.BeginSection("Public request API");
         var receiver = new ExpressionFlux(_api).Receiver(RequestTag);
         var command = Out(receiver, "Value");
         var source = _g.Read<Slot>(command, "SourceSlot");
@@ -125,6 +126,7 @@ internal sealed partial class ExpressionSystemSetup
     {
         foreach (var parameter in _model.Parameters.Values)
         {
+            _g.BeginSection("Parameter - " + parameter.Name);
             var value = _g.Local<float>(); var priority = _g.Local<float>(); var order = _g.Local<int>();
             string name = parameter.Name;
             var scan = _g.Each(_sourcesRef, source =>
@@ -153,6 +155,7 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildLifecycle()
     {
+        _g.BeginSection("Lifecycle and update order");
         // StoredValue belongs to the local execution scope, so it starts false after clone/load.
         var initialized = _g.Node("StoredValue", typeof(bool));
         var cleanup = _g.Each(_sourcesRef, source =>

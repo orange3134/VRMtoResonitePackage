@@ -54,6 +54,7 @@ internal sealed partial class ExpressionSystemSetup
         var root = _root.FindChild("Rules").AddSlot("GestureOverrides");
         foreach (var (hand, priority) in new[] { ("Left", 20f), ("Right", 21f) })
         {
+            _g.BeginSection("Gesture override - " + hand);
             var rule = Record(root, hand); var entries = rule.AddSlot("Mappings");
             Reference<Slot>(rule, "Previous", null);
             for (int gesture = 0; gesture < 8; gesture++)
@@ -94,6 +95,7 @@ internal sealed partial class ExpressionSystemSetup
     }
     private void BuildMenus()
     {
+        _g.BeginSection("Context menu commands");
         var menu = _inputs.AddSlot("ContextMenu");
         var rootItem = MenuItem(menu, "Expressions");
         menu.AttachComponent<RootContextMenuItem>().Item.Target = rootItem;
@@ -216,6 +218,7 @@ internal sealed partial class ExpressionSystemSetup
             {
                 foreach (var (side, kind) in new[] { (Chirality.Left, 1), (Chirality.Right, 2) })
                 {
+                    _g.BeginSection(side + " controller input");
                     var hand = Record(module, side.ToString()); var handRef = _g.Ref(hand); var modRef = _g.Ref(module);
                     var source = Source(device + "/" + side, module, side.ToString(), kind, 10, 0.5f);
                     var priority = source.GetComponents<DynamicValueVariable<float>>().Single(v => v.VariableName.Value == "Expr/Priority");

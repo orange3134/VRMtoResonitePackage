@@ -68,6 +68,7 @@ static async Task Run(string resonite, string artifacts)
         Console.WriteLine("Built graph");
         for (int i = 0; i < 90; i++) await default(NextUpdate);
         Check(expressions.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "all generated ProtoFlux groups are valid");
+        CheckLayout(expressions);
         var core = expressions.FindChild("Core"); var api = expressions.FindChild("API").FindChild("Receivers");
         var command = expressions.FindChild("API").FindChild("Examples").Children.Single();
         var source = command.GetComponents<DynamicReferenceVariable<Slot>>().Single(v => v.VariableName.Value == "Expr/SourceSlot").Reference.Target;
@@ -160,6 +161,7 @@ static async Task Run(string resonite, string artifacts)
         Check(Math.Abs(restored.GetComponent<ValueField<float>>().Value.Value - 0.4f) < 0.01, "package reload discards active requests and restores tracking");
         Check(restored.GetComponentsInChildren<StaticAnimationProvider>().All(p => p.Asset != null), "packaged AnimX assets reload");
         var restoredExpressions = restored.FindChild("Expressions");
+        CheckLayout(restoredExpressions);
         var restoredCommand = restoredExpressions.FindChild("API").FindChild("Examples").Children.Single();
         Set(restoredCommand, "Operation", "Select"); Set(restoredCommand, "ExpressionId", "Angry");
         Set(restoredCommand, "Sequence", 1); Set(restoredCommand, "Generation", Get<int>(restoredExpressions.FindChild("Core"), "Generation"));
@@ -183,3 +185,14 @@ static void Set<T>(Slot slot, string name, T value)
     if (result != DynamicVariableWriteResult.Success) throw new InvalidOperationException("Cannot write " + name + ": " + result);
 }
 static void Check(bool value, string message) { if (!value) throw new InvalidOperationException(message); Console.WriteLine("PASS: " + message); }
+
+static void CheckLayout(Slot expressions)
+{
+    var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
+    Check(nodes.Count > 0 && nodes.GroupBy(n => n.Slot).All(g => g.Count() == 1), "one Flux node per slot");
+    Check(nodes.All(n => n.Slot.Parent.GetComponents<ProtoFluxNode>().Count == 0), "Flux nodes belong to named sections, not other nodes");
+    Check(nodes.Select(n => n.Slot.GlobalPosition).Distinct().Count() == nodes.Count, "Flux node positions do not overlap across logic boards");
+    var logic = expressions.FindChild("Core").FindChild("Logic");
+    Check(logic.GetComponents<ProtoFluxNode>().Count == 0 && logic.Children.Any(s => s.Name.Contains("Output mixer")) &&
+        logic.Children.Any(s => s.Name.Contains("Public request API")), "Core logic is organized by responsibility");
+}
