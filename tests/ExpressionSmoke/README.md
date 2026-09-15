@@ -19,6 +19,15 @@ modules, editable table references, original tracking drivers, same-wearer clone
 and saving/reimporting/replaying an actual `.resonitepackage`.
 It also verifies one Flux node per slot, named logic sections, and distinct node
 positions before and after package reimport.
+Each actual Flux group must stay within one logic board. Core lifecycle, selection,
+playback, the three public API receivers, and each controller hand have independent
+boards. The test reports node/group counts and enforces a 256-node per-board budget,
+including after package reimport. Module diagnostic counts must match the graph.
+Playback diagnostic fields must retain native driver links after import, preventing
+a regression to synchronized writes on every frame.
+Selection/playback diagnostics, override persistence while gestures change, a partial
+tracking-to-expression crossfade, wearer departure, rejection of public and internal
+updates without a wearer, and reattachment are checked as runtime behavior.
 
 An optional second argument imports a locally converted avatar instead of the synthetic
 runtime fixture. This mode requires a fully assigned table of static gesture poses:
@@ -30,6 +39,18 @@ dotnet run --project tests/ExpressionSmoke -c Release -- .tmp_verify/imported-ge
 It invokes the actual context-menu button triggers without modifying Command values,
 checks all 64 selected poses against their AnimX tracks and target output fields,
 and requires at least eight distinct poses. Plum v1.0.1 is the registered local regression case.
+An optional third argument supplies a previous package to compare before the menu test:
+
+```powershell
+dotnet run --project tests/ExpressionSmoke -c Release -- .tmp_verify/imported-gestures path/to/new.resonitepackage path/to/baseline.resonitepackage
+```
+
+Comparison covers all 64 table references, catalog settings, output binding identities,
+and complete reserialized AnimX assets (all keys, tangents, and interpolation modes).
+Snapshots and AnimX files are saved under `current-expressions/` and
+`baseline-expressions/` for inspecting differences. The old graph's total nodes,
+largest actual Flux group, and groups spanning boards are reported without requiring
+the legacy package to meet the new board layout.
 Parser/compiler fixtures cover gesture-weight motion time, authored menu-bank defaults,
 and empty/sparse upper layers preserving lower-layer outputs.
 

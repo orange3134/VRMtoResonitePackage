@@ -6,6 +6,8 @@ using FrooxEngine.ProtoFlux;
 using FrooxEngine.Store;
 using SkyFrost.Base;
 using VrmToResonitePackage.Expressions;
+using User = FrooxEngine.User;
+using static ExpressionTestFields;
 
 string resonite = Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite";
 AssemblyLoadContext.Default.Resolving += (_, name) =>
@@ -15,11 +17,12 @@ AssemblyLoadContext.Default.Resolving += (_, name) =>
 };
 string artifacts = Path.GetFullPath(args.Length > 0 ? args[0] : ".tmp_verify/expression-smoke/" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
 string importedPackage = args.Length > 1 ? Path.GetFullPath(args[1]) : null;
-try { await Run(resonite, artifacts, importedPackage); Console.WriteLine("Expression smoke checks passed."); Environment.Exit(0); }
+string baselinePackage = args.Length > 2 ? Path.GetFullPath(args[2]) : null;
+try { await Run(resonite, artifacts, importedPackage, baselinePackage); Console.WriteLine("Expression smoke checks passed."); Environment.Exit(0); }
 catch (Exception error) { Console.Error.WriteLine(error); Environment.Exit(1); }
 
 [MethodImpl(MethodImplOptions.NoInlining)]
-static async Task Run(string resonite, string artifacts, string importedPackage)
+static async Task Run(string resonite, string artifacts, string importedPackage, string baselinePackage)
 {
     VrmToResonitePackage.ResoniteLocator.InstallAssemblyResolver(resonite);
     Environment.CurrentDirectory = resonite;
@@ -38,7 +41,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage)
         for (int i = 0; i < 30; i++) await default(NextUpdate);
         world.LocalUser.Root ??= world.AddSlot("Wearer").AttachComponent<UserRoot>();
         await default(NextUpdate);
-        if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage); return; }
+        if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage, artifacts, baselinePackage); return; }
         var avatar = world.LocalUser.Root.Slot.AddSlot("Expression smoke avatar");
         var field = avatar.AttachComponent<ValueField<float>>().Value; field.Value = 0.2f;
         var tracking = avatar.AddSlot("Tracking").AttachComponent<ValueField<float>>(); tracking.Value.Value = 0.2f;
@@ -75,7 +78,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage)
         Console.WriteLine("Built graph");
         for (int i = 0; i < 90; i++) await default(NextUpdate);
         Check(expressions.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "all generated ProtoFlux groups are valid");
-        CheckLayout(expressions);
+        ExpressionGraphChecks.CheckLayout(expressions);
         var core = expressions.FindChild("Core"); var api = expressions.FindChild("API").FindChild("Receivers");
         var command = expressions.FindChild("API").FindChild("Examples").Children.Single();
         var catalog = expressions.FindChild("Catalog"); var table = expressions.FindChild("GestureTable");
@@ -95,6 +98,10 @@ static async Task Run(string resonite, string artifacts, string importedPackage)
         Gesture(0, 1); await Frames();
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 0 && Math.Abs(field.Value - 1) < 0.01,
             "left gesture selects Smile without modifying the right hand");
+        Check(Get<int>(core, "PairIndex") == 8 && Get<int>(core, "SelectionStatus") == 1 &&
+            Reference<Slot>(core, "MappedExpression") == Reference<Slot>(core, "CurrentExpression") &&
+            Reference<Slot>(core, "CandidateExpression") == Reference<Slot>(core, "CurrentExpression"),
+            "selection diagnostics report the active gesture table entry");
         float start = Get<float>(core, "PlaybackStart");
         Gesture(0, 1); await Frames();
         Check(Get<float>(core, "PlaybackStart") == start, "same expression does not restart playback");
@@ -104,12 +111,19 @@ static async Task Run(string resonite, string artifacts, string importedPackage)
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1, "invalid hand and out-of-range gesture are ignored");
         Select("Smile"); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "direct selection overrides gesture table");
-        Gesture(0, 0); Automatic(); await Frames();
+        Gesture(0, 0); await Frames();
+        Check(Math.Abs(field.Value - 1) < 0.01 && Get<int>(core, "PairIndex") == 1 &&
+            Get<int>(core, "SelectionStatus") == 2 && Reference<Slot>(core, "CandidateExpression") == catalog.FindChild("Smile"),
+            "direct selection persists while gesture input and diagnostics continue updating");
+        Automatic(); await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01 && Get<int>(core, "RightGesture") == 1, "return to gestures uses current two-hand state");
         Select("Animated"); await Frames(20);
         float firstSample = field.Value;
+        float firstElapsed = Get<float>(core, "PlaybackElapsed");
         await Frames(20);
         Check(field.Value > firstSample && field.Value < 1, "real AnimX output advances with playback time");
+        Check(Get<float>(core, "PlaybackElapsed") > firstElapsed && Get<float>(core, "FadeWeight") is >= 0 and <= 1,
+            "playback diagnostics advance and expose a bounded fade weight");
         Set(catalog.FindChild("Animated"), "Enabled", false); await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "disabled override restores gesture selection");
         Automatic();
@@ -151,6 +165,9 @@ static async Task Run(string resonite, string artifacts, string importedPackage)
         var clone = avatar.Duplicate(avatar.Parent); await Frames(90);
         Check(Math.Abs(clone.GetComponent<ValueField<float>>().Value.Value - 0.2f) < 0.01, "cloning resets transient selection");
         Check(Math.Abs(field.Value - 1f) < 0.01, "cloning does not reset original");
+        var cloneCore = clone.FindChild("Expressions").FindChild("Core");
+        Check(Get<int>(cloneCore, "PairIndex") == 0 && Reference<Slot>(cloneCore, "Override") == null,
+            "clone diagnostics reflect reset hand inputs and no manual override");
         clone.Destroy();
         catalog.FindChild("Smile").Destroy(); await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "deleting selected expression restores base");
@@ -158,8 +175,45 @@ static async Task Run(string resonite, string artifacts, string importedPackage)
         Gesture(0, 0); Gesture(1, 0);
         tracking.Value.Value = 0.4f; await Frames();
         Check(Math.Abs(field.Value - 0.4f) < 0.01, "existing tracking driver continues through proxy");
+        Set(catalog.FindChild("Angry"), "FadeIn", 5f);
+        Select("Angry"); await Frames(3);
+        Check(Get<float>(core, "FadeWeight") is > 0 and < 1 && field.Value > 0.4f && field.Value < 0.7f,
+            "crossfade blends from the live tracking output before reaching the expression");
+        Automatic(); await Frames();
+        Set(catalog.FindChild("Angry"), "FadeIn", 0.1f);
         Select("Angry"); await Frames();
         Check(Math.Abs(field.Value - 0.7f) < 0.01, "animation drives shared tracking output while selected");
+        var wearer = avatar.Parent;
+        avatar.Parent = world.RootSlot;
+        await Frames();
+        Check(Reference<User>(core, "PreviousOwner") == null && Reference<Slot>(core, "Override") == null &&
+            Reference<Slot>(core, "CurrentExpression") == null && Get<int>(core, "SelectionStatus") == 0 &&
+            Reference<Slot>(core, "CandidateExpression") == null && Math.Abs(field.Value - 0.4f) < 0.01,
+            "wearer departure completes the previous owner's final reset and restores tracking");
+        Gesture(0, 1); Select("Angry"); await Frames();
+        Check(Get<int>(core, "LeftGesture") == 0 && Reference<Slot>(core, "Override") == null,
+            "gesture and select requests are ignored without a local wearer");
+        Set(core, "Override", catalog.FindChild("Angry"));
+        Automatic(); await Frames();
+        Check(Reference<Slot>(core, "Override") == catalog.FindChild("Angry"),
+            "automatic requests are ignored without a local wearer");
+        // Sentinel stored state proves private stages did no work. Playback diagnostics
+        // are locally driven values and must not be overwritten by the fixture.
+        var outputState = expressions.FindChild("Outputs").Children.Single();
+        Set(core, "PairIndex", -42); Set(outputState, "Result", -42f);
+        foreach (var (board, tag) in new[] { ("Selection", "ResoPon/Expression/Internal/Selection"),
+            ("Playback", "ResoPon/Expression/Internal/Playback") })
+            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core.FindChild("Logic").FindChild(board), tag, true) == 1,
+                "private stage receiver remains discoverable: " + board);
+        await Frames();
+        Check(Get<int>(core, "PairIndex") == -42 && Get<float>(outputState, "Result") == -42f,
+            "private stages also reject updates without a local wearer");
+        avatar.Parent = wearer;
+        await Frames();
+        Check(Reference<User>(core, "PreviousOwner") == world.LocalUser && Reference<Slot>(core, "Override") == null &&
+            Get<int>(core, "PairIndex") == 0 && Get<float>(core, "PlaybackElapsed") >= 0 && Math.Abs(field.Value - 0.4f) < 0.01,
+            "reattaching initializes hand state, selection, diagnostics and tracking");
+        Select("Angry"); await Frames();
         var graph = avatar.SaveObject(DependencyHandling.CollectAssets);
         var record = RecordHelper.CreateForObject<SkyFrost.Base.Record>(avatar.Name, world.LocalUser.MachineID, null);
         string packagePath = Path.Combine(artifacts, "Expression.resonitepackage");
@@ -173,7 +227,11 @@ static async Task Run(string resonite, string artifacts, string importedPackage)
         Check(Math.Abs(restored.GetComponent<ValueField<float>>().Value.Value - 0.4f) < 0.01, "package reload discards active requests and restores tracking");
         Check(restored.GetComponentsInChildren<StaticAnimationProvider>().All(p => p.Asset != null), "packaged AnimX assets reload");
         var restoredExpressions = restored.FindChild("Expressions");
-        CheckLayout(restoredExpressions);
+        ExpressionGraphChecks.CheckLayout(restoredExpressions);
+        var restoredCore = restoredExpressions.FindChild("Core");
+        Check(Get<int>(restoredCore, "PairIndex") == 0 && Get<int>(restoredCore, "SelectionStatus") == 0 &&
+            Reference<Slot>(restoredCore, "CandidateExpression") == null && Reference<Slot>(restoredCore, "Override") == null,
+            "package reload recomputes diagnostics from reset inputs and the edited empty table row");
         var restoredCommand = restoredExpressions.FindChild("API").FindChild("Examples").Children.Single();
         Set(restoredCommand, "Hand", 1); Set(restoredCommand, "Gesture", 2); Set(restoredCommand, "Available", true);
         Set(restoredExpressions.FindChild("GestureTable"), "Pair.2", restoredExpressions.FindChild("Catalog").FindChild("Angry"));
@@ -191,20 +249,10 @@ static async Task Run(string resonite, string artifacts, string importedPackage)
 }
 
 static T Get<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == "Expr/" + name).Value.Value;
+
 static void Set<T>(Slot slot, string name, T value)
 {
     var result = slot.WriteDynamicVariable("Expr/" + name, value);
     if (result != DynamicVariableWriteResult.Success) throw new InvalidOperationException("Cannot write " + name + ": " + result);
 }
 static void Check(bool value, string message) { if (!value) throw new InvalidOperationException(message); Console.WriteLine("PASS: " + message); }
-
-static void CheckLayout(Slot expressions)
-{
-    var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
-    Check(nodes.Count > 0 && nodes.GroupBy(n => n.Slot).All(g => g.Count() == 1), "one Flux node per slot");
-    Check(nodes.All(n => n.Slot.Parent.GetComponents<ProtoFluxNode>().Count == 0), "Flux nodes belong to named sections, not other nodes");
-    Check(nodes.Select(n => n.Slot.GlobalPosition).Distinct().Count() == nodes.Count, "Flux node positions do not overlap across logic boards");
-    var logic = expressions.FindChild("Core").FindChild("Logic");
-    Check(logic.GetComponents<ProtoFluxNode>().Count == 0 && logic.Children.Any(s => s.Name.Contains("Output mixer")) &&
-        logic.Children.Any(s => s.Name.Contains("Public request API")), "Core logic is organized by responsibility");
-}

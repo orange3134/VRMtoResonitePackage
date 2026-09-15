@@ -16,6 +16,10 @@ internal sealed class ExpressionFlux
     private int _sectionIndex, _nodeIndex;
     private readonly Dictionary<(Type, object), IWorldElement> _constants = new();
     private readonly Dictionary<(Type, IWorldElement, IWorldElement), IWorldElement> _reads = new();
+    private readonly Dictionary<(Type, IWorldElement), IWorldElement> _references = new();
+    private readonly Dictionary<Slot, IWorldElement> _owners = new();
+    private readonly Dictionary<Slot, IWorldElement> _ownerChecks = new();
+    private IWorldElement _now;
     private static Dictionary<string, Type[]> _types;
     public ExpressionFlux(Slot root)
     {
@@ -116,10 +120,17 @@ internal sealed class ExpressionFlux
     }
     public IWorldElement Ref<T>(T value) where T : class, IWorldElement
     {
+        if (_references.TryGetValue((typeof(T), value), out var cached)) return cached;
         var node = NodeSlot(typeof(Nodes.RefObjectInput<T>), value is Slot slot ? slot.Name : typeof(T).Name).AttachComponent<Nodes.RefObjectInput<T>>();
         node.Target.Target = value;
-        return node;
+        return _references[(typeof(T), value)] = node;
     }
+    // Keep clock and owner nodes local to a board: shared node references join Flux groups.
+    public IWorldElement Now => _now ??= Node("WorldTimeFloat");
+    public IWorldElement Owner(Slot root) => _owners.TryGetValue(root, out var owner) ? owner :
+        _owners[root] = Node("GetActiveUser", null, ("Instance", Ref(root)));
+    public IWorldElement IsOwner(Slot root) => _ownerChecks.TryGetValue(root, out var check) ? check :
+        _ownerChecks[root] = Node("IsLocalUser", null, ("User", Owner(root)));
     public static string Path(string key)
     {
         int separator = key.IndexOf('/');
@@ -163,9 +174,9 @@ internal sealed class ExpressionFlux
     public IWorldElement Mul(IWorldElement a, IWorldElement b) => Binary<float>("ValueMul", a, b);
     public IWorldElement Div(IWorldElement a, IWorldElement b) => Binary<float>("ValueDiv", a, b);
     public IWorldElement Greater(IWorldElement a, IWorldElement b) => Binary<float>("ValueGreaterThan", a, b);
-    public IWorldElement Lerp(IWorldElement a, IWorldElement b, IWorldElement t) => Add(a, Mul(Sub(b, a), t));
-    public IWorldElement Clamp01(IWorldElement value) => Choose<float>(Greater(value, Constant(1f)), Constant(1f),
-        Choose<float>(Greater(Constant(0f), value), Constant(0f), value));
+    public IWorldElement Lerp(IWorldElement a, IWorldElement b, IWorldElement t) =>
+        Node("ValueLerpUnclamped", typeof(float), ("From", a), ("To", b), ("Lerp", t));
+    public IWorldElement Clamp01(IWorldElement value) => Node("Clamp01_Float", null, ("N", value));
     public IWorldElement Active(IWorldElement slot) => Node("GetSlotActive", null, ("Instance", slot));
     public Component Each(IWorldElement parent, Func<IWorldElement, IWorldElement> body)
     {
@@ -182,6 +193,9 @@ internal sealed class ExpressionFlux
         Link(node, "Tag", global);
         return node;
     }
+    public Component Trigger(IWorldElement destination, string tag) =>
+        Node("DynamicImpulseTrigger", null, ("TargetHierarchy", destination), ("Tag", Text(tag)),
+            ("ExcludeDisabled", Constant(true)));
     public Component Trigger(IWorldElement destination, string tag, IWorldElement payload) =>
         Node("DynamicImpulseTriggerWithObject", typeof(Slot), ("TargetHierarchy", destination), ("Tag", Text(tag)),
             ("ExcludeDisabled", Constant(true)), ("Value", payload));

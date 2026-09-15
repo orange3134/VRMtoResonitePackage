@@ -6,13 +6,29 @@ using FrooxEngine.ProtoFlux;
 // Input packages and their paths are supplied locally and are never part of the fixture.
 internal static class ImportedGestureAvatarChecks
 {
-    public static async Task Run(World world, string package)
+    public static async Task Run(World world, string package, string artifacts, string baselinePackage = null)
     {
         var avatar = world.LocalUser.Root.Slot.AddSlot("Imported gesture avatar");
         await PackageImporter.ImportPackage(package, avatar);
         await default(ToWorld);
         for (int i = 0; i < 180; i++) await default(NextUpdate);
         var root = avatar.FindChild("Expressions") ?? throw new InvalidOperationException("Missing expression system");
+        ExpressionGraphChecks.CheckLayout(root);
+        if (baselinePackage != null)
+        {
+            string current = ExpressionPackageSnapshot.Capture(root, Path.Combine(artifacts, "current-expressions"));
+            var baseline = world.LocalUser.Root.Slot.AddSlot("Baseline gesture avatar");
+            await PackageImporter.ImportPackage(baselinePackage, baseline);
+            await default(ToWorld);
+            for (int i = 0; i < 180; i++) await default(NextUpdate);
+            var baselineRoot = baseline.FindChild("Expressions");
+            Console.WriteLine("BASELINE graph (legacy board boundaries are reported, not asserted):");
+            ExpressionGraphChecks.Report(baselineRoot);
+            string previous = ExpressionPackageSnapshot.Capture(baselineRoot, Path.Combine(artifacts, "baseline-expressions"));
+            Check(current == previous, "Expression semantics differ from baseline; compare current-expressions/expressions.json and baseline-expressions/expressions.json");
+            baseline.Destroy();
+            Console.WriteLine("PASS: baseline catalog, complete AnimX curves, output bindings and all 64 gesture mappings are unchanged");
+        }
         var core = root.FindChild("Core"); var table = root.FindChild("GestureTable");
         var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
         var left = menu.FindChild("Left hand").FindChild("Items"); var right = menu.FindChild("Right hand").FindChild("Items");
@@ -40,6 +56,9 @@ internal static class ImportedGestureAvatarChecks
                 var mapped = table.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
                     .Single(v => v.VariableName.Value == "Expr/Pair." + (l * 8 + r)).Reference.Target;
                 Check(mapped != null && Reference<Slot>(core, "CurrentExpression") == mapped, "Missing or incorrect selected pose");
+                Check(Get<int>(core, "PairIndex") == l * 8 + r && Get<int>(core, "SelectionStatus") == 1 &&
+                    Reference<Slot>(core, "MappedExpression") == mapped && Reference<Slot>(core, "CandidateExpression") == mapped,
+                    "Imported selection diagnostics disagree with the selected gesture pair");
                 var data = mapped.GetComponent<StaticAnimationProvider>().Asset?.Data;
                 Check(data != null, "Pose animation asset did not load");
                 var values = new List<float>();

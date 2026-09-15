@@ -16,11 +16,11 @@ internal sealed partial class ExpressionSystemSetup
         Data(command, "Hand", hand); Data(command, "Gesture", gesture); Data(command, "Available", true);
         return command;
     }
-    private IWorldElement Send(IWorldElement command) => _g.Trigger(_g.Ref(_api), RequestTag, command);
+    private IWorldElement Send(ExpressionFlux g, IWorldElement command) => g.Trigger(g.Ref(_api), RequestTag, command);
     private void OwnerUpdate(ExpressionFlux graph, IWorldElement action)
     {
         var update = graph.Node("LocalUpdate");
-        Link(update, "OnUpdate", graph.If(_isOwner, action));
+        Link(update, "OnUpdate", graph.If(graph.IsOwner(_root), action));
     }
     private void BuildInputs(bool menu)
     {
@@ -104,25 +104,21 @@ internal sealed partial class ExpressionSystemSetup
                 Data(shortcut, "Enabled", true); Data(shortcut, "Key", (InputKey)((int)InputKey.Alpha1 + gesture));
                 Data(shortcut, "Shift", hand == 1); Data(shortcut, "Held", false);
             }
-        var previous = _g; _g = new(root.AddSlot("Logic"));
-        try
+        var g = new ExpressionFlux(root.AddSlot("Logic"));
+        IWorldElement Held(InputKey key) => g.Node("KeyHeld", null, ("Key", g.Constant(key)));
+        var control = g.Or(Held(InputKey.LeftControl), Held(InputKey.RightControl));
+        var alt = g.Or(Held(InputKey.LeftAlt), Held(InputKey.RightAlt));
+        var shift = g.Or(Held(InputKey.LeftShift), Held(InputKey.RightShift));
+        var loop = g.Each(g.Ref(bindings), shortcut =>
         {
-            IWorldElement Held(InputKey key) => _g.Node("KeyHeld", null, ("Key", _g.Constant(key)));
-            var control = _g.Or(Held(InputKey.LeftControl), Held(InputKey.RightControl));
-            var alt = _g.Or(Held(InputKey.LeftAlt), Held(InputKey.RightAlt));
-            var shift = _g.Or(Held(InputKey.LeftShift), Held(InputKey.RightShift));
-            var loop = _g.Each(_g.Ref(bindings), shortcut =>
-            {
-                var key = _g.Read<InputKey>(shortcut, "Key");
-                var held = _g.And(_g.Active(shortcut), _g.Read<bool>(shortcut, "Enabled"), control, alt,
-                    _g.Equal<bool>(shift, _g.Read<bool>(shortcut, "Shift")),
-                    _g.Not(_g.Equal<InputKey>(key, _g.Constant(InputKey.None))), _g.Node("KeyHeld", null, ("Key", key)));
-                return _g.Sequence(_g.If(_g.And(held, _g.Not(_g.Read<bool>(shortcut, "Held"))), Send(shortcut)),
-                    _g.Write<bool>(shortcut, "Held", held));
-            });
-            OwnerUpdate(_g, loop);
-        }
-        finally { _g = previous; }
+            var key = g.Read<InputKey>(shortcut, "Key");
+            var held = g.And(g.Active(shortcut), g.Read<bool>(shortcut, "Enabled"), control, alt,
+                g.Equal<bool>(shift, g.Read<bool>(shortcut, "Shift")),
+                g.Not(g.Equal<InputKey>(key, g.Constant(InputKey.None))), g.Node("KeyHeld", null, ("Key", key)));
+            return g.Sequence(g.If(g.And(held, g.Not(g.Read<bool>(shortcut, "Held"))), Send(g, shortcut)),
+                g.Write<bool>(shortcut, "Held", held));
+        });
+        OwnerUpdate(g, loop);
     }
 
     private void BuildGestures()
@@ -133,68 +129,67 @@ internal sealed partial class ExpressionSystemSetup
             var module = Record(modules, device.Replace("Controller", ""));
             Data(module, "GripThreshold", 0.55f); Data(module, "TriggerThreshold", 0.55f); Data(module, "StabilitySeconds", 0.05f);
             Data(module, "GripReleaseThreshold", 0.45f); Data(module, "TriggerReleaseThreshold", 0.45f);
-            var previous = _g; _g = new(module.AddSlot("Logic"));
-            try
-            {
-                foreach (var (side, kind) in new[] { (Chirality.Left, 0), (Chirality.Right, 1) })
-                {
-                    _g.BeginSection(side + " controller input");
-                    var hand = Record(module, side.ToString()); var handRef = _g.Ref(hand); var modRef = _g.Ref(module);
-                    var commandSlot = Command(hand, kind, 0); var command = _g.Ref(commandSlot);
-                    Data(hand, "Candidate", -1); Data(hand, "Since", 0f); Data(hand, "Stable", -1);
-                    Data(hand, "GripHeld", false); Data(hand, "TriggerHeld", false);
-                    Reference<User>(hand, "PreviousOwner", null);
-                    var initialized = _g.Node("StoredValue", typeof(bool));
-                    var reset = _g.If(_g.Or(_g.Not(initialized),
-                        _g.Not(_g.Equal<User>(_g.Read<User>(handRef, "PreviousOwner"), _owner))), _g.Sequence(
-                        _g.Write<int>(handRef, "Candidate", _g.Constant(-1)), _g.Write<int>(handRef, "Stable", _g.Constant(-1)),
-                        _g.Write<bool>(handRef, "GripHeld", _g.Constant(false)), _g.Write<bool>(handRef, "TriggerHeld", _g.Constant(false)),
-                        _g.Write<User>(handRef, "PreviousOwner", _owner), _g.Set<bool>(initialized, _g.Constant(true))));
-                    var controller = _g.Node(device, null, ("User", _owner), ("Node", _g.Constant(side)));
-                    var active = Out(controller, "IsActive"); var trigger = Out(controller, "Trigger");
-                    IWorldElement grip = Out(controller, "Grip");
-                    bool wand = device is "ViveController" or "WindowsMRController";
-                    if (!wand) grip = _g.Greater(grip, _g.Choose<float>(_g.Read<bool>(handRef, "GripHeld"),
-                        _g.Read<float>(modRef, "GripReleaseThreshold"), _g.Read<float>(modRef, "GripThreshold")));
-                    var indexCurled = _g.Greater(trigger, _g.Choose<float>(_g.Read<bool>(handRef, "TriggerHeld"),
-                        _g.Read<float>(modRef, "TriggerReleaseThreshold"), _g.Read<float>(modRef, "TriggerThreshold")));
-                    IWorldElement thumb, victory, rock;
-                    if (wand)
-                    {
-                        thumb = Out(controller, "TouchpadTouch");
-                        victory = _g.And(Out(controller, "TouchpadClick"), _g.Not(grip));
-                        rock = _g.And(Out(controller, "TouchpadClick"), grip);
-                    }
-                    else
-                    {
-                        bool touch = device == "TouchController";
-                        thumb = _g.Or(Out(controller, "JoystickTouch"), Out(controller, touch ? "ButtonXA_Touch" : "ButtonA_Touch"),
-                            Out(controller, touch ? "ButtonYB_Touch" : "ButtonB_Touch"));
-                        victory = Out(controller, touch ? "ButtonXA" : "ButtonA");
-                        rock = Out(controller, touch ? "ButtonYB" : "ButtonB");
-                    }
-                    // Devices without individual finger curl use explicit button chords for Victory/Rock.
-                    var gesture = _g.Choose<int>(rock, _g.Constant(5), _g.Choose<int>(victory, _g.Constant(4),
-                        _g.Choose<int>(grip, _g.Choose<int>(indexCurled, _g.Choose<int>(thumb, _g.Constant(1), _g.Constant(7)),
-                            _g.Choose<int>(thumb, _g.Constant(3), _g.Constant(6))), _g.Constant(2))));
-                    var changed = _g.Not(_g.Equal<int>(gesture, _g.Read<int>(handRef, "Candidate")));
-                    var stable = _g.Not(_g.Greater(_g.Add(_g.Read<float>(handRef, "Since"), _g.Read<float>(modRef, "StabilitySeconds")), _now));
-                    var send = _g.Sequence(_g.Write<int>(command, "Gesture", gesture),
-                        _g.Write<bool>(command, "Available", _g.Constant(true)), Send(command),
-                        _g.Write<int>(handRef, "Stable", gesture));
-                    OwnerUpdate(_g, _g.Sequence(reset, _g.If(active, _g.Sequence(
-                        _g.Write<bool>(handRef, "GripHeld", grip), _g.Write<bool>(handRef, "TriggerHeld", indexCurled),
-                        _g.If(changed, _g.Sequence(_g.Write<int>(handRef, "Candidate", gesture), _g.Write<float>(handRef, "Since", _now))),
-                        _g.If(_g.And(stable, _g.Not(_g.Equal<int>(_g.Read<int>(handRef, "Stable"), gesture))), send)),
-                        _g.Sequence(_g.If(_g.Not(_g.Equal<int>(_g.Read<int>(handRef, "Stable"), _g.Constant(-1))),
-                            _g.Sequence(_g.Write<bool>(command, "Available", _g.Constant(false)), Send(command))),
-                            _g.Write<int>(handRef, "Candidate", _g.Constant(-1)),
-                            _g.Write<int>(handRef, "Stable", _g.Constant(-1)),
-                            _g.Write<bool>(handRef, "GripHeld", _g.Constant(false)),
-                            _g.Write<bool>(handRef, "TriggerHeld", _g.Constant(false))))));
-                }
-            }
-            finally { _g = previous; }
+            foreach (var (side, kind) in new[] { (Chirality.Left, 0), (Chirality.Right, 1) })
+                BuildGestureHand(module, device, side, kind);
         }
+    }
+
+    private void BuildGestureHand(Slot module, string device, Chirality side, int kind)
+    {
+        var hand = Record(module, side.ToString());
+        var g = new ExpressionFlux(hand.AddSlot("Logic"));
+        var handRef = g.Ref(hand); var modRef = g.Ref(module);
+        var commandSlot = Command(hand, kind, 0); var command = g.Ref(commandSlot);
+        Data(hand, "Candidate", -1); Data(hand, "Since", 0f); Data(hand, "Stable", -1);
+        Data(hand, "GripHeld", false); Data(hand, "TriggerHeld", false);
+        Reference<User>(hand, "PreviousOwner", null);
+        var initialized = g.Node("StoredValue", typeof(bool));
+        var reset = g.If(g.Or(g.Not(initialized),
+            g.Not(g.Equal<User>(g.Read<User>(handRef, "PreviousOwner"), g.Owner(_root)))), g.Sequence(
+            g.Write<int>(handRef, "Candidate", g.Constant(-1)), g.Write<int>(handRef, "Stable", g.Constant(-1)),
+            g.Write<bool>(handRef, "GripHeld", g.Constant(false)), g.Write<bool>(handRef, "TriggerHeld", g.Constant(false)),
+            g.Write<User>(handRef, "PreviousOwner", g.Owner(_root)), g.Set<bool>(initialized, g.Constant(true))));
+        var controller = g.Node(device, null, ("User", g.Owner(_root)), ("Node", g.Constant(side)));
+        var active = Out(controller, "IsActive"); var trigger = Out(controller, "Trigger");
+        IWorldElement grip = Out(controller, "Grip");
+        bool wand = device is "ViveController" or "WindowsMRController";
+        if (!wand) grip = g.Greater(grip, g.Choose<float>(g.Read<bool>(handRef, "GripHeld"),
+            g.Read<float>(modRef, "GripReleaseThreshold"), g.Read<float>(modRef, "GripThreshold")));
+        var indexCurled = g.Greater(trigger, g.Choose<float>(g.Read<bool>(handRef, "TriggerHeld"),
+            g.Read<float>(modRef, "TriggerReleaseThreshold"), g.Read<float>(modRef, "TriggerThreshold")));
+        IWorldElement thumb, victory, rock;
+        if (wand)
+        {
+            thumb = Out(controller, "TouchpadTouch");
+            victory = g.And(Out(controller, "TouchpadClick"), g.Not(grip));
+            rock = g.And(Out(controller, "TouchpadClick"), grip);
+        }
+        else
+        {
+            bool touch = device == "TouchController";
+            thumb = g.Or(Out(controller, "JoystickTouch"), Out(controller, touch ? "ButtonXA_Touch" : "ButtonA_Touch"),
+                Out(controller, touch ? "ButtonYB_Touch" : "ButtonB_Touch"));
+            victory = Out(controller, touch ? "ButtonXA" : "ButtonA");
+            rock = Out(controller, touch ? "ButtonYB" : "ButtonB");
+        }
+        // Devices without individual finger curl use explicit button chords for Victory/Rock.
+        var gesture = g.Choose<int>(rock, g.Constant(5), g.Choose<int>(victory, g.Constant(4),
+            g.Choose<int>(grip, g.Choose<int>(indexCurled, g.Choose<int>(thumb, g.Constant(1), g.Constant(7)),
+                g.Choose<int>(thumb, g.Constant(3), g.Constant(6))), g.Constant(2))));
+        var changed = g.Not(g.Equal<int>(gesture, g.Read<int>(handRef, "Candidate")));
+        var stable = g.Not(g.Greater(g.Add(g.Read<float>(handRef, "Since"), g.Read<float>(modRef, "StabilitySeconds")), g.Now));
+        var send = g.Sequence(g.Write<int>(command, "Gesture", gesture),
+            g.Write<bool>(command, "Available", g.Constant(true)), Send(g, command),
+            g.Write<int>(handRef, "Stable", gesture));
+        OwnerUpdate(g, g.Sequence(reset, g.If(active, g.Sequence(
+            g.Write<bool>(handRef, "GripHeld", grip), g.Write<bool>(handRef, "TriggerHeld", indexCurled),
+            g.If(changed, g.Sequence(g.Write<int>(handRef, "Candidate", gesture), g.Write<float>(handRef, "Since", g.Now))),
+            g.If(g.And(stable, g.Not(g.Equal<int>(g.Read<int>(handRef, "Stable"), gesture))), send)),
+            g.Sequence(g.If(g.Not(g.Equal<int>(g.Read<int>(handRef, "Stable"), g.Constant(-1))),
+                g.Sequence(g.Write<bool>(command, "Available", g.Constant(false)), Send(g, command))),
+                g.Write<int>(handRef, "Candidate", g.Constant(-1)),
+                g.Write<int>(handRef, "Stable", g.Constant(-1)),
+                g.Write<bool>(handRef, "GripHeld", g.Constant(false)),
+                g.Write<bool>(handRef, "TriggerHeld", g.Constant(false))))));
     }
 }

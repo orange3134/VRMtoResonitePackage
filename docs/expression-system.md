@@ -27,14 +27,22 @@ Expressions/
   Catalog/                         表情ごとの定義と AnimX
   GestureTable/                    64個の Catalog 参照
   Core/                            左右の状態、現在の表情、再生開始時刻
-    Logic/                         公開API、対応表の参照、出力、初期化
+    Logic/
+      Lifecycle/                   初期化、所有者変更、更新順序
+      Selection/                   対応表・直接指定の選択と切り替え
+      Playback/                    再生時刻、フェード、出力の合成
   Outputs/                         BlendShape ごとのベース入力と最終出力
   Inputs/
     ContextMenu/
     Keyboard/Bindings/             左右8種ずつのショートカット
     HandGestures/Modules/
-      Touch|Index|Vive|WindowsMR/   削除できる機種別入力とその Logic
+      Touch|Index|Vive|WindowsMR/   削除できる機種別入力
+        Left/Logic/                左手の入力検出・安定化・通知
+        Right/Logic/               右手の入力検出・安定化・通知
   API/Receivers/Logic/
+    Gesture/                       左右の入力受付
+    Select/                        Catalog の直接指定受付
+    Automatic/                     直接指定の解除
   API/Examples/                    外部入力用の小さな Command
   API/Templates/                   Catalog に複製する表情テンプレート
   Diagnostics/                     自動設定できなかった理由
@@ -43,9 +51,60 @@ Expressions/
 Core に入力元の一覧・優先順位・有効期限・汎用 Animator パラメーターは持たない。
 各手の最後の入力 Command への参照は、削除・切断された入力を解放するためだけに使う。
 
-Flux は1スロット1ノードで、役割別の名前付きグループへ分け、8列のグリッドに配置する。
-Resonite の ProtoFlux Tool で `Logic` を Unpack すると保存した位置で表示できる。
-共通の定数・読み出しノードは同じグループ内で共用する。
+Flux は1スロット1ノードで、各モジュール内を名前付きの節と8列のグリッドに配置する。
+ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュールを個別に Unpack する。
+モジュール間では ProtoFlux ノードを直接接続しない。所有者・時刻・定数の取得も各モジュール内で完結するため、
+1つの入力や再生処理を開くだけで全機種・APIまでつながった巨大なグラフにはならない。
+
+Core の更新は `Lifecycle` → `Selection` → `Playback` の順で行う。
+呼び出しには対象モジュールだけを宛先とする同期 Dynamic Impulse を使い、
+選択の更新が終わってから同じ更新内で再生・出力を計算する。
+モジュール間の状態は Core の DynamicVariable で渡し、公開 API v2 のタグと既存変数名を維持する。
+Dynamic Impulse は装着者のクライアントで実行され、所有者による処理制限も各入口で確認する。
+
+## 不具合の調べ方
+
+まず Core の変数を見て、入力・選択・再生のどこで期待とずれたかを分ける。
+Inspector 上の実際の変数名には `Expr/` が付く。
+
+| Core の変数 | 確認する内容 |
+|---|---|
+| `LeftGesture` / `RightGesture` | 各入力から届いた0〜7の状態 |
+| `LeftInput` / `RightInput` | 最後にその手を設定した Command |
+| `PairIndex` | 左×8＋右で求めた対応表の番号 |
+| `MappedExpression` | その行に割り当てられた Catalog の表情 |
+| `Override` / `CandidateExpression` | 直接指定と、検証前の選択候補 |
+| `SelectionStatus` | 0=未割当、1=対応表、2=直接指定、3=無効またはアセット未ロード |
+| `CurrentExpression` | 実際に再生している表情 |
+| `PlaybackStart` / `PlaybackElapsed` | 再生開始時刻と経過秒数 |
+| `FadeDuration` / `FadeWeight` | フェード秒数と現在の混合率（0〜1） |
+
+1. 左右の番号が違う場合は、`API/Receivers/Logic/Gesture` と該当入力の `Logic` を調べる。
+2. 番号が正しく表情が違う場合は、`PairIndex` に対応する `GestureTable` の参照と `Override` を確認し、`Selection` を調べる。
+3. `SelectionStatus=3` の場合は、候補の `Enabled` と `StaticAnimationProvider` のアセット読み込みを確認する。
+4. 選択が正しく見た目が違う場合は、`Playback` と該当する `Outputs` レコードの `Base`、`TrackingWeight`、`Snapshot`、`Result`、`Target` を調べる。
+
+これらの状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
+変換時の警告は引き続き `Diagnostics` に残る。
+`Diagnostics/Graph modules` の各レコードには `Expr/Path` と `Expr/NodeCount` があり、モジュールの場所と規模を確認できる。
+`PlaybackElapsed` と `FadeWeight` はローカルに駆動する表示値で、診断のための毎フレームの同期書き込みを増やさない。
+これらは時計から求める値であり、Playback の処理が実行されたことを示すカウンターではない。
+反映が止まっている場合は、アバターの装着状態、該当モジュールの有効状態と `Outputs/Result`・`Target` を確認する。
+
+
+resoloop を使う場合は、リポジトリ直下から次の読み取り専用スクリプトで Core の状態を一覧にできる。
+`-CoreSlot` には対象の正確なパスまたは現在のスロット ID、
+`-Url` には ResoniteLink に表示される現在のポートを指定する。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/inspect-expression.ps1 -CoreSlot "Root/Plum/Expressions/Core" -Url "ws://localhost:42038"
+```
+
+`-Json` を付けると機械可読の JSON を返す。
+URL を省略した場合は resoloop の環境変数・プロジェクト設定を使う。
+参照値は現在の ResoniteLink 接続での ID として表示するため、保存後の固定 ID として使わない。
+旧パッケージも読み取れるが、追加した診断項目は再変換・再インポート後に表示される。
+
 
 ## 入力の動作
 
@@ -191,3 +250,18 @@ LilLeo の元の左右レイヤーには従来から未対応の挙動・欠落 
 左右64通り・102出力を検査して8種類の表情を確認した。
 空／別プロパティだけを持つ上位レイヤーが下位の値を保持する挙動は、Unity 2022.3.22f1 の
 SkinnedMeshRenderer と2レイヤーの Animator を使った再現でも確認した。
+
+2026-09-15 のモジュール分割では、既存 Plum パッケージの1グループ・1,098ノードに対し、
+再変換後は15グループ・合計1,174ノード、最大グループ106ノードとなった。
+所有者や時刻の取得をモジュールごとに持たせるため総数は増えるが、API・Core・機種別左右の間で
+FluxGroupを共有しない。Core は Lifecycle 59、Selection 101、Playback 60ノード。
+この構造上の境界は、見出しや座標だけでなく実際の FluxGroup で検査している。
+
+Plum の旧・新パッケージで29クリップの全 AnimX 内容、Catalog設定、出力binding・基準値・追跡混合率、
+64通りの割り当てを比較し、一致を確認した。保存パッケージのメニューボタンを実際に発火する試験でも、
+64通り・102出力・8種類の表情が成功した。
+ExpressionSmoke はフェード、診断値のローカル駆動、入力拒否、所有者の離脱・再装着、
+複製と保存再読み込みも検査する。PrefabInputSmoke、PrefabSceneSmoke、Plum の変換・inspect も成功した。
+
+今回の変更は変換器の生成処理へ適用される。既存ワールド内の変換済みアバターへ反映するには、
+新しい ResoPon で再変換したパッケージを再インポートする。

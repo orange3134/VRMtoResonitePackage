@@ -13,12 +13,12 @@ internal sealed partial class ExpressionSystemSetup
     internal const string AutomaticTag = "ResoPon/Expression/v2/Automatic";
     private readonly ExpressionModel _model;
     private readonly Slot _root, _catalog, _core, _outputs, _table, _api, _inputs;
-    private ExpressionFlux _g;
-    private readonly IWorldElement _now, _owner, _isOwner, _coreRef;
+    private readonly Slot _lifecycle, _selection, _playback;
+    private const string SelectionTickTag = "ResoPon/Expression/Internal/Selection";
+    private const string PlaybackTickTag = "ResoPon/Expression/Internal/Playback";
     private GesturePairCompiler _compiled;
     private readonly Dictionary<string, Slot> _clips = new();
     private readonly Dictionary<string, Slot> _outputSlots = new();
-    private readonly List<IWorldElement> _updates = new();
 
     private ExpressionSystemSetup(Slot avatar, ExpressionModel model)
     {
@@ -31,11 +31,10 @@ internal sealed partial class ExpressionSystemSetup
         _table.GetComponent<DynamicVariableSpace>().OnlyDirectBinding.Value = false;
         _inputs = _root.AddSlot("Inputs");
         _api = _root.AddSlot("API").AddSlot("Receivers");
-        _g = new(_core.AddSlot("Logic"));
-        _coreRef = _g.Ref(_core);
-        _now = _g.Node("WorldTimeFloat");
-        _owner = _g.Node("GetActiveUser", null, ("Instance", _g.Ref(_root)));
-        _isOwner = _g.Node("IsLocalUser", null, ("User", _owner));
+        var logic = _core.AddSlot("Logic");
+        _lifecycle = logic.AddSlot("Lifecycle");
+        _selection = logic.AddSlot("Selection");
+        _playback = logic.AddSlot("Playback");
         Reference<User>(_core, "PreviousOwner", null);
         foreach (string hand in new[] { "Left", "Right" })
         {
@@ -43,6 +42,10 @@ internal sealed partial class ExpressionSystemSetup
         }
         Reference<Slot>(_core, "Override", null); Reference<Slot>(_core, "CurrentExpression", null);
         Data(_core, "PlaybackStart", 0f); Data(_core, "FadeDuration", 0.1f);
+        Data(_core, "PairIndex", 0);
+        Reference<Slot>(_core, "MappedExpression", null); Reference<Slot>(_core, "CandidateExpression", null);
+        Data(_core, "SelectionStatus", 0); // 0=unassigned, 1=gesture, 2=override, 3=invalid/unloaded
+        Data(_core, "PlaybackElapsed", 0f); Data(_core, "FadeWeight", 1f);
         Data(_root, "Version", 2);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
@@ -63,9 +66,11 @@ internal sealed partial class ExpressionSystemSetup
         }
         setup.BuildApi();
         setup.BuildInputs(menu);
-        setup.BuildMixer();
+        setup.BuildSelection();
+        setup.BuildPlayback();
         setup.BuildLifecycle();
         ExpressionFlux.Arrange(setup._root);
+        setup.DescribeGraphs();
         foreach (string message in model.Diagnostics) Data(Record(setup._root.FindChild("Diagnostics"), "Import warning"), "Message", message);
         if (setup._clips.Count > 0)
         {
@@ -177,17 +182,19 @@ internal sealed partial class ExpressionSystemSetup
         }
     }
 
-    private IWorldElement ClipAsset(IWorldElement expression) => _g.Node("GetAsset", typeof(Animation),
-        ("Provider", _g.Read<IAssetProvider<Animation>>(expression, "Clip")));
-    private IWorldElement ValidExpression(IWorldElement expression) => _g.And(_g.Active(expression), _g.Read<bool>(expression, "Enabled"),
-        _g.Node("NotNull", typeof(Animation), ("Instance", ClipAsset(expression))));
-    private IWorldElement SampleTime(IWorldElement expression, IWorldElement elapsed) => _g.Choose<float>(
-        _g.Read<bool>(expression, "Loop"), _g.Binary<float>("ValueMod", elapsed, _g.Read<float>(expression, "Duration")), elapsed);
-    private (IWorldElement Index, IWorldElement Value) Sample(IWorldElement expression, IWorldElement property, IWorldElement elapsed)
+    private void DescribeGraphs()
     {
-        var asset = ClipAsset(expression);
-        var index = _g.Node("FindAnimationTrackIndex", null, ("Animation", asset), ("Node", _g.Text("Expression")), ("Property", property));
-        var value = _g.Node("SampleValueAnimationTrack", typeof(float), ("Animation", asset), ("TrackIndex", index), ("Time", SampleTime(expression, elapsed)));
-        return (index, value);
+        var modules = _root.FindChild("Diagnostics").AddSlot("Graph modules");
+        var boards = _root.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent.Parent).ToArray();
+        foreach (var board in boards)
+        {
+            var names = new Stack<string>();
+            for (var slot = board.Key; slot != _root; slot = slot.Parent) names.Push(slot.Name);
+            string path = string.Join("/", names);
+            var record = Record(modules, path);
+            Data(record, "Path", path);
+            Data(record, "NodeCount", board.Count());
+        }
+        Console.WriteLine($"Expression logic: {boards.Length} independent boards, largest {boards.Max(b => b.Count())} nodes");
     }
 }
