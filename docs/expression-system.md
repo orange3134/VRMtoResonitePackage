@@ -8,16 +8,14 @@ VRChat の Animator 条件とレイヤーは変換時に評価し、アバター
 
 ```mermaid
 flowchart LR
-    H[機種別ジェスチャー] --> E[DynamicImpulseReceiver]
-    K[キーボード] --> E
-    M[左右のコンテキストメニュー] --> E
-    X[外部イベント] --> E
-    E --> S[LeftGesture / RightGesture]
-    S --> T[64通りの GestureTable]
-    C[共有 Catalog] --> T
-    T --> P[選択変更時に再生開始]
-    O[直接選択の Override] --> P
-    P --> R[出力と追跡入力の合成]
+    H[ジェスチャー・キーボード・外部入力] --> G{AllowExternalInput}
+    G -->|true| S[LeftGesture / RightGesture]
+    M[左右のコンテキストメニュー] --> L[boolをfalseにして左右値を更新]
+    D[対応表にある表情をメニューで選択] --> T[対応する左右の組を取得]
+    T --> L
+    L --> S
+    S --> P[64通りのGestureTableから選択]
+    P --> R[再生・出力と追跡入力の合成]
 ```
 
 ## 生成される構成
@@ -29,11 +27,11 @@ Expressions/
   Core/                            左右の状態、現在の表情、再生開始時刻
     Logic/
       Lifecycle/                   初期化、所有者変更、更新順序
-      Selection/                   対応表・直接指定の選択と切り替え
+      Selection/                   対応表からの選択と切り替え
       Playback/                    再生時刻、フェード、出力の合成
   Outputs/                         BlendShape ごとのベース入力と最終出力
   Inputs/
-    ContextMenu/
+    ContextMenu/                   対応表にある表情のみメニュー表示
     Keyboard/Bindings/             左右8種ずつのショートカット
     HandGestures/Modules/
       Touch|Index|Vive|WindowsMR/   削除できる機種別入力
@@ -42,8 +40,10 @@ Expressions/
   API/Receivers/Logic/
     Left/                          左手の int 入力受付
     Right/                         右手の int 入力受付
-    Select/                        Catalog の直接指定受付
-    Automatic/                     直接指定の解除
+    MenuLeft/                      メニューから左手を更新し入力を固定
+    MenuRight/                     メニューから右手を更新し入力を固定
+    Select/                        Catalog IDを対応表の左右値へ変換
+    AllowExternalInput/            boolによる通常入力の許可・停止
   API/Examples/                    左右の int イベントを送るボタンの例
   API/Templates/                   Catalog に複製する表情テンプレート
   Diagnostics/                     自動設定できなかった理由
@@ -85,7 +85,7 @@ Dynamic Impulse は装着者のクライアントで実行され、所有者に�
 子 Slot の処理は `Children` → `ForEachObject<IReadOnlyList<Slot>, Slot>`（表示名 ForEach）で列挙する。
 すべてのループ本体は列挙中に子 Slot の追加・削除・並べ替えを行わず、元の直下の子の順序を保つ。
 装着者は同じアバター配下の各ボードにある `GetActiveUserSelf` で取得する。
-各ボードは独立した FluxGroup を維持し、公開 API の Tag と 0〜7 の契約は変更しない。
+各ボードは独立した FluxGroup を維持する。対応表の逆引きとメニュー表示判定には、安定した Pair.0〜63 を数値で走査する For を使い、GetChild は使わない。
 
 ## 不具合の調べ方
 
@@ -98,18 +98,19 @@ Inspector 上の実際の変数名には `Expr/` が付く。
 | `LeftRevision` / `RightRevision` | 受理したイベントの更新番号。同じ状態の再送でも増える |
 | `PairIndex` | 左×8＋右で求めた対応表の番号 |
 | `MappedExpression` | その行に割り当てられた Catalog の表情 |
-| `Override` / `CandidateExpression` | 直接指定と、検証前の選択候補 |
-| `SelectionStatus` | 0=未割当、1=対応表、2=直接指定、3=無効またはアセット未ロード |
+| AllowExternalInput | true=通常入力も許可、false=コンテキストメニューのみ（編集可能） |
+| CandidateExpression | 対応表から得た検証前の選択候補 |
+| `SelectionStatus` | 0=未割当、1=通常入力可、2=メニューのみ、3=無効またはアセット未ロード |
 | `CurrentExpression` | 実際に再生している表情 |
 | `PlaybackStart` / `PlaybackElapsed` | 再生開始時刻と経過秒数 |
 | `FadeDuration` / `FadeWeight` | フェード秒数と現在の混合率（0〜1） |
 
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
-2. 番号が正しく表情が違う場合は、`PairIndex` に対応する `GestureTable` の参照と `Override` を確認し、`Selection` を調べる。
+2. 番号が正しく表情が違う場合は、`PairIndex` に対応する `GestureTable` の参照と `AllowExternalInput` を確認し、`Selection` を調べる。
 3. `SelectionStatus=3` の場合は、候補の `Enabled` と `StaticAnimationProvider` のアセット読み込みを確認する。
 4. 選択が正しく見た目が違う場合は、`Playback` と該当する `Outputs` レコードの `Base`、`TrackingWeight`、`Snapshot`、`Result`、`Target` を調べる。
 
-これらの状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
+`AllowExternalInput` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
 変換時の警告は引き続き `Diagnostics` に残る。
 `Diagnostics/Graph modules` の各レコードには `Expr/Path` と `Expr/NodeCount` があり、モジュールの場所と規模を確認できる。
 `PlaybackElapsed` と `FadeWeight` はローカルに駆動する表示値で、診断のための毎フレームの同期書き込みを増やさない。
@@ -134,8 +135,8 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
 ## 入力の動作
 
 ジェスチャー番号は次の対応になる。
-各メニュー項目は 0〜7 の int を固定値として持ち、`ResoPon/Expression/Gesture/Left` または `ResoPon/Expression/Gesture/Right` Tag に送る。
-キーボードとコントローラーも同じ int イベント API を使い、文字列への変換は行わない。
+各左右メニュー項目は 0〜7 の int を固定値として持ち、`ResoPon/Expression/Menu/Left` または `ResoPon/Expression/Menu/Right` Tag に送る。受信側は bool を false にして該当の手を更新する。
+キーボードとコントローラーは Gesture/Left・Gesture/Right の int API を使い、bool が true のときだけ受け付ける。文字列への変換は行わない。
 動作確認では `Core/LeftGesture`、`RightGesture`、`CurrentExpression` と対応表の参照先を見る。
 
 | 番号 | 状態 |
@@ -149,10 +150,10 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
 | 6 | HandGun |
 | 7 | ThumbsUp |
 
-同じ手には最後に届いたイベントを採用し、もう一方の手は変更しない。
+同じ手には最後に受理したイベントを採用し、もう一方の手は変更しない。bool が false の間は、通常入力を受理せず、左右値と更新番号を維持する。
 キーボードとメニューの指定はラッチする。キーやボタンを離しても戻らず、Neutral を選ぶと0に戻る。
 物理入力は安定したジェスチャーが変化したときと接続時にだけ送る。
-したがって、手を動かさずにキーボードで設定した状態は維持され、次に物理ジェスチャーが変わると更新される。
+通常入力が許可されている間は、手を動かさずにキーボードで設定した状態を維持し、次の物理ジェスチャー変更で更新する。メニュー専用モードでは機種別の判定状態をリセットし、許可を戻した後は再び安定した手形を検出して送る。
 
 - コンテキストメニュー: `Left hand` / `Right hand` に各8項目。
 - キーボード: 左手は Ctrl+Alt+1〜8、右手は Ctrl+Alt+Shift+1〜8。数字1が Neutral、8が ThumbsUp。
@@ -164,10 +165,16 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
   Grip/Trigger の押し込み・解放しきい値と安定待ち時間を機種ごとに編集できる。
   指を個別に取得できない機種の Victory/Rock はボタン操作から判定する。
 
-直接表情を選ぶ `Select expression` は、左右の状態を保持したまま Override する。
-`Return to gestures` で現在の左右状態による選択へ戻る。
-インポートした ExpressionMenu は、単独のパラメーターで表情を確定できる項目をこの直接選択へ変換する。
-元の Button/Toggle の押下期間・パラメーター保存・トグル解除は再現せず、どちらも直接選択としてラッチする。
+直接表情を選ぶ `Select expression` と Imported menu は、対応表に存在する有効な表情だけを表示する。
+選択すると、現在の対応表を逆引きして該当する左右値を両方更新し、`Expr/AllowExternalInput=false` にする。
+同じ表情に複数の組がある場合は `PairIndex` が最小の組を使う。
+Catalog の Slot を固定用に保持する `Expr/Override` は生成しない。
+
+`Allow gestures and keyboard` は bool を true に、`Menu only` は false にする。
+モードだけの変更では左右値を変えない。初期値は true。
+メニューから表情を選ぶと再び false になるため、通常入力へ戻すには許可をオンにする。
+コンテキストメニューの左右項目・直接選択は bool が false でも使える。
+元の ExpressionMenu の Button/Toggle は、このメニュー専用選択へ変換する。
 
 ## 対応表と表情の編集
 
@@ -184,7 +191,7 @@ N は左×8＋右。例えば左1・右2は `Pair.10`。
 表情の追加は `API/Templates` または既存の Catalog エントリーを Catalog へ複製し、
 `Enabled` を有効にして `Id`、`DisplayName`、`Clip`、`Duration`、`Loop` を設定する。
 `Id` は空でない一意の文字列にする。外部からの直接選択にはこの ID を使う。
-`FadeIn` / `FadeOut` は切り替え秒数。削除は表情スロットごと行える。
+直接選択メニューに表示するには、GestureTable の少なくとも1組へ参照を割り当てる。対応表の編集はメニュー表示にも次の更新で反映する。`FadeIn` / `FadeOut` は切り替え秒数。削除は表情スロットごと行える。
 テンプレートから複製したメニューの表示名・有効状態・送信する ID は複製先の変数に追従する。
 
 AnimX のトラックは Node=`Expression`、Property=出力の `Id` を使う。
@@ -192,40 +199,33 @@ AnimX のトラックは Node=`Expression`、Property=出力の `Id` を使う�
 新しい BlendShape を操作する場合は Outputs の出力レコードとフィールド接続も必要になる。
 `Bindings` は編集時の参照情報であり、AnimX のトラックを自動で書き換えるものではない。
 
-## 外部イベント API
+## 外部イベント API（Version 4）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
-左右の受信ノードは `DynamicImpulseReceiverWithValue<int>`、
-送信ノードは `DynamicImpulseTriggerWithValue<int>`。
-メニューは標準コンポーネント `ButtonDynamicImpulseTriggerWithValue<int>` を使う。
+左右の通常入力・メニュー入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
 
 | Tag | 引数 | 動作 |
 |---|---|---|
-| `ResoPon/Expression/Gesture/Left` | int 0〜7 | 左手の状態を更新し、その場で両手を評価 |
-| `ResoPon/Expression/Gesture/Right` | int 0〜7 | 右手の状態を更新し、その場で両手を評価 |
-| `ResoPon/Expression/v3/Select` | string: Catalog の `Expr/Id` | 表情を直接選択 |
-| `ResoPon/Expression/v3/Automatic` | string: 空文字列 | Override を解除し、現在の両手で再選択 |
+| `ResoPon/Expression/Gesture/Left` | int 0〜7 | bool が true のとき左手を更新 |
+| `ResoPon/Expression/Gesture/Right` | int 0〜7 | bool が true のとき右手を更新 |
+| `ResoPon/Expression/Menu/Left` | int 0〜7 | bool を false にして左手を更新 |
+| `ResoPon/Expression/Menu/Right` | int 0〜7 | bool を false にして右手を更新 |
+| `ResoPon/Expression/Menu/Select` | string: Catalog の `Expr/Id` | 対応表を逆引きし、bool を false にして両手を更新 |
+| `ResoPon/Expression/AllowExternalInput` | bool | 通常入力を許可するか設定。左右値は維持 |
 
 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp。
-左右で同じ VRChat の番号を使う。
+Tag は大文字・小文字を含めて完全一致。範囲外の int、引数型違い、無効・未割当の ID は入力状態を変更しない。
+固定したいときは Menu 側の Tag を使い、手入力など固定しない送信元は Gesture 側を使う。
+メニューの送信にも専用の Tag を使うため、通常入力を無効にしてもメニューは操作できる。
 
-例えば int Trigger の `TargetHierarchy` に `Expressions/API/Receivers`、
-`Tag` に `ResoPon/Expression/Gesture/Left`、`Value` に int の `1`、
-`ExcludeDisabled` に true を接続して発火すると左手が Fist になる。
-`API/Examples/Left Fist (int 1)` と `Right Fist (int 1)` にボタントリガーの例を置く。
+左右メニューは bool と片手の値、直接選択メニューは bool と両手の値を同じ Impulse 内で更新する。
+その後、通常と同じ `Selection` → `Playback` を同期実行する。
+bool を false にしただけでは左右値は変えず、表情は対応表から引き続き決定する。
+初期化は入力許可の判定より前に行い、複製・再ロード・装着者変更時には bool=true、左右=0 に戻す。
+Dynamic Impulse はネットワーク RPC ではなく、装着者以外のクライアントからの実行は無視する。
 
-Tag は大文字・小文字を含めて完全一致。他のシステムとの衝突を避けるため表情入力専用の接頭辞を付け、一般名の `Left`／`Right` は受け付けない。左右の表情入力 Tag は int 0〜7 のみ受け付け、
-範囲外、string、float、Slot、引数なしの入力は左右状態・更新番号・再生を変更しない。
-Select と Automatic の string API は変更しない。Select は存在する有効な Catalog ID のみ受け付ける。
-旧 `ResoPon/Expression/v3/Gesture` ＋ `Left.Fist` などの送信側は、
-`ResoPon/Expression/Gesture/Left`／`ResoPon/Expression/Gesture/Right` ＋ int に変更する。文字列デコード用グラフは生成しない。
-
-状態は次のイベントまで保持する。送り元の Slot を削除しても状態を消さず、解除には該当する手の Neutral を送る。
-既存の直接選択中にも左右状態は更新し、Automatic で現在の両手による表情へ戻る。
-装着者変更・複製・再ロード時は初期化する。API から初期化も同期して呼ぶため、更新前に届いた最初の左右イベントも保持する。
-
-Dynamic Impulse 自体はネットワーク RPC ではない。装着者以外のクライアントからの実行は無視する。
-装着者が最終出力を計算して同期する構成で、各クライアントが状態だけを受け取って独立再生する方式ではない。
+旧 `ResoPon/Expression/v3/Select` と `v3/Automatic` は生成しない。
+旧 Select 送信側は Menu/Select へ変更し、通常入力を再開する操作は AllowExternalInput に true を送る。
 
 ## 変換時の判定と制限
 
@@ -246,7 +246,7 @@ Hermite 曲線を保持する。固定の正の再生速度もキー時刻と接
 メニューにないパラメーターや連続値は推測で固定しない。
 `GestureLeftWeight` / `GestureRightWeight` が Motion Time に使われる場合は、
 8種類の離散入力向けに最大値1の位置を固定ポーズとして取り込む。握り込みの連続変化は再現しない。
-元のアニメーションクリップは直接選択用として Catalog に残す。
+元のアニメーションクリップは Catalog に残す。対応表へ割り当てた表情だけをメニューから選択できる。
 
 Exit Time、再生オフセット、上記の固定化で扱えないパラメーター・GestureWeight 条件が必要なレイヤー、
 履歴に依存する Write Defaults、解決できない出力は自動割り当ての対象外。
@@ -263,7 +263,7 @@ Exit Time、再生オフセット、上記の固定化で扱えないパラメ�
 既存の瞬き・口パク等のドライバーは Outputs の `Base` に接続し直す。
 表情にトラックがない出力は Base を使い、ある出力はアニメーション値を使う。
 出力ごとの `TrackingWeight`（0〜1）で Base の混合率を調整できる。
-複製・再ロード・装着者変更時には左右状態と直接選択を初期化する。
+複製・再ロード・装着者変更時には左右状態を0に、AllowExternalInput を true に初期化する。
 VRM の感情表情も同じ Catalog を使うが、VRChat の条件がないため対応表は未設定から始まる。
 
 ## 検証
@@ -323,3 +323,10 @@ For、GetChild、GetActiveUser は生成グラフからなくなり、総ノー�
 ReadDynamicValueVariable は63、ReadDynamicObjectVariable は12を残す。
 ExpressionSmoke の複製・所有者変更・保存再読み込み、および再変換した Plum の
 旧版との表情データ比較と64通り・102出力・8表情の実行検証が成功した。
+
+2026-09-19 の入力モード変更では、固定用の Override を廃止し、Core の `Expr/AllowExternalInput` と通常の左右値へ統一した。
+ExpressionSmoke でメニュー専用時の通常入力・更新番号の保護、再許可、対応表に応じたメニュー表示、複製・再装着・保存再読み込みを確認した。
+Plum の再変換・inspect と旧版との全表情データ比較が成功し、保存済みメニューボタンによる64通り・102出力・8表情に加え、
+対応表にある8個の直接選択ボタンと入力許可・停止の両ボタンを実行検証した。
+生成グラフは1,377ノード・19グループ、最大111ノードで、ボードをまたぐグループは0。
+For は安定した Pair.0～63 の逆引き・メニュー表示判定に使う数値ループ2個だけで、GetChild は0。

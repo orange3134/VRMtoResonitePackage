@@ -12,15 +12,13 @@ internal sealed partial class ExpressionSystemSetup
         var core = g.Ref(_core);
         var actions = new List<IWorldElement>();
 
-        g.BeginSection("Resolve gesture and override");
+        g.BeginSection("Resolve gesture pair");
         var index = g.Binary<int>("ValueAdd", g.Binary<int>("ValueMul", g.Read<int>(core, "LeftGesture"), g.Constant(8)),
             g.Read<int>(core, "RightGesture"));
         var path = g.Node("ConcatenateString", null, ("A", g.Text("Expr/Pair.")),
             ("B", g.Node("ToString_Int", null, ("V", index))));
         var mapped = g.Read<Slot>(g.Ref(_table), path);
-        var manual = g.Read<Slot>(core, "Override");
-        var useManual = g.And(g.Active(manual), g.Read<bool>(manual, "Enabled"));
-        var candidate = g.Choose<Slot>(useManual, manual, mapped);
+        var candidate = mapped;
         var selected = g.Local<Slot>();
         var current = g.Read<Slot>(core, "CurrentExpression");
         var noExpression = g.Ref<Slot>(null);
@@ -30,7 +28,7 @@ internal sealed partial class ExpressionSystemSetup
         actions.Add(g.Write<Slot>(core, "CandidateExpression", candidate));
         actions.Add(g.Write<int>(core, "SelectionStatus", g.Choose<int>(g.Equal<Slot>(selected, noExpression),
             g.Choose<int>(g.Equal<Slot>(candidate, noExpression), g.Constant(0), g.Constant(3)),
-            g.Choose<int>(useManual, g.Constant(2), g.Constant(1)))));
+            g.Choose<int>(g.Read<bool>(core, "AllowExternalInput"), g.Constant(1), g.Constant(2)))));
 
         g.BeginSection("Snapshot and switch only when changed");
         actions.Add(g.If(g.Not(g.Equal<Slot>(selected, current)), g.Sequence(

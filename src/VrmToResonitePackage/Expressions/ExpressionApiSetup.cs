@@ -8,48 +8,76 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildApi()
     {
         var logic = _api.AddSlot("Logic");
-        BuildGestureReceiver(new(logic.AddSlot("Left")), "Left", LeftTag);
-        BuildGestureReceiver(new(logic.AddSlot("Right")), "Right", RightTag);
+        BuildGestureReceiver(new(logic.AddSlot("Left")), "Left", LeftTag, fromMenu: false);
+        BuildGestureReceiver(new(logic.AddSlot("Right")), "Right", RightTag, fromMenu: false);
+        BuildGestureReceiver(new(logic.AddSlot("MenuLeft")), "Left", MenuLeftTag, fromMenu: true);
+        BuildGestureReceiver(new(logic.AddSlot("MenuRight")), "Right", MenuRightTag, fromMenu: true);
         BuildSelectReceiver(new(logic.AddSlot("Select")));
-        BuildAutomaticReceiver(new(logic.AddSlot("Automatic")));
+        BuildInputEnabledReceiver(new(logic.AddSlot("AllowExternalInput")));
     }
 
-    // Keep initialization and both stages synchronous: each event resolves the hand pair
-    // that exists when it arrives, even when two events arrive before the next frame.
-    private IWorldElement ApplyRequest(ExpressionFlux g, IWorldElement mutation) => g.Sequence(
-        g.Trigger(g.Ref(_lifecycle), InitializeTag), mutation,
-        g.Trigger(g.Ref(_selection), SelectionTickTag), g.Trigger(g.Ref(_playback), PlaybackTickTag));
+    // Initialization runs before checking the input gate so the first event after
+    // cloning or reattachment can restore the default enabled state.
+    private IWorldElement ApplyRequest(ExpressionFlux g, IWorldElement mutation, IWorldElement allowed = null) => g.Sequence(
+        g.Trigger(g.Ref(_lifecycle), InitializeTag),
+        g.If(allowed ?? g.Constant(true), g.Sequence(mutation,
+            g.Trigger(g.Ref(_selection), SelectionTickTag), g.Trigger(g.Ref(_playback), PlaybackTickTag))));
 
-    private void BuildGestureReceiver(ExpressionFlux g, string hand, string tag)
+    private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture)
+    {
+        var core = g.Ref(_core);
+        return g.Sequence(g.Write<int>(core, hand + "Gesture", gesture),
+            g.Write<int>(core, hand + "Revision",
+                g.Binary<int>("ValueAdd", g.Read<int>(core, hand + "Revision"), g.Constant(1))));
+    }
+
+    private void BuildGestureReceiver(ExpressionFlux g, string hand, string tag, bool fromMenu)
     {
         var core = g.Ref(_core);
         var receiver = g.Receiver<int>(tag);
         var payload = Out(receiver, "Value");
-        var mutation = g.Sequence(
-            g.Write<int>(core, hand + "Gesture", payload),
-            g.Write<int>(core, hand + "Revision",
-                g.Binary<int>("ValueAdd", g.Read<int>(core, hand + "Revision"), g.Constant(1))));
+        var mutation = fromMenu
+            ? g.Sequence(g.Write<bool>(core, "AllowExternalInput", g.Constant(false)), WriteHand(g, hand, payload))
+            : WriteHand(g, hand, payload);
         Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
             g.Binary<int>("ValueGreaterOrEqual", payload, g.Constant(0)),
-            g.Binary<int>("ValueLessThan", payload, g.Constant(8))), ApplyRequest(g, mutation)));
+            g.Binary<int>("ValueLessThan", payload, g.Constant(8))),
+            ApplyRequest(g, mutation, fromMenu ? null : g.Read<bool>(core, "AllowExternalInput"))));
+    }
+
+    // This is a numeric lookup over stable Pair.0..63 keys, not child-index traversal.
+    // Deleted or reordered table Slots cannot change a pair's identity.
+    private IWorldElement EachGesturePair(ExpressionFlux g, Func<IWorldElement, IWorldElement, IWorldElement> body)
+    {
+        var loop = g.Node("For", null, ("Count", g.Constant(64)));
+        var index = Out(loop, "Iteration");
+        var path = g.Node("ConcatenateString", null, ("A", g.Text("Expr/Pair.")),
+            ("B", g.Node("ToString_Int", null, ("V", index))));
+        Link(loop, "LoopIteration", body(index, g.Read<Slot>(g.Ref(_table), path)));
+        return loop;
     }
 
     private void BuildSelectReceiver(ExpressionFlux g)
     {
         var receiver = g.Receiver(SelectTag);
         var id = Out(receiver, "Value");
-        var select = g.Each(g.Ref(_catalog), expression => g.If(
-            g.And(g.Active(expression), g.Read<bool>(expression, "Enabled"),
-                g.Equal<string>(id, g.Read<string>(expression, "Id"))),
-            ApplyRequest(g, g.Write<Slot>(g.Ref(_core), "Override", expression))));
+        var pair = g.Local<int>();
+        var find = EachGesturePair(g, (index, expression) => g.If(g.And(
+            g.Equal<int>(pair, g.Constant(-1)), g.Active(expression), g.Read<bool>(expression, "Enabled"),
+            g.Equal<string>(id, g.Read<string>(expression, "Id"))), g.Set<int>(pair, index)));
+        var select = g.Sequence(g.Set<int>(pair, g.Constant(-1)), find,
+            g.If(g.Binary<int>("ValueGreaterOrEqual", pair, g.Constant(0)), ApplyRequest(g, g.Sequence(
+                g.Write<bool>(g.Ref(_core), "AllowExternalInput", g.Constant(false)),
+                WriteHand(g, "Left", g.Binary<int>("ValueDiv", pair, g.Constant(8))),
+                WriteHand(g, "Right", g.Binary<int>("ValueMod", pair, g.Constant(8)))))));
         Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
             g.Not(g.Equal<string>(id, g.Text(""))), g.Node("NotNull", typeof(string), ("Instance", id))), select));
     }
 
-    private void BuildAutomaticReceiver(ExpressionFlux g)
+    private void BuildInputEnabledReceiver(ExpressionFlux g)
     {
-        var receiver = g.Receiver(AutomaticTag);
+        var receiver = g.Receiver<bool>(InputEnabledTag);
         Link(receiver, "OnTriggered", g.If(g.IsOwner(_root),
-            ApplyRequest(g, g.Write<Slot>(g.Ref(_core), "Override", g.Ref<Slot>(null)))));
+            ApplyRequest(g, g.Write<bool>(g.Ref(_core), "AllowExternalInput", Out(receiver, "Value")))));
     }
 }

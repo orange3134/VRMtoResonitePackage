@@ -57,7 +57,7 @@ internal sealed partial class ExpressionSystemSetup
             for (int gesture = 0; gesture < 8; gesture++)
             {
                 var item = gestures.AddSlot(gesture + " " + GestureNames[gesture]); MenuItem(item, item.Name);
-                MenuTrigger(item, _api, GestureTag(hand), gesture);
+                MenuTrigger(item, _api, hand == 0 ? MenuLeftTag : MenuRightTag, gesture);
             }
         }
         var direct = items.AddSlot("Direct selection"); MenuItem(direct, "Select expression");
@@ -66,11 +66,15 @@ internal sealed partial class ExpressionSystemSetup
         {
             var item = MenuItem(expression, expression.Name);
             item.Label.DriveFrom(expression.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == "Expr/DisplayName").Value);
-            item.EnabledField.DriveFrom(expression.GetComponents<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == "Expr/Enabled").Value);
+            item.EnabledField.DriveFrom(Data(expression, "MenuAvailable", false).Value);
             SelectMenuTrigger(expression, expression);
         }
-        var automatic = items.AddSlot("Automatic"); MenuItem(automatic, "Return to gestures");
-        MenuTrigger(automatic, _api, AutomaticTag, "");
+        foreach (var (name, enabled) in new[] { ("Allow gestures and keyboard", true), ("Menu only", false) })
+        {
+            var mode = items.AddSlot(name); MenuItem(mode, name);
+            MenuTrigger(mode, _api, InputEnabledTag, enabled);
+        }
+        BuildMenuAvailability(menu);
         if (_compiled.Menu.Count > 0)
         {
             var imported = items.AddSlot("Imported menu"); MenuItem(imported, imported.Name);
@@ -90,9 +94,25 @@ internal sealed partial class ExpressionSystemSetup
                     if (children.Children.Count == 0) slot.Destroy();
                 }
                 else if (_clips.TryGetValue(_compiled.Menu[control], out var expression))
+                {
                     SelectMenuTrigger(slot, expression);
+                    slot.GetComponent<ContextMenuItemSource>().EnabledField.DriveFrom(
+                        expression.GetComponents<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == "Expr/MenuAvailable").Value);
+                }
             }
         }
+    }
+
+    private void BuildMenuAvailability(Slot menu)
+    {
+        var g = new ExpressionFlux(menu.AddSlot("Logic"));
+        // Keep menu visibility editable: adding/removing a table mapping updates the next frame.
+        var available = g.Local<bool>();
+        OwnerUpdate(g, g.Each(g.Ref(_catalog), expression => g.Sequence(
+            g.Set<bool>(available, g.Constant(false)),
+            EachGesturePair(g, (_, mapped) => g.If(g.Equal<Slot>(expression, mapped),
+                g.Set<bool>(available, g.And(g.Active(expression), g.Read<bool>(expression, "Enabled"))))),
+            g.Write<bool>(expression, "MenuAvailable", available))));
     }
 
     private void BuildKeyboard()
@@ -185,7 +205,7 @@ internal sealed partial class ExpressionSystemSetup
         var send = g.Sequence(SendGesture(g, g.Text(GestureTag(kind)), gesture),
             g.Write<int>(handRef, "LastRevision", g.Read<int>(g.Ref(_core), revision)),
             g.Write<int>(handRef, "Stable", gesture));
-        OwnerUpdate(g, g.Sequence(reset, g.If(active, g.Sequence(
+        OwnerUpdate(g, g.Sequence(reset, g.If(g.And(active, g.Read<bool>(g.Ref(_core), "AllowExternalInput")), g.Sequence(
             g.Write<bool>(handRef, "GripHeld", grip), g.Write<bool>(handRef, "TriggerHeld", indexCurled),
             g.If(changed, g.Sequence(g.Write<int>(handRef, "Candidate", gesture), g.Write<float>(handRef, "Since", g.Now))),
             g.If(g.And(stable, g.Not(g.Equal<int>(g.Read<int>(handRef, "Stable"), gesture))), send)),

@@ -23,14 +23,14 @@ It also verifies one Flux node per slot, named logic sections, and distinct node
 positions before and after package reimport. Every connection outside a feedback cycle
 must run from left to right; this includes data inputs and impulse calls. Feedback
 cycles stay within one layer.
-Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. Select and Automatic retain string arguments; no Command slots may remain.
+Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight also receive int; Select receives a mapped ID and AllowExternalInput receives bool; no Command slots may remain.
 Each actual Flux group must stay within one logic board. Core lifecycle, selection,
-playback, the four public API receivers, and each controller hand have independent
+playback, the six public API receivers and menu visibility, and each controller hand have independent
 boards. The test reports node/group counts and enforces a 256-node per-board budget,
 including after package reimport. Module diagnostic counts must match the graph.
 Playback diagnostic fields must retain native driver links after import, preventing
 a regression to synchronized writes on every frame.
-Selection/playback diagnostics, override persistence while gestures change, a partial
+Selection/playback diagnostics, menu-only mode rejecting gesture/keyboard updates, enabling input again, mapped-only menu selection, a partial
 tracking-to-expression crossfade, wearer departure, rejection of public and internal
 updates without a wearer, first events after reattachment, and independent cloned
 int gesture receivers are checked as runtime behavior.
@@ -46,7 +46,7 @@ It verifies all 16 saved menu int payloads and their hand Tags, then invokes the
 button triggers without editing their values. Each click must synchronously update
 the current pair and selected expression. It checks all 64 selected poses against
 their AnimX tracks and target output fields,
-and requires at least eight distinct poses. Plum v1.0.1 is the registered local regression case.
+and requires at least eight distinct poses. Saved direct-menu visibility, selection of the lowest matching pair, rejection of ordinary input while disabled, and both actual bool mode buttons are also checked. Plum v1.0.1 is the registered local regression case.
 An optional third argument supplies a previous package to compare before the menu test:
 
 ```powershell
@@ -74,3 +74,9 @@ and GetActiveUserSelf for wearer lookup. Core reads stay live: broad Dynamic Inp
 the clone playback check even when CurrentExpression was correct. The NATIVE report lists both replaced
 and retained node types for comparison. Existing same-frame events, editable tables, removable modules,
 owner changes, clones and package reloads exercise the behavioral boundaries of these substitutions.
+
+Version 4 removes Override Slot state. Actual menu buttons must disable ordinary input and update the same
+LeftGesture/RightGesture fields used by gesture input. Unmapped IDs must leave the pair and mode unchanged.
+Mapping a Catalog entry makes it appear in the menu; copies from the template become usable after assignment.
+The mode bool defaults to true and resets on cloning, loading and owner changes. Ordinary input cannot update
+hand revisions while disabled, and the first valid event after reattachment initializes before testing the gate.

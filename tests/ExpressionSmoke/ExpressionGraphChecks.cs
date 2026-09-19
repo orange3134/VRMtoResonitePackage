@@ -27,7 +27,8 @@ internal static class ExpressionGraphChecks
         }
 
         foreach (string path in new[] { "Core/Logic/Lifecycle", "Core/Logic/Selection", "Core/Logic/Playback",
-            "API/Receivers/Logic/Left", "API/Receivers/Logic/Right", "API/Receivers/Logic/Select", "API/Receivers/Logic/Automatic" })
+            "API/Receivers/Logic/Left", "API/Receivers/Logic/Right", "API/Receivers/Logic/MenuLeft", "API/Receivers/Logic/MenuRight",
+            "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowExternalInput", "Inputs/ContextMenu/Logic" })
         {
             var board = Descendant(expressions, path);
             Check(board != null && boards.Any(g => g.Key == board), "independent logic board exists: " + path);
@@ -53,7 +54,7 @@ internal static class ExpressionGraphChecks
         }
         var publicReceivers = Descendant(expressions, "API/Receivers").GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
-        Check(publicReceivers.Length == 4, "exactly four public API receivers");
+        Check(publicReceivers.Length == 6, "exactly six public API receivers");
         foreach (string hand in new[] { "Left", "Right" })
         {
             var receiver = publicReceivers.Single(node => node.Slot.Parent.Parent.Name == hand);
@@ -63,9 +64,19 @@ internal static class ExpressionGraphChecks
             Check(receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/Gesture/" + hand,
                 hand + " uses the exact hand Tag");
         }
-        Check(publicReceivers.Where(node => node.Slot.Parent.Parent.Name is "Select" or "Automatic")
-            .All(node => node.GetType().GetGenericArguments().SequenceEqual(new[] { typeof(string) })),
-            "direct selection and automatic retain their string API");
+        foreach (string hand in new[] { "Left", "Right" })
+        {
+            var receiver = publicReceivers.Single(node => node.Slot.Parent.Parent.Name == "Menu" + hand);
+            Check(receiver.GetType().GetGenericArguments().Single() == typeof(int) &&
+                receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/Menu/" + hand,
+                "menu has a separate int path while ordinary input is disabled: " + hand);
+        }
+        Check(publicReceivers.Single(node => node.Slot.Parent.Parent.Name == "Select").GetType().GetGenericArguments().Single() == typeof(string),
+            "mapped expression selection receives an ID");
+        Check(publicReceivers.Single(node => node.Slot.Parent.Parent.Name == "AllowExternalInput").GetType().GetGenericArguments().Single() == typeof(bool),
+            "input permission receives a bool");
+        Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value != "Expr/Override"),
+            "no Override Slot state is generated");
         var core = Descendant(expressions, "Core");
         foreach (string name in new[] { "PlaybackElapsed", "FadeWeight" })
         {
