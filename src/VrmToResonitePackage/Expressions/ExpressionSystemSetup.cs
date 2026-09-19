@@ -8,14 +8,16 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
-    internal const string RequestTag = "ResoPon/Expression/v2/Gesture";
-    internal const string SelectTag = "ResoPon/Expression/v2/Select";
-    internal const string AutomaticTag = "ResoPon/Expression/v2/Automatic";
+    internal const string LeftTag = "ResoPon/Expression/Gesture/Left";
+    internal const string RightTag = "ResoPon/Expression/Gesture/Right";
+    internal const string SelectTag = "ResoPon/Expression/v3/Select";
+    internal const string AutomaticTag = "ResoPon/Expression/v3/Automatic";
     private readonly ExpressionModel _model;
     private readonly Slot _root, _catalog, _core, _outputs, _table, _api, _inputs;
     private readonly Slot _lifecycle, _selection, _playback;
     private const string SelectionTickTag = "ResoPon/Expression/Internal/Selection";
     private const string PlaybackTickTag = "ResoPon/Expression/Internal/Playback";
+    private const string InitializeTag = "ResoPon/Expression/Internal/Initialize";
     private GesturePairCompiler _compiled;
     private readonly Dictionary<string, Slot> _clips = new();
     private readonly Dictionary<string, Slot> _outputSlots = new();
@@ -38,7 +40,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<User>(_core, "PreviousOwner", null);
         foreach (string hand in new[] { "Left", "Right" })
         {
-            Data(_core, hand + "Gesture", 0); Reference<Slot>(_core, hand + "Input", null);
+            Data(_core, hand + "Gesture", 0); Data(_core, hand + "Revision", 0);
         }
         Reference<Slot>(_core, "Override", null); Reference<Slot>(_core, "CurrentExpression", null);
         Data(_core, "PlaybackStart", 0f); Data(_core, "FadeDuration", 0.1f);
@@ -46,7 +48,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_core, "MappedExpression", null); Reference<Slot>(_core, "CandidateExpression", null);
         Data(_core, "SelectionStatus", 0); // 0=unassigned, 1=gesture, 2=override, 3=invalid/unloaded
         Data(_core, "PlaybackElapsed", 0f); Data(_core, "FadeWeight", 1f);
-        Data(_root, "Version", 2);
+        Data(_root, "Version", 3);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");

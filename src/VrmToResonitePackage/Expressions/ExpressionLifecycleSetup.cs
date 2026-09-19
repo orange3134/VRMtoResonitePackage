@@ -17,7 +17,8 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildLifecycle()
     {
-        var g = new ExpressionFlux(_lifecycle);
+        // Core state must remain live: cached Dynamic Inputs regress clone/reset playback.
+        var g = new ExpressionFlux(_lifecycle, useDynamicInputs: false);
         var core = g.Ref(_core);
         // StoredValue is local and not serialized, so clone/load starts with fresh hand inputs.
         var initialized = g.Node("StoredValue", typeof(bool));
@@ -25,7 +26,7 @@ internal sealed partial class ExpressionSystemSetup
         foreach (string hand in new[] { "Left", "Right" })
         {
             cleanup.Add(g.Write<int>(core, hand + "Gesture", g.Constant(0)));
-            cleanup.Add(g.Write<Slot>(core, hand + "Input", g.Ref<Slot>(null)));
+            cleanup.Add(g.Write<int>(core, hand + "Revision", g.Constant(0)));
         }
         cleanup.Add(g.Write<Slot>(core, "Override", g.Ref<Slot>(null)));
         cleanup.Add(g.Write<Slot>(core, "CurrentExpression", g.Ref<Slot>(null)));
@@ -37,6 +38,8 @@ internal sealed partial class ExpressionSystemSetup
         cleanup.Add(g.Set<bool>(initialized, g.Constant(true)));
         var reset = g.If(g.Or(g.Not(initialized), g.Not(g.Equal<User>(g.Owner(_root), g.Read<User>(core, "PreviousOwner")))),
             g.Sequence(cleanup.ToArray()));
+        // API events may arrive before LocalUpdate; preserve both hands even within one impulse.
+        ReceiveUpdate(g, InitializeTag, g.Sequence(reset, g.Write<User>(core, "PreviousOwner", g.Owner(_root))));
         var update = g.Node("LocalUpdate");
         // DynamicImpulseTrigger is synchronous. Keep reset -> selection/snapshot -> playback order,
         // while each target board owns all of its nodes and can be unpacked independently.

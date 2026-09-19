@@ -10,6 +10,7 @@ internal static class ExpressionGraphChecks
     public static void CheckLayout(Slot expressions)
     {
         Report(expressions);
+        ExpressionLayoutChecks.CheckDirection(expressions);
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
         Check(nodes.Count > 0 && nodes.GroupBy(n => n.Slot).All(g => g.Count() == 1), "one Flux node per slot");
         Check(nodes.All(n => n.Group?.IsValid == true), "all expression Flux groups are valid");
@@ -26,7 +27,7 @@ internal static class ExpressionGraphChecks
         }
 
         foreach (string path in new[] { "Core/Logic/Lifecycle", "Core/Logic/Selection", "Core/Logic/Playback",
-            "API/Receivers/Logic/Gesture", "API/Receivers/Logic/Select", "API/Receivers/Logic/Automatic" })
+            "API/Receivers/Logic/Left", "API/Receivers/Logic/Right", "API/Receivers/Logic/Select", "API/Receivers/Logic/Automatic" })
         {
             var board = Descendant(expressions, path);
             Check(board != null && boards.Any(g => g.Key == board), "independent logic board exists: " + path);
@@ -44,6 +45,27 @@ internal static class ExpressionGraphChecks
             foreach (string hand in new[] { "Left", "Right" })
                 Check(boards.Any(b => b.Key == Descendant(module, hand + "/Logic")),
                     "controller hand has an independent board: " + module.Name + "/" + hand);
+        var pending = new Stack<Slot>(); pending.Push(expressions);
+        while (pending.TryPop(out var slot))
+        {
+            Check(slot.Name != "Command", "expression API contains no Command slots");
+            foreach (var child in slot.Children) pending.Push(child);
+        }
+        var publicReceivers = Descendant(expressions, "API/Receivers").GetComponentsInChildren<ProtoFluxNode>()
+            .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
+        Check(publicReceivers.Length == 4, "exactly four public API receivers");
+        foreach (string hand in new[] { "Left", "Right" })
+        {
+            var receiver = publicReceivers.Single(node => node.Slot.Parent.Parent.Name == hand);
+            Check(receiver.GetType().Name == "DynamicImpulseReceiverWithValue`1" &&
+                receiver.GetType().GetGenericArguments().SequenceEqual(new[] { typeof(int) }),
+                hand + " receives int directly");
+            Check(receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/Gesture/" + hand,
+                hand + " uses the exact hand Tag");
+        }
+        Check(publicReceivers.Where(node => node.Slot.Parent.Parent.Name is "Select" or "Automatic")
+            .All(node => node.GetType().GetGenericArguments().SequenceEqual(new[] { typeof(string) })),
+            "direct selection and automatic retain their string API");
         var core = Descendant(expressions, "Core");
         foreach (string name in new[] { "PlaybackElapsed", "FadeWeight" })
         {
@@ -61,6 +83,12 @@ internal static class ExpressionGraphChecks
         foreach (var board in boards.OrderBy(b => RelativePath(expressions, b.Key), StringComparer.Ordinal))
             Console.WriteLine($"BOARD: {RelativePath(expressions, board.Key)}: {board.Count()} nodes, " +
                 $"{board.Select(n => n.Group).Distinct().Count()} groups");
+        int Count(string name) => nodes.Count(node => node.GetType().Name.Split('`')[0] == name);
+        Console.WriteLine($"NATIVE: DynamicVariableValueInput={Count("DynamicVariableValueInput")}, " +
+            $"DynamicVariableObjectInput={Count("DynamicVariableObjectInput")}, " +
+            $"ReadDynamicValueVariable={Count("ReadDynamicValueVariable")}, ReadDynamicObjectVariable={Count("ReadDynamicObjectVariable")}, " +
+            $"Children={Count("Children")}, ForEachObject={Count("ForEachObject")}, For={Count("For")}, GetChild={Count("GetChild")}, " +
+            $"GetActiveUserSelf={Count("GetActiveUserSelf")}, GetActiveUser={Count("GetActiveUser")}");
         int crossed = groups.Count(g => g.Select(n => n.Slot.Parent.Parent).Distinct().Count() > 1);
         Console.WriteLine($"GRAPH: {nodes.Count} nodes, {groups.Length} groups, {boards.Length} boards, " +
             $"largest board {boards.Select(b => b.Count()).DefaultIfEmpty().Max()} nodes, " +

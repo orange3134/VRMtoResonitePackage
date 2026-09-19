@@ -12,18 +12,21 @@ namespace VrmToResonitePackage.Expressions;
 internal sealed class ExpressionFlux
 {
     private readonly Slot _root;
+    private readonly bool _useDynamicInputs;
     private Slot _section;
     private int _sectionIndex, _nodeIndex;
     private readonly Dictionary<(Type, object), IWorldElement> _constants = new();
     private readonly Dictionary<(Type, IWorldElement, IWorldElement), IWorldElement> _reads = new();
+    private readonly Dictionary<(Type, string), IWorldElement> _dynamicInputs = new();
     private readonly Dictionary<(Type, IWorldElement), IWorldElement> _references = new();
     private readonly Dictionary<Slot, IWorldElement> _owners = new();
     private readonly Dictionary<Slot, IWorldElement> _ownerChecks = new();
     private IWorldElement _now;
     private static Dictionary<string, Type[]> _types;
-    public ExpressionFlux(Slot root)
+    public ExpressionFlux(Slot root, bool useDynamicInputs = true)
     {
         _root = root;
+        _useDynamicInputs = useDynamicInputs;
         BeginSection("Shared inputs");
     }
 
@@ -34,6 +37,7 @@ internal sealed class ExpressionFlux
         // Keep constants near their consumers instead of wiring every section back to the first one.
         _constants.Clear();
         _reads.Clear();
+        _dynamicInputs.Clear();
     }
 
     private Slot NodeSlot(Type type, string detail = null)
@@ -47,34 +51,91 @@ internal sealed class ExpressionFlux
     /// <summary>Lay out each logic board without changing its functional parent hierarchy.</summary>
     public static void Arrange(Slot expressions)
     {
-        const int columns = 8;
         const float columnSpacing = 0.65f;
         var sections = expressions.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent).ToArray();
-        int boardIndex = 0;
+        float boardOffset = 0;
         foreach (var board in sections.GroupBy(s => s.Key.Parent))
         {
-            board.Key.GlobalPosition = expressions.LocalPointToGlobal(new float3(boardIndex++ * (columns * columnSpacing + 1), 0, 0));
+            var columns = DependencyColumns(board.SelectMany(s => s).ToArray());
+            board.Key.GlobalPosition = expressions.LocalPointToGlobal(new float3(boardOffset, 0, 0));
             float sectionOffset = 0;
             foreach (var section in board)
             {
                 section.Key.LocalPosition = new float3(0, -sectionOffset, 0);
-                var nodes = section.ToArray();
-                float rowOffset = 0;
-                for (int first = 0; first < nodes.Length; first += columns)
+                float sectionHeight = 0;
+                foreach (var column in section.GroupBy(node => columns[node]))
                 {
-                    float rowHeight = 0.3f;
-                    for (int column = 0; column < columns && first + column < nodes.Length; column++)
+                    float rowOffset = 0;
+                    foreach (var node in column)
                     {
-                        var node = nodes[first + column];
-                        node.Slot.LocalPosition = new float3(column * columnSpacing, -rowOffset, 0);
+                        node.Slot.LocalPosition = new float3(column.Key * columnSpacing, -rowOffset, 0);
                         // Sequence and other variable-port nodes need more vertical space.
-                        rowHeight = Math.Max(rowHeight, 0.18f + 0.045f * Math.Max(node.NodeInputCount, node.NodeOutputCount + node.NodeImpulseCount));
+                        int leftPorts = node.AllInputs.Count() + node.NodeReferenceCount + node.NodeGlobalRefCount + node.AllTargetOperations.Count();
+                        int rightPorts = node.AllSourceOutputs.Count() + node.AllImpulses.Count();
+                        rowOffset += Math.Max(0.3f, 0.18f + 0.045f * Math.Max(leftPorts, rightPorts));
                     }
-                    rowOffset += rowHeight;
+                    sectionHeight = Math.Max(sectionHeight, rowOffset);
                 }
-                sectionOffset += rowOffset + 0.6f;
+                sectionOffset += sectionHeight + 0.6f;
             }
+            boardOffset += (columns.Values.Max() + 1) * columnSpacing + 1;
         }
+    }
+
+    private static Dictionary<ProtoFluxNode, int> DependencyColumns(ProtoFluxNode[] nodes)
+    {
+        var outgoing = nodes.ToDictionary(node => node, _ => new HashSet<ProtoFluxNode>());
+        void Edge(ProtoFluxNode source, ProtoFluxNode target)
+        {
+            if (source != null && target != null && source != target && outgoing.ContainsKey(source) && outgoing.ContainsKey(target))
+                outgoing[source].Add(target);
+        }
+        foreach (var node in nodes)
+        {
+            // Data and node references enter on the left; impulses leave on the right.
+            // AllInputs/AllImpulses also enumerate variable-sized ports such as Sequence.Calls.
+            foreach (var input in node.AllInputs.Concat(node.NodeReferences)) Edge(OwningNode(input.Target), node);
+            foreach (var impulse in node.AllImpulses) Edge(node, OwningNode(impulse.Target));
+        }
+
+        // Feedback cannot all point right. Collapse each strongly connected component into
+        // one column, then layer the acyclic graph by its longest incoming dependency chain.
+        var indices = new Dictionary<ProtoFluxNode, int>();
+        var low = new Dictionary<ProtoFluxNode, int>();
+        var component = new Dictionary<ProtoFluxNode, int>();
+        var stack = new Stack<ProtoFluxNode>();
+        var active = new HashSet<ProtoFluxNode>();
+        int nextIndex = 0, componentCount = 0;
+        void Visit(ProtoFluxNode node)
+        {
+            indices[node] = low[node] = nextIndex++;
+            stack.Push(node); active.Add(node);
+            foreach (var target in outgoing[node])
+            {
+                if (!indices.ContainsKey(target)) { Visit(target); low[node] = Math.Min(low[node], low[target]); }
+                else if (active.Contains(target)) low[node] = Math.Min(low[node], indices[target]);
+            }
+            if (low[node] != indices[node]) return;
+            ProtoFluxNode member;
+            do { member = stack.Pop(); active.Remove(member); component[member] = componentCount; } while (member != node);
+            componentCount++;
+        }
+        foreach (var node in nodes) if (!indices.ContainsKey(node)) Visit(node);
+
+        var incoming = Enumerable.Range(0, componentCount).Select(_ => new HashSet<int>()).ToArray();
+        foreach (var source in nodes)
+            foreach (var target in outgoing[source])
+                if (component[source] != component[target]) incoming[component[target]].Add(component[source]);
+        var columns = new int?[componentCount];
+        int Column(int group) => columns[group] ??= incoming[group].Select(parent => Column(parent) + 1).DefaultIfEmpty(0).Max();
+        return nodes.ToDictionary(node => node, node => Column(component[node]));
+    }
+
+    private static ProtoFluxNode OwningNode(IWorldElement element)
+    {
+        for (; element != null; element = element.Parent)
+            if (element is ProtoFluxNode node) return node;
+        return null;
     }
 
     public Component Node(string name, Type generic = null, params (string Port, IWorldElement Value)[] inputs)
@@ -128,7 +189,9 @@ internal sealed class ExpressionFlux
     // Keep clock and owner nodes local to a board: shared node references join Flux groups.
     public IWorldElement Now => _now ??= Node("WorldTimeFloat");
     public IWorldElement Owner(Slot root) => _owners.TryGetValue(root, out var owner) ? owner :
-        _owners[root] = Node("GetActiveUser", null, ("Instance", Ref(root)));
+        _owners[root] = _root == root || _root.IsChildOf(root)
+            ? Node("GetActiveUserSelf")
+            : Node("GetActiveUser", null, ("Instance", Ref(root)));
     public IWorldElement IsOwner(Slot root) => _ownerChecks.TryGetValue(root, out var check) ? check :
         _ownerChecks[root] = Node("IsLocalUser", null, ("User", Owner(root)));
     public static string Path(string key)
@@ -138,7 +201,26 @@ internal sealed class ExpressionFlux
         string suffix = key[(separator + 1)..];
         return "Expr/" + key[..separator] + "." + (key.StartsWith("Own/", StringComparison.Ordinal) ? suffix : Convert.ToHexString(Encoding.UTF8.GetBytes(suffix)));
     }
-    public IWorldElement Read<T>(IWorldElement source, string key) => Read<T>(source, Text(Path(key)));
+    public IWorldElement Read<T>(IWorldElement source, string key)
+    {
+        string path = Path(key);
+        // Dynamic Inputs bind from their own Slot, not from a runtime Source input.
+        // Only replace fixed references resolving to the same named variable space.
+        if (_useDynamicInputs && source is Nodes.RefObjectInput<Slot> reference && reference.Target.Target is Slot slot &&
+            NamedSpace(slot) is { } space && space == NamedSpace(_section))
+        {
+            if (_dynamicInputs.TryGetValue((typeof(T), path), out var cached)) return cached;
+            var node = Node(typeof(T).IsValueType ? "DynamicVariableValueInput" : "DynamicVariableObjectInput", typeof(T));
+            var name = node.Slot.AddSlot("VariableName").AttachComponent<GlobalValue<string>>();
+            name.Value.Value = path;
+            Link(node, "VariableName", name);
+            return _dynamicInputs[(typeof(T), path)] = Out(node, "Value");
+        }
+        return Read<T>(source, Text(path));
+    }
+
+    private static DynamicVariableSpace NamedSpace(Slot slot) =>
+        slot.GetComponentInParents<DynamicVariableSpace>(space => space.SpaceName.Value == "Expr");
     public IWorldElement Read<T>(IWorldElement source, IWorldElement path)
     {
         if (_reads.TryGetValue((typeof(T), source, path), out var cached)) return cached;
@@ -180,14 +262,19 @@ internal sealed class ExpressionFlux
     public IWorldElement Active(IWorldElement slot) => Node("GetSlotActive", null, ("Instance", slot));
     public Component Each(IWorldElement parent, Func<IWorldElement, IWorldElement> body)
     {
-        var loop = Node("For", null, ("Count", Node("ChildrenCount", null, ("Instance", parent))));
-        var child = Node("GetChild", null, ("Instance", parent), ("ChildIndex", Out(loop, "Iteration")));
-        Link(loop, "LoopIteration", body(child));
+        // None of these loop bodies change the collection; preserve direct-child order.
+        var loop = NodeSlot(typeof(Nodes.ForEachObject<IReadOnlyList<Slot>, Slot>))
+            .AttachComponent<Nodes.ForEachObject<IReadOnlyList<Slot>, Slot>>();
+        Link(loop, "Collection", Node("Children", null, ("Instance", parent)));
+        Link(loop, "LoopIteration", body(Out(loop, "Element")));
         return loop;
     }
-    public Component Receiver(string tag, bool withSlot = true)
+    public Component Receiver(string tag, bool withString = true) => Receiver(tag, withString ? typeof(string) : null);
+    public Component Receiver<T>(string tag) => Receiver(tag, typeof(T));
+    private Component Receiver(string tag, Type type)
     {
-        var node = Node(withSlot ? "DynamicImpulseReceiverWithObject" : "DynamicImpulseReceiver", withSlot ? typeof(Slot) : null);
+        var node = Node(type == null ? "DynamicImpulseReceiver" : type.IsValueType
+            ? "DynamicImpulseReceiverWithValue" : "DynamicImpulseReceiverWithObject", type);
         var global = node.Slot.AddSlot("Tag").AttachComponent<GlobalValue<string>>();
         global.Value.Value = tag;
         Link(node, "Tag", global);
@@ -197,7 +284,10 @@ internal sealed class ExpressionFlux
         Node("DynamicImpulseTrigger", null, ("TargetHierarchy", destination), ("Tag", Text(tag)),
             ("ExcludeDisabled", Constant(true)));
     public Component Trigger(IWorldElement destination, string tag, IWorldElement payload) =>
-        Node("DynamicImpulseTriggerWithObject", typeof(Slot), ("TargetHierarchy", destination), ("Tag", Text(tag)),
+        Trigger<string>(destination, Text(tag), payload);
+    public Component Trigger<T>(IWorldElement destination, IWorldElement tag, IWorldElement payload) =>
+        Node(typeof(T).IsValueType ? "DynamicImpulseTriggerWithValue" : "DynamicImpulseTriggerWithObject", typeof(T),
+            ("TargetHierarchy", destination), ("Tag", tag),
             ("ExcludeDisabled", Constant(true)), ("Value", payload));
 
     public static Slot Record(Slot parent, string name)

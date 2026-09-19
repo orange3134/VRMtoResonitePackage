@@ -7,12 +7,10 @@ internal sealed partial class ExpressionSystemSetup
 {
     private void BuildSelection()
     {
-        var g = new ExpressionFlux(_selection);
+        // Keep Core reads live across synchronous API events, reset, and playback.
+        var g = new ExpressionFlux(_selection, useDynamicInputs: false);
         var core = g.Ref(_core);
         var actions = new List<IWorldElement>();
-        foreach (string hand in new[] { "Left", "Right" })
-            actions.Add(g.If(g.Not(g.Active(g.Read<Slot>(core, hand + "Input"))),
-                g.Write<int>(core, hand + "Gesture", g.Constant(0))));
 
         g.BeginSection("Resolve gesture and override");
         var index = g.Binary<int>("ValueAdd", g.Binary<int>("ValueMul", g.Read<int>(core, "LeftGesture"), g.Constant(8)),
@@ -45,7 +43,8 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildPlayback()
     {
-        var g = new ExpressionFlux(_playback);
+        // Using Dynamic Inputs here regressed cloned playback in the runtime test.
+        var g = new ExpressionFlux(_playback, useDynamicInputs: false);
         var core = g.Ref(_core);
         var current = g.Read<Slot>(core, "CurrentExpression");
         var elapsed = g.Sub(g.Now, g.Read<float>(core, "PlaybackStart"));

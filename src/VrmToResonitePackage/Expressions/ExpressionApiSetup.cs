@@ -8,50 +8,48 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildApi()
     {
         var logic = _api.AddSlot("Logic");
-        BuildGestureReceiver(new(logic.AddSlot("Gesture")));
+        BuildGestureReceiver(new(logic.AddSlot("Left")), "Left", LeftTag);
+        BuildGestureReceiver(new(logic.AddSlot("Right")), "Right", RightTag);
         BuildSelectReceiver(new(logic.AddSlot("Select")));
         BuildAutomaticReceiver(new(logic.AddSlot("Automatic")));
     }
 
-    private void BuildGestureReceiver(ExpressionFlux g)
+    // Keep initialization and both stages synchronous: each event resolves the hand pair
+    // that exists when it arrives, even when two events arrive before the next frame.
+    private IWorldElement ApplyRequest(ExpressionFlux g, IWorldElement mutation) => g.Sequence(
+        g.Trigger(g.Ref(_lifecycle), InitializeTag), mutation,
+        g.Trigger(g.Ref(_selection), SelectionTickTag), g.Trigger(g.Ref(_playback), PlaybackTickTag));
+
+    private void BuildGestureReceiver(ExpressionFlux g, string hand, string tag)
     {
         var core = g.Ref(_core);
-        var receiver = g.Receiver(RequestTag);
-        var command = Out(receiver, "Value");
-        var hand = g.Read<int>(command, "Hand");
-        var gesture = g.Read<int>(command, "Gesture");
-        var available = g.Read<bool>(command, "Available");
-        var valid = g.And(g.IsOwner(_root), g.Active(command),
-            g.Binary<int>("ValueGreaterOrEqual", gesture, g.Constant(0)),
-            g.Binary<int>("ValueLessOrEqual", gesture, g.Constant(7)));
-        var writes = new List<IWorldElement>();
-        for (int side = 0; side < 2; side++)
-        {
-            string name = side == 0 ? "Left" : "Right";
-            // A disconnect only clears the hand still owned by this input.
-            writes.Add(g.If(g.Equal<int>(hand, g.Constant(side)),
-                g.If(available, g.Sequence(g.Write<int>(core, name + "Gesture", gesture),
-                        g.Write<Slot>(core, name + "Input", command)),
-                    g.If(g.Equal<Slot>(g.Read<Slot>(core, name + "Input"), command),
-                        g.Sequence(g.Write<int>(core, name + "Gesture", g.Constant(0)),
-                            g.Write<Slot>(core, name + "Input", g.Ref<Slot>(null)))))));
-        }
-        Link(receiver, "OnTriggered", g.If(valid, g.Sequence(writes.ToArray())));
+        var receiver = g.Receiver<int>(tag);
+        var payload = Out(receiver, "Value");
+        var mutation = g.Sequence(
+            g.Write<int>(core, hand + "Gesture", payload),
+            g.Write<int>(core, hand + "Revision",
+                g.Binary<int>("ValueAdd", g.Read<int>(core, hand + "Revision"), g.Constant(1))));
+        Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
+            g.Binary<int>("ValueGreaterOrEqual", payload, g.Constant(0)),
+            g.Binary<int>("ValueLessThan", payload, g.Constant(8))), ApplyRequest(g, mutation)));
     }
 
     private void BuildSelectReceiver(ExpressionFlux g)
     {
         var receiver = g.Receiver(SelectTag);
-        var expression = Out(receiver, "Value");
-        Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root), g.Active(expression), g.Read<bool>(expression, "Enabled"),
-                g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", expression)), g.Ref(_catalog))),
-            g.Write<Slot>(g.Ref(_core), "Override", expression)));
+        var id = Out(receiver, "Value");
+        var select = g.Each(g.Ref(_catalog), expression => g.If(
+            g.And(g.Active(expression), g.Read<bool>(expression, "Enabled"),
+                g.Equal<string>(id, g.Read<string>(expression, "Id"))),
+            ApplyRequest(g, g.Write<Slot>(g.Ref(_core), "Override", expression))));
+        Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
+            g.Not(g.Equal<string>(id, g.Text(""))), g.Node("NotNull", typeof(string), ("Instance", id))), select));
     }
 
     private void BuildAutomaticReceiver(ExpressionFlux g)
     {
-        var receiver = g.Receiver(AutomaticTag, false);
+        var receiver = g.Receiver(AutomaticTag);
         Link(receiver, "OnTriggered", g.If(g.IsOwner(_root),
-            g.Write<Slot>(g.Ref(_core), "Override", g.Ref<Slot>(null))));
+            ApplyRequest(g, g.Write<Slot>(g.Ref(_core), "Override", g.Ref<Slot>(null)))));
     }
 }
