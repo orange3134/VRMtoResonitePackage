@@ -42,7 +42,7 @@ internal sealed partial class ExpressionSystemSetup
         _playback = logic.AddSlot("Playback");
         foreach (string hand in new[] { "Left", "Right" })
         {
-            Data(_core, hand + "Gesture", 0); Data(_core, hand + "Revision", 0);
+            Data(_core, hand + "Gesture", 0);
         }
         Data(_core, "AllowExternalInput", true);
         Reference<Slot>(_core, "CurrentExpression", null);

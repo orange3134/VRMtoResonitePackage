@@ -24,13 +24,8 @@ internal sealed partial class ExpressionSystemSetup
         g.If(allowed ?? g.Constant(true), g.Sequence(mutation,
             g.Trigger(g.Ref(_selection), SelectionTickTag), g.Trigger(g.Ref(_playback), PlaybackTickTag))));
 
-    private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture)
-    {
-        var core = g.Ref(_core);
-        return g.Sequence(g.Write<int>(core, CoreSpace, hand + "Gesture", gesture),
-            g.Write<int>(core, CoreSpace, hand + "Revision",
-                g.Binary<int>("ValueAdd", g.Read<int>(core, CoreSpace, hand + "Revision"), g.Constant(1))));
-    }
+    private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
+        g.Write<int>(g.Ref(_core), CoreSpace, hand + "Gesture", gesture);
 
     private void BuildGestureReceiver(ExpressionFlux g, string hand, string tag, bool fromMenu)
     {

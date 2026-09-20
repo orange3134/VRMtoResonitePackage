@@ -137,22 +137,19 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"),
             "validated table entry is the current expression");
         float start = Get<float>(core, "PlaybackStart");
-        int revision = Get<int>(core, "LeftRevision");
         Gesture(0, 1);
-        Check(Get<float>(core, "PlaybackStart") == start && Get<int>(core, "LeftRevision") == revision + 1,
-            "same gesture increments its event revision without restarting playback");
+        Check(Get<float>(core, "PlaybackStart") == start && Get<int>(core, "LeftGesture") == 1,
+            "same gesture preserves the hand value without restarting playback");
         await Frames();
         Check(Get<float>(core, "PlaybackStart") == start, "same expression does not restart playback");
         Gesture(1, 1); await Frames();
         Check(Math.Abs(field.Value - 0.7f) < 0.01, "both-hand table entry selects Angry");
         start = Get<float>(core, "PlaybackStart");
-        int leftRevision = Get<int>(core, "LeftRevision"), rightRevision = Get<int>(core, "RightRevision");
         foreach (int malformed in new[] { int.MinValue, -1, 8, 255, int.MaxValue })
         {
             Gesture(0, malformed);
             Gesture(1, malformed);
             Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
-                Get<int>(core, "LeftRevision") == leftRevision && Get<int>(core, "RightRevision") == rightRevision &&
                 Get<int>(core, "PairIndex") == 9 && Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry") &&
                 Get<bool>(core, "AllowExternalInput") && Get<float>(core, "PlaybackStart") == start,
                 "malformed gesture leaves hand state and playback unchanged: " + malformed);
@@ -169,12 +166,11 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             Check(!Get<bool>(core, "AllowExternalInput") && Get<int>(core, "PairIndex") == 8 &&
                 Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"), "invalid or unmapped ID preserves menu selection");
         }
-        leftRevision = Get<int>(core, "LeftRevision"); rightRevision = Get<int>(core, "RightRevision");
         Gesture(0, 0); Gesture(1, 1); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01 && Get<int>(core, "PairIndex") == 8 &&
-            Get<int>(core, "LeftRevision") == leftRevision && Get<int>(core, "RightRevision") == rightRevision &&
+            Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 0 &&
             !Get<bool>(core, "AllowExternalInput"),
-            "menu-only mode ignores normal input without altering hand values or revisions");
+            "menu-only mode ignores normal input without altering hand values");
         MenuGesture(1, 1);
         Check(!Get<bool>(core, "AllowExternalInput") && Get<int>(core, "PairIndex") == 9 &&
             Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry"),
@@ -227,14 +223,30 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Math.Abs(field.Value - 1) < 0.01, "deleting row 8 does not shift row 9");
 
         var touch = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules").FindChild("Touch");
-        var hardware = touch.FindChild("Left");
-        Gesture(0, 1);
-        Set(hardware, "Stable", 1); Set(hardware, "LastRevision", Get<int>(core, "LeftRevision"));
-        Gesture(0, 1); await Frames();
-        Check(Get<int>(core, "LeftGesture") == 1, "inactive controller preserves a newer manual event with the same gesture");
-        Set(hardware, "Stable", 1); Set(hardware, "LastRevision", Get<int>(core, "LeftRevision"));
+        start = Get<float>(core, "PlaybackStart");
+        foreach (string side in new[] { "Left", "Right" })
+        {
+            var hardware = touch.FindChild(side);
+            Set(hardware, "Candidate", 1); Set(hardware, "Stable", 1);
+            Set(hardware, "GripHeld", true); Set(hardware, "TriggerHeld", true);
+        }
         await Frames();
-        Check(Get<int>(core, "LeftGesture") == 0, "inactive controller clears the gesture when its event revision is still current");
+        Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
+            Get<float>(core, "PlaybackStart") == start && Math.Abs(field.Value - 1) < 0.01,
+            "inactive controllers retain the last accepted hand values and expression without restarting playback");
+        foreach (string side in new[] { "Left", "Right" })
+        {
+            var hardware = touch.FindChild(side);
+            Check(Get<int>(hardware, "Candidate") == -1 && Get<int>(hardware, "Stable") == -1 &&
+                !Get<bool>(hardware, "GripHeld") && !Get<bool>(hardware, "TriggerHeld"),
+                "inactive controller resets sensing state for reconnection: " + side);
+        }
+        Gesture(0, 2); await Frames();
+        Check(Get<int>(core, "LeftGesture") == 2 && Get<int>(core, "RightGesture") == 1,
+            "the next accepted input replaces only its hand while controllers remain inactive");
+        Gesture(0, 0); await Frames();
+        Check(Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 1,
+            "explicit Neutral clears only the requested hand");
         Gesture(0, 1); await Frames();
         touch.Destroy(); await Frames();
         Check(Get<int>(core, "LeftGesture") == 1, "deleting a controller module preserves the last accepted int state");
@@ -363,7 +375,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         avatar.Parent = wearer;
         Gesture(0, 1); Gesture(1, 1);
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 && Get<int>(core, "PairIndex") == 9 &&
-            Get<bool>(core, "AllowExternalInput") && Get<int>(core, "LeftRevision") == 1 && Get<int>(core, "RightRevision") == 1,
+            Get<bool>(core, "AllowExternalInput"),
             "first events after reattachment initialize once and retain both hand requests before LocalUpdate");
         AllowInput(); Gesture(0, 0); Gesture(1, 0);
         await Frames();

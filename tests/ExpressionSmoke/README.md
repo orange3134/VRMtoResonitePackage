@@ -16,8 +16,8 @@ serialized VRChat menu enum values, gesture conditions, Hermite curves, public
 impulse validation, all 64 compiled gesture pairs, layer composition and history rejection,
 all eight int values on each of the ResoPon/Expression/Gesture/Left and ResoPon/Expression/Gesture/Right Tags, immediate evaluation of each
 received hand pair (including back-to-back events before the next frame), unchanged-expression
-playback, out-of-range integers, invalid/null selection IDs, argument-type mismatches, revision-aware controller
-disconnects and removable modules, editable table references, original tracking drivers, same-wearer clones,
+playback, out-of-range integers, invalid/null selection IDs, argument-type mismatches, last-input retention across controller
+inactivity and removable modules, editable table references, original tracking drivers, same-wearer clones,
 and saving/reimporting/replaying an actual `.resonitepackage`.
 It also verifies one Flux node per slot, named logic sections, and distinct node
 positions before and after package reimport. Every connection outside a feedback cycle
@@ -85,10 +85,10 @@ initialize once while worn and rearm when the local user stops wearing the avata
 The previous active client clears state once on departure only when no new wearer is present.
 Private stages reject unworn updates, unworn clones do not initialize or repeatedly clear
 stored state, and their first wear restores the base output. Same-frame reattachment API
-requests verify that initialization does not discard either hand or reset revisions twice.
+requests verify that initialization runs once and does not discard either hand.
 Mapping a Catalog entry makes it appear in the menu; copies from the template become usable after assignment.
 The mode bool defaults to true and resets on cloning, loading and reattachment. Ordinary input cannot update
-hand revisions while disabled, and the first valid event after reattachment initializes before testing the gate.
+hand values while disabled, and the first valid event after reattachment initializes before testing the gate.
 
 Version 5 gives each record schema a distinct DynamicVariableSpace name. The fixture
 checks every record's expected name and every value/reference prefix before and after

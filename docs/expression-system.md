@@ -54,7 +54,7 @@ Expressions/
 
 Core に入力元の一覧・優先順位・有効期限・汎用 Animator パラメーターは持たない。
 入力内容は `ResoPon/Expression/Gesture/Left`／`ResoPon/Expression/Gesture/Right` タグと int 引数で渡す。Core は入力元の Slot 参照を保持しない。
-各手の更新番号は、コントローラー切断時に後から届いた別入力を消さないために使う。
+各手は最後に受理した入力値を保持し、コントローラーが切断されても変更しない。更新番号は保持しない。
 
 Flux は1スロット1ノードで、名前付きの節を保持しながらモジュール全体の接続関係で整列する。
 データの供給元を左、入力を使うノードを右に置く。Impulse も発火元から呼び出し先へ左から右に配置する。
@@ -78,7 +78,7 @@ Dynamic Impulse は装着者のクライアントで実行され、所有者に�
 `DynamicVariableValueInput<T>`／`DynamicVariableObjectInput<T>` で読む。
 間に別名の空間があっても、要求した空間名で祖先を検索する。
 
-- 各手の Candidate・Stable・Since・LastRevision・GripHeld・TriggerHeld：`ExpressionGestureHand`。
+- 各手の Candidate・Stable・Since・GripHeld・TriggerHeld：`ExpressionGestureHand`。
 - 機種ごとの Grip/Trigger しきい値・StabilitySeconds：親モジュールの `ExpressionGestureSettings`。
 - Selection の左右値と、Playback の開始時刻・フェード秒数：`ExpressionCore`。
 - Selection／Playback の CurrentExpression：`ExpressionCore` の Object Input。
@@ -109,7 +109,6 @@ Inspector 上の Core の変数名には `ExpressionCore/` が付く。他のレ
 | Core の変数 | 確認する内容 |
 |---|---|
 | `LeftGesture` / `RightGesture` | 各入力から届いた0〜7の状態 |
-| `LeftRevision` / `RightRevision` | 受理したイベントの更新番号。同じ状態の再送でも増える |
 | `PairIndex` | 左×8＋右で求めた対応表の番号 |
 | AllowExternalInput | true=通常入力も許可、false=コンテキストメニューのみ（編集可能） |
 | `CurrentExpression` | Selection の検証を通過した再生対象。無効・未割当なら null |
@@ -188,7 +187,7 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
 | 6 | HandGun |
 | 7 | ThumbsUp |
 
-同じ手には最後に受理したイベントを採用し、もう一方の手は変更しない。bool が false の間は、通常入力を受理せず、左右値と更新番号を維持する。
+同じ手には最後に受理したイベントを採用し、もう一方の手は変更しない。bool が false の間は、通常入力を受理せず、左右値を維持する。
 キーボードとメニューの指定はラッチする。キーやボタンを離しても戻らず、Neutral を選ぶと0に戻る。
 物理入力は安定したジェスチャーが変化したときと接続時にだけ送る。
 通常入力が許可されている間は、手を動かさずにキーボードで設定した状態を維持し、次の物理ジェスチャー変更で更新する。メニュー専用モードでは機種別の判定状態をリセットし、許可を戻した後は再び安定した手形を検出して送る。
@@ -197,9 +196,9 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
 - キーボード: 左手は Ctrl+Alt+1〜8、右手は Ctrl+Alt+Shift+1〜8。数字1が Neutral、8が ThumbsUp。
   `Bindings` の `Key`、`Shift`、`Enabled`、送信先の `Tag` と整数値の `Gesture` を編集できる。
 - コントローラー: 不要な `Modules/Touch|Index|Vive|WindowsMR` を削除できる。
-  機器の切断を検出すると、その機器からの送信が最新の場合だけ Neutral を送る。
-  後から別入力が同じジェスチャーを送っていても、その状態を保持する。
-  モジュール自体の削除・無効化はイベントを送らないため、手の状態は残る。必要なら Neutral を送ってから削除する。
+  機器の切断・非アクティブ化では判定状態だけをリセットし、Neutral は送らない。
+  最後に受理した左右値を保持し、再接続後に安定した手形を検出すると、その手の値を更新する。
+  モジュール自体の削除・無効化でも手の状態は残る。解除したい場合は Neutral を明示的に送る。
   Grip/Trigger の押し込み・解放しきい値と安定待ち時間を機種ごとに編集できる。
   指を個別に取得できない機種の Victory/Rock はボタン操作から判定する。
 

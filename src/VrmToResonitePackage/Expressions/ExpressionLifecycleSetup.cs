@@ -23,7 +23,6 @@ internal sealed partial class ExpressionSystemSetup
         foreach (string hand in new[] { "Left", "Right" })
         {
             cleanup.Add(g.Write<int>(core, CoreSpace, hand + "Gesture", g.Constant(0)));
-            cleanup.Add(g.Write<int>(core, CoreSpace, hand + "Revision", g.Constant(0)));
         }
         cleanup.Add(g.Write<bool>(core, CoreSpace, "AllowExternalInput", g.Constant(true)));
         cleanup.Add(g.Write<Slot>(core, CoreSpace, "CurrentExpression", g.Ref<Slot>(null)));

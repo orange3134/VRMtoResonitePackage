@@ -162,13 +162,11 @@ internal sealed partial class ExpressionSystemSetup
         var hand = Record(module, side.ToString(), GestureHandSpace);
         var g = new ExpressionFlux(hand.AddSlot("Logic"));
         var handRef = g.Ref(hand); var modRef = g.Ref(module);
-        Data(hand, "LastRevision", -1);
         Data(hand, "Candidate", -1); Data(hand, "Since", 0f); Data(hand, "Stable", -1);
         Data(hand, "GripHeld", false); Data(hand, "TriggerHeld", false);
         var initialized = g.Node("StoredValue", typeof(bool));
         var reset = g.If(g.Not(initialized), g.Sequence(
             g.Write<int>(handRef, GestureHandSpace, "Candidate", g.Constant(-1)), g.Write<int>(handRef, GestureHandSpace, "Stable", g.Constant(-1)),
-            g.Write<int>(handRef, GestureHandSpace, "LastRevision", g.Constant(-1)),
             g.Write<bool>(handRef, GestureHandSpace, "GripHeld", g.Constant(false)), g.Write<bool>(handRef, GestureHandSpace, "TriggerHeld", g.Constant(false)),
             g.Set<bool>(initialized, g.Constant(true))));
         var controller = g.Node(device, null, ("User", g.Owner(_root)), ("Node", g.Constant(side)));
@@ -200,17 +198,13 @@ internal sealed partial class ExpressionSystemSetup
                 g.Choose<int>(thumb, g.Constant(3), g.Constant(6))), g.Constant(2))));
         var changed = g.Not(g.Equal<int>(gesture, g.Read<int>(handRef, GestureHandSpace, "Candidate")));
         var stable = g.Not(g.Greater(g.Add(g.Read<float>(handRef, GestureHandSpace, "Since"), g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds")), g.Now));
-        string revision = side + "Revision";
         var send = g.Sequence(SendGesture(g, g.Text(GestureTag(kind)), gesture),
-            g.Write<int>(handRef, GestureHandSpace, "LastRevision", g.Read<int>(g.Ref(_core), CoreSpace, revision)),
             g.Write<int>(handRef, GestureHandSpace, "Stable", gesture));
         OwnerUpdate(g, g.Sequence(reset, g.If(g.And(active, g.Read<bool>(g.Ref(_core), CoreSpace, "AllowExternalInput")), g.Sequence(
             g.Write<bool>(handRef, GestureHandSpace, "GripHeld", grip), g.Write<bool>(handRef, GestureHandSpace, "TriggerHeld", indexCurled),
             g.If(changed, g.Sequence(g.Write<int>(handRef, GestureHandSpace, "Candidate", gesture), g.Write<float>(handRef, GestureHandSpace, "Since", g.Now))),
             g.If(g.And(stable, g.Not(g.Equal<int>(g.Read<int>(handRef, GestureHandSpace, "Stable"), gesture))), send)),
-            g.Sequence(g.If(g.And(g.Not(g.Equal<int>(g.Read<int>(handRef, GestureHandSpace, "Stable"), g.Constant(-1))),
-                    g.Equal<int>(g.Read<int>(handRef, GestureHandSpace, "LastRevision"), g.Read<int>(g.Ref(_core), CoreSpace, revision))),
-                SendGesture(g, g.Text(GestureTag(kind)), g.Constant(0))),
+            g.Sequence(
                 g.Write<int>(handRef, GestureHandSpace, "Candidate", g.Constant(-1)),
                 g.Write<int>(handRef, GestureHandSpace, "Stable", g.Constant(-1)),
                 g.Write<bool>(handRef, GestureHandSpace, "GripHeld", g.Constant(false)),

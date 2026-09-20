@@ -81,6 +81,9 @@ internal static class ExpressionGraphChecks
             "no Override Slot state is generated");
         Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<User>>().Count == 0,
             "expression state retains no wearer User references");
+        Check(expressions.GetComponentsInChildren<DynamicValueVariable<int>>()
+            .All(v => !v.VariableName.Value.EndsWith("Revision", StringComparison.Ordinal)),
+            "expression state retains no input revisions");
         var core = Descendant(expressions, "Core");
         Check(core.GetComponents<DynamicValueVariable<int>>().All(v => v.VariableName.Value != "ExpressionCore/SelectionStatus"),
             "Core contains no SelectionStatus diagnostic variable");

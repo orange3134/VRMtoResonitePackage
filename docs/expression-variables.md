@@ -78,7 +78,6 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 |---|---|---|---|
 | `AllowExternalInput` | bool | true | **設定**。通常のジェスチャー・キーボード・外部左右 API の受付可否。メニュー操作で false、初期化で true。許可 API でも変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の 0〜7。メニューも同じ値を更新 |
-| `LeftRevision` / `RightRevision` | int | 0 | 各手の受理ごとに加算。同じ値の再送でも増える。禁止中の通常入力では増えない |
 | `PairIndex` | int | 0 | Selection が計算した LeftGesture × 8 + RightGesture（0〜63） |
 | `CurrentExpression` | Slot | null | Slot 有効・Enabled=true・アセット取得済みの候補。それ以外は null |
 | `PlaybackStart` | float | 0 | CurrentExpression の参照が変わった WorldTimeFloat（秒）。同じ表情の再指定では再生を始め直さない |
@@ -99,7 +98,7 @@ Lifecycle は現在の装着者がローカルユーザーの場合だけ、初�
 初期化済みかは保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。
 公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、最初の LocalUpdate より早い左右入力も保持する。
 
-初期化時は左右値・更新番号・PairIndex を 0、AllowExternalInput を true、
+初期化時は左右値・PairIndex を 0、AllowExternalInput を true、
 CurrentExpression を null、Outputs の Result・Snapshot を Base、
 キーボード Held を false に戻す。その後の Selection → Playback で現在の対応表に応じた状態になる。
 PlaybackStart・FadeDuration はここでは変更しないため、時計から算出する PlaybackElapsed・FadeWeight は初期化完了の指標ではない。
@@ -161,22 +160,22 @@ Touch・Index・Vive・WindowsMR の各モジュールに以下の設定を持�
 比較は厳密な `入力値 > しきい値`。Vive・WindowsMR は Grip の bool 出力を直接使うため、Grip の2設定は判定に使わない。
 各モジュールの Left / Right は独立した ExpressionGestureHand スコープを持つ。
 機種別入力もローカルな `StoredValue<bool>` で初期化済みかを管理し、User 参照は保持しない。
-ローカルユーザーが装着者でなくなるとフラグを false に戻し、次の装着時に候補・安定値・更新番号・押下判定を初期化する。
+ローカルユーザーが装着者でなくなるとフラグを false に戻し、次の装着時に候補・安定値・押下判定を初期化する。
 
 | 名前 | 型 | 初期値 | 更新元・役割 |
 |---|---|---|---|
 | `Candidate` | int | -1 | 最新の入力判定候補。変化すると Since を更新 |
 | `Since` | float | 0 | Candidate が変わった WorldTimeFloat（秒）。安定待ちの起点 |
 | `Stable` | int | -1 | 安定判定後に送信したジェスチャー。変化時だけ再送するための比較値 |
-| `LastRevision` | int | -1 | この機種が送信した直後の Core の該当手の Revision |
 | `GripHeld` | bool | false | 前回の Grip 判定。次回の押下／解放しきい値を選ぶ |
 | `TriggerHeld` | bool | false | 前回の Trigger 判定。次回の押下／解放しきい値を選ぶ |
 
 -1 は未確定・未送信で、公開左右 API の有効値ではない。
-切断時は Stable が確定済みかつ LastRevision が Core の現在値と一致するときだけ Neutral を送る。
-後から別入力が届いていれば Revision が異なるため、その入力を消さない。
-入力禁止中も判定状態をリセットするが、Neutral の通常入力は API に拒否される。
-モジュール自体の削除・無効化では更新処理が走らず、手の状態が残る。
+切断・非アクティブ時や入力禁止中は Candidate・Stable を -1、GripHeld・TriggerHeld を false に戻し、入力イベントは送らない。
+Core は左右それぞれで最後に受理した値を保持し、更新番号は保持しない。
+再接続・入力再許可後に安定した手形を検出すると、その手の値を新しい入力で更新する。
+モジュール自体の削除・無効化でも手の状態は残る。明示的な Neutral（0）で解除できる。
+アバターの装着解除・再装着・複製に伴う Core の初期化は、機器の切断とは別に行う。
 
 ## Diagnostics
 
@@ -229,7 +228,7 @@ Internal の3つは公開操作用ではない。メニューボタンの送信�
 
 - [ExpressionSystemSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionSystemSetup.cs)：Core、Catalog、Outputs、対応表、診断レコードの生成。
 - [ExpressionFlux.cs](../src/VrmToResonitePackage/Expressions/ExpressionFlux.cs)：スコープ、変数・定数ノード、読み書き。
-- [ExpressionApiSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionApiSetup.cs)：入力検証、更新番号、モード変更、ID の逆引き。
+- [ExpressionApiSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionApiSetup.cs)：入力検証、左右値の更新、モード変更、ID の逆引き。
 - [ExpressionLifecycleSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionLifecycleSetup.cs)：装着状態による初期化・終了処理。
 - [ExpressionPlaybackSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionPlaybackSetup.cs)：選択検証、フェード、追跡入力との合成。
 - [ExpressionInputSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionInputSetup.cs)：メニュー、キー割当、機種別入力。
