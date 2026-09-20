@@ -23,7 +23,8 @@ internal sealed partial class ExpressionSystemSetup
         var selected = g.Local<Slot>();
         var current = g.Read<Slot>(core, CoreSpace, "CurrentExpression");
         var noExpression = g.Ref<Slot>(null);
-        actions.Add(g.Set<Slot>(selected, g.Choose<Slot>(ValidExpression(g, candidate), candidate, noExpression)));
+        var resolved = g.Choose<Slot>(ValidExpression(g, candidate), candidate, noExpression);
+        actions.Add(g.Set<Slot>(selected, resolved));
         actions.Add(g.Write<int>(core, CoreSpace, "PairIndex", index));
 
         g.BeginSection("Snapshot and switch only when changed");
@@ -32,7 +33,13 @@ internal sealed partial class ExpressionSystemSetup
             g.Write<float>(core, CoreSpace, "FadeDuration", g.Choose<float>(g.Active(selected),
                 g.Read<float>(selected, ClipSpace, "FadeIn"), g.Read<float>(current, ClipSpace, "FadeOut"))),
             g.Write<float>(core, CoreSpace, "PlaybackStart", g.Now), g.Write<Slot>(core, CoreSpace, "CurrentExpression", selected))));
-        ReceiveUpdate(g, SelectionTickTag, g.Sequence(actions.ToArray()));
+        var select = g.Sequence(actions.ToArray());
+        ReceiveUpdate(g, SelectionTickTag, select);
+        // API requests retain synchronous selection. Inspector/table/asset edits also
+        // update selection, but an unchanged pair/clip no longer runs this sequence.
+        var changed = g.If(g.IsOwner(_root), g.Sequence(select, g.Trigger(g.Ref(_playback), PlaybackTickTag)));
+        g.OnChanged<int>(index, changed);
+        g.OnChanged<Slot>(resolved, changed);
     }
 
     private void BuildPlayback()
@@ -61,6 +68,8 @@ internal sealed partial class ExpressionSystemSetup
         DriveDiagnostic("PlaybackElapsed", elapsed);
         DriveDiagnostic("FadeWeight", blend);
         ReceiveUpdate(g, PlaybackTickTag, mix);
+        // Animation time, crossfades and live tracking still require continuous sampling.
+        Link(g.Node("LocalUpdate"), "OnUpdate", g.If(g.IsOwner(_root), mix));
 
         void DriveDiagnostic(string name, IWorldElement value)
         {

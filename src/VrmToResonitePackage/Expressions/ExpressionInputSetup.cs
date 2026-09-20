@@ -14,11 +14,7 @@ internal sealed partial class ExpressionSystemSetup
     private static string GestureTag(int hand) => hand == 0 ? LeftTag : RightTag;
     private IWorldElement SendGesture(ExpressionFlux g, IWorldElement tag, IWorldElement gesture) =>
         g.Trigger<int>(g.Ref(_api), tag, gesture);
-    private void OwnerUpdate(ExpressionFlux graph, IWorldElement action, IWorldElement otherwise = null)
-    {
-        var update = graph.Node("LocalUpdate");
-        Link(update, "OnUpdate", graph.If(graph.IsOwner(_root), action, otherwise));
-    }
+
     private void BuildInputs(bool menu)
     {
         if (menu) BuildMenus();
@@ -106,14 +102,33 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildMenuAvailability(Slot menu)
     {
-        var g = new ExpressionFlux(menu.AddSlot("Logic"));
-        // Keep menu visibility editable: adding/removing a table mapping updates the next frame.
+        _menuAvailability = menu.AddSlot("Logic");
+        var g = new ExpressionFlux(_menuAvailability);
         var available = g.Local<bool>();
-        OwnerUpdate(g, g.Each(g.Ref(_catalog), expression => g.Sequence(
+        var refresh = g.Each(g.Ref(_catalog), expression => g.Sequence(
             g.Set<bool>(available, g.Constant(false)),
             EachGesturePair(g, (_, mapped) => g.If(g.Equal<Slot>(expression, mapped),
                 g.Set<bool>(available, g.And(g.Active(expression), g.Read<bool>(expression, ClipSpace, "Enabled"))))),
-            g.Write<bool>(expression, ClipSpace, "MenuAvailable", available))));
+            g.Write<bool>(expression, ClipSpace, "MenuAvailable", available)));
+        ReceiveUpdate(g, MenuRefreshTag, refresh);
+        g.OnChanged<int>(g.Node("ChildrenCount", null, ("Instance", g.Ref(_catalog))),
+            g.If(g.IsOwner(_root), refresh));
+
+        // Watch fixed table keys from inside their namespace. Keep watchers outside
+        // the editable rows so deleting/recreating a row cannot remove its watcher.
+        var logic = _table.AddSlot("Logic");
+        for (int first = 0; first < 64; first += 8)
+        {
+            var watch = new ExpressionFlux(logic.AddSlot($"Menu mappings {first:D2}-{first + 7:D2}"));
+            var changed = watch.If(watch.IsOwner(_root), watch.Trigger(watch.Ref(_menuAvailability), MenuRefreshTag));
+            for (int pair = first; pair < first + 8; pair++)
+            {
+                var mapped = watch.Read<Slot>(watch.Ref(_table), TableSpace, "Pair." + pair);
+                var visible = watch.Choose<Slot>(watch.And(watch.Active(mapped),
+                    watch.Read<bool>(mapped, ClipSpace, "Enabled")), mapped, watch.Ref<Slot>(null));
+                watch.OnChanged<Slot>(visible, changed);
+            }
+        }
     }
 
     private void BuildKeyboard()
@@ -125,23 +140,26 @@ internal sealed partial class ExpressionSystemSetup
                 var shortcut = Record(bindings, (hand == 0 ? "Left " : "Right ") + gesture + " " + GestureNames[gesture], KeyboardSpace);
                 Data(shortcut, "Tag", GestureTag(hand)); Data(shortcut, "Gesture", gesture);
                 Data(shortcut, "Enabled", true); Data(shortcut, "Key", (InputKey)((int)InputKey.Alpha1 + gesture));
-                Data(shortcut, "Shift", hand == 1); Data(shortcut, "Held", false);
+                Data(shortcut, "Shift", hand == 1);
+                BuildKeyboardBinding(shortcut);
             }
-        var g = new ExpressionFlux(root.AddSlot("Logic"));
+    }
+
+    private void BuildKeyboardBinding(Slot shortcut)
+    {
+        var g = new ExpressionFlux(shortcut.AddSlot("Logic"));
+        var source = g.Ref(shortcut);
         IWorldElement Held(InputKey key) => g.Node("KeyHeld", null, ("Key", g.Constant(key)));
         var control = g.Or(Held(InputKey.LeftControl), Held(InputKey.RightControl));
         var alt = g.Or(Held(InputKey.LeftAlt), Held(InputKey.RightAlt));
         var shift = g.Or(Held(InputKey.LeftShift), Held(InputKey.RightShift));
-        var loop = g.Each(g.Ref(bindings), shortcut =>
-        {
-            var key = g.Read<InputKey>(shortcut, KeyboardSpace, "Key");
-            var held = g.And(g.Active(shortcut), g.Read<bool>(shortcut, KeyboardSpace, "Enabled"), control, alt,
-                g.Equal<bool>(shift, g.Read<bool>(shortcut, KeyboardSpace, "Shift")),
-                g.Not(g.Equal<InputKey>(key, g.Constant(InputKey.None))), g.Node("KeyHeld", null, ("Key", key)));
-            return g.Sequence(g.If(g.And(held, g.Not(g.Read<bool>(shortcut, KeyboardSpace, "Held"))), SendGesture(g, g.Read<string>(shortcut, KeyboardSpace, "Tag"), g.Read<int>(shortcut, KeyboardSpace, "Gesture"))),
-                g.Write<bool>(shortcut, KeyboardSpace, "Held", held));
-        });
-        OwnerUpdate(g, loop);
+        var key = g.Read<InputKey>(source, KeyboardSpace, "Key");
+        var held = g.And(g.IsOwner(_root), g.Read<bool>(source, KeyboardSpace, "Enabled"), control, alt,
+            g.Equal<bool>(shift, g.Read<bool>(source, KeyboardSpace, "Shift")),
+            g.Not(g.Equal<InputKey>(key, g.Constant(InputKey.None))), g.Node("KeyHeld", null, ("Key", key)));
+        var press = g.If(held, SendGesture(g, g.Read<string>(source, KeyboardSpace, "Tag"), g.Read<int>(source, KeyboardSpace, "Gesture")));
+        g.OnChanged<bool>(held, press);
+        g.OnStart(press);
     }
 
     private void BuildGestures()
@@ -200,7 +218,8 @@ internal sealed partial class ExpressionSystemSetup
         var stable = g.Not(g.Greater(g.Add(g.Read<float>(handRef, GestureHandSpace, "Since"), g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds")), g.Now));
         var send = g.Sequence(SendGesture(g, g.Text(GestureTag(kind)), gesture),
             g.Write<int>(handRef, GestureHandSpace, "Stable", gesture));
-        OwnerUpdate(g, g.Sequence(reset, g.If(g.And(active, g.Read<bool>(g.Ref(_core), CoreSpace, "AllowExternalInput")), g.Sequence(
+        var enabled = g.And(active, g.Read<bool>(g.Ref(_core), CoreSpace, "AllowExternalInput"));
+        var update = g.If(g.IsOwner(_root), g.Sequence(reset, g.If(enabled, g.Sequence(
             g.Write<bool>(handRef, GestureHandSpace, "GripHeld", grip), g.Write<bool>(handRef, GestureHandSpace, "TriggerHeld", indexCurled),
             g.If(changed, g.Sequence(g.Write<int>(handRef, GestureHandSpace, "Candidate", gesture), g.Write<float>(handRef, GestureHandSpace, "Since", g.Now))),
             g.If(g.And(stable, g.Not(g.Equal<int>(g.Read<int>(handRef, GestureHandSpace, "Stable"), gesture))), send)),
@@ -210,5 +229,14 @@ internal sealed partial class ExpressionSystemSetup
                 g.Write<bool>(handRef, GestureHandSpace, "GripHeld", g.Constant(false)),
                 g.Write<bool>(handRef, GestureHandSpace, "TriggerHeld", g.Constant(false))))),
             g.Set<bool>(initialized, g.Constant(false)));
+        // Watch interpreted values, not continuously changing analog amounts.
+        // The stable predicate produces one change when the waiting time expires.
+        var accepting = g.And(g.IsOwner(_root), enabled);
+        g.OnChanged<int>(g.Choose<int>(accepting, gesture, g.Constant(-1)), update);
+        g.OnChanged<bool>(g.And(accepting, grip), update);
+        g.OnChanged<bool>(g.And(accepting, indexCurled), update);
+        g.OnChanged<bool>(g.And(accepting, stable), update);
+        g.OnChanged<bool>(g.IsOwner(_root), update);
+        g.OnStart(update);
     }
 }

@@ -30,20 +30,21 @@ internal sealed partial class ExpressionSystemSetup
         cleanup.Add(g.Each(g.Ref(_outputs), output => g.Sequence(
             g.Write<float>(output, OutputSpace, "Result", g.Read<float>(output, OutputSpace, "Base")),
             g.Write<float>(output, OutputSpace, "Snapshot", g.Read<float>(output, OutputSpace, "Base")))));
-        cleanup.Add(g.Each(g.Ref(_inputs.FindChild("Keyboard").FindChild("Bindings")),
-            shortcut => g.Write<bool>(shortcut, KeyboardSpace, "Held", g.Constant(false))));
+
         var clear = g.Sequence(cleanup.ToArray());
         var initialize = g.If(g.Not(initialized), g.Sequence(clear, g.Set<bool>(initialized, g.Constant(true))));
-        // API events may arrive before LocalUpdate; initialize once before accepting either hand.
+        // API events may arrive before the wearer-change event; initialize synchronously.
         ReceiveUpdate(g, InitializeTag, initialize);
-        var update = g.Node("LocalUpdate");
         // Only the current local wearer runs selection/playback. On departure, the client
         // that initialized this instance clears it once, provided nobody else is wearing it.
         // Observers never initialize and therefore never write this cleanup state.
         var stop = g.If(initialized, g.Sequence(
             g.If(g.Equal<User>(g.Owner(_root), g.Ref<User>(null)), clear),
             g.Set<bool>(initialized, g.Constant(false))));
-        Link(update, "OnUpdate", g.If(g.IsOwner(_root), g.Sequence(initialize,
-            g.Trigger(g.Ref(_selection), SelectionTickTag), g.Trigger(g.Ref(_playback), PlaybackTickTag)), stop));
+        var update = g.If(g.IsOwner(_root), g.Sequence(initialize,
+            g.Trigger(g.Ref(_selection), SelectionTickTag), g.Trigger(g.Ref(_playback), PlaybackTickTag),
+            _menuAvailability == null ? null : g.Trigger(g.Ref(_menuAvailability), MenuRefreshTag)), stop);
+        g.OnChanged<bool>(g.IsOwner(_root), update);
+        g.OnStart(update);
     }
 }

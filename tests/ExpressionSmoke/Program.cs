@@ -81,6 +81,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(expressions.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "all generated ProtoFlux groups are valid");
         ExpressionGraphChecks.CheckLayout(expressions);
         await ExpressionDynamicInputChecks.CheckEdits(expressions);
+        await ExpressionInputEventChecks.Run(expressions);
         var core = expressions.FindChild("Core"); var api = expressions.FindChild("API").FindChild("Receivers");
         var catalog = expressions.FindChild("Catalog"); var table = expressions.FindChild("GestureTable");
         string[] gestureNames = { "Neutral", "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
@@ -212,7 +213,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
 
         // Table keys are stable dynamic names; deleting/reordering rows cannot shift other mappings.
         Set(table, "Pair.9", catalog.FindChild("Smile"));
-        Gesture(0, 1); await Frames();
+        await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "editing table reference takes effect");
         start = Get<float>(core, "PlaybackStart");
         Gesture(1, 0); await Frames();
@@ -224,23 +225,12 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
 
         var touch = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules").FindChild("Touch");
         start = Get<float>(core, "PlaybackStart");
-        foreach (string side in new[] { "Left", "Right" })
-        {
-            var hardware = touch.FindChild(side);
-            Set(hardware, "Candidate", 1); Set(hardware, "Stable", 1);
-            Set(hardware, "GripHeld", true); Set(hardware, "TriggerHeld", true);
-        }
+
         await Frames();
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
             Get<float>(core, "PlaybackStart") == start && Math.Abs(field.Value - 1) < 0.01,
             "inactive controllers retain the last accepted hand values and expression without restarting playback");
-        foreach (string side in new[] { "Left", "Right" })
-        {
-            var hardware = touch.FindChild(side);
-            Check(Get<int>(hardware, "Candidate") == -1 && Get<int>(hardware, "Stable") == -1 &&
-                !Get<bool>(hardware, "GripHeld") && !Get<bool>(hardware, "TriggerHeld"),
-                "inactive controller resets sensing state for reconnection: " + side);
-        }
+
         Gesture(0, 2); await Frames();
         Check(Get<int>(core, "LeftGesture") == 2 && Get<int>(core, "RightGesture") == 1,
             "the next accepted input replaces only its hand while controllers remain inactive");
@@ -376,7 +366,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Gesture(0, 1); Gesture(1, 1);
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 && Get<int>(core, "PairIndex") == 9 &&
             Get<bool>(core, "AllowExternalInput"),
-            "first events after reattachment initialize once and retain both hand requests before LocalUpdate");
+            "first events after reattachment initialize once and retain both hand requests before the wearer-change event");
         AllowInput(); Gesture(0, 0); Gesture(1, 0);
         await Frames();
         Check(Get<bool>(core, "AllowExternalInput") &&

@@ -21,6 +21,8 @@ internal sealed partial class ExpressionSystemSetup
     private const string SelectionTickTag = "ResoPon/Expression/Internal/Selection";
     private const string PlaybackTickTag = "ResoPon/Expression/Internal/Playback";
     private const string InitializeTag = "ResoPon/Expression/Internal/Initialize";
+    private const string MenuRefreshTag = "ResoPon/Expression/Internal/MenuRefresh";
+    private Slot _menuAvailability;
     private GesturePairCompiler _compiled;
     private readonly Dictionary<string, Slot> _clips = new();
     private readonly Dictionary<string, Slot> _outputSlots = new();

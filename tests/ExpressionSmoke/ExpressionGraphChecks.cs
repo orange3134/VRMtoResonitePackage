@@ -20,6 +20,14 @@ internal static class ExpressionGraphChecks
         Check(nodes.Select(n => n.Slot.GlobalPosition).Distinct().Count() == nodes.Count, "Flux node positions do not overlap across logic boards");
 
         Slot Board(ProtoFluxNode node) => node.Slot.Parent.Parent;
+        var updates = nodes.Where(n => n.GetType().Name == "LocalUpdate").ToArray();
+        Check(updates.Length == 1 && Board(updates[0]) == Descendant(expressions, "Core/Logic/Playback"),
+            "only continuous playback uses LocalUpdate");
+        Check(nodes.Any(n => n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
+            "state transitions use local change detectors");
+        Check(expressions.GetComponentsInChildren<DynamicValueVariable<bool>>()
+            .All(v => v.VariableName.Value != "ExpressionKeyboardBinding/Held"),
+            "keyboard edge state is local to its change detector");
         var boards = nodes.GroupBy(Board).ToArray();
         foreach (var group in nodes.GroupBy(n => n.Group))
         {

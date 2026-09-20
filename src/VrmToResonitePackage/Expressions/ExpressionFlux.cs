@@ -247,6 +247,12 @@ internal sealed class ExpressionFlux
     }
     public Component If(IWorldElement condition, IWorldElement onTrue, IWorldElement onFalse = null) =>
         Node("If", null, ("Condition", condition), ("OnTrue", onTrue), ("OnFalse", onFalse));
+    // Local change detectors keep their previous value out of serialized/shared state.
+    // They do not fire for the initial value; use OnStart when an initial action is needed.
+    public void OnChanged<T>(IWorldElement value, IWorldElement action) =>
+        Node(typeof(T).IsValueType ? "FireOnLocalValueChange" : "FireOnLocalObjectChange", typeof(T),
+            ("Value", value), ("OnChange", action));
+    public void OnStart(IWorldElement action) => Node("OnStart", null, ("Trigger", action));
     public IWorldElement Choose<T>(IWorldElement condition, IWorldElement onTrue, IWorldElement onFalse) =>
         Node(typeof(T).IsValueType ? "ValueConditional" : "ObjectConditional", typeof(T),
             ("Condition", condition), ("OnTrue", onTrue), ("OnFalse", onFalse));

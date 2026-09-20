@@ -80,6 +80,16 @@ wearer departure/reattachment and clone playback cover the synchronization behav
 
 Version 4 removes Override Slot state. Actual menu buttons must disable ordinary input and update the same
 LeftGesture/RightGesture fields used by gesture input. Unmapped IDs must leave the pair and mode unchanged.
+Only Playback uses LocalUpdate; lifecycle, selection, menu availability and input actions use
+local change detectors. OnStart handles initial values without storing previous inputs in shared state.
+The sensor-event fixture replaces hardware outputs temporarily and executes the exported graph:
+both hands must wait for stability, fire when the timer expires without more sensor changes,
+preserve hysteresis, reset on gate/disconnect transitions, and redetect on reconnect.
+Keyboard chords must fire once per press and retain newer manual input while held.
+Idle sentinels prove Selection and menu scans do not run on unchanged frames. Table edits and
+clip enable/disable changes must update selection and menu visibility without API requests.
+Graph checks require exactly one LocalUpdate, in Playback, before and after package reload.
+
 Lifecycle and controller hands retain no User references. Local StoredValue<bool> flags
 initialize once while worn and rearm when the local user stops wearing the avatar.
 The previous active client clears state once on departure only when no new wearer is present.

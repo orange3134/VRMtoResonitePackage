@@ -64,7 +64,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | `FadeOut` | float | 0.1 | 設定。その表情から選択なしへ戻る秒数。別の有効表情へ移る場合は移動先の FadeIn を使う |
 | `Source` | string | 元データの説明、または空文字 | 定義。由来の記録。再生判定には使わない |
 | `Clip` | IAssetProvider&lt;Animation&gt; | 同じ Slot の StaticAnimationProvider | 定義。AnimX 供給元。AssetLoader にも参照をコピーする。アセット未ロードなら選択無効 |
-| `MenuAvailable` | bool | false | 状態。メニュー生成時のみ作成。毎更新、Slot が有効・Enabled=true・対応表に参照ありなら true。ロード完了は判定しない |
+| `MenuAvailable` | bool | false | 状態。メニュー生成時のみ作成。装着開始・対応表や有効状態などの変更時に再計算。Slot が有効・Enabled=true・対応表に参照ありなら true。ロード完了は判定しない |
 
 `Bindings/各項目` の `Output`（Slot）は対応する Outputs レコードへの定義参照。
 再生ループは Bindings を走査せず、Outputs の Id で AnimX トラックを検索する。
@@ -94,13 +94,13 @@ AllowExternalInput 以外は状態として扱う。SelectionStatus は生成し
 PlaybackElapsed・FadeWeight は ValueFieldDrive で各クライアントが駆動し、毎フレームの同期書き込みを行わない。
 再生処理の実行回数を示す値ではない。
 
-Lifecycle は現在の装着者がローカルユーザーの場合だけ、初期化確認 → Selection → Playback を実行する。
+Lifecycle は OnStart とローカル装着状態の変更時に動き、現在の装着者がローカルユーザーの場合だけ、初期化確認 → Selection → Playback とメニュー表示更新を実行する。
 初期化済みかは保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。
-公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、最初の LocalUpdate より早い左右入力も保持する。
+公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、装着状態の変更イベントより早い左右入力も保持する。
 
 初期化時は左右値・PairIndex を 0、AllowExternalInput を true、
-CurrentExpression を null、Outputs の Result・Snapshot を Base、
-キーボード Held を false に戻す。その後の Selection → Playback で現在の対応表に応じた状態になる。
+CurrentExpression を null、Outputs の Result・Snapshot を Base に戻す。
+その後の Selection → Playback で現在の対応表に応じた状態になる。
 PlaybackStart・FadeDuration はここでは変更しないため、時計から算出する PlaybackElapsed・FadeWeight は初期化完了の指標ではない。
 
 装着が終了すると、初期化済みのクライアントだけが一度このクリア処理を実行し、フラグを false に戻す。
@@ -141,9 +141,10 @@ Result → ValueCopy → 元の BlendShape フィールド
 | `Enabled` | bool | true | 設定。そのショートカットの有効・無効 |
 | `Key` | Renderite.Shared.Key | Alpha1〜Alpha8 | 設定。数字キー。None は無効 |
 | `Shift` | bool | 左=false、右=true | 設定。Shift 押下状態の一致条件。Ctrl・Alt はロジック側の固定必須条件 |
-| `Held` | bool | false | 状態。前回のキー条件成立状態。false→true でだけ送信し、連続発火を防ぐ |
 
-キーを離しても Neutral は送らない。入力禁止中も Held は更新するが、送られた通常入力は API が拒否する。
+各割当の Logic が FireOnLocalValueChange<bool> でキー条件を監視し、成立時だけ送信する。
+前回の条件は変更監視ノードのローカル状態で保持するため、Held の DynamicVariable は不要。
+キーを離しても Neutral は送らない。入力禁止中の押下は API が拒否し、押したまま再許可しても再送しない。
 
 ## Inputs/HandGestures/Modules：機種別入力
 
@@ -171,6 +172,8 @@ Touch・Index・Vive・WindowsMR の各モジュールに以下の設定を持�
 | `TriggerHeld` | bool | false | 前回の Trigger 判定。次回の押下／解放しきい値を選ぶ |
 
 -1 は未確定・未送信で、公開左右 API の有効値ではない。
+判定した手形・Grip/Trigger 判定・受付状態の変化時に処理する。
+Since + StabilitySeconds に時刻が達して安定判定が変化したときも処理するため、指を止めたままでも確定入力を送れる。
 切断・非アクティブ時や入力禁止中は Candidate・Stable を -1、GripHeld・TriggerHeld を false に戻し、入力イベントは送らない。
 Core は左右それぞれで最後に受理した値を保持し、更新番号は保持しない。
 再接続・入力再許可後に安定した手形を検出すると、その手の値を新しい入力で更新する。
@@ -216,8 +219,9 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `InitializeTag` | `ResoPon/Expression/Internal/Initialize` | 引数なし。Lifecycle の初期化確認 |
 | `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。選択更新を同期実行 |
 | `PlaybackTickTag` | `ResoPon/Expression/Internal/Playback` | 引数なし。再生・出力更新を同期実行 |
+| `MenuRefreshTag` | `ResoPon/Expression/Internal/MenuRefresh` | 引数なし。メニュー表示可否を再計算。メニュー生成時のみ |
 
-Internal の3つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
+Internal の4つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
 選択中の一時候補、逆引き Pair 番号、メニュー表示判定は LocalValue / LocalObject、初期化済みフラグは StoredValue<bool> を使う。
 これらも DynamicVariable の保存変数とは区別する。
 
