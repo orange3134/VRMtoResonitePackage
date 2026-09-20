@@ -25,9 +25,6 @@ internal sealed partial class ExpressionSystemSetup
         var noExpression = g.Ref<Slot>(null);
         actions.Add(g.Set<Slot>(selected, g.Choose<Slot>(ValidExpression(g, candidate), candidate, noExpression)));
         actions.Add(g.Write<int>(core, CoreSpace, "PairIndex", index));
-        actions.Add(g.Write<int>(core, CoreSpace, "SelectionStatus", g.Choose<int>(g.Equal<Slot>(selected, noExpression),
-            g.Choose<int>(g.Equal<Slot>(candidate, noExpression), g.Constant(0), g.Constant(3)),
-            g.Choose<int>(g.Read<bool>(core, CoreSpace, "AllowExternalInput"), g.Constant(1), g.Constant(2)))));
 
         g.BeginSection("Snapshot and switch only when changed");
         actions.Add(g.If(g.Not(g.Equal<Slot>(selected, current)), g.Sequence(

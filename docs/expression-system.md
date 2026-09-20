@@ -80,7 +80,7 @@ Dynamic Impulse は装着者のクライアントで実行され、所有者に�
 
 - 各手の Candidate・Stable・Since・LastRevision・GripHeld・TriggerHeld：`ExpressionGestureHand`。
 - 機種ごとの Grip/Trigger しきい値・StabilitySeconds：親モジュールの `ExpressionGestureSettings`。
-- Selection の左右値・入力許可と、Playback の開始時刻・フェード秒数：`ExpressionCore`。
+- Selection の左右値と、Playback の開始時刻・フェード秒数：`ExpressionCore`。
 - Selection／Playback の CurrentExpression：`ExpressionCore` の Object Input。
 
 Core の入力ノード化は現行の名前付き空間で再検証し、同一フレームの入力、複製、再装着、
@@ -112,14 +112,13 @@ Inspector 上の Core の変数名には `ExpressionCore/` が付く。他のレ
 | `LeftRevision` / `RightRevision` | 受理したイベントの更新番号。同じ状態の再送でも増える |
 | `PairIndex` | 左×8＋右で求めた対応表の番号 |
 | AllowExternalInput | true=通常入力も許可、false=コンテキストメニューのみ（編集可能） |
-| `SelectionStatus` | 0=未割当、1=通常入力可、2=メニューのみ、3=無効またはアセット未ロード |
 | `CurrentExpression` | Selection の検証を通過した再生対象。無効・未割当なら null |
 | `PlaybackStart` / `PlaybackElapsed` | 再生開始時刻と経過秒数 |
 | `FadeDuration` / `FadeWeight` | フェード秒数と現在の混合率（0〜1） |
 
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
 2. 番号が正しく表情が違う場合は、`PairIndex` に対応する `GestureTable` の参照と `AllowExternalInput` を確認し、`Selection` を調べる。
-3. `SelectionStatus=3` の場合は、`GestureTable/Pair.N`（N は PairIndex）の参照先で Slot の有効状態、`Enabled`、`Clip` のアセット読み込みを確認する。
+3. `CurrentExpression` が null の場合は、`GestureTable/Pair.N`（N は PairIndex）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`、`Clip` のアセット読み込みを確認する。
 4. 選択が正しく見た目が違う場合は、`Playback` と該当する `Outputs` レコードの `Base`、`TrackingWeight`、`Snapshot`、`Result`、`Target` を調べる。
 
 `AllowExternalInput` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
@@ -138,7 +137,7 @@ resoloop を使う場合は、リポジトリ直下から次の読み取り専�
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/inspect-expression.ps1 -CoreSlot "Root/Plum/Expressions/Core" -Url "ws://localhost:42038"
 ```
 
-`-Json` を付けると機械可読の JSON を返す。
+`-Json` を付けると CoreSlot と Values を持つ JSON を返す。SelectionStatus に基づく Selection 要約は出力しない。
 URL を省略した場合は resoloop の環境変数・プロジェクト設定を使う。
 参照値は現在の ResoniteLink 接続での ID として表示するため、保存後の固定 ID として使わない。
 診断スクリプトは旧 `Expr/` と現行 `ExpressionCore/` の両方を読み取れる。新しい空間名・診断項目の反映には再変換・再インポートが必要。
@@ -152,6 +151,8 @@ Selection は `GestureTable/Pair.N` を読み、Slot 有効・Enabled=true・ア
 異なる場合は現在の出力を Snapshot に保存し、切替先の FadeIn（解除なら切替前の FadeOut）と
 再生開始時刻を設定して、CurrentExpression に確定した参照を直接書き込む。同じ参照なら再生を継続する。
 未検証の対応表の参照を調べたい場合は、PairIndex に対応する行を直接見る。
+SelectionStatus は生成・計算しない。入力モードは AllowExternalInput、再生対象は CurrentExpression で確認する。
+未割当と無効・未ロードはどちらも CurrentExpression=null となり、理由は対応表と参照先を調べる。
 
 ## 装着状態と Lifecycle
 

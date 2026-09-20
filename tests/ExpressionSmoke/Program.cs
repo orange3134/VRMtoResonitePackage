@@ -133,7 +133,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Gesture(1, 0); await Frames();
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 0 && Math.Abs(field.Value - 1) < 0.01,
             "left gesture selects Smile without modifying the right hand");
-        Check(Get<int>(core, "PairIndex") == 8 && Get<int>(core, "SelectionStatus") == 1 &&
+        Check(Get<int>(core, "PairIndex") == 8 &&
             Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"),
             "validated table entry is the current expression");
         float start = Get<float>(core, "PlaybackStart");
@@ -173,7 +173,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Gesture(0, 0); Gesture(1, 1); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01 && Get<int>(core, "PairIndex") == 8 &&
             Get<int>(core, "LeftRevision") == leftRevision && Get<int>(core, "RightRevision") == rightRevision &&
-            Get<int>(core, "SelectionStatus") == 2,
+            !Get<bool>(core, "AllowExternalInput"),
             "menu-only mode ignores normal input without altering hand values or revisions");
         MenuGesture(1, 1);
         Check(!Get<bool>(core, "AllowExternalInput") && Get<int>(core, "PairIndex") == 9 &&
@@ -205,7 +205,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         float beforeInvalidation = field.Value;
         Set(catalog.FindChild("Animated"), "Enabled", false);
         AllowInput(); // Synchronously validate the disabled table entry and start its fade-out.
-        Check(Reference<Slot>(core, "CurrentExpression") == null && Get<int>(core, "SelectionStatus") == 3 &&
+        Check(Reference<Slot>(core, "CurrentExpression") == null &&
             Get<float>(core, "FadeDuration") == 0.25f &&
             Math.Abs(Get<float>(expressions.FindChild("Outputs").Children.Single(), "Snapshot") - beforeInvalidation) < 0.001f,
             "invalid selection clears CurrentExpression while preserving the previous expression's FadeOut and output snapshot");
@@ -325,7 +325,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         avatar.Parent = world.RootSlot;
         await Frames();
         Check(Get<bool>(core, "AllowExternalInput") && Get<int>(core, "PairIndex") == 0 &&
-            Reference<Slot>(core, "CurrentExpression") == null && Get<int>(core, "SelectionStatus") == 0 &&
+            Reference<Slot>(core, "CurrentExpression") == null &&
             Math.Abs(field.Value - 0.4f) < 0.01,
             "wearer departure restores base instead of playing the mapped Neutral expression");
         Set(table, "Pair.0", (Slot)null);
@@ -387,7 +387,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         ExpressionGraphChecks.CheckLayout(restoredExpressions);
         await ExpressionDynamicInputChecks.CheckEdits(restoredExpressions);
         var restoredCore = restoredExpressions.FindChild("Core");
-        Check(Get<int>(restoredCore, "PairIndex") == 0 && Get<int>(restoredCore, "SelectionStatus") == 0 &&
+        Check(Get<int>(restoredCore, "PairIndex") == 0 &&
             Reference<Slot>(restoredCore, "CurrentExpression") == null && Get<bool>(restoredCore, "AllowExternalInput"),
             "package reload recomputes diagnostics from reset inputs and the edited empty table row");
         Set(restoredExpressions.FindChild("GestureTable"), "Pair.2", restoredExpressions.FindChild("Catalog").FindChild("Angry"));

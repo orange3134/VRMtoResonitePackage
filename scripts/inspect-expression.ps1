@@ -34,19 +34,12 @@ if (!($values.Name -contains 'LeftGesture') -or !($values.Name -contains 'Curren
     throw 'The selected slot is not an expression Core: expected LeftGesture and CurrentExpression.'
 }
 
-$status = $values | Where-Object Name -eq 'SelectionStatus' | Select-Object -First 1
-$statusNames = @{ 0 = 'Unassigned'; 1 = 'Gesture table'; 2 = 'Menu only'; 3 = 'Invalid or asset not loaded' }
-if (!($values.Name -contains 'AllowExternalInput')) { $statusNames[2] = 'Direct selection' }
-$selection = if ($status) { $statusNames[[int]$status.Value] } else { 'Not available in this package version' }
-
 if ($Json) {
     [pscustomobject][ordered]@{
         CoreSlot = $CoreSlot
-        Selection = $selection
         Values = $values
     } | ConvertTo-Json -Depth 8
 } else {
     Write-Output "Core: $CoreSlot"
-    Write-Output "Selection: $selection"
     $values | Select-Object Name,Value,Kind | Format-Table -AutoSize
 }

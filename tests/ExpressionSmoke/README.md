@@ -100,5 +100,5 @@ impulse Tags and payload types are unchanged from Version 4.
 Core retains only CurrentExpression as a Slot reference. Selection validates the table
 entry in a local value and writes it directly after snapshotting and configuring the fade.
 Graph checks enforce the absence of intermediate diagnostic references before and after
-package reload. Disabling the selected clip must clear CurrentExpression, report invalid
-selection, and preserve that clip's FadeOut and the previous output snapshot.
+package reload. Core must not retain a SelectionStatus field. Disabling the selected clip must clear CurrentExpression,
+and preserve that clip's FadeOut and the previous output snapshot.

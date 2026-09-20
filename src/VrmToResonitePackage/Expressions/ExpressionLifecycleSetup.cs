@@ -28,7 +28,6 @@ internal sealed partial class ExpressionSystemSetup
         cleanup.Add(g.Write<bool>(core, CoreSpace, "AllowExternalInput", g.Constant(true)));
         cleanup.Add(g.Write<Slot>(core, CoreSpace, "CurrentExpression", g.Ref<Slot>(null)));
         cleanup.Add(g.Write<int>(core, CoreSpace, "PairIndex", g.Constant(0)));
-        cleanup.Add(g.Write<int>(core, CoreSpace, "SelectionStatus", g.Constant(0)));
         cleanup.Add(g.Each(g.Ref(_outputs), output => g.Sequence(
             g.Write<float>(output, OutputSpace, "Result", g.Read<float>(output, OutputSpace, "Base")),
             g.Write<float>(output, OutputSpace, "Snapshot", g.Read<float>(output, OutputSpace, "Base")))));

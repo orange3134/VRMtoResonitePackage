@@ -60,8 +60,8 @@ internal static class ImportedGestureAvatarChecks
                 var mapped = table.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
                     .Single(v => v.VariableName.Value == "ExpressionGestureTable/Pair." + (l * 8 + r)).Reference.Target;
                 Check(mapped != null && Reference<Slot>(core, "CurrentExpression") == mapped, "Missing or incorrect selected pose");
-                Check(Get<int>(core, "PairIndex") == l * 8 + r && Get<int>(core, "SelectionStatus") == 2 && !Get<bool>(core, "AllowExternalInput"),
-                    "Imported selection diagnostics disagree with the selected gesture pair");
+                Check(Get<int>(core, "PairIndex") == l * 8 + r && !Get<bool>(core, "AllowExternalInput"),
+                    "Imported pair or input mode disagrees with the selected gesture pair");
                 for (int i = 0; i < 6; i++) await default(NextUpdate);
                 var data = mapped.GetComponent<StaticAnimationProvider>().Asset?.Data;
                 Check(data != null, "Pose animation asset did not load");

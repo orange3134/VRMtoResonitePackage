@@ -82,6 +82,8 @@ internal static class ExpressionGraphChecks
         Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<User>>().Count == 0,
             "expression state retains no wearer User references");
         var core = Descendant(expressions, "Core");
+        Check(core.GetComponents<DynamicValueVariable<int>>().All(v => v.VariableName.Value != "ExpressionCore/SelectionStatus"),
+            "Core contains no SelectionStatus diagnostic variable");
         Check(core.GetComponents<DynamicReferenceVariable<Slot>>().Select(v => v.VariableName.Value)
             .SequenceEqual(new[] { "ExpressionCore/CurrentExpression" }),
             "Core stores only the current expression, without intermediate diagnostic references");
