@@ -74,8 +74,8 @@ Dynamic Impulse は装着者のクライアントで実行され、所有者に�
 
 ## 入力・列挙ノード
 
-機種別の各手の状態（Candidate、Stable、Since、LastRevision、GripHeld、TriggerHeld、PreviousOwner）は、
-同じ `Expr` スコープを参照する `DynamicVariableValueInput<T>`／`DynamicVariableObjectInput<T>` で読む。
+機種別の各手の状態（Candidate、Stable、Since、LastRevision、GripHeld、TriggerHeld）は、
+同じ `Expr` スコープを参照する `DynamicVariableValueInput<T>` で読む。
 これらのノードは該当する手の変数スコープ内に配置する。
 
 次の読み取りは `ReadDynamicValueVariable<T>`／`ReadDynamicObjectVariable<T>` を維持する。
@@ -134,6 +134,22 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
 参照値は現在の ResoniteLink 接続での ID として表示するため、保存後の固定 ID として使わない。
 旧パッケージも読み取れるが、追加した診断項目は再変換・再インポート後に表示される。
 
+
+## 装着状態と Lifecycle
+
+Core と機種別入力は PreviousOwner を持たず、「現在の装着者がローカルユーザーか」で更新を制御する。
+装着者が存在するかだけでは閲覧者も実行してしまうため、ローカルユーザーとの一致判定は残す。
+Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。
+
+- 装着中：必要なら初期化し、Selection → Playback を同期実行する。
+- 取り外し：初期化済みのクライアントが一度だけ入力・選択状態をクリアし、出力を Base に戻す。初期化済みフラグを解除する。
+- 未装着中：選択・再生を停止する。未装着で生成したものや閲覧者は共有状態を書き換えない。
+- 再装着・複製・読み込み：初回に左右値を 0、入力許可を true に戻して再開する。API が先に届いた場合も同じ初期化を行う。
+
+取り外し時に別の装着者が既にいる場合は、終了側は共有値をクリアせずローカルフラグだけを解除する。
+装着者の履歴は比較しない。装着終了を検出するには LocalUpdate が必要で、同じクライアントで更新の間に
+外して即座に戻した場合は連続した装着として扱う。未装着中の追跡値変化も継続転送せず、終了時の出力を保持する。
+既存パッケージへ反映するには再変換・再インポートが必要。
 
 ## 入力の動作
 
@@ -224,7 +240,7 @@ Tag は大文字・小文字を含めて完全一致。範囲外の int、引数
 左右メニューは bool と片手の値、直接選択メニューは bool と両手の値を同じ Impulse 内で更新する。
 その後、通常と同じ `Selection` → `Playback` を同期実行する。
 bool を false にしただけでは左右値は変えず、表情は対応表から引き続き決定する。
-初期化は入力許可の判定より前に行い、複製・再ロード・装着者変更時には bool=true、左右=0 に戻す。
+初期化は入力許可の判定より前に行い、複製・再ロード・再装着時には bool=true、左右=0 に戻す。
 Dynamic Impulse はネットワーク RPC ではなく、装着者以外のクライアントからの実行は無視する。
 
 旧 `ResoPon/Expression/v3/Select` と `v3/Automatic` は生成しない。
@@ -266,7 +282,7 @@ Exit Time、再生オフセット、上記の固定化で扱えないパラメ�
 既存の瞬き・口パク等のドライバーは Outputs の `Base` に接続し直す。
 表情にトラックがない出力は Base を使い、ある出力はアニメーション値を使う。
 出力ごとの `TrackingWeight`（0〜1）で Base の混合率を調整できる。
-複製・再ロード・装着者変更時には左右状態を0に、AllowExternalInput を true に初期化する。
+複製・再ロード・再装着時には左右状態を0に、AllowExternalInput を true に初期化する。
 VRM の感情表情も同じ Catalog を使うが、VRChat の条件がないため対応表は未設定から始まる。
 
 ## 検証

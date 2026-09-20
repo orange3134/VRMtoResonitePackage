@@ -39,7 +39,6 @@ internal sealed partial class ExpressionSystemSetup
         _lifecycle = logic.AddSlot("Lifecycle");
         _selection = logic.AddSlot("Selection");
         _playback = logic.AddSlot("Playback");
-        Reference<User>(_core, "PreviousOwner", null);
         foreach (string hand in new[] { "Left", "Right" })
         {
             Data(_core, hand + "Gesture", 0); Data(_core, hand + "Revision", 0);

@@ -73,10 +73,16 @@ Node simplification uses scoped Dynamic Variable Inputs in controller hands, Chi
 and GetActiveUserSelf for wearer lookup. Core reads stay live: broad Dynamic Input replacement regressed
 the clone playback check even when CurrentExpression was correct. The NATIVE report lists both replaced
 and retained node types for comparison. Existing same-frame events, editable tables, removable modules,
-owner changes, clones and package reloads exercise the behavioral boundaries of these substitutions.
+wearer departure/reattachment, clones and package reloads exercise the behavioral boundaries of these substitutions.
 
 Version 4 removes Override Slot state. Actual menu buttons must disable ordinary input and update the same
 LeftGesture/RightGesture fields used by gesture input. Unmapped IDs must leave the pair and mode unchanged.
+Lifecycle and controller hands retain no User references. Local StoredValue<bool> flags
+initialize once while worn and rearm when the local user stops wearing the avatar.
+The previous active client clears state once on departure only when no new wearer is present.
+Private stages reject unworn updates, unworn clones do not initialize or repeatedly clear
+stored state, and their first wear restores the base output. Same-frame reattachment API
+requests verify that initialization does not discard either hand or reset revisions twice.
 Mapping a Catalog entry makes it appear in the menu; copies from the template become usable after assignment.
-The mode bool defaults to true and resets on cloning, loading and owner changes. Ordinary input cannot update
+The mode bool defaults to true and resets on cloning, loading and reattachment. Ordinary input cannot update
 hand revisions while disabled, and the first valid event after reattachment initializes before testing the gate.

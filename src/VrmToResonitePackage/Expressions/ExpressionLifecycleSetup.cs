@@ -5,14 +5,10 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
-    // The previous owner gets one final reset/update when the avatar changes users.
-    private IWorldElement CanUpdate(ExpressionFlux g) => g.Or(g.IsOwner(_root),
-        g.Node("IsLocalUser", null, ("User", g.Read<User>(g.Ref(_core), "PreviousOwner"))));
-
     private void ReceiveUpdate(ExpressionFlux g, string tag, IWorldElement action)
     {
         var receiver = g.Receiver(tag, false);
-        Link(receiver, "OnTriggered", g.If(CanUpdate(g), action));
+        Link(receiver, "OnTriggered", g.If(g.IsOwner(_root), action));
     }
 
     private void BuildLifecycle()
@@ -20,7 +16,7 @@ internal sealed partial class ExpressionSystemSetup
         // Core state must remain live: cached Dynamic Inputs regress clone/reset playback.
         var g = new ExpressionFlux(_lifecycle, useDynamicInputs: false);
         var core = g.Ref(_core);
-        // StoredValue is local and not serialized, so clone/load starts with fresh hand inputs.
+        // Local, unserialized state: no User reference survives cloning or loading.
         var initialized = g.Node("StoredValue", typeof(bool));
         var cleanup = new List<IWorldElement>();
         foreach (string hand in new[] { "Left", "Right" })
@@ -30,23 +26,27 @@ internal sealed partial class ExpressionSystemSetup
         }
         cleanup.Add(g.Write<bool>(core, "AllowExternalInput", g.Constant(true)));
         cleanup.Add(g.Write<Slot>(core, "CurrentExpression", g.Ref<Slot>(null)));
+        cleanup.Add(g.Write<int>(core, "PairIndex", g.Constant(0)));
+        cleanup.Add(g.Write<Slot>(core, "MappedExpression", g.Ref<Slot>(null)));
+        cleanup.Add(g.Write<Slot>(core, "CandidateExpression", g.Ref<Slot>(null)));
+        cleanup.Add(g.Write<int>(core, "SelectionStatus", g.Constant(0)));
         cleanup.Add(g.Each(g.Ref(_outputs), output => g.Sequence(
             g.Write<float>(output, "Result", g.Read<float>(output, "Base")),
             g.Write<float>(output, "Snapshot", g.Read<float>(output, "Base")))));
         cleanup.Add(g.Each(g.Ref(_inputs.FindChild("Keyboard").FindChild("Bindings")),
             shortcut => g.Write<bool>(shortcut, "Held", g.Constant(false))));
-        cleanup.Add(g.Set<bool>(initialized, g.Constant(true)));
-        var reset = g.If(g.Or(g.Not(initialized), g.Not(g.Equal<User>(g.Owner(_root), g.Read<User>(core, "PreviousOwner")))),
-            g.Sequence(cleanup.ToArray()));
-        // API events may arrive before LocalUpdate; preserve both hands even within one impulse.
-        ReceiveUpdate(g, InitializeTag, g.Sequence(reset, g.Write<User>(core, "PreviousOwner", g.Owner(_root))));
+        var clear = g.Sequence(cleanup.ToArray());
+        var initialize = g.If(g.Not(initialized), g.Sequence(clear, g.Set<bool>(initialized, g.Constant(true))));
+        // API events may arrive before LocalUpdate; initialize once before accepting either hand.
+        ReceiveUpdate(g, InitializeTag, initialize);
         var update = g.Node("LocalUpdate");
-        // DynamicImpulseTrigger is synchronous. Keep reset -> selection/snapshot -> playback order,
-        // while each target board owns all of its nodes and can be unpacked independently.
-        // Preserve PreviousOwner until both guarded stages finish, including the old owner's
-        // final update. Each stage also rejects direct impulses from an unrelated client.
-        Link(update, "OnUpdate", g.If(CanUpdate(g), g.Sequence(reset,
-            g.Trigger(g.Ref(_selection), SelectionTickTag), g.Trigger(g.Ref(_playback), PlaybackTickTag),
-            g.Write<User>(core, "PreviousOwner", g.Owner(_root)))));
+        // Only the current local wearer runs selection/playback. On departure, the client
+        // that initialized this instance clears it once, provided nobody else is wearing it.
+        // Observers never initialize and therefore never write this cleanup state.
+        var stop = g.If(initialized, g.Sequence(
+            g.If(g.Equal<User>(g.Owner(_root), g.Ref<User>(null)), clear),
+            g.Set<bool>(initialized, g.Constant(false))));
+        Link(update, "OnUpdate", g.If(g.IsOwner(_root), g.Sequence(initialize,
+            g.Trigger(g.Ref(_selection), SelectionTickTag), g.Trigger(g.Ref(_playback), PlaybackTickTag)), stop));
     }
 }

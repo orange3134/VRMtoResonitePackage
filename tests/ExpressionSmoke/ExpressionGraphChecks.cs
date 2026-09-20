@@ -77,6 +77,8 @@ internal static class ExpressionGraphChecks
             "input permission receives a bool");
         Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value != "Expr/Override"),
             "no Override Slot state is generated");
+        Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<User>>().Count == 0,
+            "expression state retains no wearer User references");
         var core = Descendant(expressions, "Core");
         foreach (string name in new[] { "PlaybackElapsed", "FadeWeight" })
         {

@@ -1,4 +1,4 @@
-﻿# 表情システムの DynamicVariable・定数リファレンス
+# 表情システムの DynamicVariable・定数リファレンス
 
 現行の生成実装（`Expr/Version = 4`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
@@ -52,7 +52,6 @@
 | `AllowExternalInput` | bool | true | **設定**。通常のジェスチャー・キーボード・外部左右 API の受付可否。メニュー操作で false、初期化で true。許可 API でも変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の 0〜7。メニューも同じ値を更新 |
 | `LeftRevision` / `RightRevision` | int | 0 | 各手の受理ごとに加算。同じ値の再送でも増える。禁止中の通常入力では増えない |
-| `PreviousOwner` | User | null | Lifecycle が記録する前回の装着者。変更検出と旧装着者の最終リセット・更新の許可に使用 |
 | `PairIndex` | int | 0 | Selection が計算した LeftGesture × 8 + RightGesture（0〜63） |
 | `MappedExpression` | Slot | null | Selection が対応表から読んだ参照。無効でも元の参照を残す |
 | `CandidateExpression` | Slot | null | 検証前の候補。現行実装では MappedExpression と同じ |
@@ -67,10 +66,20 @@ AllowExternalInput 以外は状態として扱う。未割当・無効な表情�
 PlaybackElapsed・FadeWeight は ValueFieldDrive で各クライアントが駆動し、毎フレームの同期書き込みを行わない。
 再生処理の実行回数を示す値ではない。
 
-Lifecycle は初期化時に左右値・更新番号を 0、AllowExternalInput を true、CurrentExpression を null にし、
-Outputs の Result・Snapshot を Base、キーボード Held を false に戻す。
-初期化済みフラグは保存されない StoredValue なので複製・読み込みでもリセットする。
-全診断値を一括で 0 にする処理ではなく、その後の Selection → Playback で状態を更新する。
+Lifecycle は現在の装着者がローカルユーザーの場合だけ、初期化確認 → Selection → Playback を実行する。
+初期化済みかは保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。
+公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、最初の LocalUpdate より早い左右入力も保持する。
+
+初期化時は左右値・更新番号・PairIndex・SelectionStatus を 0、AllowExternalInput を true、
+CurrentExpression・MappedExpression・CandidateExpression を null、Outputs の Result・Snapshot を Base、
+キーボード Held を false に戻す。その後の Selection → Playback で現在の対応表に応じた状態になる。
+PlaybackStart・FadeDuration はここでは変更しないため、時計から算出する PlaybackElapsed・FadeWeight は初期化完了の指標ではない。
+
+装着が終了すると、初期化済みのクライアントだけが一度このクリア処理を実行し、フラグを false に戻す。
+既に別のユーザーが装着している場合は共有値をクリアせず、ローカルフラグだけを戻す。
+未装着で生成・複製したインスタンスや閲覧者のクライアントはクリアを書き込まない。
+未装着中は Selection・Playback を実行せず、出力は終了時に戻した値を保持する。
+再装着・複製・読み込み後の最初の処理では再び初期化する。
 
 ## Outputs/各 BlendShape
 
@@ -122,6 +131,8 @@ Touch・Index・Vive・WindowsMR の各モジュールに以下の設定を持�
 
 比較は厳密な `入力値 > しきい値`。Vive・WindowsMR は Grip の bool 出力を直接使うため、Grip の2設定は判定に使わない。
 各モジュールの Left / Right は独立した Expr スコープを持つ。
+機種別入力もローカルな `StoredValue<bool>` で初期化済みかを管理し、User 参照は保持しない。
+ローカルユーザーが装着者でなくなるとフラグを false に戻し、次の装着時に候補・安定値・更新番号・押下判定を初期化する。
 
 | 名前 | 型 | 初期値 | 更新元・役割 |
 |---|---|---|---|
@@ -131,7 +142,6 @@ Touch・Index・Vive・WindowsMR の各モジュールに以下の設定を持�
 | `LastRevision` | int | -1 | この機種が送信した直後の Core の該当手の Revision |
 | `GripHeld` | bool | false | 前回の Grip 判定。次回の押下／解放しきい値を選ぶ |
 | `TriggerHeld` | bool | false | 前回の Trigger 判定。次回の押下／解放しきい値を選ぶ |
-| `PreviousOwner` | User | null | この手の初期化に使う装着者変更の検出用。Core の同名変数とは別 |
 
 -1 は未確定・未送信で、公開左右 API の有効値ではない。
 切断時は Stable が確定済みかつ LastRevision が Core の現在値と一致するときだけ Neutral を送る。
@@ -183,7 +193,7 @@ Internal の3つは公開操作用ではない。メニューボタンの送信�
 選択中の一時候補、逆引き Pair 番号、メニュー表示判定は LocalValue / LocalObject、初期化済みフラグは StoredValue<bool> を使う。
 これらも Expr の保存変数とは区別する。
 
-現行版は `Expr/Override`、`Expr/LeftInput`、`Expr/RightInput` を生成しない。
+現行版は `Expr/PreviousOwner`、`Expr/Override`、`Expr/LeftInput`、`Expr/RightInput` を生成しない。
 表情固定は AllowExternalInput=false と左右のジェスチャー値で表現する。
 
 ## 実装の参照先
@@ -191,7 +201,7 @@ Internal の3つは公開操作用ではない。メニューボタンの送信�
 - [ExpressionSystemSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionSystemSetup.cs)：Core、Catalog、Outputs、対応表、診断レコードの生成。
 - [ExpressionFlux.cs](../src/VrmToResonitePackage/Expressions/ExpressionFlux.cs)：スコープ、変数・定数ノード、読み書き。
 - [ExpressionApiSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionApiSetup.cs)：入力検証、更新番号、モード変更、ID の逆引き。
-- [ExpressionLifecycleSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionLifecycleSetup.cs)：初期化と装着者変更。
+- [ExpressionLifecycleSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionLifecycleSetup.cs)：装着状態による初期化・終了処理。
 - [ExpressionPlaybackSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionPlaybackSetup.cs)：選択検証、フェード、追跡入力との合成。
 - [ExpressionInputSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionInputSetup.cs)：メニュー、キー割当、機種別入力。
 - [ExpressionAnimationConverter.cs](../src/VrmToResonitePackage/Expressions/ExpressionAnimationConverter.cs)：出力 ID と AnimX トラック。

@@ -221,7 +221,6 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var hardware = touch.FindChild("Left");
         Gesture(0, 1);
         Set(hardware, "Stable", 1); Set(hardware, "LastRevision", Get<int>(core, "LeftRevision"));
-        Set(hardware, "PreviousOwner", world.LocalUser);
         Gesture(0, 1); await Frames();
         Check(Get<int>(core, "LeftGesture") == 1, "inactive controller preserves a newer manual event with the same gesture");
         Set(hardware, "Stable", 1); Set(hardware, "LastRevision", Get<int>(core, "LeftRevision"));
@@ -310,12 +309,15 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Select("Angry"); await Frames();
         Check(Math.Abs(field.Value - 0.7f) < 0.01, "animation drives shared tracking output while selected");
         var wearer = avatar.Parent;
+        // Departure must clear output directly, even when Neutral maps to a clip.
+        Set(table, "Pair.0", catalog.FindChild("Angry"));
         avatar.Parent = world.RootSlot;
         await Frames();
-        Check(Reference<User>(core, "PreviousOwner") == null && Get<bool>(core, "AllowExternalInput") &&
+        Check(Get<bool>(core, "AllowExternalInput") && Get<int>(core, "PairIndex") == 0 &&
             Reference<Slot>(core, "CurrentExpression") == null && Get<int>(core, "SelectionStatus") == 0 &&
             Reference<Slot>(core, "CandidateExpression") == null && Math.Abs(field.Value - 0.4f) < 0.01,
-            "wearer departure completes the previous owner's final reset and restores tracking");
+            "wearer departure restores base instead of playing the mapped Neutral expression");
+        Set(table, "Pair.0", (Slot)null);
         Gesture(0, 1); Select("Angry"); await Frames();
         Check(Get<int>(core, "LeftGesture") == 0 && Get<bool>(core, "AllowExternalInput"),
             "gesture and select requests are ignored without a local wearer");
@@ -328,20 +330,33 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var outputState = expressions.FindChild("Outputs").Children.Single();
         Set(core, "PairIndex", -42); Set(outputState, "Result", -42f);
         foreach (var (board, tag) in new[] { ("Selection", "ResoPon/Expression/Internal/Selection"),
-            ("Playback", "ResoPon/Expression/Internal/Playback") })
+            ("Playback", "ResoPon/Expression/Internal/Playback"), ("Lifecycle", "ResoPon/Expression/Internal/Initialize") })
             Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core.FindChild("Logic").FindChild(board), tag, true) == 1,
                 "private stage receiver remains discoverable: " + board);
         await Frames();
         Check(Get<int>(core, "PairIndex") == -42 && Get<float>(outputState, "Result") == -42f,
             "private stages also reject updates without a local wearer");
+        // A loaded/cloned instance with no wearer must not mutate shared state just
+        // because its local initialization flag starts false.
+        var unwornClone = avatar.Duplicate(world.RootSlot);
+        await Frames();
+        var unwornCore = unwornClone.FindChild("Expressions").FindChild("Core");
+        Check(Get<int>(unwornCore, "PairIndex") == -42 && !Get<bool>(unwornCore, "AllowExternalInput"),
+            "an unworn clone does not initialize or repeatedly clear stored state");
+        unwornClone.Parent = wearer;
+        await Frames();
+        Check(Get<int>(unwornCore, "PairIndex") == 0 && Get<bool>(unwornCore, "AllowExternalInput") &&
+            Math.Abs(unwornClone.GetComponent<ValueField<float>>().Value.Value - 0.4f) < 0.01,
+            "first wear initializes a previously unworn clone and restores its base output");
+        unwornClone.Destroy();
         avatar.Parent = wearer;
         Gesture(0, 1); Gesture(1, 1);
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 && Get<int>(core, "PairIndex") == 9 &&
-            Reference<User>(core, "PreviousOwner") == world.LocalUser,
-            "first events after owner change initialize once and retain both hand requests before LocalUpdate");
+            Get<bool>(core, "AllowExternalInput") && Get<int>(core, "LeftRevision") == 1 && Get<int>(core, "RightRevision") == 1,
+            "first events after reattachment initialize once and retain both hand requests before LocalUpdate");
         AllowInput(); Gesture(0, 0); Gesture(1, 0);
         await Frames();
-        Check(Reference<User>(core, "PreviousOwner") == world.LocalUser && Get<bool>(core, "AllowExternalInput") &&
+        Check(Get<bool>(core, "AllowExternalInput") &&
             Get<int>(core, "PairIndex") == 0 && Get<float>(core, "PlaybackElapsed") >= 0 && Math.Abs(field.Value - 0.4f) < 0.01,
             "reattaching initializes hand state, selection, diagnostics and tracking");
         Select("Angry"); await Frames();

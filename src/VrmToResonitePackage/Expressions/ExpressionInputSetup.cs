@@ -13,10 +13,10 @@ internal sealed partial class ExpressionSystemSetup
     private static string GestureTag(int hand) => hand == 0 ? LeftTag : RightTag;
     private IWorldElement SendGesture(ExpressionFlux g, IWorldElement tag, IWorldElement gesture) =>
         g.Trigger<int>(g.Ref(_api), tag, gesture);
-    private void OwnerUpdate(ExpressionFlux graph, IWorldElement action)
+    private void OwnerUpdate(ExpressionFlux graph, IWorldElement action, IWorldElement otherwise = null)
     {
         var update = graph.Node("LocalUpdate");
-        Link(update, "OnUpdate", graph.If(graph.IsOwner(_root), action));
+        Link(update, "OnUpdate", graph.If(graph.IsOwner(_root), action, otherwise));
     }
     private void BuildInputs(bool menu)
     {
@@ -164,14 +164,12 @@ internal sealed partial class ExpressionSystemSetup
         Data(hand, "LastRevision", -1);
         Data(hand, "Candidate", -1); Data(hand, "Since", 0f); Data(hand, "Stable", -1);
         Data(hand, "GripHeld", false); Data(hand, "TriggerHeld", false);
-        Reference<User>(hand, "PreviousOwner", null);
         var initialized = g.Node("StoredValue", typeof(bool));
-        var reset = g.If(g.Or(g.Not(initialized),
-            g.Not(g.Equal<User>(g.Read<User>(handRef, "PreviousOwner"), g.Owner(_root)))), g.Sequence(
+        var reset = g.If(g.Not(initialized), g.Sequence(
             g.Write<int>(handRef, "Candidate", g.Constant(-1)), g.Write<int>(handRef, "Stable", g.Constant(-1)),
             g.Write<int>(handRef, "LastRevision", g.Constant(-1)),
             g.Write<bool>(handRef, "GripHeld", g.Constant(false)), g.Write<bool>(handRef, "TriggerHeld", g.Constant(false)),
-            g.Write<User>(handRef, "PreviousOwner", g.Owner(_root)), g.Set<bool>(initialized, g.Constant(true))));
+            g.Set<bool>(initialized, g.Constant(true))));
         var controller = g.Node(device, null, ("User", g.Owner(_root)), ("Node", g.Constant(side)));
         var active = Out(controller, "IsActive"); var trigger = Out(controller, "Trigger");
         IWorldElement grip = Out(controller, "Grip");
@@ -215,6 +213,7 @@ internal sealed partial class ExpressionSystemSetup
                 g.Write<int>(handRef, "Candidate", g.Constant(-1)),
                 g.Write<int>(handRef, "Stable", g.Constant(-1)),
                 g.Write<bool>(handRef, "GripHeld", g.Constant(false)),
-                g.Write<bool>(handRef, "TriggerHeld", g.Constant(false))))));
+                g.Write<bool>(handRef, "TriggerHeld", g.Constant(false))))),
+            g.Set<bool>(initialized, g.Constant(false)));
     }
 }
