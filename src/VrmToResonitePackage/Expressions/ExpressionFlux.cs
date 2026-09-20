@@ -259,7 +259,15 @@ internal sealed class ExpressionFlux
     public IWorldElement Binary<T>(string op, IWorldElement a, IWorldElement b) => Node(op, typeof(T), ("A", a), ("B", b));
     public IWorldElement Equal<T>(IWorldElement a, IWorldElement b) => Binary<T>(typeof(T).IsValueType ? "ValueEquals" : "ObjectEquals", a, b);
     public IWorldElement Not(IWorldElement a) => Node("NOT_Bool", null, ("A", a));
-    public IWorldElement And(params IWorldElement[] terms) => terms.Length == 0 ? Constant(true) : terms.Aggregate((a, b) => Node("AND_Bool", null, ("A", a), ("B", b)));
+    public IWorldElement And(params IWorldElement[] terms)
+    {
+        if (terms.Length == 0) return Constant(true);
+        if (terms.Length == 1) return terms[0];
+        if (terms.Length == 2) return Node("AND_Bool", null, ("A", terms[0]), ("B", terms[1]));
+        var node = (Nodes.Operators.AND_Multi_Bool)Node("AND_Multi_Bool");
+        foreach (var term in terms) node.Operands.Add((INodeValueOutput<bool>)term);
+        return node;
+    }
     public IWorldElement Or(params IWorldElement[] terms) => terms.Length == 0 ? Constant(false) : terms.Aggregate((a, b) => Node("OR_Bool", null, ("A", a), ("B", b)));
     public IWorldElement Add(IWorldElement a, IWorldElement b) => Binary<float>("ValueAdd", a, b);
     public IWorldElement Sub(IWorldElement a, IWorldElement b) => Binary<float>("ValueSub", a, b);
