@@ -48,7 +48,6 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_core, "CurrentExpression", null);
         Data(_core, "PlaybackStart", 0f); Data(_core, "FadeDuration", 0.1f);
         Data(_core, "PairIndex", 0);
-        Reference<Slot>(_core, "MappedExpression", null); Reference<Slot>(_core, "CandidateExpression", null);
         Data(_core, "SelectionStatus", 0); // 0=unassigned, 1=normal input, 2=menu only, 3=invalid/unloaded
         Data(_core, "PlaybackElapsed", 0f); Data(_core, "FadeWeight", 1f);
         Data(_root, "Version", 5);

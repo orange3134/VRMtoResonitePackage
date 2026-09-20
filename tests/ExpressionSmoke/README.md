@@ -96,3 +96,9 @@ package reload, including templates, bindings, child table rows and import warni
 Legacy Expr writes must not affect the new Core. Snapshot comparison discovers the
 saved space names so old Expr packages remain usable as semantic baselines. Public
 impulse Tags and payload types are unchanged from Version 4.
+
+Core retains only CurrentExpression as a Slot reference. Selection validates the table
+entry in a local value and writes it directly after snapshotting and configuring the fade.
+Graph checks enforce the absence of intermediate diagnostic references before and after
+package reload. Disabling the selected clip must clear CurrentExpression, report invalid
+selection, and preserve that clip's FadeOut and the previous output snapshot.

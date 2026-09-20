@@ -18,15 +18,13 @@ internal sealed partial class ExpressionSystemSetup
             g.Read<int>(core, CoreSpace, "RightGesture"));
         var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(TableSpace, "Pair."))),
             ("B", g.Node("ToString_Int", null, ("V", index))));
-        var mapped = g.Read<Slot>(g.Ref(_table), path);
-        var candidate = mapped;
+        var candidate = g.Read<Slot>(g.Ref(_table), path);
+        // Capture validation for this update without persisting intermediate references in Core.
         var selected = g.Local<Slot>();
         var current = g.Read<Slot>(core, CoreSpace, "CurrentExpression");
         var noExpression = g.Ref<Slot>(null);
         actions.Add(g.Set<Slot>(selected, g.Choose<Slot>(ValidExpression(g, candidate), candidate, noExpression)));
         actions.Add(g.Write<int>(core, CoreSpace, "PairIndex", index));
-        actions.Add(g.Write<Slot>(core, CoreSpace, "MappedExpression", mapped));
-        actions.Add(g.Write<Slot>(core, CoreSpace, "CandidateExpression", candidate));
         actions.Add(g.Write<int>(core, CoreSpace, "SelectionStatus", g.Choose<int>(g.Equal<Slot>(selected, noExpression),
             g.Choose<int>(g.Equal<Slot>(candidate, noExpression), g.Constant(0), g.Constant(3)),
             g.Choose<int>(g.Read<bool>(core, CoreSpace, "AllowExternalInput"), g.Constant(1), g.Constant(2)))));

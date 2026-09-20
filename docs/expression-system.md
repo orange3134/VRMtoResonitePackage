@@ -111,17 +111,15 @@ Inspector 上の Core の変数名には `ExpressionCore/` が付く。他のレ
 | `LeftGesture` / `RightGesture` | 各入力から届いた0〜7の状態 |
 | `LeftRevision` / `RightRevision` | 受理したイベントの更新番号。同じ状態の再送でも増える |
 | `PairIndex` | 左×8＋右で求めた対応表の番号 |
-| `MappedExpression` | その行に割り当てられた Catalog の表情 |
 | AllowExternalInput | true=通常入力も許可、false=コンテキストメニューのみ（編集可能） |
-| CandidateExpression | 対応表から得た検証前の選択候補 |
 | `SelectionStatus` | 0=未割当、1=通常入力可、2=メニューのみ、3=無効またはアセット未ロード |
-| `CurrentExpression` | 実際に再生している表情 |
+| `CurrentExpression` | Selection の検証を通過した再生対象。無効・未割当なら null |
 | `PlaybackStart` / `PlaybackElapsed` | 再生開始時刻と経過秒数 |
 | `FadeDuration` / `FadeWeight` | フェード秒数と現在の混合率（0〜1） |
 
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
 2. 番号が正しく表情が違う場合は、`PairIndex` に対応する `GestureTable` の参照と `AllowExternalInput` を確認し、`Selection` を調べる。
-3. `SelectionStatus=3` の場合は、候補の `Enabled` と `StaticAnimationProvider` のアセット読み込みを確認する。
+3. `SelectionStatus=3` の場合は、`GestureTable/Pair.N`（N は PairIndex）の参照先で Slot の有効状態、`Enabled`、`Clip` のアセット読み込みを確認する。
 4. 選択が正しく見た目が違う場合は、`Playback` と該当する `Outputs` レコードの `Base`、`TrackingWeight`、`Snapshot`、`Result`、`Target` を調べる。
 
 `AllowExternalInput` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
@@ -145,6 +143,15 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
 参照値は現在の ResoniteLink 接続での ID として表示するため、保存後の固定 ID として使わない。
 診断スクリプトは旧 `Expr/` と現行 `ExpressionCore/` の両方を読み取れる。新しい空間名・診断項目の反映には再変換・再インポートが必要。
 
+
+## Selection と再生対象
+
+Core に保存する表情参照は `CurrentExpression` だけ。`MappedExpression` と `CandidateExpression` は生成しない。
+Selection は `GestureTable/Pair.N` を読み、Slot 有効・Enabled=true・アセット取得済みを確認する。
+通過した参照（無効なら null）をその更新中のローカル値として確定し、CurrentExpression と比較する。
+異なる場合は現在の出力を Snapshot に保存し、切替先の FadeIn（解除なら切替前の FadeOut）と
+再生開始時刻を設定して、CurrentExpression に確定した参照を直接書き込む。同じ参照なら再生を継続する。
+未検証の対応表の参照を調べたい場合は、PairIndex に対応する行を直接見る。
 
 ## 装着状態と Lifecycle
 

@@ -80,14 +80,17 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の 0〜7。メニューも同じ値を更新 |
 | `LeftRevision` / `RightRevision` | int | 0 | 各手の受理ごとに加算。同じ値の再送でも増える。禁止中の通常入力では増えない |
 | `PairIndex` | int | 0 | Selection が計算した LeftGesture × 8 + RightGesture（0〜63） |
-| `MappedExpression` | Slot | null | Selection が対応表から読んだ参照。無効でも元の参照を残す |
-| `CandidateExpression` | Slot | null | 検証前の候補。現行実装では MappedExpression と同じ |
 | `SelectionStatus` | int | 0 | 0=未割当、1=有効表情・通常入力可、2=有効表情・メニューのみ、3=候補が無効／未ロード |
 | `CurrentExpression` | Slot | null | Slot 有効・Enabled=true・アセット取得済みの候補。それ以外は null |
 | `PlaybackStart` | float | 0 | CurrentExpression の参照が変わった WorldTimeFloat（秒）。同じ表情の再指定では再生を始め直さない |
 | `FadeDuration` | float | 0.1 | 切替時に採用した FadeIn または FadeOut。途中で Catalog を編集してもその切替の値は再取得しない |
 | `PlaybackElapsed` | float | 0 | ローカル駆動の診断値。WorldTimeFloat − PlaybackStart |
 | `FadeWeight` | float | 1 | ローカル駆動の診断値。FadeDuration が正なら clamp01(PlaybackElapsed / FadeDuration)、それ以外は 1 |
+
+Core に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取った参照を検証し、
+切替前後の比較・フェード設定後に CurrentExpression へ直接渡す。
+MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
+対応表の参照先の確認には PairIndex と GestureTable の行を使う。
 
 AllowExternalInput 以外は状態として扱う。未割当・無効な表情では入力モードにかかわらず SelectionStatus は 0 または 3。
 PlaybackElapsed・FadeWeight は ValueFieldDrive で各クライアントが駆動し、毎フレームの同期書き込みを行わない。
@@ -98,7 +101,7 @@ Lifecycle は現在の装着者がローカルユーザーの場合だけ、初�
 公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、最初の LocalUpdate より早い左右入力も保持する。
 
 初期化時は左右値・更新番号・PairIndex・SelectionStatus を 0、AllowExternalInput を true、
-CurrentExpression・MappedExpression・CandidateExpression を null、Outputs の Result・Snapshot を Base、
+CurrentExpression を null、Outputs の Result・Snapshot を Base、
 キーボード Held を false に戻す。その後の Selection → Playback で現在の対応表に応じた状態になる。
 PlaybackStart・FadeDuration はここでは変更しないため、時計から算出する PlaybackElapsed・FadeWeight は初期化完了の指標ではない。
 
