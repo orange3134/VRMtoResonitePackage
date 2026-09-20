@@ -140,9 +140,10 @@ Result → ValueCopy → 元の BlendShape フィールド
 | `Gesture` | int | 項目ごとの 0〜7 | 設定。送信する手の状態 |
 | `Enabled` | bool | true | 設定。そのショートカットの有効・無効 |
 | `Key` | Renderite.Shared.Key | Keypad1〜Keypad8 | 設定。テンキーの数字キー。None は無効 |
-| `Shift` | bool | 左=false、右=true | 設定。Shift 押下状態の一致条件。Ctrl・Alt はロジック側の固定必須条件 |
+| `Shift` | bool | true | 設定。Shift 押下状態の一致条件。左右とも標準では必須 |
+| `Control` | bool | 左=false、右=true | 設定。Ctrl 押下状態の一致条件。標準では Ctrl なしが左手、Ctrl ありが右手 |
 
-各割当の Logic が FireOnLocalValueChange<bool> でキー条件を監視し、成立時だけ送信する。
+各割当の Logic が FireOnLocalValueChange<bool> でキー条件を監視し、成立時だけ送信する。Shift・Ctrl は左右どちらのキーでもよく、Alt の状態は判定しない。
 前回の条件は変更監視ノードのローカル状態で保持するため、Held の DynamicVariable は不要。
 キーを離しても Neutral は送らない。入力禁止中の押下は API が拒否し、押したまま再許可しても再送しない。
 

@@ -113,39 +113,63 @@ internal static class ExpressionInputEventChecks
                 await Frames(10);
             }
 
-            var binding = expressions.FindChild("Inputs").FindChild("Keyboard").FindChild("Bindings").Children
-                .Single(s => Get<string>(s, "Tag") == ExpressionSystemSetup.LeftTag && Get<int>(s, "Gesture") == 1);
-            Nodes.ValueInput<bool> keyHeld = null;
-            foreach (var keyNode in binding.GetComponentsInChildren<ProtoFluxNode>().Where(n => n.GetType().Name == "KeyHeld").ToArray())
+            var keys = new Dictionary<InputKey, List<Nodes.ValueInput<bool>>>();
+            foreach (var binding in expressions.FindChild("Inputs").FindChild("Keyboard").FindChild("Bindings").Children
+                .Where(s => Get<int>(s, "Gesture") == 1))
             {
-                var key = ((ISyncRef)ExpressionFlux.Member(keyNode, "Key")).Target as Nodes.ValueInput<InputKey>;
-                var sensor = Replace<bool>(binding, keyNode);
-                if (key == null) keyHeld = sensor;
-                else sensor.Value.Value = key.Value.Value is InputKey.LeftControl or InputKey.LeftAlt;
+                foreach (var keyNode in binding.GetComponentsInChildren<ProtoFluxNode>().Where(n => n.GetType().Name == "KeyHeld").ToArray())
+                {
+                    var literal = ((ISyncRef)ExpressionFlux.Member(keyNode, "Key")).Target as Nodes.ValueInput<InputKey>;
+                    var key = literal?.Value.Value ?? Get<InputKey>(binding, "Key");
+                    if (!keys.TryGetValue(key, out var sensors)) keys[key] = sensors = new();
+                    sensors.Add(Replace<bool>(binding, keyNode));
+                }
+            }
+            void Key(InputKey key, bool held)
+            {
+                foreach (var sensor in keys[key]) sensor.Value.Value = held;
             }
             await Frames(10);
-            Gesture("Left", 0);
-            keyHeld.Value.Value = true;
+            Gesture("Left", 0); Gesture("Right", 0);
+            Key(InputKey.Keypad2, true);
+            await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 0,
+                "keypad alone does not trigger either hand");
+            Key(InputKey.LeftShift, true);
             await Frames(10);
-            Check(Get<int>(core, "LeftGesture") == 1, "keyboard chord rising edge sends its configured input");
+            Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 0,
+                "Shift plus keypad sends only the left-hand input");
             Gesture("Left", 4);
             await Frames(10);
             Check(Get<int>(core, "LeftGesture") == 4, "held keyboard chord does not repeatedly overwrite later input");
-            keyHeld.Value.Value = false;
+            Key(InputKey.Keypad2, false);
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 4, "keyboard release preserves the last input");
             Allow(false);
-            keyHeld.Value.Value = true;
+            Key(InputKey.Keypad2, true);
             await Frames(5);
             Allow(true);
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 4, "a key pressed while input is disabled must be released before retrying");
-            keyHeld.Value.Value = false;
+            Key(InputKey.Keypad2, false);
             await Frames(5);
-            keyHeld.Value.Value = true;
+            Key(InputKey.Keypad2, true);
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 1, "keyboard chord fires again after release and repress");
-            keyHeld.Value.Value = false;
+            Key(InputKey.Keypad2, false);
+            Key(InputKey.LeftShift, false);
+            Key(InputKey.RightControl, true);
+            Gesture("Left", 4); Gesture("Right", 4);
+            await Frames(5);
+            Key(InputKey.Keypad2, true);
+            await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 4 && Get<int>(core, "RightGesture") == 4,
+                "Ctrl plus keypad without Shift does not trigger either hand");
+            Key(InputKey.RightShift, true);
+            await Frames(10);
+            Check(Get<int>(core, "LeftGesture") == 4 && Get<int>(core, "RightGesture") == 1,
+                "Ctrl plus Shift plus keypad sends only the right-hand input, including right-side modifiers");
+            Key(InputKey.Keypad2, false);
             await Frames(5);
         }
         finally

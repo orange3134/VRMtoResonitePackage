@@ -85,7 +85,7 @@ local change detectors. OnStart handles initial values without storing previous 
 The sensor-event fixture replaces hardware outputs temporarily and executes the exported graph:
 both hands must wait for stability, fire when the timer expires without more sensor changes,
 preserve hysteresis, reset on gate/disconnect transitions, and redetect on reconnect.
-Keyboard chords must fire once per press and retain newer manual input while held.
+Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends only the left hand; Ctrl+Shift+keypad sends only the right. Keypad alone and Ctrl+keypad without Shift must leave both hands unchanged.
 Idle sentinels prove Selection and menu scans do not run on unchanged frames. Table edits and
 clip enable/disable changes must update selection and menu visibility without API requests.
 Graph checks require exactly one LocalUpdate, in Playback, before and after package reload.

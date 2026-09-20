@@ -140,7 +140,7 @@ internal sealed partial class ExpressionSystemSetup
                 var shortcut = Record(bindings, (hand == 0 ? "Left " : "Right ") + gesture + " " + GestureNames[gesture], KeyboardSpace);
                 Data(shortcut, "Tag", GestureTag(hand)); Data(shortcut, "Gesture", gesture);
                 Data(shortcut, "Enabled", true); Data(shortcut, "Key", (InputKey)((int)InputKey.Keypad1 + gesture));
-                Data(shortcut, "Shift", hand == 1);
+                Data(shortcut, "Shift", true); Data(shortcut, "Control", hand == 1);
                 BuildKeyboardBinding(shortcut);
             }
     }
@@ -151,10 +151,10 @@ internal sealed partial class ExpressionSystemSetup
         var source = g.Ref(shortcut);
         IWorldElement Held(InputKey key) => g.Node("KeyHeld", null, ("Key", g.Constant(key)));
         var control = g.Or(Held(InputKey.LeftControl), Held(InputKey.RightControl));
-        var alt = g.Or(Held(InputKey.LeftAlt), Held(InputKey.RightAlt));
         var shift = g.Or(Held(InputKey.LeftShift), Held(InputKey.RightShift));
         var key = g.Read<InputKey>(source, KeyboardSpace, "Key");
-        var held = g.And(g.IsOwner(_root), g.Read<bool>(source, KeyboardSpace, "Enabled"), control, alt,
+        var held = g.And(g.IsOwner(_root), g.Read<bool>(source, KeyboardSpace, "Enabled"),
+            g.Equal<bool>(control, g.Read<bool>(source, KeyboardSpace, "Control")),
             g.Equal<bool>(shift, g.Read<bool>(source, KeyboardSpace, "Shift")),
             g.Not(g.Equal<InputKey>(key, g.Constant(InputKey.None))), g.Node("KeyHeld", null, ("Key", key)));
         var press = g.If(held, SendGesture(g, g.Read<string>(source, KeyboardSpace, "Tag"), g.Read<int>(source, KeyboardSpace, "Gesture")));
