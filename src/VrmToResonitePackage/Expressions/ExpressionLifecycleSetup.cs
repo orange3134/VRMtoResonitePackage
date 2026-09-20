@@ -39,7 +39,7 @@ internal sealed partial class ExpressionSystemSetup
         // that initialized this instance clears it once, provided nobody else is wearing it.
         // Observers never initialize and therefore never write this cleanup state.
         var stop = g.If(initialized, g.Sequence(
-            g.If(g.Equal<User>(g.Owner(_root), g.Ref<User>(null)), clear),
+            g.If(g.IsNull<User>(g.Owner(_root)), clear),
             g.Set<bool>(initialized, g.Constant(false))));
         var update = g.If(g.IsOwner(_root), g.Sequence(initialize,
             g.Trigger(g.Ref(_selection), SelectionTickTag), g.Trigger(g.Ref(_playback), PlaybackTickTag),

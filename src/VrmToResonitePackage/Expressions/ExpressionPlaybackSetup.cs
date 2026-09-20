@@ -28,7 +28,7 @@ internal sealed partial class ExpressionSystemSetup
         actions.Add(g.Write<int>(core, CoreSpace, "PairIndex", index));
 
         g.BeginSection("Snapshot and switch only when changed");
-        actions.Add(g.If(g.Not(g.Equal<Slot>(selected, current)), g.Sequence(
+        actions.Add(g.If(g.NotEqual<Slot>(selected, current), g.Sequence(
             g.Each(g.Ref(_outputs), output => g.Write<float>(output, OutputSpace, "Snapshot", g.Read<float>(output, OutputSpace, "Result"))),
             g.Write<float>(core, CoreSpace, "FadeDuration", g.Choose<float>(g.Active(selected),
                 g.Read<float>(selected, ClipSpace, "FadeIn"), g.Read<float>(current, ClipSpace, "FadeOut"))),

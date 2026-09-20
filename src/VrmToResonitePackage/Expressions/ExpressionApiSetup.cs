@@ -67,7 +67,7 @@ internal sealed partial class ExpressionSystemSetup
                 WriteHand(g, "Left", g.Binary<int>("ValueDiv", pair, g.Constant(8))),
                 WriteHand(g, "Right", g.Binary<int>("ValueMod", pair, g.Constant(8)))))));
         Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
-            g.Not(g.Equal<string>(id, g.Text(""))), g.Node("NotNull", typeof(string), ("Instance", id))), select));
+            g.NotEqual<string>(id, g.Text("")), g.Node("NotNull", typeof(string), ("Instance", id))), select));
     }
 
     private void BuildInputEnabledReceiver(ExpressionFlux g)

@@ -258,6 +258,8 @@ internal sealed class ExpressionFlux
             ("Condition", condition), ("OnTrue", onTrue), ("OnFalse", onFalse));
     public IWorldElement Binary<T>(string op, IWorldElement a, IWorldElement b) => Node(op, typeof(T), ("A", a), ("B", b));
     public IWorldElement Equal<T>(IWorldElement a, IWorldElement b) => Binary<T>(typeof(T).IsValueType ? "ValueEquals" : "ObjectEquals", a, b);
+    public IWorldElement NotEqual<T>(IWorldElement a, IWorldElement b) => Binary<T>(typeof(T).IsValueType ? "ValueNotEquals" : "ObjectNotEquals", a, b);
+    public IWorldElement IsNull<T>(IWorldElement value) where T : class => Node("IsNull", typeof(T), ("Instance", value));
     public IWorldElement Not(IWorldElement a) => Node("NOT_Bool", null, ("A", a));
     public IWorldElement And(params IWorldElement[] terms)
     {

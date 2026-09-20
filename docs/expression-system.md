@@ -60,6 +60,7 @@ Core に入力元の一覧・優先順位・有効期限・汎用 Animator パ�
 Flux は1スロット1ノードで、名前付きの節を保持しながらモジュール全体の接続関係で整列する。
 データの供給元を左、入力を使うノードを右に置く。Impulse も発火元から呼び出し先へ左から右に配置する。
 3条件以上をまとめて判定する AND は `AND_Multi_Bool`（AndMulti）1ノードに入力を列挙し、2入力 AND の連結を避ける。
+不一致判定は `ValueNotEquals`／`ObjectNotEquals`、null 判定は `IsNull` を使い、Equal と Not や null 定数の組み合わせを避ける。
 循環する接続は同じ階層にまとめ、モジュール間には実際の幅に応じた余白を設ける。
 ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュールを個別に Unpack する。
 モジュール間では ProtoFlux ノードを直接接続しない。所有者・時刻・定数の取得も各モジュール内で完結するため、
