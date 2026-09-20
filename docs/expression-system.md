@@ -36,7 +36,10 @@ Expressions/
   Outputs/                         BlendShape ごとのベース入力と最終出力
   Inputs/
     ContextMenu/                   対応表にある表情のみメニュー表示
-    Keyboard/Bindings/             左右8種ずつのショートカット（各項目の Logic で押下を監視）
+    Keyboard/
+      Bindings/                    左右8種ずつの編集用データ（Flux なし）
+      Logic/Left/                  左手8キーの変更監視・共通送信
+      Logic/Right/                 右手8キーの変更監視・共通送信
     HandGestures/Modules/
       Touch|Index|Vive|WindowsMR/   削除できる機種別入力
         Left/Logic/                左手の入力検出・安定化・通知
@@ -83,7 +86,7 @@ Dynamic Impulse は装着者のクライアントで実行され、所有者に�
 | Lifecycle | OnStart とローカル装着状態の変化 |
 | Selection | API の同期呼び出し、左右から求めた PairIndex または検証済み表情参照の変化 |
 | メニュー表示 | 装着開始、Catalog の項目数、対応表の有効な参照先の変化 |
-| キーボード | 各割当のキー・修飾キー条件が成立したとき |
+| キーボード | 左右それぞれの8キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
 | Playback | LocalUpdate と API・選択変更からの同期呼び出し |
 
@@ -221,6 +224,11 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
 - コンテキストメニュー: `Left hand` / `Right hand` に各8項目。
 - キーボード: 左手は Shift+テンキー0〜7（Ctrl なし）、右手は Ctrl+Shift+テンキー0〜7。テンキー0が Neutral、1が Fist、以降は順に7の ThumbsUp まで。
   `Bindings` の `Key`、`Shift`、`Control`、`Enabled`、送信先の `Tag` と整数値の `Gesture` を編集できる。
+  Flux は `Keyboard/Logic/Left` と `Right` の2つだけで、各割当には生成しない。
+  各手の8条件を ComposeBits_byte でまとめ、1つの FireOnLocalValueChange<byte> で監視する。
+  変化時は共通ループで前回 false・今回 true の割当だけを送る。キーの解放や他のキーの押下で、既に押しているキーを再送しない。
+  同じ検出で複数の割当が成立した場合は、生成時の割当順（標準では0〜7）に送り、後の入力が残る。
+  監視先は生成した各手8個のレコード参照で固定するため、並べ替えても対応は変わらない。
 - コントローラー: 不要な `Modules/Touch|Index|Vive|WindowsMR` を削除できる。
   機器の切断・非アクティブ化では判定状態だけをリセットし、Neutral は送らない。
   最後に受理した左右値を保持し、再接続後に安定した手形を検出すると、その手の値を更新する。

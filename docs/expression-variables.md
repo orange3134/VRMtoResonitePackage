@@ -30,7 +30,7 @@
 ProtoFlux の読み書きは対象の空間名を明示し、変数生成は配置先の空間名を使う。
 固定の読み取り先がノード自身の祖先と同じ名前付き空間を指す場合は Dynamic Variable Input にする。
 各手の状態と親機種の設定、Core 内の Selection／Playback の状態・表情参照が対象。
-実行時に対象が変わるレコード、Pair.N の可変名、祖先にない兄弟 Core への参照は ReadDynamicVariable を使う。
+実行時に対象が変わるレコード、Pair.N の可変名、祖先にない兄弟 Core やキーボードの割当レコードへの参照は ReadDynamicVariable を使う。
 
 Version 4 以前の共通 `Expr` 空間は新規生成しない。既存パッケージは再変換・再インポートで更新する。
 DynamicVariable を直接読む外部処理は新しい名前へ変更する。公開 Dynamic Impulse の Tag・引数は Version 4 と同じ。
@@ -143,8 +143,11 @@ Result → ValueCopy → 元の BlendShape フィールド
 | `Shift` | bool | true | 設定。Shift 押下状態の一致条件。左右とも標準では必須 |
 | `Control` | bool | 左=false、右=true | 設定。Ctrl 押下状態の一致条件。標準では Ctrl なしが左手、Ctrl ありが右手 |
 
-各割当の Logic が FireOnLocalValueChange<bool> でキー条件を監視し、成立時だけ送信する。Shift・Ctrl は左右どちらのキーでもよく、Alt の状態は判定しない。
-前回の条件は変更監視ノードのローカル状態で保持するため、Held の DynamicVariable は不要。
+各割当は編集用データのみで、Flux は Keyboard/Logic/Left と Right の2つにまとめる。
+各手の8条件を ComposeBits_byte で1つの byte にし、FireOnLocalValueChange<byte> で監視する。
+変化時に LocalValue<byte> へ今回の状態を取得し、StoredValue<byte> の前回状態と比較する共通ループで新しい押下だけを送信する。
+処理後に前回状態を更新する。これらはローカルな実行状態で、Held などの DynamicVariable は追加しない。
+Shift・Ctrl は左右どちらのキーでもよく、Alt の状態は判定しない。
 キーを離しても Neutral は送らない。入力禁止中の押下は API が拒否し、押したまま再許可しても再送しない。
 
 ## Inputs/HandGestures/Modules：機種別入力

@@ -114,15 +114,22 @@ internal static class ExpressionInputEventChecks
             }
 
             var keys = new Dictionary<InputKey, List<Nodes.ValueInput<bool>>>();
-            foreach (var binding in expressions.FindChild("Inputs").FindChild("Keyboard").FindChild("Bindings").Children
-                .Where(s => Get<int>(s, "Gesture") == 1))
+            var keyboard = expressions.FindChild("Inputs").FindChild("Keyboard");
+            foreach (var board in keyboard.FindChild("Logic").Children)
             {
-                foreach (var keyNode in binding.GetComponentsInChildren<ProtoFluxNode>().Where(n => n.GetType().Name == "KeyHeld").ToArray())
+                foreach (var keyNode in board.GetComponentsInChildren<ProtoFluxNode>().Where(n => n.GetType().Name == "KeyHeld").ToArray())
                 {
-                    var literal = ((ISyncRef)ExpressionFlux.Member(keyNode, "Key")).Target as Nodes.ValueInput<InputKey>;
-                    var key = literal?.Value.Value ?? Get<InputKey>(binding, "Key");
+                    IWorldElement input = ((ISyncRef)ExpressionFlux.Member(keyNode, "Key")).Target;
+                    InputKey key;
+                    if (input is Nodes.ValueInput<InputKey> literal) key = literal.Value.Value;
+                    else
+                    {
+                        while (input is not ProtoFluxNode) input = input.Parent;
+                        var source = (Nodes.RefObjectInput<Slot>)((ISyncRef)ExpressionFlux.Member(input, "Source")).Target;
+                        key = Get<InputKey>(source.Target.Target, "Key");
+                    }
                     if (!keys.TryGetValue(key, out var sensors)) keys[key] = sensors = new();
-                    sensors.Add(Replace<bool>(binding, keyNode));
+                    sensors.Add(Replace<bool>(board, keyNode));
                 }
             }
             void Key(InputKey key, bool held)
@@ -156,7 +163,40 @@ internal static class ExpressionInputEventChecks
             Key(InputKey.Keypad1, true);
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 1, "keyboard chord fires again after release and repress");
+            Key(InputKey.Keypad2, true);
+            await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 2, "pressing another keypad key while holding the first sends only the new key");
+            Key(InputKey.Keypad2, false);
+            await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 2, "releasing the newer key does not resend the older held key");
             Key(InputKey.Keypad1, false);
+            await Frames(5);
+            Key(InputKey.Keypad1, true); Key(InputKey.Keypad3, true);
+            await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 3, "simultaneous new keys are sent in binding order");
+            Key(InputKey.Keypad1, false); Key(InputKey.Keypad3, false);
+            await Frames(5);
+            var leftFist = keyboard.FindChild("Bindings").Children.Single(s =>
+                Get<string>(s, "Tag") == ExpressionSystemSetup.LeftTag && Get<int>(s, "Gesture") == 1);
+            Set(leftFist, "Gesture", 6);
+            Key(InputKey.Keypad1, true);
+            await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 6, "shared keyboard sender reads the edited binding payload");
+            Key(InputKey.Keypad1, false);
+            Set(leftFist, "Gesture", 1); Set(leftFist, "Enabled", false);
+            await Frames(5);
+            Key(InputKey.Keypad1, true);
+            await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 6, "disabled binding does not send through the shared keyboard loop");
+            Set(leftFist, "Enabled", true);
+            await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 1, "enabling a held binding is detected by the shared keyboard mask");
+            Key(InputKey.Keypad1, false);
+            await Frames(5);
+            Key(InputKey.Keypad0, true);
+            await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 0, "keypad zero sends Neutral through the shared sender");
+            Key(InputKey.Keypad0, false);
             Key(InputKey.LeftShift, false);
             Key(InputKey.RightControl, true);
             Gesture("Left", 4); Gesture("Right", 4);

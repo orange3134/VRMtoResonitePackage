@@ -88,7 +88,11 @@ preserve hysteresis, reset on gate/disconnect transitions, and redetect on recon
 Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends only the left hand; Ctrl+Shift+keypad sends only the right. Keypad alone and Ctrl+keypad without Shift must leave both hands unchanged.
 Idle sentinels prove Selection and menu scans do not run on unchanged frames. Table edits and
 clip enable/disable changes must update selection and menu visibility without API requests.
-Graph checks require exactly one LocalUpdate, in Playback, before and after package reload.
+Keyboard Flux consists of exactly two boards, Logic/Left and Logic/Right, with one byte-mask
+change detector and one shared send loop per hand. Binding records contain no Flux.
+Multiple-key checks verify that only newly pressed keys send, releases do not resend older held keys,
+simultaneous new presses use binding order, and edited payloads/enabled flags still work.
+Graph checks require exactly one LocalUpdate, in Playback, and two keyboard boards before and after package reload.
 
 Lifecycle and controller hands retain no User references. Local StoredValue<bool> flags
 initialize once while worn and rearm when the local user stops wearing the avatar.

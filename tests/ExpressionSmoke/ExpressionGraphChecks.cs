@@ -29,6 +29,18 @@ internal static class ExpressionGraphChecks
             .All(v => v.VariableName.Value != "ExpressionKeyboardBinding/Held"),
             "keyboard edge state is local to its change detector");
         var boards = nodes.GroupBy(Board).ToArray();
+        var keyboard = Descendant(expressions, "Inputs/Keyboard");
+        Check(Descendant(keyboard, "Bindings").GetComponentsInChildren<ProtoFluxNode>().Count == 0,
+            "keyboard binding records contain no per-key Flux");
+        var keyboardBoards = keyboard.GetComponentsInChildren<ProtoFluxNode>().GroupBy(Board).ToArray();
+        Check(keyboardBoards.Length == 2 &&
+            keyboardBoards.Select(b => b.Key).ToHashSet().SetEquals(new[] {
+                Descendant(keyboard, "Logic/Left"), Descendant(keyboard, "Logic/Right") }),
+            "keyboard has exactly two logic boards, Left and Right");
+        foreach (var board in keyboardBoards)
+            Check(board.Count(n => n.GetType().Name == "FireOnLocalValueChange`1") == 1 &&
+                board.Count(n => n.GetType().Name.StartsWith("DynamicImpulseTriggerWithValue", StringComparison.Ordinal)) == 1,
+                "each keyboard hand has one change detector and one shared sender");
         foreach (var group in nodes.GroupBy(n => n.Group))
         {
             var owners = group.Select(Board).Distinct().ToArray();

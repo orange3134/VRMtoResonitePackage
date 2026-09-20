@@ -134,32 +134,65 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildKeyboard()
     {
         var root = _inputs.AddSlot("Keyboard"); var bindings = root.AddSlot("Bindings");
+        var logic = root.AddSlot("Logic");
         for (int hand = 0; hand < 2; hand++)
+        {
+            var shortcuts = new List<Slot>();
             for (int gesture = 0; gesture < 8; gesture++)
             {
                 var shortcut = Record(bindings, (hand == 0 ? "Left " : "Right ") + gesture + " " + GestureNames[gesture], KeyboardSpace);
                 Data(shortcut, "Tag", GestureTag(hand)); Data(shortcut, "Gesture", gesture);
                 Data(shortcut, "Enabled", true); Data(shortcut, "Key", (InputKey)((int)InputKey.Keypad0 + gesture));
                 Data(shortcut, "Shift", true); Data(shortcut, "Control", hand == 1);
-                BuildKeyboardBinding(shortcut);
+                shortcuts.Add(shortcut);
             }
+            BuildKeyboardHand(logic.AddSlot(hand == 0 ? "Left" : "Right"), shortcuts);
+        }
     }
 
-    private void BuildKeyboardBinding(Slot shortcut)
+    private void BuildKeyboardHand(Slot board, IReadOnlyList<Slot> shortcuts)
     {
-        var g = new ExpressionFlux(shortcut.AddSlot("Logic"));
-        var source = g.Ref(shortcut);
+        var g = new ExpressionFlux(board);
         IWorldElement Held(InputKey key) => g.Node("KeyHeld", null, ("Key", g.Constant(key)));
         var control = g.Or(Held(InputKey.LeftControl), Held(InputKey.RightControl));
         var shift = g.Or(Held(InputKey.LeftShift), Held(InputKey.RightShift));
-        var key = g.Read<InputKey>(source, KeyboardSpace, "Key");
-        var held = g.And(g.IsOwner(_root), g.Read<bool>(source, KeyboardSpace, "Enabled"),
-            g.Equal<bool>(control, g.Read<bool>(source, KeyboardSpace, "Control")),
-            g.Equal<bool>(shift, g.Read<bool>(source, KeyboardSpace, "Shift")),
-            g.NotEqual<InputKey>(key, g.Constant(InputKey.None)), g.Node("KeyHeld", null, ("Key", key)));
-        var press = g.If(held, SendGesture(g, g.Read<string>(source, KeyboardSpace, "Tag"), g.Read<int>(source, KeyboardSpace, "Gesture")));
-        g.OnChanged<bool>(held, press);
-        g.OnStart(press);
+        var heldKeys = g.Node("ComposeBits_byte");
+        var loop = g.Node("For", null, ("Count", g.Constant(shortcuts.Count)));
+        var binding = (global::FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ObjectMultiplex<Slot>)
+            g.Node("ObjectMultiplex", typeof(Slot), ("Index", Out(loop, "Iteration")));
+        for (int index = 0; index < shortcuts.Count; index++)
+        {
+            var source = g.Ref(shortcuts[index]);
+            binding.Inputs.Add((INodeObjectOutput<Slot>)source);
+            var key = g.Read<InputKey>(source, KeyboardSpace, "Key");
+            var held = g.And(g.IsOwner(_root), g.Active(source), g.Read<bool>(source, KeyboardSpace, "Enabled"),
+                g.Equal<bool>(control, g.Read<bool>(source, KeyboardSpace, "Control")),
+                g.Equal<bool>(shift, g.Read<bool>(source, KeyboardSpace, "Shift")),
+                g.NotEqual<InputKey>(key, g.Constant(InputKey.None)), g.Node("KeyHeld", null, ("Key", key)));
+            Link(heldKeys, "Bit" + index, held);
+        }
+
+        // One change detector and one send loop per hand. Capture the mask before
+        // sending so all keys in this event use the same current/previous state.
+        var current = g.Local<byte>();
+        var previous = g.Node("StoredValue", typeof(byte));
+        var currentBits = g.Node("ExtractBits_byte", null, ("Integer", current));
+        var previousBits = g.Node("ExtractBits_byte", null, ("Integer", previous));
+        IWorldElement BitAt(IWorldElement bits)
+        {
+            var mux = (global::FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueMultiplex<bool>)
+                g.Node("ValueMultiplex", typeof(bool), ("Index", Out(loop, "Iteration")));
+            for (int index = 0; index < shortcuts.Count; index++)
+                mux.Inputs.Add((INodeValueOutput<bool>)Out(bits, "Bit" + index));
+            return Out(mux, "Output");
+        }
+        var sourceBinding = Out(binding, "Output");
+        Link(loop, "LoopIteration", g.If(g.And(BitAt(currentBits), g.Not(BitAt(previousBits))),
+            SendGesture(g, g.Read<string>(sourceBinding, KeyboardSpace, "Tag"), g.Read<int>(sourceBinding, KeyboardSpace, "Gesture"))));
+        var update = g.Sequence(g.Set<byte>(current, heldKeys),
+            g.If(g.IsOwner(_root), loop), g.Set<byte>(previous, current));
+        g.OnChanged<byte>(heldKeys, update);
+        g.OnStart(update);
     }
 
     private void BuildGestures()
