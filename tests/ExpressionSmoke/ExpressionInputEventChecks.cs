@@ -131,7 +131,7 @@ internal static class ExpressionInputEventChecks
             }
             await Frames(10);
             Gesture("Left", 0); Gesture("Right", 0);
-            Key(InputKey.Keypad2, true);
+            Key(InputKey.Keypad1, true);
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 0,
                 "keypad alone does not trigger either hand");
@@ -142,26 +142,26 @@ internal static class ExpressionInputEventChecks
             Gesture("Left", 4);
             await Frames(10);
             Check(Get<int>(core, "LeftGesture") == 4, "held keyboard chord does not repeatedly overwrite later input");
-            Key(InputKey.Keypad2, false);
+            Key(InputKey.Keypad1, false);
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 4, "keyboard release preserves the last input");
             Allow(false);
-            Key(InputKey.Keypad2, true);
+            Key(InputKey.Keypad1, true);
             await Frames(5);
             Allow(true);
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 4, "a key pressed while input is disabled must be released before retrying");
-            Key(InputKey.Keypad2, false);
+            Key(InputKey.Keypad1, false);
             await Frames(5);
-            Key(InputKey.Keypad2, true);
+            Key(InputKey.Keypad1, true);
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 1, "keyboard chord fires again after release and repress");
-            Key(InputKey.Keypad2, false);
+            Key(InputKey.Keypad1, false);
             Key(InputKey.LeftShift, false);
             Key(InputKey.RightControl, true);
             Gesture("Left", 4); Gesture("Right", 4);
             await Frames(5);
-            Key(InputKey.Keypad2, true);
+            Key(InputKey.Keypad1, true);
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 4 && Get<int>(core, "RightGesture") == 4,
                 "Ctrl plus keypad without Shift does not trigger either hand");
@@ -169,7 +169,7 @@ internal static class ExpressionInputEventChecks
             await Frames(10);
             Check(Get<int>(core, "LeftGesture") == 4 && Get<int>(core, "RightGesture") == 1,
                 "Ctrl plus Shift plus keypad sends only the right-hand input, including right-side modifiers");
-            Key(InputKey.Keypad2, false);
+            Key(InputKey.Keypad1, false);
             await Frames(5);
         }
         finally

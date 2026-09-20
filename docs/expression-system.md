@@ -219,7 +219,7 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
 通常入力が許可されている間は、手を動かさずにキーボードで設定した状態を維持し、次の物理ジェスチャー変更で更新する。メニュー専用モードでは機種別の判定状態をリセットし、許可を戻した後は再び安定した手形を検出して送る。
 
 - コンテキストメニュー: `Left hand` / `Right hand` に各8項目。
-- キーボード: 左手は Shift+テンキー1〜8（Ctrl なし）、右手は Ctrl+Shift+テンキー1〜8。テンキー1が Neutral、8が ThumbsUp。
+- キーボード: 左手は Shift+テンキー0〜7（Ctrl なし）、右手は Ctrl+Shift+テンキー0〜7。テンキー0が Neutral、1が Fist、以降は順に7の ThumbsUp まで。
   `Bindings` の `Key`、`Shift`、`Control`、`Enabled`、送信先の `Tag` と整数値の `Gesture` を編集できる。
 - コントローラー: 不要な `Modules/Touch|Index|Vive|WindowsMR` を削除できる。
   機器の切断・非アクティブ化では判定状態だけをリセットし、Neutral は送らない。

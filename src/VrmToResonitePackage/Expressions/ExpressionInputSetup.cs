@@ -139,7 +139,7 @@ internal sealed partial class ExpressionSystemSetup
             {
                 var shortcut = Record(bindings, (hand == 0 ? "Left " : "Right ") + gesture + " " + GestureNames[gesture], KeyboardSpace);
                 Data(shortcut, "Tag", GestureTag(hand)); Data(shortcut, "Gesture", gesture);
-                Data(shortcut, "Enabled", true); Data(shortcut, "Key", (InputKey)((int)InputKey.Keypad1 + gesture));
+                Data(shortcut, "Enabled", true); Data(shortcut, "Key", (InputKey)((int)InputKey.Keypad0 + gesture));
                 Data(shortcut, "Shift", true); Data(shortcut, "Control", hand == 1);
                 BuildKeyboardBinding(shortcut);
             }

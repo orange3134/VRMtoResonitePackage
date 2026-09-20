@@ -139,7 +139,7 @@ Result → ValueCopy → 元の BlendShape フィールド
 | `Tag` | string | 左右の Gesture API Tag | 設定。イベントの送信先 Tag |
 | `Gesture` | int | 項目ごとの 0〜7 | 設定。送信する手の状態 |
 | `Enabled` | bool | true | 設定。そのショートカットの有効・無効 |
-| `Key` | Renderite.Shared.Key | Keypad1〜Keypad8 | 設定。テンキーの数字キー。None は無効 |
+| `Key` | Renderite.Shared.Key | Keypad0〜Keypad7 | 設定。テンキー0=Neutral、1=Fist、以降は順に7=ThumbsUp。None は無効 |
 | `Shift` | bool | true | 設定。Shift 押下状態の一致条件。左右とも標準では必須 |
 | `Control` | bool | 左=false、右=true | 設定。Ctrl 押下状態の一致条件。標準では Ctrl なしが左手、Ctrl ありが右手 |
 
