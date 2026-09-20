@@ -15,6 +15,7 @@
     <Reference Include="SkyFrost.Base"><HintPath>$(ResonitePath)/SkyFrost.Base.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="SkyFrost.Base.Models"><HintPath>$(ResonitePath)/SkyFrost.Base.Models.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="ProtoFlux.Core"><HintPath>$(ResonitePath)/ProtoFlux.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ProtoFlux.Nodes.FrooxEngine"><HintPath>$(ResonitePath)/ProtoFlux.Nodes.FrooxEngine.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="ProtoFluxBindings"><HintPath>$(ResonitePath)/ProtoFluxBindings.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 </Project>

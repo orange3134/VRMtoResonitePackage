@@ -8,8 +8,8 @@ internal sealed partial class ExpressionSystemSetup
 {
     private void BuildSelection()
     {
-        // Keep Core reads live across synchronous API events, reset, and playback.
-        var g = new ExpressionFlux(_selection, useDynamicInputs: false);
+        // Fixed Core state binds to the named ancestor space; selected clips stay dynamic.
+        var g = new ExpressionFlux(_selection);
         var core = g.Ref(_core);
         var actions = new List<IWorldElement>();
 
@@ -42,8 +42,8 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildPlayback()
     {
-        // Using Dynamic Inputs here regressed cloned playback in the runtime test.
-        var g = new ExpressionFlux(_playback, useDynamicInputs: false);
+        // Core inputs bind locally; output records and the current clip are runtime Sources.
+        var g = new ExpressionFlux(_playback);
         var core = g.Ref(_core);
         var current = g.Read<Slot>(core, CoreSpace, "CurrentExpression");
         var elapsed = g.Sub(g.Now, g.Read<float>(core, CoreSpace, "PlaybackStart"));

@@ -69,11 +69,14 @@ exits without running asynchronous engine shutdown callbacks.
 Physical controller sensing, keyboard focus in a desktop client, context-menu
 layout, and multi-client networking still require interactive verification.
 
-Node simplification uses scoped Dynamic Variable Inputs in controller hands, Children/ForEach for child loops,
-and GetActiveUserSelf for wearer lookup. Core reads stay live: broad Dynamic Input replacement regressed
-the clone playback check even when CurrentExpression was correct. The NATIVE report lists both replaced
-and retained node types for comparison. Existing same-frame events, editable tables, removable modules,
-wearer departure/reattachment, clones and package reloads exercise the behavioral boundaries of these substitutions.
+Node simplification uses scoped Dynamic Variable Inputs in controller hands, ancestor gesture settings,
+and Core selection/playback. Namespace lookup must reach the same space instance from the fixed source
+and the input node; different intervening namespace names do not block that lookup. Dynamic source Slots,
+variable table keys and sibling Core lookups retain ReadDynamic nodes. The NATIVE report lists both forms.
+Input proxy checks inspect actual HasValue/DynamicValue for both hands and Core object inputs. Editing
+StabilitySeconds must update that module's hands while other modules retain their values. The same checks
+run on clones and package reloads. Existing same-frame events, editable tables, removable modules,
+wearer departure/reattachment and clone playback cover the synchronization behavior of Core inputs.
 
 Version 4 removes Override Slot state. Actual menu buttons must disable ordinary input and update the same
 LeftGesture/RightGesture fields used by gesture input. Unmapped IDs must leave the pair and mode unchanged.

@@ -80,6 +80,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         for (int i = 0; i < 90; i++) await default(NextUpdate);
         Check(expressions.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "all generated ProtoFlux groups are valid");
         ExpressionGraphChecks.CheckLayout(expressions);
+        await ExpressionDynamicInputChecks.CheckEdits(expressions);
         var core = expressions.FindChild("Core"); var api = expressions.FindChild("API").FindChild("Receivers");
         var catalog = expressions.FindChild("Catalog"); var table = expressions.FindChild("GestureTable");
         string[] gestureNames = { "Neutral", "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
@@ -284,6 +285,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var clone = avatar.Duplicate(avatar.Parent); await Frames(90);
         Check(Math.Abs(clone.GetComponent<ValueField<float>>().Value.Value - 0.2f) < 0.01, "cloning resets transient selection");
         Check(Math.Abs(field.Value - 1f) < 0.01, "cloning does not reset original");
+        await ExpressionDynamicInputChecks.CheckEdits(clone.FindChild("Expressions"));
+        ExpressionDynamicInputChecks.CheckBindings(expressions);
         var cloneCore = clone.FindChild("Expressions").FindChild("Core");
         Check(Get<int>(cloneCore, "PairIndex") == 0 && Get<bool>(cloneCore, "AllowExternalInput"),
             "clone diagnostics reflect reset hand inputs and ordinary input enabled");
@@ -375,6 +378,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(restored.GetComponentsInChildren<StaticAnimationProvider>().All(p => p.Asset != null), "packaged AnimX assets reload");
         var restoredExpressions = restored.FindChild("Expressions");
         ExpressionGraphChecks.CheckLayout(restoredExpressions);
+        await ExpressionDynamicInputChecks.CheckEdits(restoredExpressions);
         var restoredCore = restoredExpressions.FindChild("Core");
         Check(Get<int>(restoredCore, "PairIndex") == 0 && Get<int>(restoredCore, "SelectionStatus") == 0 &&
             Reference<Slot>(restoredCore, "CandidateExpression") == null && Get<bool>(restoredCore, "AllowExternalInput"),

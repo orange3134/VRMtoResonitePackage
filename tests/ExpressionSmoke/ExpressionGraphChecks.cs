@@ -10,6 +10,7 @@ internal static class ExpressionGraphChecks
     public static void CheckLayout(Slot expressions)
     {
         ExpressionSpaceChecks.Run(expressions);
+        ExpressionDynamicInputChecks.CheckBindings(expressions);
         Report(expressions);
         ExpressionLayoutChecks.CheckDirection(expressions);
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();

@@ -74,16 +74,27 @@ Dynamic Impulse は装着者のクライアントで実行され、所有者に�
 
 ## 入力・列挙ノード
 
-機種別の各手の状態（Candidate、Stable、Since、LastRevision、GripHeld、TriggerHeld）は、
-同じ `ExpressionGestureHand` スコープを参照する `DynamicVariableValueInput<T>` で読む。
-これらのノードは該当する手の変数スコープ内に配置する。
+固定参照のうち、読み取り元 Slot とノード自身から同じ名前付き空間へ到達できるものは
+`DynamicVariableValueInput<T>`／`DynamicVariableObjectInput<T>` で読む。
+間に別名の空間があっても、要求した空間名で祖先を検索する。
+
+- 各手の Candidate・Stable・Since・LastRevision・GripHeld・TriggerHeld：`ExpressionGestureHand`。
+- 機種ごとの Grip/Trigger しきい値・StabilitySeconds：親モジュールの `ExpressionGestureSettings`。
+- Selection の左右値・入力許可と、Playback の開始時刻・フェード秒数：`ExpressionCore`。
+- Selection／Playback の CurrentExpression：`ExpressionCore` の Object Input。
+
+Core の入力ノード化は現行の名前付き空間で再検証し、同一フレームの入力、複製、再装着、
+保存再読み込み後の選択・再生を確認した。機種別設定の編集も、両手の入力プロキシが該当する
+モジュールの値へ追従し、別機種・複製元と混ざらないことを確認する。
+置換により接続先がなくなった固定 Slot 参照ノードは、配線完了後に除去する。
 
 次の読み取りは `ReadDynamicValueVariable<T>`／`ReadDynamicObjectVariable<T>` を維持する。
 
-- Core の Lifecycle／Selection／Playback の同期状態。Dynamic Input に置き換えた実エンジン試験では、
-  複製後に表情の選択は更新されても出力が古いままになる回帰があったため、直接読み取る。
-- 各コントローラーの共通しきい値や API からの Core 参照など、ノードと変数のスコープが異なる固定参照。
-- ループ中の子 Slot、選択中の Catalog、左右の番号で決まる `ExpressionGestureTable/Pair.N` など、実行中に対象や名前が変わる参照。
+- API・機種別入力からの Core 参照：Core は兄弟階層にあり、入力ノード自身の祖先にはない。
+- ForEach の出力レコード・キー割当、選択中の Catalog：実行中に Source Slot が変わる。
+- `ExpressionGestureTable/Pair.N`：左右値や走査番号で読み取る変数名が変わる。
+
+入力ノードには Source Slot を渡せないため、これらはそのまま入力ノードに置き換えない。
 
 子 Slot の処理は `Children` → `ForEachObject<IReadOnlyList<Slot>, Slot>`（表示名 ForEach）で列挙する。
 すべてのループ本体は列挙中に子 Slot の追加・削除・並べ替えを行わず、元の直下の子の順序を保つ。
@@ -356,3 +367,13 @@ ExpressionSmoke で生成時・保存再読み込み後の全レコードの空�
 Plum の再変換・inspect、新旧パッケージの Catalog・AnimX・出力定義・64通りの割り当て比較が成功し、
 保存済みメニューによる64通り・102出力・8表情、直接選択と入力モードの動作も確認した。
 診断スクリプトは新 ExpressionCore と旧 Expr の模擬応答で読み取りを検証した。
+
+2026-09-20: 空間名を指定して祖先を検索するよう入力ノードの適用条件を拡張し、機種別設定と
+Core の固定読み取りを DynamicVariableValueInput／DynamicVariableObjectInput に置換した。
+Core の一律除外を廃止し、配線先のなくなった固定 Slot 参照も除去した。
+テスト用アバターで ReadDynamicValueVariable は78→41、ReadDynamicObjectVariable は10→8、
+DynamicVariableValueInput は44→81、DynamicVariableObjectInput は0→2。
+総ノードは1,332→1,284、19グループを維持し、最大グループは106→100、ボードをまたぐグループは0。
+ExpressionSmoke で機種別設定の編集、Core 参照の結合、同一フレームの左右入力、
+複製・再装着・保存再読み込み後の再生を確認した。Plum の再変換・inspect、旧版との全表情データ比較、
+保存済みメニューの64通り・102出力・8表情、直接選択と入力モードの実行検証も成功した。

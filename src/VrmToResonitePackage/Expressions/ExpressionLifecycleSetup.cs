@@ -14,8 +14,8 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildLifecycle()
     {
-        // Core state must remain live: cached Dynamic Inputs regress clone/reset playback.
-        var g = new ExpressionFlux(_lifecycle, useDynamicInputs: false);
+        // Only the looped output records below need runtime Source reads.
+        var g = new ExpressionFlux(_lifecycle);
         var core = g.Ref(_core);
         // Local, unserialized state: no User reference survives cloning or loading.
         var initialized = g.Node("StoredValue", typeof(bool));

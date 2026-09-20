@@ -11,7 +11,6 @@ namespace VrmToResonitePackage.Expressions;
 internal sealed class ExpressionFlux
 {
     private readonly Slot _root;
-    private readonly bool _useDynamicInputs;
     private Slot _section;
     private int _sectionIndex, _nodeIndex;
     private readonly Dictionary<(Type, object), IWorldElement> _constants = new();
@@ -22,10 +21,9 @@ internal sealed class ExpressionFlux
     private readonly Dictionary<Slot, IWorldElement> _ownerChecks = new();
     private IWorldElement _now;
     private static Dictionary<string, Type[]> _types;
-    public ExpressionFlux(Slot root, bool useDynamicInputs = true)
+    public ExpressionFlux(Slot root)
     {
         _root = root;
-        _useDynamicInputs = useDynamicInputs;
         BeginSection("Shared inputs");
     }
 
@@ -50,6 +48,13 @@ internal sealed class ExpressionFlux
     /// <summary>Lay out each logic board without changing its functional parent hierarchy.</summary>
     public static void Arrange(Slot expressions)
     {
+        // A fixed Source literal can become unused when its reads bind by namespace.
+        // Remove only these pure Slot literals after every board has finished wiring.
+        var allNodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
+        var usedSources = allNodes.SelectMany(node => node.AllInputs.Concat(node.NodeReferences))
+            .Select(input => OwningNode(input.Target)).ToHashSet();
+        foreach (var unused in allNodes.OfType<Nodes.RefObjectInput<Slot>>().Where(node => !usedSources.Contains(node)).ToArray())
+            unused.Slot.Destroy();
         const float columnSpacing = 0.65f;
         var sections = expressions.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent).ToArray();
         float boardOffset = 0;
@@ -201,9 +206,9 @@ internal sealed class ExpressionFlux
     {
         string path = Path(spaceName, key);
         // Dynamic Inputs bind from their own Slot, not from a runtime Source input.
-        // Only replace fixed references resolving to the same named variable space.
-        if (_useDynamicInputs && source is Nodes.RefObjectInput<Slot> reference && reference.Target.Target is Slot slot &&
-            NamedSpace(slot) is { } space && space.SpaceName.Value == spaceName && space == NamedSpace(_section))
+        // Match the requested namespace through ancestors, even across other schema spaces.
+        if (source is Nodes.RefObjectInput<Slot> reference && reference.Target.Target is Slot slot &&
+            NamedSpace(slot, spaceName) is { } space && space == NamedSpace(_section, spaceName))
         {
             if (_dynamicInputs.TryGetValue((typeof(T), path), out var cached)) return cached;
             var node = Node(typeof(T).IsValueType ? "DynamicVariableValueInput" : "DynamicVariableObjectInput", typeof(T));
@@ -217,6 +222,8 @@ internal sealed class ExpressionFlux
 
     private static DynamicVariableSpace NamedSpace(Slot slot) =>
         slot.GetComponentInParents<DynamicVariableSpace>();
+    private static DynamicVariableSpace NamedSpace(Slot slot, string name) =>
+        slot.GetComponentInParents<DynamicVariableSpace>(space => space.SpaceName.Value == name);
     public IWorldElement Read<T>(IWorldElement source, IWorldElement path)
     {
         if (_reads.TryGetValue((typeof(T), source, path), out var cached)) return cached;
