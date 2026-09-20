@@ -75,7 +75,7 @@ Dynamic Impulse は装着者のクライアントで実行され、所有者に�
 ## 入力・列挙ノード
 
 機種別の各手の状態（Candidate、Stable、Since、LastRevision、GripHeld、TriggerHeld）は、
-同じ `Expr` スコープを参照する `DynamicVariableValueInput<T>` で読む。
+同じ `ExpressionGestureHand` スコープを参照する `DynamicVariableValueInput<T>` で読む。
 これらのノードは該当する手の変数スコープ内に配置する。
 
 次の読み取りは `ReadDynamicValueVariable<T>`／`ReadDynamicObjectVariable<T>` を維持する。
@@ -83,7 +83,7 @@ Dynamic Impulse は装着者のクライアントで実行され、所有者に�
 - Core の Lifecycle／Selection／Playback の同期状態。Dynamic Input に置き換えた実エンジン試験では、
   複製後に表情の選択は更新されても出力が古いままになる回帰があったため、直接読み取る。
 - 各コントローラーの共通しきい値や API からの Core 参照など、ノードと変数のスコープが異なる固定参照。
-- ループ中の子 Slot、選択中の Catalog、左右の番号で決まる `Expr/Pair.N` など、実行中に対象や名前が変わる参照。
+- ループ中の子 Slot、選択中の Catalog、左右の番号で決まる `ExpressionGestureTable/Pair.N` など、実行中に対象や名前が変わる参照。
 
 子 Slot の処理は `Children` → `ForEachObject<IReadOnlyList<Slot>, Slot>`（表示名 ForEach）で列挙する。
 すべてのループ本体は列挙中に子 Slot の追加・削除・並べ替えを行わず、元の直下の子の順序を保つ。
@@ -93,7 +93,7 @@ Dynamic Impulse は装着者のクライアントで実行され、所有者に�
 ## 不具合の調べ方
 
 まず Core の変数を見て、入力・選択・再生のどこで期待とずれたかを分ける。
-Inspector 上の実際の変数名には `Expr/` が付く。
+Inspector 上の Core の変数名には `ExpressionCore/` が付く。他のレコードも定義別の空間名を使う。
 
 | Core の変数 | 確認する内容 |
 |---|---|
@@ -115,7 +115,7 @@ Inspector 上の実際の変数名には `Expr/` が付く。
 
 `AllowExternalInput` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
 変換時の警告は引き続き `Diagnostics` に残る。
-`Diagnostics/Graph modules` の各レコードには `Expr/Path` と `Expr/NodeCount` があり、モジュールの場所と規模を確認できる。
+`Diagnostics/Graph modules` の各レコードには `ExpressionGraphModule/Path` と `ExpressionGraphModule/NodeCount` があり、モジュールの場所と規模を確認できる。
 `PlaybackElapsed` と `FadeWeight` はローカルに駆動する表示値で、診断のための毎フレームの同期書き込みを増やさない。
 これらは時計から求める値であり、Playback の処理が実行されたことを示すカウンターではない。
 反映が止まっている場合は、アバターの装着状態、該当モジュールの有効状態と `Outputs/Result`・`Target` を確認する。
@@ -132,7 +132,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/inspect-expression.p
 `-Json` を付けると機械可読の JSON を返す。
 URL を省略した場合は resoloop の環境変数・プロジェクト設定を使う。
 参照値は現在の ResoniteLink 接続での ID として表示するため、保存後の固定 ID として使わない。
-旧パッケージも読み取れるが、追加した診断項目は再変換・再インポート後に表示される。
+診断スクリプトは旧 `Expr/` と現行 `ExpressionCore/` の両方を読み取れる。新しい空間名・診断項目の反映には再変換・再インポートが必要。
 
 
 ## 装着状態と Lifecycle
@@ -185,9 +185,9 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
   指を個別に取得できない機種の Victory/Rock はボタン操作から判定する。
 
 直接表情を選ぶ `Select expression` と Imported menu は、対応表に存在する有効な表情だけを表示する。
-選択すると、現在の対応表を逆引きして該当する左右値を両方更新し、`Expr/AllowExternalInput=false` にする。
+選択すると、現在の対応表を逆引きして該当する左右値を両方更新し、`ExpressionCore/AllowExternalInput=false` にする。
 同じ表情に複数の組がある場合は `PairIndex` が最小の組を使う。
-Catalog の Slot を固定用に保持する `Expr/Override` は生成しない。
+Catalog の Slot を固定用に保持する Override 変数は生成しない。
 
 `Allow gestures and keyboard` は bool を true に、`Menu only` は false にする。
 モードだけの変更では左右値を変えない。初期値は true。
@@ -197,7 +197,7 @@ Catalog の Slot を固定用に保持する `Expr/Override` は生成しない�
 
 ## 対応表と表情の編集
 
-`GestureTable` の各スロットには `Expr/Pair.N` という DynamicReferenceVariable<Slot> がある。
+`GestureTable` の各スロットには `ExpressionGestureTable/Pair.N` という DynamicReferenceVariable<Slot> がある。
 N は左×8＋右。例えば左1・右2は `Pair.10`。
 参照先を `Catalog` の表情スロットへ変更するだけで割り当てを編集できる。
 左右の組み合わせごとにアニメーションを複製せず、同じ表情は同じ Catalog エントリーを参照する。
@@ -218,7 +218,7 @@ AnimX のトラックは Node=`Expression`、Property=出力の `Id` を使う�
 新しい BlendShape を操作する場合は Outputs の出力レコードとフィールド接続も必要になる。
 `Bindings` は編集時の参照情報であり、AnimX のトラックを自動で書き換えるものではない。
 
-## 外部イベント API（Version 4）
+## 外部イベント API（Version 5、Tag・引数は Version 4 と共通）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
 左右の通常入力・メニュー入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
@@ -229,7 +229,7 @@ AnimX のトラックは Node=`Expression`、Property=出力の `Id` を使う�
 | `ResoPon/Expression/Gesture/Right` | int 0〜7 | bool が true のとき右手を更新 |
 | `ResoPon/Expression/Menu/Left` | int 0〜7 | bool を false にして左手を更新 |
 | `ResoPon/Expression/Menu/Right` | int 0〜7 | bool を false にして右手を更新 |
-| `ResoPon/Expression/Menu/Select` | string: Catalog の `Expr/Id` | 対応表を逆引きし、bool を false にして両手を更新 |
+| `ResoPon/Expression/Menu/Select` | string: Catalog の `ExpressionClip/Id` | 対応表を逆引きし、bool を false にして両手を更新 |
 | `ResoPon/Expression/AllowExternalInput` | bool | 通常入力を許可するか設定。左右値は維持 |
 
 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp。
@@ -349,3 +349,10 @@ Plum の再変換・inspect と旧版との全表情データ比較が成功し�
 対応表にある8個の直接選択ボタンと入力許可・停止の両ボタンを実行検証した。
 生成グラフは1,377ノード・19グループ、最大111ノードで、ボードをまたぐグループは0。
 For は安定した Pair.0～63 の逆引き・メニュー表示判定に使う数値ループ2個だけで、GetChild は0。
+
+2026-09-20: Version 5 では共通の Expr 空間を廃止し、変数定義ごとに11種類の名前を付けた。
+空間名と変数パス、ProtoFlux の参照、テンプレート、診断スクリプトを更新した。公開イベント Tag・引数は変更していない。
+ExpressionSmoke で生成時・保存再読み込み後の全レコードの空間名と変数接頭辞、旧 Expr 書き込みの拒否を確認した。
+Plum の再変換・inspect、新旧パッケージの Catalog・AnimX・出力定義・64通りの割り当て比較が成功し、
+保存済みメニューによる64通り・102出力・8表情、直接選択と入力モードの動作も確認した。
+診断スクリプトは新 ExpressionCore と旧 Expr の模擬応答で読み取りを検証した。

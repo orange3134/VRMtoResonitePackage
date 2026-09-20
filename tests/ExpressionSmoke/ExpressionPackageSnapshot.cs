@@ -31,13 +31,14 @@ internal static class ExpressionPackageSnapshot
                 FadeIn = Value<float>(entry, "FadeIn"), FadeOut = Value<float>(entry, "FadeOut"),
                 AnimationSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(animationPath))),
                 Bindings = entry.FindChild("Bindings").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-                    .Where(v => v.VariableName.Value == "Expr/Output")
+                    .Where(v => v.VariableName.Value == ExpressionTestFields.VariablePath(v.Slot, "Output"))
                     .Select(v => Value<string>(v.Reference.Target, "Id")).OrderBy(v => v, StringComparer.Ordinal).ToArray()
             });
         }
+        string pairPrefix = ExpressionTestFields.VariablePath(root.FindChild("GestureTable"), "Pair.");
         var table = root.FindChild("GestureTable").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Where(v => v.VariableName.Value.StartsWith("Expr/Pair.", StringComparison.Ordinal))
-            .ToDictionary(v => int.Parse(v.VariableName.Value["Expr/Pair.".Length..]), v => v.Reference.Target);
+            .Where(v => v.VariableName.Value.StartsWith(pairPrefix, StringComparison.Ordinal))
+            .ToDictionary(v => int.Parse(v.VariableName.Value[pairPrefix.Length..]), v => v.Reference.Target);
         if (table.Count != 64 || Enumerable.Range(0, 64).Any(i => !table.ContainsKey(i)))
             throw new InvalidOperationException("Baseline comparison needs exactly 64 gesture table rows");
         string json = JsonSerializer.Serialize(new
@@ -51,5 +52,5 @@ internal static class ExpressionPackageSnapshot
     }
 
     private static T Value<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>()
-        .Single(v => v.VariableName.Value == "Expr/" + name).Value.Value;
+        .Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;
 }

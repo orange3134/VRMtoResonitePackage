@@ -3,6 +3,7 @@ using FrooxEngine.ProtoFlux;
 using Renderite.Shared;
 using InputKey = Renderite.Shared.Key;
 using static VrmToResonitePackage.Expressions.ExpressionFlux;
+using static VrmToResonitePackage.Expressions.ExpressionSpaces;
 
 namespace VrmToResonitePackage.Expressions;
 
@@ -40,7 +41,7 @@ internal sealed partial class ExpressionSystemSetup
     }
     private void SelectMenuTrigger(Slot item, Slot expression)
     {
-        var id = expression.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == "Expr/Id").Value;
+        var id = expression.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Id")).Value;
         MenuTrigger(item, _api, SelectTag, id.Value);
         item.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>().PressedData.Value.DriveFrom(id);
     }
@@ -65,7 +66,7 @@ internal sealed partial class ExpressionSystemSetup
         foreach (var expression in _clips.Values)
         {
             var item = MenuItem(expression, expression.Name);
-            item.Label.DriveFrom(expression.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == "Expr/DisplayName").Value);
+            item.Label.DriveFrom(expression.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "DisplayName")).Value);
             item.EnabledField.DriveFrom(Data(expression, "MenuAvailable", false).Value);
             SelectMenuTrigger(expression, expression);
         }
@@ -97,7 +98,7 @@ internal sealed partial class ExpressionSystemSetup
                 {
                     SelectMenuTrigger(slot, expression);
                     slot.GetComponent<ContextMenuItemSource>().EnabledField.DriveFrom(
-                        expression.GetComponents<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == "Expr/MenuAvailable").Value);
+                        expression.GetComponents<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == Path(ClipSpace, "MenuAvailable")).Value);
                 }
             }
         }
@@ -111,8 +112,8 @@ internal sealed partial class ExpressionSystemSetup
         OwnerUpdate(g, g.Each(g.Ref(_catalog), expression => g.Sequence(
             g.Set<bool>(available, g.Constant(false)),
             EachGesturePair(g, (_, mapped) => g.If(g.Equal<Slot>(expression, mapped),
-                g.Set<bool>(available, g.And(g.Active(expression), g.Read<bool>(expression, "Enabled"))))),
-            g.Write<bool>(expression, "MenuAvailable", available))));
+                g.Set<bool>(available, g.And(g.Active(expression), g.Read<bool>(expression, ClipSpace, "Enabled"))))),
+            g.Write<bool>(expression, ClipSpace, "MenuAvailable", available))));
     }
 
     private void BuildKeyboard()
@@ -121,7 +122,7 @@ internal sealed partial class ExpressionSystemSetup
         for (int hand = 0; hand < 2; hand++)
             for (int gesture = 0; gesture < 8; gesture++)
             {
-                var shortcut = Record(bindings, (hand == 0 ? "Left " : "Right ") + gesture + " " + GestureNames[gesture]);
+                var shortcut = Record(bindings, (hand == 0 ? "Left " : "Right ") + gesture + " " + GestureNames[gesture], KeyboardSpace);
                 Data(shortcut, "Tag", GestureTag(hand)); Data(shortcut, "Gesture", gesture);
                 Data(shortcut, "Enabled", true); Data(shortcut, "Key", (InputKey)((int)InputKey.Alpha1 + gesture));
                 Data(shortcut, "Shift", hand == 1); Data(shortcut, "Held", false);
@@ -133,12 +134,12 @@ internal sealed partial class ExpressionSystemSetup
         var shift = g.Or(Held(InputKey.LeftShift), Held(InputKey.RightShift));
         var loop = g.Each(g.Ref(bindings), shortcut =>
         {
-            var key = g.Read<InputKey>(shortcut, "Key");
-            var held = g.And(g.Active(shortcut), g.Read<bool>(shortcut, "Enabled"), control, alt,
-                g.Equal<bool>(shift, g.Read<bool>(shortcut, "Shift")),
+            var key = g.Read<InputKey>(shortcut, KeyboardSpace, "Key");
+            var held = g.And(g.Active(shortcut), g.Read<bool>(shortcut, KeyboardSpace, "Enabled"), control, alt,
+                g.Equal<bool>(shift, g.Read<bool>(shortcut, KeyboardSpace, "Shift")),
                 g.Not(g.Equal<InputKey>(key, g.Constant(InputKey.None))), g.Node("KeyHeld", null, ("Key", key)));
-            return g.Sequence(g.If(g.And(held, g.Not(g.Read<bool>(shortcut, "Held"))), SendGesture(g, g.Read<string>(shortcut, "Tag"), g.Read<int>(shortcut, "Gesture"))),
-                g.Write<bool>(shortcut, "Held", held));
+            return g.Sequence(g.If(g.And(held, g.Not(g.Read<bool>(shortcut, KeyboardSpace, "Held"))), SendGesture(g, g.Read<string>(shortcut, KeyboardSpace, "Tag"), g.Read<int>(shortcut, KeyboardSpace, "Gesture"))),
+                g.Write<bool>(shortcut, KeyboardSpace, "Held", held));
         });
         OwnerUpdate(g, loop);
     }
@@ -148,7 +149,7 @@ internal sealed partial class ExpressionSystemSetup
         var root = _inputs.AddSlot("HandGestures"); var modules = root.AddSlot("Modules");
         foreach (string device in new[] { "TouchController", "IndexController", "ViveController", "WindowsMRController" })
         {
-            var module = Record(modules, device.Replace("Controller", ""));
+            var module = Record(modules, device.Replace("Controller", ""), GestureSettingsSpace);
             Data(module, "GripThreshold", 0.55f); Data(module, "TriggerThreshold", 0.55f); Data(module, "StabilitySeconds", 0.05f);
             Data(module, "GripReleaseThreshold", 0.45f); Data(module, "TriggerReleaseThreshold", 0.45f);
             foreach (var (side, kind) in new[] { (Chirality.Left, 0), (Chirality.Right, 1) })
@@ -158,7 +159,7 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildGestureHand(Slot module, string device, Chirality side, int kind)
     {
-        var hand = Record(module, side.ToString());
+        var hand = Record(module, side.ToString(), GestureHandSpace);
         var g = new ExpressionFlux(hand.AddSlot("Logic"));
         var handRef = g.Ref(hand); var modRef = g.Ref(module);
         Data(hand, "LastRevision", -1);
@@ -166,18 +167,18 @@ internal sealed partial class ExpressionSystemSetup
         Data(hand, "GripHeld", false); Data(hand, "TriggerHeld", false);
         var initialized = g.Node("StoredValue", typeof(bool));
         var reset = g.If(g.Not(initialized), g.Sequence(
-            g.Write<int>(handRef, "Candidate", g.Constant(-1)), g.Write<int>(handRef, "Stable", g.Constant(-1)),
-            g.Write<int>(handRef, "LastRevision", g.Constant(-1)),
-            g.Write<bool>(handRef, "GripHeld", g.Constant(false)), g.Write<bool>(handRef, "TriggerHeld", g.Constant(false)),
+            g.Write<int>(handRef, GestureHandSpace, "Candidate", g.Constant(-1)), g.Write<int>(handRef, GestureHandSpace, "Stable", g.Constant(-1)),
+            g.Write<int>(handRef, GestureHandSpace, "LastRevision", g.Constant(-1)),
+            g.Write<bool>(handRef, GestureHandSpace, "GripHeld", g.Constant(false)), g.Write<bool>(handRef, GestureHandSpace, "TriggerHeld", g.Constant(false)),
             g.Set<bool>(initialized, g.Constant(true))));
         var controller = g.Node(device, null, ("User", g.Owner(_root)), ("Node", g.Constant(side)));
         var active = Out(controller, "IsActive"); var trigger = Out(controller, "Trigger");
         IWorldElement grip = Out(controller, "Grip");
         bool wand = device is "ViveController" or "WindowsMRController";
-        if (!wand) grip = g.Greater(grip, g.Choose<float>(g.Read<bool>(handRef, "GripHeld"),
-            g.Read<float>(modRef, "GripReleaseThreshold"), g.Read<float>(modRef, "GripThreshold")));
-        var indexCurled = g.Greater(trigger, g.Choose<float>(g.Read<bool>(handRef, "TriggerHeld"),
-            g.Read<float>(modRef, "TriggerReleaseThreshold"), g.Read<float>(modRef, "TriggerThreshold")));
+        if (!wand) grip = g.Greater(grip, g.Choose<float>(g.Read<bool>(handRef, GestureHandSpace, "GripHeld"),
+            g.Read<float>(modRef, GestureSettingsSpace, "GripReleaseThreshold"), g.Read<float>(modRef, GestureSettingsSpace, "GripThreshold")));
+        var indexCurled = g.Greater(trigger, g.Choose<float>(g.Read<bool>(handRef, GestureHandSpace, "TriggerHeld"),
+            g.Read<float>(modRef, GestureSettingsSpace, "TriggerReleaseThreshold"), g.Read<float>(modRef, GestureSettingsSpace, "TriggerThreshold")));
         IWorldElement thumb, victory, rock;
         if (wand)
         {
@@ -197,23 +198,23 @@ internal sealed partial class ExpressionSystemSetup
         var gesture = g.Choose<int>(rock, g.Constant(5), g.Choose<int>(victory, g.Constant(4),
             g.Choose<int>(grip, g.Choose<int>(indexCurled, g.Choose<int>(thumb, g.Constant(1), g.Constant(7)),
                 g.Choose<int>(thumb, g.Constant(3), g.Constant(6))), g.Constant(2))));
-        var changed = g.Not(g.Equal<int>(gesture, g.Read<int>(handRef, "Candidate")));
-        var stable = g.Not(g.Greater(g.Add(g.Read<float>(handRef, "Since"), g.Read<float>(modRef, "StabilitySeconds")), g.Now));
+        var changed = g.Not(g.Equal<int>(gesture, g.Read<int>(handRef, GestureHandSpace, "Candidate")));
+        var stable = g.Not(g.Greater(g.Add(g.Read<float>(handRef, GestureHandSpace, "Since"), g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds")), g.Now));
         string revision = side + "Revision";
         var send = g.Sequence(SendGesture(g, g.Text(GestureTag(kind)), gesture),
-            g.Write<int>(handRef, "LastRevision", g.Read<int>(g.Ref(_core), revision)),
-            g.Write<int>(handRef, "Stable", gesture));
-        OwnerUpdate(g, g.Sequence(reset, g.If(g.And(active, g.Read<bool>(g.Ref(_core), "AllowExternalInput")), g.Sequence(
-            g.Write<bool>(handRef, "GripHeld", grip), g.Write<bool>(handRef, "TriggerHeld", indexCurled),
-            g.If(changed, g.Sequence(g.Write<int>(handRef, "Candidate", gesture), g.Write<float>(handRef, "Since", g.Now))),
-            g.If(g.And(stable, g.Not(g.Equal<int>(g.Read<int>(handRef, "Stable"), gesture))), send)),
-            g.Sequence(g.If(g.And(g.Not(g.Equal<int>(g.Read<int>(handRef, "Stable"), g.Constant(-1))),
-                    g.Equal<int>(g.Read<int>(handRef, "LastRevision"), g.Read<int>(g.Ref(_core), revision))),
+            g.Write<int>(handRef, GestureHandSpace, "LastRevision", g.Read<int>(g.Ref(_core), CoreSpace, revision)),
+            g.Write<int>(handRef, GestureHandSpace, "Stable", gesture));
+        OwnerUpdate(g, g.Sequence(reset, g.If(g.And(active, g.Read<bool>(g.Ref(_core), CoreSpace, "AllowExternalInput")), g.Sequence(
+            g.Write<bool>(handRef, GestureHandSpace, "GripHeld", grip), g.Write<bool>(handRef, GestureHandSpace, "TriggerHeld", indexCurled),
+            g.If(changed, g.Sequence(g.Write<int>(handRef, GestureHandSpace, "Candidate", gesture), g.Write<float>(handRef, GestureHandSpace, "Since", g.Now))),
+            g.If(g.And(stable, g.Not(g.Equal<int>(g.Read<int>(handRef, GestureHandSpace, "Stable"), gesture))), send)),
+            g.Sequence(g.If(g.And(g.Not(g.Equal<int>(g.Read<int>(handRef, GestureHandSpace, "Stable"), g.Constant(-1))),
+                    g.Equal<int>(g.Read<int>(handRef, GestureHandSpace, "LastRevision"), g.Read<int>(g.Ref(_core), CoreSpace, revision))),
                 SendGesture(g, g.Text(GestureTag(kind)), g.Constant(0))),
-                g.Write<int>(handRef, "Candidate", g.Constant(-1)),
-                g.Write<int>(handRef, "Stable", g.Constant(-1)),
-                g.Write<bool>(handRef, "GripHeld", g.Constant(false)),
-                g.Write<bool>(handRef, "TriggerHeld", g.Constant(false))))),
+                g.Write<int>(handRef, GestureHandSpace, "Candidate", g.Constant(-1)),
+                g.Write<int>(handRef, GestureHandSpace, "Stable", g.Constant(-1)),
+                g.Write<bool>(handRef, GestureHandSpace, "GripHeld", g.Constant(false)),
+                g.Write<bool>(handRef, GestureHandSpace, "TriggerHeld", g.Constant(false))))),
             g.Set<bool>(initialized, g.Constant(false)));
     }
 }

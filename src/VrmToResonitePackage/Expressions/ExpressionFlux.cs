@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Text;
 using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.ProtoFlux;
@@ -194,20 +193,17 @@ internal sealed class ExpressionFlux
             : Node("GetActiveUser", null, ("Instance", Ref(root)));
     public IWorldElement IsOwner(Slot root) => _ownerChecks.TryGetValue(root, out var check) ? check :
         _ownerChecks[root] = Node("IsLocalUser", null, ("User", Owner(root)));
-    public static string Path(string key)
+    public static string Path(string spaceName, string key) => spaceName + "/" + key;
+    public static string Path(Slot slot, string key) => Path(NamedSpace(slot)?.SpaceName.Value
+        ?? throw new InvalidOperationException("Expression record has no variable space: " + slot.Name), key);
+
+    public IWorldElement Read<T>(IWorldElement source, string spaceName, string key)
     {
-        int separator = key.IndexOf('/');
-        if (separator < 0) return "Expr/" + key;
-        string suffix = key[(separator + 1)..];
-        return "Expr/" + key[..separator] + "." + (key.StartsWith("Own/", StringComparison.Ordinal) ? suffix : Convert.ToHexString(Encoding.UTF8.GetBytes(suffix)));
-    }
-    public IWorldElement Read<T>(IWorldElement source, string key)
-    {
-        string path = Path(key);
+        string path = Path(spaceName, key);
         // Dynamic Inputs bind from their own Slot, not from a runtime Source input.
         // Only replace fixed references resolving to the same named variable space.
         if (_useDynamicInputs && source is Nodes.RefObjectInput<Slot> reference && reference.Target.Target is Slot slot &&
-            NamedSpace(slot) is { } space && space == NamedSpace(_section))
+            NamedSpace(slot) is { } space && space.SpaceName.Value == spaceName && space == NamedSpace(_section))
         {
             if (_dynamicInputs.TryGetValue((typeof(T), path), out var cached)) return cached;
             var node = Node(typeof(T).IsValueType ? "DynamicVariableValueInput" : "DynamicVariableObjectInput", typeof(T));
@@ -220,7 +216,7 @@ internal sealed class ExpressionFlux
     }
 
     private static DynamicVariableSpace NamedSpace(Slot slot) =>
-        slot.GetComponentInParents<DynamicVariableSpace>(space => space.SpaceName.Value == "Expr");
+        slot.GetComponentInParents<DynamicVariableSpace>();
     public IWorldElement Read<T>(IWorldElement source, IWorldElement path)
     {
         if (_reads.TryGetValue((typeof(T), source, path), out var cached)) return cached;
@@ -228,7 +224,8 @@ internal sealed class ExpressionFlux
             ("Source", source), ("Path", path));
         return _reads[(typeof(T), source, path)] = Out(node, "Value");
     }
-    public Component Write<T>(IWorldElement target, string key, IWorldElement value) => Write<T>(target, Text(Path(key)), value);
+    public Component Write<T>(IWorldElement target, string spaceName, string key, IWorldElement value) =>
+        Write<T>(target, Text(Path(spaceName, key)), value);
     public Component Write<T>(IWorldElement target, IWorldElement path, IWorldElement value) =>
         Node(typeof(T).IsValueType ? "WriteDynamicValueVariable" : "WriteDynamicObjectVariable", typeof(T),
             ("Target", target), ("Path", path), ("Value", value));
@@ -290,25 +287,25 @@ internal sealed class ExpressionFlux
             ("TargetHierarchy", destination), ("Tag", tag),
             ("ExcludeDisabled", Constant(true)), ("Value", payload));
 
-    public static Slot Record(Slot parent, string name)
+    public static Slot Record(Slot parent, string name, string spaceName)
     {
         var slot = parent.AddSlot(name);
         var space = slot.AttachComponent<DynamicVariableSpace>();
-        space.SpaceName.Value = "Expr";
+        space.SpaceName.Value = spaceName;
         space.OnlyDirectBinding.Value = true;
         return slot;
     }
     public static DynamicValueVariable<T> Data<T>(Slot slot, string name, T value)
     {
         var variable = slot.AttachComponent<DynamicValueVariable<T>>();
-        variable.VariableName.Value = Path(name);
+        variable.VariableName.Value = Path(slot, name);
         variable.Value.Value = value;
         return variable;
     }
     public static DynamicReferenceVariable<T> Reference<T>(Slot slot, string name, T value) where T : class, IWorldElement
     {
         var variable = slot.AttachComponent<DynamicReferenceVariable<T>>();
-        variable.VariableName.Value = Path(name);
+        variable.VariableName.Value = Path(slot, name);
         variable.Reference.Target = value;
         return variable;
     }

@@ -9,6 +9,7 @@ internal static class ExpressionGraphChecks
 
     public static void CheckLayout(Slot expressions)
     {
+        ExpressionSpaceChecks.Run(expressions);
         Report(expressions);
         ExpressionLayoutChecks.CheckDirection(expressions);
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
@@ -75,7 +76,7 @@ internal static class ExpressionGraphChecks
             "mapped expression selection receives an ID");
         Check(publicReceivers.Single(node => node.Slot.Parent.Parent.Name == "AllowExternalInput").GetType().GetGenericArguments().Single() == typeof(bool),
             "input permission receives a bool");
-        Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value != "Expr/Override"),
+        Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value != "ExpressionCore/Override"),
             "no Override Slot state is generated");
         Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<User>>().Count == 0,
             "expression state retains no wearer User references");
@@ -83,7 +84,7 @@ internal static class ExpressionGraphChecks
         foreach (string name in new[] { "PlaybackElapsed", "FadeWeight" })
         {
             var field = core.GetComponents<DynamicValueVariable<float>>()
-                .Single(v => v.VariableName.Value == "Expr/" + name).Value;
+                .Single(v => v.VariableName.Value == "ExpressionCore/" + name).Value;
             Check(field.ActiveLink != null, "playback diagnostics have native local drivers: " + name);
         }
     }
@@ -132,5 +133,5 @@ internal static class ExpressionGraphChecks
     }
 
     private static T Value<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>()
-        .Single(v => v.VariableName.Value == "Expr/" + name).Value.Value;
+        .Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;
 }

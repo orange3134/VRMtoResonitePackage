@@ -86,3 +86,10 @@ requests verify that initialization does not discard either hand or reset revisi
 Mapping a Catalog entry makes it appear in the menu; copies from the template become usable after assignment.
 The mode bool defaults to true and resets on cloning, loading and reattachment. Ordinary input cannot update
 hand revisions while disabled, and the first valid event after reattachment initializes before testing the gate.
+
+Version 5 gives each record schema a distinct DynamicVariableSpace name. The fixture
+checks every record's expected name and every value/reference prefix before and after
+package reload, including templates, bindings, child table rows and import warnings.
+Legacy Expr writes must not affect the new Core. Snapshot comparison discovers the
+saved space names so old Expr packages remain usable as semantic baselines. Public
+impulse Tags and payload types are unchanged from Version 4.

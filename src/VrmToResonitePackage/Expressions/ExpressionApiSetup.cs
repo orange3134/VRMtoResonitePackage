@@ -1,5 +1,6 @@
 using FrooxEngine;
 using static VrmToResonitePackage.Expressions.ExpressionFlux;
+using static VrmToResonitePackage.Expressions.ExpressionSpaces;
 
 namespace VrmToResonitePackage.Expressions;
 
@@ -26,9 +27,9 @@ internal sealed partial class ExpressionSystemSetup
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture)
     {
         var core = g.Ref(_core);
-        return g.Sequence(g.Write<int>(core, hand + "Gesture", gesture),
-            g.Write<int>(core, hand + "Revision",
-                g.Binary<int>("ValueAdd", g.Read<int>(core, hand + "Revision"), g.Constant(1))));
+        return g.Sequence(g.Write<int>(core, CoreSpace, hand + "Gesture", gesture),
+            g.Write<int>(core, CoreSpace, hand + "Revision",
+                g.Binary<int>("ValueAdd", g.Read<int>(core, CoreSpace, hand + "Revision"), g.Constant(1))));
     }
 
     private void BuildGestureReceiver(ExpressionFlux g, string hand, string tag, bool fromMenu)
@@ -37,12 +38,12 @@ internal sealed partial class ExpressionSystemSetup
         var receiver = g.Receiver<int>(tag);
         var payload = Out(receiver, "Value");
         var mutation = fromMenu
-            ? g.Sequence(g.Write<bool>(core, "AllowExternalInput", g.Constant(false)), WriteHand(g, hand, payload))
+            ? g.Sequence(g.Write<bool>(core, CoreSpace, "AllowExternalInput", g.Constant(false)), WriteHand(g, hand, payload))
             : WriteHand(g, hand, payload);
         Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
             g.Binary<int>("ValueGreaterOrEqual", payload, g.Constant(0)),
             g.Binary<int>("ValueLessThan", payload, g.Constant(8))),
-            ApplyRequest(g, mutation, fromMenu ? null : g.Read<bool>(core, "AllowExternalInput"))));
+            ApplyRequest(g, mutation, fromMenu ? null : g.Read<bool>(core, CoreSpace, "AllowExternalInput"))));
     }
 
     // This is a numeric lookup over stable Pair.0..63 keys, not child-index traversal.
@@ -51,7 +52,7 @@ internal sealed partial class ExpressionSystemSetup
     {
         var loop = g.Node("For", null, ("Count", g.Constant(64)));
         var index = Out(loop, "Iteration");
-        var path = g.Node("ConcatenateString", null, ("A", g.Text("Expr/Pair.")),
+        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(TableSpace, "Pair."))),
             ("B", g.Node("ToString_Int", null, ("V", index))));
         Link(loop, "LoopIteration", body(index, g.Read<Slot>(g.Ref(_table), path)));
         return loop;
@@ -63,11 +64,11 @@ internal sealed partial class ExpressionSystemSetup
         var id = Out(receiver, "Value");
         var pair = g.Local<int>();
         var find = EachGesturePair(g, (index, expression) => g.If(g.And(
-            g.Equal<int>(pair, g.Constant(-1)), g.Active(expression), g.Read<bool>(expression, "Enabled"),
-            g.Equal<string>(id, g.Read<string>(expression, "Id"))), g.Set<int>(pair, index)));
+            g.Equal<int>(pair, g.Constant(-1)), g.Active(expression), g.Read<bool>(expression, ClipSpace, "Enabled"),
+            g.Equal<string>(id, g.Read<string>(expression, ClipSpace, "Id"))), g.Set<int>(pair, index)));
         var select = g.Sequence(g.Set<int>(pair, g.Constant(-1)), find,
             g.If(g.Binary<int>("ValueGreaterOrEqual", pair, g.Constant(0)), ApplyRequest(g, g.Sequence(
-                g.Write<bool>(g.Ref(_core), "AllowExternalInput", g.Constant(false)),
+                g.Write<bool>(g.Ref(_core), CoreSpace, "AllowExternalInput", g.Constant(false)),
                 WriteHand(g, "Left", g.Binary<int>("ValueDiv", pair, g.Constant(8))),
                 WriteHand(g, "Right", g.Binary<int>("ValueMod", pair, g.Constant(8)))))));
         Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
@@ -78,6 +79,6 @@ internal sealed partial class ExpressionSystemSetup
     {
         var receiver = g.Receiver<bool>(InputEnabledTag);
         Link(receiver, "OnTriggered", g.If(g.IsOwner(_root),
-            ApplyRequest(g, g.Write<bool>(g.Ref(_core), "AllowExternalInput", Out(receiver, "Value")))));
+            ApplyRequest(g, g.Write<bool>(g.Ref(_core), CoreSpace, "AllowExternalInput", Out(receiver, "Value")))));
     }
 }

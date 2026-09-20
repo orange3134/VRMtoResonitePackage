@@ -1,5 +1,6 @@
 using FrooxEngine;
 using static VrmToResonitePackage.Expressions.ExpressionFlux;
+using static VrmToResonitePackage.Expressions.ExpressionSpaces;
 
 namespace VrmToResonitePackage.Expressions;
 
@@ -13,29 +14,29 @@ internal sealed partial class ExpressionSystemSetup
         var actions = new List<IWorldElement>();
 
         g.BeginSection("Resolve gesture pair");
-        var index = g.Binary<int>("ValueAdd", g.Binary<int>("ValueMul", g.Read<int>(core, "LeftGesture"), g.Constant(8)),
-            g.Read<int>(core, "RightGesture"));
-        var path = g.Node("ConcatenateString", null, ("A", g.Text("Expr/Pair.")),
+        var index = g.Binary<int>("ValueAdd", g.Binary<int>("ValueMul", g.Read<int>(core, CoreSpace, "LeftGesture"), g.Constant(8)),
+            g.Read<int>(core, CoreSpace, "RightGesture"));
+        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(TableSpace, "Pair."))),
             ("B", g.Node("ToString_Int", null, ("V", index))));
         var mapped = g.Read<Slot>(g.Ref(_table), path);
         var candidate = mapped;
         var selected = g.Local<Slot>();
-        var current = g.Read<Slot>(core, "CurrentExpression");
+        var current = g.Read<Slot>(core, CoreSpace, "CurrentExpression");
         var noExpression = g.Ref<Slot>(null);
         actions.Add(g.Set<Slot>(selected, g.Choose<Slot>(ValidExpression(g, candidate), candidate, noExpression)));
-        actions.Add(g.Write<int>(core, "PairIndex", index));
-        actions.Add(g.Write<Slot>(core, "MappedExpression", mapped));
-        actions.Add(g.Write<Slot>(core, "CandidateExpression", candidate));
-        actions.Add(g.Write<int>(core, "SelectionStatus", g.Choose<int>(g.Equal<Slot>(selected, noExpression),
+        actions.Add(g.Write<int>(core, CoreSpace, "PairIndex", index));
+        actions.Add(g.Write<Slot>(core, CoreSpace, "MappedExpression", mapped));
+        actions.Add(g.Write<Slot>(core, CoreSpace, "CandidateExpression", candidate));
+        actions.Add(g.Write<int>(core, CoreSpace, "SelectionStatus", g.Choose<int>(g.Equal<Slot>(selected, noExpression),
             g.Choose<int>(g.Equal<Slot>(candidate, noExpression), g.Constant(0), g.Constant(3)),
-            g.Choose<int>(g.Read<bool>(core, "AllowExternalInput"), g.Constant(1), g.Constant(2)))));
+            g.Choose<int>(g.Read<bool>(core, CoreSpace, "AllowExternalInput"), g.Constant(1), g.Constant(2)))));
 
         g.BeginSection("Snapshot and switch only when changed");
         actions.Add(g.If(g.Not(g.Equal<Slot>(selected, current)), g.Sequence(
-            g.Each(g.Ref(_outputs), output => g.Write<float>(output, "Snapshot", g.Read<float>(output, "Result"))),
-            g.Write<float>(core, "FadeDuration", g.Choose<float>(g.Active(selected),
-                g.Read<float>(selected, "FadeIn"), g.Read<float>(current, "FadeOut"))),
-            g.Write<float>(core, "PlaybackStart", g.Now), g.Write<Slot>(core, "CurrentExpression", selected))));
+            g.Each(g.Ref(_outputs), output => g.Write<float>(output, OutputSpace, "Snapshot", g.Read<float>(output, OutputSpace, "Result"))),
+            g.Write<float>(core, CoreSpace, "FadeDuration", g.Choose<float>(g.Active(selected),
+                g.Read<float>(selected, ClipSpace, "FadeIn"), g.Read<float>(current, ClipSpace, "FadeOut"))),
+            g.Write<float>(core, CoreSpace, "PlaybackStart", g.Now), g.Write<Slot>(core, CoreSpace, "CurrentExpression", selected))));
         ReceiveUpdate(g, SelectionTickTag, g.Sequence(actions.ToArray()));
     }
 
@@ -44,21 +45,21 @@ internal sealed partial class ExpressionSystemSetup
         // Using Dynamic Inputs here regressed cloned playback in the runtime test.
         var g = new ExpressionFlux(_playback, useDynamicInputs: false);
         var core = g.Ref(_core);
-        var current = g.Read<Slot>(core, "CurrentExpression");
-        var elapsed = g.Sub(g.Now, g.Read<float>(core, "PlaybackStart"));
-        var duration = g.Read<float>(core, "FadeDuration");
+        var current = g.Read<Slot>(core, CoreSpace, "CurrentExpression");
+        var elapsed = g.Sub(g.Now, g.Read<float>(core, CoreSpace, "PlaybackStart"));
+        var duration = g.Read<float>(core, CoreSpace, "FadeDuration");
         var blend = g.Choose<float>(g.Greater(duration, g.Constant(0f)),
             g.Clamp01(g.Div(elapsed, duration)), g.Constant(1f));
 
         g.BeginSection("Sample, mix tracking, and fade");
         var mix = g.Each(g.Ref(_outputs), output =>
         {
-            var sample = Sample(g, current, g.Read<string>(output, "Id"), elapsed);
-            var baseValue = g.Read<float>(output, "Base");
+            var sample = Sample(g, current, g.Read<string>(output, OutputSpace, "Id"), elapsed);
+            var baseValue = g.Read<float>(output, OutputSpace, "Base");
             var desired = g.Choose<float>(g.And(g.Active(current),
                 g.Binary<int>("ValueGreaterOrEqual", sample.Index, g.Constant(0))), sample.Value, baseValue);
-            desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(output, "TrackingWeight")));
-            return g.Write<float>(output, "Result", g.Lerp(g.Read<float>(output, "Snapshot"), desired, blend));
+            desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(output, OutputSpace, "TrackingWeight")));
+            return g.Write<float>(output, OutputSpace, "Result", g.Lerp(g.Read<float>(output, OutputSpace, "Snapshot"), desired, blend));
         });
         // Diagnostics are derived locally on each client. Writing elapsed every update would
         // otherwise add continuous network traffic even while a static expression is unchanged.
@@ -71,18 +72,18 @@ internal sealed partial class ExpressionSystemSetup
             var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>)
                 g.Node("ValueFieldDrive", typeof(float), ("Value", value));
             var field = _core.GetComponents<DynamicValueVariable<float>>()
-                .Single(v => v.VariableName.Value == Path(name)).Value;
+                .Single(v => v.VariableName.Value == Path(CoreSpace, name)).Value;
             driver.GetRootProxy(addIfMissing: true).Drive.Target = field;
         }
     }
 
     private static IWorldElement ClipAsset(ExpressionFlux g, IWorldElement expression) => g.Node("GetAsset", typeof(Animation),
-        ("Provider", g.Read<IAssetProvider<Animation>>(expression, "Clip")));
+        ("Provider", g.Read<IAssetProvider<Animation>>(expression, ClipSpace, "Clip")));
     private static IWorldElement ValidExpression(ExpressionFlux g, IWorldElement expression) =>
-        g.And(g.Active(expression), g.Read<bool>(expression, "Enabled"),
+        g.And(g.Active(expression), g.Read<bool>(expression, ClipSpace, "Enabled"),
             g.Node("NotNull", typeof(Animation), ("Instance", ClipAsset(g, expression))));
     private static IWorldElement SampleTime(ExpressionFlux g, IWorldElement expression, IWorldElement elapsed) => g.Choose<float>(
-        g.Read<bool>(expression, "Loop"), g.Binary<float>("ValueMod", elapsed, g.Read<float>(expression, "Duration")), elapsed);
+        g.Read<bool>(expression, ClipSpace, "Loop"), g.Binary<float>("ValueMod", elapsed, g.Read<float>(expression, ClipSpace, "Duration")), elapsed);
     private static (IWorldElement Index, IWorldElement Value) Sample(ExpressionFlux g, IWorldElement expression,
         IWorldElement property, IWorldElement elapsed)
     {

@@ -3,6 +3,7 @@ using FrooxEngine;
 using FrooxEngine.ProtoFlux;
 using FrooxEngine.Store;
 using static VrmToResonitePackage.Expressions.ExpressionFlux;
+using static VrmToResonitePackage.Expressions.ExpressionSpaces;
 
 namespace VrmToResonitePackage.Expressions;
 
@@ -27,11 +28,11 @@ internal sealed partial class ExpressionSystemSetup
     private ExpressionSystemSetup(Slot avatar, ExpressionModel model)
     {
         _model = model;
-        _root = Record(avatar, "Expressions");
+        _root = Record(avatar, "Expressions", SystemSpace);
         _catalog = _root.AddSlot("Catalog");
-        _core = Record(_root, "Core");
+        _core = Record(_root, "Core", CoreSpace);
         _outputs = _root.AddSlot("Outputs");
-        _table = Record(_root, "GestureTable");
+        _table = Record(_root, "GestureTable", TableSpace);
         _table.GetComponent<DynamicVariableSpace>().OnlyDirectBinding.Value = false;
         _inputs = _root.AddSlot("Inputs");
         _api = _root.AddSlot("API").AddSlot("Receivers");
@@ -50,7 +51,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_core, "MappedExpression", null); Reference<Slot>(_core, "CandidateExpression", null);
         Data(_core, "SelectionStatus", 0); // 0=unassigned, 1=normal input, 2=menu only, 3=invalid/unloaded
         Data(_core, "PlaybackElapsed", 0f); Data(_core, "FadeWeight", 1f);
-        Data(_root, "Version", 4);
+        Data(_root, "Version", 5);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -75,13 +76,13 @@ internal sealed partial class ExpressionSystemSetup
         setup.BuildLifecycle();
         ExpressionFlux.Arrange(setup._root);
         setup.DescribeGraphs();
-        foreach (string message in model.Diagnostics) Data(Record(setup._root.FindChild("Diagnostics"), "Import warning"), "Message", message);
+        foreach (string message in model.Diagnostics) Data(Record(setup._root.FindChild("Diagnostics"), "Import warning", WarningSpace), "Message", message);
         if (setup._clips.Count > 0)
         {
             var template = setup._clips.Values.First().Duplicate(setup._root.FindChild("API").AddSlot("Templates"));
             template.Name = "Expression (copy into Catalog)";
-            template.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == "Expr/Id").Value.Value = "";
-            template.GetComponents<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == "Expr/Enabled").Value.Value = false;
+            template.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Id")).Value.Value = "";
+            template.GetComponents<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Enabled")).Value.Value = false;
         }
         int assigned = setup._compiled.Pairs.Count(id => id != null && setup._clips.ContainsKey(id));
         Console.WriteLine($"Expression system: {setup._clips.Count} clips, {setup._outputSlots.Count} outputs, {assigned}/64 gesture pairs assigned, " +
@@ -137,7 +138,7 @@ internal sealed partial class ExpressionSystemSetup
                     throw new InvalidOperationException($"Expression bindings resolve to the same output: {curve.Binding}");
                 if (field.InheritedLink != null || (field.ActiveLink != null && field.ActiveLink is not ISyncRef))
                 { UniLog.Warning($"Expression binding has an unsupported inherited drive: {curve.Binding}"); continue; }
-                var output = Record(_outputs, curve.Binding.Shape);
+                var output = Record(_outputs, curve.Binding.Shape, OutputSpace);
                 Data(output, "Id", id); Data(output, "Path", curve.Binding.Path); Data(output, "Shape", curve.Binding.Shape);
                 Data(output, "Baseline", initialWeight?.Invoke(field) ?? field.Value);
                 Data(output, "TrackingWeight", 0f);
@@ -159,7 +160,7 @@ internal sealed partial class ExpressionSystemSetup
             // A partially resolved face must not be presented as a faithfully imported clip.
             if (clip.Curves.Any(c => !_outputSlots.ContainsKey(ExpressionAnimationConverter.BindingId(c.Binding))))
             { UniLog.Warning($"Expression '{clip.Name}' omitted: one or more output bindings were not resolved"); continue; }
-            Slot entry = Record(_catalog, clip.Name);
+            Slot entry = Record(_catalog, clip.Name, ClipSpace);
             Data(entry, "Id", clip.Id); Data(entry, "DisplayName", clip.Name); Data(entry, "Enabled", true);
             Data(entry, "Loop", clip.Loop); Data(entry, "Duration", Math.Max(0.001f, clip.Duration));
             Data(entry, "FadeIn", 0.1f); Data(entry, "FadeOut", 0.1f);
@@ -180,7 +181,7 @@ internal sealed partial class ExpressionSystemSetup
             foreach (var curve in clip.Curves)
             {
                 string id = ExpressionAnimationConverter.BindingId(curve.Binding);
-                Reference(Record(bindings, curve.Binding.Shape), "Output", _outputSlots[id]);
+                Reference(Record(bindings, curve.Binding.Shape, BindingSpace), "Output", _outputSlots[id]);
             }
             _clips[clip.Id] = entry;
         }
@@ -195,7 +196,7 @@ internal sealed partial class ExpressionSystemSetup
             var names = new Stack<string>();
             for (var slot = board.Key; slot != _root; slot = slot.Parent) names.Push(slot.Name);
             string path = string.Join("/", names);
-            var record = Record(modules, path);
+            var record = Record(modules, path, GraphModuleSpace);
             Data(record, "Path", path);
             Data(record, "NodeCount", board.Count());
         }

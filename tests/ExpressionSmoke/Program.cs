@@ -48,6 +48,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var trackingDriver = avatar.AttachComponent<ValueCopy<float>>();
         trackingDriver.Source.Target = tracking.Value; trackingDriver.Target.Target = field;
         var model = new ExpressionModel();
+        model.Diagnostics.Add("Synthetic warning for expression record scope coverage.");
         foreach (string hand in new[] { "Left", "Right" })
         {
             model.Parameters["Gesture" + hand] = new("Gesture" + hand, 3, 0);
@@ -97,7 +98,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(core.FindChild("SourceState") == null && core.FindChild("ParameterState") == null && expressions.FindChild("Rules") == null,
             "generic source arbitration and Animator graph are absent");
         Console.WriteLine($"Flux nodes: {expressions.GetComponentsInChildren<ProtoFluxNode>().Count}; Core: {core.GetComponentsInChildren<ProtoFluxNode>().Count}");
-        Check(core.GetComponents<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value is not "Expr/LeftInput" and not "Expr/RightInput"),
+        Check(core.GetComponents<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value is not "ExpressionCore/LeftInput" and not "ExpressionCore/RightInput"),
             "int requests retain no input Slot references");
         foreach (string tag in new[] { ExpressionSystemSetup.LeftTag, ExpressionSystemSetup.RightTag })
         {
@@ -395,11 +396,11 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
     });
 }
 
-static T Get<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == "Expr/" + name).Value.Value;
+static T Get<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;
 
 static void Set<T>(Slot slot, string name, T value)
 {
-    var result = slot.WriteDynamicVariable("Expr/" + name, value);
+    var result = slot.WriteDynamicVariable(ExpressionTestFields.VariablePath(slot, name), value);
     if (result != DynamicVariableWriteResult.Success) throw new InvalidOperationException("Cannot write " + name + ": " + result);
 }
 static void Check(bool value, string message) { if (!value) throw new InvalidOperationException(message); Console.WriteLine("PASS: " + message); }

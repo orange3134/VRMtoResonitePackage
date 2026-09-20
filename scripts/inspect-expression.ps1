@@ -16,12 +16,14 @@ if (!$response.ok) { throw ($response.error | ConvertTo-Json -Compress -Depth 8)
 $values = @(
     foreach ($entry in $response.data.components) {
         $members = $entry.component.members
-        if (!$members.VariableName -or !$members.VariableName.value.StartsWith('Expr/')) { continue }
+        if (!$members.VariableName) { continue }
+        $variableName = $members.VariableName.value
+        if (!$variableName.StartsWith('ExpressionCore/') -and !$variableName.StartsWith('Expr/')) { continue }
         $member = if ($members.Value) { $members.Value } else { $members.Reference }
         if (!$member) { continue }
         $value = if ($member.kind -eq 'reference') { $member.targetId } else { $member.value }
         [pscustomobject][ordered]@{
-            Name = $members.VariableName.value.Substring(5)
+            Name = $variableName.Substring($variableName.IndexOf('/') + 1)
             Value = $value
             Kind = $member.kind
             ComponentId = $entry.component.id

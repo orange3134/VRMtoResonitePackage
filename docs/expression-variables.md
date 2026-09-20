@@ -1,12 +1,36 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`Expr/Version = 4`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 5`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
-表では変数名の `Expr/` を省略する。例えば Core の `LeftGesture` は `Expressions/Core` の `Expr/LeftGesture`。
-同名でも配置先のスコープが異なれば別の値。`Record()` は名前 `Expr`、`OnlyDirectBinding=true` の DynamicVariableSpace を作る。
-例外は GestureTable（false）で、子 Slot の Pair.N を表のスコープから読む。
+変数名は `空間名/項目名`。以下の項目一覧では空間名を省略する。
+例えば Core の `LeftGesture` は `ExpressionCore/LeftGesture`、Catalog の `Id` は `ExpressionClip/Id`。
+変数定義が異なるレコードには別の空間名を付け、同じ定義のインスタンス間だけで名前を共用する。
+左右の手や各表情は、それぞれ独立した DynamicVariableSpace を持つため、同じ名前でも値は別になる。
+
+| 配置先（Expressions からの相対位置） | 空間名 | 定義の役割 |
+|---|---|---|
+| Expressions 自身 | `ExpressionSystem` | バージョンと入口への参照 |
+| Core | `ExpressionCore` | 入力・選択・再生状態 |
+| GestureTable | `ExpressionGestureTable` | 左右64通りの表情参照 |
+| Catalog/各表情、API/Templates/各表情 | `ExpressionClip` | 表情の設定と AnimX 参照 |
+| 各表情/Bindings/各項目 | `ExpressionBinding` | 出力レコードへの参照 |
+| Outputs/各項目 | `ExpressionOutput` | BlendShape の基礎入力・混合・最終出力 |
+| Inputs/Keyboard/Bindings/各項目 | `ExpressionKeyboardBinding` | キー割当と押下状態 |
+| Inputs/HandGestures/Modules/各機種 | `ExpressionGestureSettings` | しきい値と安定待ち時間 |
+| 各機種/Left、Right | `ExpressionGestureHand` | 片手の入力判定状態 |
+| Diagnostics/Import warning | `ExpressionImportWarning` | 変換時の警告文 |
+| Diagnostics/Graph modules/各項目 | `ExpressionGraphModule` | ボードのパスとノード数 |
+
+`Record()` は空間名を必須引数で受け取り、`OnlyDirectBinding=true` の空間を作る。
+例外は GestureTable（false）で、子 Slot の `ExpressionGestureTable/Pair.N` を表のスコープから読む。
+単なる整理用の Catalog・Outputs・Bindings・Diagnostics には空間を追加しない。
+名前の定義は [ExpressionSpaces.cs](../src/VrmToResonitePackage/Expressions/ExpressionSpaces.cs) に集約する。
+ProtoFlux の読み書きは対象の空間名を明示し、変数生成は配置先の空間名を使う。
+
+Version 4 以前の共通 `Expr` 空間は新規生成しない。既存パッケージは再変換・再インポートで更新する。
+DynamicVariable を直接読む外部処理は新しい名前へ変更する。公開 Dynamic Impulse の Tag・引数は Version 4 と同じ。
 
 - **設定**：動作を調整する編集用の値。固定的に使われても、実装上は変更可能な変数。
 - **定義**：生成時の識別子・参照・メタデータ。編集時は関連データとの整合が必要。
@@ -19,7 +43,7 @@
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 4 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 5 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | GestureTable/各セル | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
@@ -130,7 +154,7 @@ Touch・Index・Vive・WindowsMR の各モジュールに以下の設定を持�
 | `StabilitySeconds` | float | 0.05 | 候補が変わらず続く必要時間（秒） |
 
 比較は厳密な `入力値 > しきい値`。Vive・WindowsMR は Grip の bool 出力を直接使うため、Grip の2設定は判定に使わない。
-各モジュールの Left / Right は独立した Expr スコープを持つ。
+各モジュールの Left / Right は独立した ExpressionGestureHand スコープを持つ。
 機種別入力もローカルな `StoredValue<bool>` で初期化済みかを管理し、User 参照は保持しない。
 ローカルユーザーが装着者でなくなるとフラグを false に戻し、次の装着時に候補・安定値・更新番号・押下判定を初期化する。
 
@@ -162,14 +186,14 @@ Touch・Index・Vive・WindowsMR の各モジュールに以下の設定を持�
 ## DynamicVariable 以外の定数・一時値
 
 ExpressionFlux の `Constant<T>()` は ValueInput、`Text()` は ValueObjectInput、`Ref<T>()` は RefObjectInput を生成する。
-これらはグラフ内の固定入力で、Expr の変数一覧には現れない。
+これらはグラフ内の固定入力で、DynamicVariable の変数一覧には現れない。
 Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> も使う。
 同じセクション内の定数は共有するが、ロジックボードは独立している。
 
 | 定数・値 | 役割 |
 |---|---|
-| `Expr` / `Expr/` | 空間名／変数名の接頭辞 |
-| `Expr/Pair.` | 番号を付けて対応表を検索するパスの接頭辞 |
+| `ExpressionSystem`、`ExpressionCore` など | 上記のレコード定義別の空間名。変数パスは空間名 + `/` + 項目名 |
+| `ExpressionGestureTable/Pair.` | 番号を付けて対応表を検索するパスの接頭辞 |
 | 0〜7 | 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp |
 | 8 / 64 | 片手の状態数／左右の組合せ数。Pair の計算・逆引き・API 範囲検査に使用 |
 | -1 | 手の未確定、Select の一致する Pair が未発見 |
@@ -191,9 +215,9 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 
 Internal の3つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
 選択中の一時候補、逆引き Pair 番号、メニュー表示判定は LocalValue / LocalObject、初期化済みフラグは StoredValue<bool> を使う。
-これらも Expr の保存変数とは区別する。
+これらも DynamicVariable の保存変数とは区別する。
 
-現行版は `Expr/PreviousOwner`、`Expr/Override`、`Expr/LeftInput`、`Expr/RightInput` を生成しない。
+現行版は `PreviousOwner`、`Override`、`LeftInput`、`RightInput` という項目を生成しない。
 表情固定は AllowExternalInput=false と左右のジェスチャー値で表現する。
 
 ## 実装の参照先

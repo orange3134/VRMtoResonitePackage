@@ -35,7 +35,7 @@ internal static class ImportedGestureAvatarChecks
         var left = menu.FindChild("Left hand").FindChild("Items"); var right = menu.FindChild("Right hand").FindChild("Items");
         foreach (var entry in root.FindChild("Catalog").Children)
         {
-            entry.WriteDynamicVariable("Expr/FadeIn", 0f); entry.WriteDynamicVariable("Expr/FadeOut", 0f);
+            entry.WriteDynamicVariable("ExpressionClip/FadeIn", 0f); entry.WriteDynamicVariable("ExpressionClip/FadeOut", 0f);
         }
 
         for (int hand = 0; hand < 2; hand++)
@@ -58,7 +58,7 @@ internal static class ImportedGestureAvatarChecks
                 right.Children[r].GetComponent<ButtonDynamicImpulseTriggerWithValue<int>>().Pressed(null, default);
                 Check(Get<int>(core, "LeftGesture") == l && Get<int>(core, "RightGesture") == r, "Menu did not update both hand states synchronously");
                 var mapped = table.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-                    .Single(v => v.VariableName.Value == "Expr/Pair." + (l * 8 + r)).Reference.Target;
+                    .Single(v => v.VariableName.Value == "ExpressionGestureTable/Pair." + (l * 8 + r)).Reference.Target;
                 Check(mapped != null && Reference<Slot>(core, "CurrentExpression") == mapped, "Missing or incorrect selected pose");
                 Check(Get<int>(core, "PairIndex") == l * 8 + r && Get<int>(core, "SelectionStatus") == 2 && !Get<bool>(core, "AllowExternalInput") &&
                     Reference<Slot>(core, "MappedExpression") == mapped && Reference<Slot>(core, "CandidateExpression") == mapped,
@@ -81,8 +81,8 @@ internal static class ImportedGestureAvatarChecks
         Check(distinctPoses.Count >= 8, "Gesture menu did not produce eight distinct visible poses");
         var receiverRoot = root.FindChild("API").FindChild("Receivers");
         var mappings = table.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Where(v => v.VariableName.Value.StartsWith("Expr/Pair.", StringComparison.Ordinal))
-            .ToDictionary(v => int.Parse(v.VariableName.Value["Expr/Pair.".Length..]), v => v.Reference.Target);
+            .Where(v => v.VariableName.Value.StartsWith("ExpressionGestureTable/Pair.", StringComparison.Ordinal))
+            .ToDictionary(v => int.Parse(v.VariableName.Value["ExpressionGestureTable/Pair.".Length..]), v => v.Reference.Target);
         int visible = 0;
         foreach (var expression in root.FindChild("Catalog").Children)
         {
@@ -133,7 +133,7 @@ internal static class ImportedGestureAvatarChecks
             var selected = catalog.Children.Single(entry => Get<string>(entry, "Id") == originalId);
             const string editedId = "Smoke.RenamedImportedExpression";
             Check(catalog.Children.All(entry => Get<string>(entry, "Id") != editedId), "Edited test ID is unique");
-            Check(selected.WriteDynamicVariable("Expr/Id", editedId) == DynamicVariableWriteResult.Success, "Can edit imported expression ID");
+            Check(selected.WriteDynamicVariable("ExpressionClip/Id", editedId) == DynamicVariableWriteResult.Success, "Can edit imported expression ID");
             try
             {
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
@@ -148,7 +148,7 @@ internal static class ImportedGestureAvatarChecks
             }
             finally
             {
-                Check(selected.WriteDynamicVariable("Expr/Id", originalId) == DynamicVariableWriteResult.Success, "Can restore imported expression ID");
+                Check(selected.WriteDynamicVariable("ExpressionClip/Id", originalId) == DynamicVariableWriteResult.Success, "Can restore imported expression ID");
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(root.FindChild("API").FindChild("Receivers"),
                     ExpressionSystemSetup.InputEnabledTag, true, true);
@@ -159,8 +159,8 @@ internal static class ImportedGestureAvatarChecks
         Console.WriteLine($"PASS: imported package menu drives all 64 pairs and {distinctPoses.Count} distinct poses");
     }
 
-    private static T Get<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == "Expr/" + name).Value.Value;
+    private static T Get<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;
     private static T Reference<T>(Slot slot, string name) where T : class, IWorldElement =>
-        slot.GetComponents<DynamicReferenceVariable<T>>().Single(v => v.VariableName.Value == "Expr/" + name).Reference.Target;
+        slot.GetComponents<DynamicReferenceVariable<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Reference.Target;
     private static void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 }
