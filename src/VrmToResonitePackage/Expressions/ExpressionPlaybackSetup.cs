@@ -96,7 +96,9 @@ internal sealed partial class ExpressionSystemSetup
             g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(2)), g.Binary<float>("ValueMin", result, baseValue), result));
         // All clients evaluate the same synchronized selection. An unworn instance follows
         // Base even if it has retained selection state from saving or cloning.
-        DriveValue(g, output, OutputSpace, "Result", g.Choose<float>(g.IsNull<User>(g.Owner(_root)), baseValue, result));
+        var target = output.GetComponents<DynamicField<float>>()
+            .Single(v => v.VariableName.Value == Path(OutputSpace, "Result")).TargetField.Target;
+        DriveField(g, target, g.Choose<float>(g.IsNull<User>(g.Owner(_root)), baseValue, result));
     }
 
     private static (IWorldElement Elapsed, IWorldElement Blend) PlaybackTiming(ExpressionFlux g, IWorldElement core)

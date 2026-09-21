@@ -14,6 +14,12 @@ internal static class ImportedGestureAvatarChecks
         await default(ToWorld);
         for (int i = 0; i < 180; i++) await default(NextUpdate);
         var root = avatar.FindChild("Expressions") ?? throw new InvalidOperationException("Missing expression system");
+        // Package import restores fields before the mesh assets finish loading.
+        var renderers = root.GetComponentsInChildren<DynamicBlendShapeDriver>()
+            .Select(driver => driver.Renderer.Target).Distinct().ToArray();
+        for (int i = 0; i < 7200 && renderers.Any(renderer => renderer.MeshBlendshapeCount == 0); i++)
+            await default(NextUpdate);
+        Check(renderers.All(renderer => renderer.MeshBlendshapeCount > 0), "Expression driver meshes finished loading");
         ExpressionGraphChecks.CheckLayout(root);
         if (baselinePackage != null)
         {

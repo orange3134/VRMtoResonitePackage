@@ -44,14 +44,39 @@ internal static class ExpressionGraphChecks
                 Check(sources.Count(source => source.RootSourceReference.Target == field) == 1,
                     "output ValueSource references its own shared " + name + ": " + output.Name);
             }
-            var result = output.GetComponents<DynamicValueVariable<float>>()
-                .Single(v => v.VariableName.Value == "ExpressionOutput/Result").Value;
+            var result = output.GetComponents<DynamicField<float>>()
+                .Single(v => v.VariableName.Value == "ExpressionOutput/Result").TargetField.Target;
             var driver = logic.GetComponentsInChildren<global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>>().Single();
             Check(driver.GetRootProxy(addIfMissing: false)?.Drive.Target == result && result.ActiveLink != null,
                 "each result has its own native driver: " + output.Name);
-            Check(output.GetComponent<ValueCopy<float>>().Source.Target == result,
-                "the driven result remains connected to its BlendShape target: " + output.Name);
+            Check(output.GetComponent<ValueCopy<float>>() == null,
+                "outputs use no ValueCopy: " + output.Name);
+            Check(!output.GetComponents<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionOutput/Result"),
+                "Result is a field view, not duplicate stored state: " + output.Name);
+            var target = ExpressionTestFields.Reference<IField<float>>(output, "Target");
+            var renderer = target.FindNearestParent<SkinnedMeshRenderer>();
+            if (renderer != null)
+            {
+                var meshDriver = result.FindNearestParent<DynamicBlendShapeDriver>();
+                var entry = result.Parent as DynamicBlendShapeDriver.BlendShape;
+                Check(meshDriver != null && entry != null && meshDriver.Renderer.Target == renderer && entry.Value == result &&
+                    entry._drive.Target == target && entry._drive.IsLinkValid && renderer.TryGetBlendShape(entry.BlendShapeName.Value) == target,
+                    $"Result references the correct renderer's named blendshape entry: {output.Name}; " +
+                    $"renderer={meshDriver?.Renderer.Target == renderer}, value={entry?.Value == result}, " +
+                    $"target={entry?._drive.Target == target}, linked={entry?._drive.IsLinkValid}, " +
+                    $"name={entry?.BlendShapeName.Value}, shapes={renderer.MeshBlendshapeCount}");
+            }
+            else Check(result == target, "standalone field outputs are driven directly");
         }
+        var meshDrivers = expressions.GetComponentsInChildren<DynamicBlendShapeDriver>();
+        var meshOutputs = expressions.FindChild("Outputs").Children
+            .Select(o => ExpressionTestFields.Reference<IField<float>>(o, "Target").FindNearestParent<SkinnedMeshRenderer>())
+            .Where(r => r != null).ToArray();
+        Check(meshDrivers.Select(d => d.Renderer.Target).Distinct().Count() == meshDrivers.Count &&
+            meshDrivers.Count == meshOutputs.Distinct().Count(), "exactly one driver per output renderer");
+        foreach (var meshDriver in meshDrivers)
+            Check(meshDriver.BlendShapes.Count == meshOutputs.Count(r => r == meshDriver.Renderer.Target),
+                "mesh driver contains only required shape entries");
         Check(Descendant(expressions, "Core/Logic/Playback").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => n.GetType().Name is not "ForEachObject`2" and not "SampleValueAnimationTrack`1"),
             "Core playback drives shared time and diagnostics without an output loop");

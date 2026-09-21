@@ -44,6 +44,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage, artifacts, baselinePackage); return; }
         await ExpressionOutputDriveChecks.Run(world.LocalUser.Root.Slot);
         await ExpressionBlinkChecks.Run(world.LocalUser.Root.Slot, artifacts);
+        await ExpressionMeshDriverChecks.Run(world.LocalUser.Root.Slot, artifacts);
         ExpressionLayoutChecks.CheckFixtures(world.LocalUser.Root.Slot);
         var avatar = world.LocalUser.Root.Slot.AddSlot("Expression smoke avatar");
         var field = avatar.AttachComponent<ValueField<float>>().Value; field.Value = 0.2f;
@@ -414,7 +415,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
     });
 }
 
-static T Get<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;
+static T Get<T>(Slot slot, string name) => slot.GetComponents<DynamicVariableBase<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).DynamicValue;
 
 static void Set<T>(Slot slot, string name, T value)
 {

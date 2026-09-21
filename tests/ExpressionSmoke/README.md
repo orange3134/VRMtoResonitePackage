@@ -34,7 +34,8 @@ Each actual Flux group must stay within one logic board. Core lifecycle, selecti
 playback, the six public API receivers and menu visibility, and each controller hand have independent
 boards. The test reports node/group counts and enforces a 256-node per-board budget,
 including after package reimport. Module diagnostic counts must match the graph.
-Each Output has its own sampling/mixing/fade board and driven Result. Result and
+Each Output has its own sampling/mixing/fade board and a driven field exposed as Result.
+Result targets and
 playback diagnostic fields must retain native driver links after import, preventing
 a regression to synchronized writes on every frame.
 Selection/playback diagnostics, menu-only mode rejecting gesture/keyboard updates, enabling input again, mapped-only menu selection, a partial
@@ -149,3 +150,12 @@ overrides exercise zero-valued animation tracks, independent eyes, max/min closu
 closed expressions, missing tracks, fade-in/out, existing viseme weighting, and
 manual BlinkMode edits. The same checks run on a clone and a saved/reloaded package,
 including OpenCloseTarget-to-Base and OriginalDriver reference remapping.
+
+Version 10 replaces per-output ValueCopy with one DynamicBlendShapeDriver per
+renderer. Result is a DynamicField targeting the driven entry's Value. Graph checks
+verify unique renderer ownership, exact entry-to-target links, and no extra entries.
+A real two-mesh fixture covers same-named renderers/shapes, numeric VRM-style bindings,
+a shape added after a Catalog asset await, untouched mesh weights, dynamic Result
+reads and Selection snapshots, blink routing, cloning and package reload.
+Standalone test fields are driven directly and exposed through the same DynamicField.
+Imported-package checks wait for driver mesh assets before verifying named shape links.

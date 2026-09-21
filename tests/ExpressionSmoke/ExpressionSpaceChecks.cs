@@ -47,7 +47,7 @@ internal static class ExpressionSpaceChecks
         string Prefix(Slot slot) => slot.GetComponentInParents<DynamicVariableSpace>().SpaceName.Value + "/";
         void Values<T>()
         {
-            foreach (var variable in root.GetComponentsInChildren<DynamicValueVariable<T>>())
+            foreach (var variable in root.GetComponentsInChildren<DynamicVariableBase<T>>())
                 Check(variable.VariableName.Value.StartsWith(Prefix(variable.Slot), StringComparison.Ordinal),
                     "value belongs to its record's space: " + variable.VariableName.Value);
         }
@@ -59,8 +59,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>(); References<IAssetProvider<Animation>>();
-        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 9,
-            "blink cooperation is identified by package version 9");
+        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 10,
+            "mesh driver outputs are identified by package version 10");
         var core = root.FindChild("Core");
         Check(core.WriteDynamicVariable("Expr/AllowExternalInput", false) != DynamicVariableWriteResult.Success,
             "legacy shared-space writes cannot modify the new Core");

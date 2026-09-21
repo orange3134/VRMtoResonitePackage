@@ -52,7 +52,7 @@ internal sealed partial class ExpressionSystemSetup
         Data(_core, "PairIndex", 0);
         Data(_core, "PlaybackElapsed", 0f); Data(_core, "FadeWeight", 1f);
         Data(_core, "AnimationTime", 0f);
-        Data(_root, "Version", 9);
+        Data(_root, "Version", 10);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -140,7 +140,7 @@ internal sealed partial class ExpressionSystemSetup
                     throw new InvalidOperationException($"Expression bindings resolve to the same output: {curve.Binding}");
                 if (field.InheritedLink != null || (field.ActiveLink != null && field.ActiveLink is not ISyncRef))
                 { UniLog.Warning($"Expression binding has an unsupported inherited drive: {curve.Binding}"); continue; }
-                var output = Record(_outputs, curve.Binding.Shape, OutputSpace);
+                var output = Record(_outputs, UniqueChildName(_outputs, curve.Binding.Shape), OutputSpace);
                 Data(output, "Id", id); Data(output, "Path", curve.Binding.Path); Data(output, "Shape", curve.Binding.Shape);
                 Data(output, "Baseline", initialWeight?.Invoke(field) ?? field.Value);
                 Data(output, "TrackingWeight", 0f);
@@ -151,7 +151,7 @@ internal sealed partial class ExpressionSystemSetup
                     ? (eye.ClosedState.Value < eye.OpenState.Value ? 2 : 1) : 0;
                 Data(output, "BlinkMode", blinkMode);
                 var baseValue = Data(output, "Base", field.Value);
-                var result = Data(output, "Result", field.Value);
+                float initialValue = field.Value;
                 Reference<IField<float>>(output, "Target", field);
                 // Move the existing blink/viseme driver onto its own proxy; never ForceLink it away.
                 if (field.ActiveLink is ISyncRef oldDriver)
@@ -159,10 +159,10 @@ internal sealed partial class ExpressionSystemSetup
                     Reference<ISyncRef>(output, "OriginalDriver", oldDriver);
                     oldDriver.Target = baseValue.Value;
                 }
-                var writer = output.AttachComponent<ValueCopy<float>>();
-                writer.Source.Target = result.Value;
-                writer.Target.Target = field;
-                Data(output, "Snapshot", field.Value);
+                var result = output.AttachComponent<DynamicField<float>>();
+                result.VariableName.Value = Path(OutputSpace, "Result");
+                result.TargetField.Target = BuildOutputTarget(field, initialValue);
+                Data(output, "Snapshot", initialValue);
                 _outputSlots[id] = output; fields[field] = output;
             }
             // A partially resolved face must not be presented as a faithfully imported clip.

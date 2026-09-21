@@ -19,7 +19,8 @@ flowchart LR
     L --> S
     S --> P[64通りのGestureTableから選択]
     P --> R[各 Output でサンプリング・混合・フェード]
-    R --> V[Result を Drive → BlendShape]
+    R --> V[DynamicBlendShapeDriver の Value を Drive → BlendShape]
+    Result[Result: DynamicField] -. Value を参照 .-> V
 ```
 
 ## 生成される構成
@@ -35,7 +36,8 @@ Expressions/
       Selection/                   対応表からの選択と切り替え
       Playback/                    共通 AnimationTime・フェード率を Drive
   Outputs/                         BlendShape ごとのベース入力と最終出力
-    各 BlendShape/Logic/           サンプリング・混合・フェード → Result を Drive
+    各 BlendShape/Logic/           サンプリング・混合・フェード → ドライバーの Value を Drive
+  Drivers/各 Renderer/            DynamicBlendShapeDriver、必要なシェイプのみ登録
   Inputs/
     ContextMenu/                   対応表にある表情のみメニュー表示
     Keyboard/
@@ -84,8 +86,9 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態を評価する。
 表の編集・表情の無効化・アセットのロード完了は、選択結果の変化を監視して反映する。
 各 Output の Logic がアニメーションをサンプリングし、追跡値との混合・フェード結果を
-ValueFieldDrive<float> で Result に反映する。LocalUpdate と再生用 Dynamic Impulse は生成しない。
-API は選択状態まで同期更新し、見た目は次の Drive / ValueCopy の更新で追従する。
+ValueFieldDrive<float> で DynamicBlendShapeDriver の該当 Value に直接反映する。
+Result はその Value を参照する DynamicField<float>。LocalUpdate と再生用 Dynamic Impulse は生成しない。
+API は選択状態まで同期更新し、見た目は次の Drive / DynamicBlendShapeDriver の更新で追従する。
 モジュール間の状態は Core の DynamicVariable で渡す。
 Dynamic Impulse は装着者のクライアントで実行され、所有者による処理制限も各入口で確認する。
 
@@ -288,7 +291,7 @@ AnimX のトラックは Node=`Expression`、Property=出力の `Id` を使う�
 新しい BlendShape を操作する場合は Outputs の出力レコードとフィールド接続も必要になる。
 `Bindings` は編集時の参照情報であり、AnimX のトラックを自動で書き換えるものではない。
 
-## 外部イベント API（Version 9、Tag・引数は Version 4 と共通）
+## 外部イベント API（Version 10、Tag・引数は Version 4 と共通）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
 左右の通常入力・メニュー入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
@@ -369,10 +372,17 @@ Result を外部から直接書き換えず、入力・Clip・TrackingWeight な
 口パク・視線などの他のドライバーにはこの合成を自動適用しない。
 後から瞬きを設定する場合は、OpenCloseTarget を該当 `Outputs/シェイプキー` の `Base` の Value フィールドへ接続し、
 `BlinkMode=1`（大きいほど閉じる通常の設定）にする。小さいほど閉じる設定では2にする。`TrackingWeight` は0のままでよい。
-元の BlendShape フィールドは Result からの ValueCopy が Drive するため、OpenCloseTarget を直接重ねて接続しない。
+元の BlendShape フィールドは DynamicBlendShapeDriver が Drive するため、OpenCloseTarget を直接重ねて接続しない。
 既存パッケージをこの方式にするには再変換が必要。瞬き binding がないアバターは、再変換だけで Eyes の接続先が増えるわけではない。
 複製・再ロード・再装着時には左右状態を0に、AllowExternalInput を true に初期化する。
 VRM の感情表情も同じ Catalog を使うが、VRChat の条件がないため対応表は未設定から始まる。
+
+DynamicBlendShapeDriver は Expressions/Drivers 以下に SkinnedMeshRenderer ごとに1つ生成し、
+表情で使用するシェイプだけを登録する。同名 renderer は名前ではなく Component の同一性で区別する。
+Output と Drivers の同名 Slot には連番を付け、診断パスの重複も避ける。binding の Id・Path・Shape は変更しない。
+VRM の binding は数値インデックスの場合があるため、登録名は解決済みメッシュフィールドから実メッシュ名を取得する。
+各 Output の Result は対応する BlendShapes[].Value への DynamicField で、値を二重に保存・コピーしない。
+Selection の Snapshot 取得は従来どおり ExpressionOutput/Result を読み取る。
 
 ## 検証
 
@@ -477,3 +487,11 @@ Base に瞬きが届いても、Clip が同じトラックを持ち TrackingWeig
 実 DLL の EyeLinearDriver.UpdateTarget は OpenState／ClosedState へ値を写すため、閉じるほど小さい設定では min が必要。
 ExpressionSmoke は実 EyeManager／EyeLinearDriver で開眼・閉眼・左右別入力・逆方向・フェード中の瞬きと、複製・保存再読込を検証した。
 Plum の再変換・inspect、左右64通り・102出力・8表情の再生、v8 パッケージとの Catalog・全 AnimX・対応表の比較も成功した。
+
+2026-09-21: Version 10 はメッシュごとの DynamicBlendShapeDriver に必要なシェイプをまとめ、Result を DynamicField へ変更した。
+実 DLL の DynamicBlendShapeDriver は Renderer 変更時または Inspector の Update BlendShape Targets で名前を解決する。
+既存 Renderer にエントリを追加しただけでは再解決しないため、生成時には各 _drive を明示的にリンクする。
+これにより Catalog のアセット書き出しを await した後に増えたシェイプも正しく接続する。
+実メッシュ2個で数値 binding・同名 Slot/シェイプ・未使用シェイプの保持・DynamicField 読取・Snapshot・瞬き合成・複製・保存再読込を検証した。
+Plum の再変換・inspect と保存パッケージの左右64通り・102出力・8表情の再生も成功し、v9 の Catalog・全 AnimX・対応表と一致した。
+パッケージ読込ではフィールド参照の復元がメッシュロードより先に完了するため、実メッシュ名との照合はロード完了後に行う。
