@@ -50,7 +50,8 @@ internal sealed partial class ExpressionSystemSetup
         Data(_core, "PlaybackStart", 0f); Data(_core, "FadeDuration", 0.1f);
         Data(_core, "PairIndex", 0);
         Data(_core, "PlaybackElapsed", 0f); Data(_core, "FadeWeight", 1f);
-        Data(_root, "Version", 7);
+        Data(_core, "AnimationTime", 0f);
+        Data(_root, "Version", 8);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");

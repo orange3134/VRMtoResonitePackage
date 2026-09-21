@@ -45,32 +45,50 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildPlayback()
     {
         var g = new ExpressionFlux(_playback);
-        var timing = PlaybackTiming(g, g.Ref(_core));
+        var core = g.Ref(_core);
+        var timing = PlaybackTiming(g, core);
+        var current = g.Read<Slot>(core, CoreSpace, "CurrentExpression");
         // Diagnostics and outputs are evaluated locally, without synchronized per-frame writes.
         DriveValue(g, _core, CoreSpace, "PlaybackElapsed", timing.Elapsed);
-        DriveValue(g, _core, CoreSpace, "FadeWeight", timing.Blend);
-        foreach (var output in _outputSlots.Values) BuildOutputPlayback(output);
+        var blend = DriveValue(g, _core, CoreSpace, "FadeWeight", timing.Blend);
+        var animationTime = DriveValue(g, _core, CoreSpace, "AnimationTime", SampleTime(g, current, timing.Elapsed));
+        // A consumer can run before this board after selection changes. Publish the inputs
+        // with the timing so it can hold Snapshot until the new selection has been evaluated.
+        var evaluated = _playback.AddSlot("Evaluated selection");
+        var evaluatedStart = evaluated.AttachComponent<ValueField<float>>().Value;
+        DriveField(g, evaluatedStart, g.Read<float>(core, CoreSpace, "PlaybackStart"));
+        var evaluatedExpression = evaluated.AttachComponent<ReferenceField<Slot>>().Reference;
+        var expressionDriver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ReferenceDrive<Slot>)
+            g.Node("ReferenceDrive", typeof(Slot), ("Target", current));
+        if (!expressionDriver.TrySetRootTarget(evaluatedExpression))
+            throw new InvalidOperationException("Cannot drive the evaluated expression reference.");
+        foreach (var output in _outputSlots.Values)
+            BuildOutputPlayback(output, animationTime, blend, evaluatedStart, evaluatedExpression);
     }
 
-    private void BuildOutputPlayback(Slot output)
+    private void BuildOutputPlayback(Slot output, IField<float> animationTime, IField<float> blend,
+        IField<float> evaluatedStart, SyncRef<Slot> evaluatedExpression)
     {
         var g = new ExpressionFlux(output.AddSlot("Logic"));
         var core = g.Ref(_core);
         var record = g.Ref(output);
         var current = g.Read<Slot>(core, CoreSpace, "CurrentExpression");
-        // Evaluate the clock in this board. Reading driven diagnostic fields could combine
-        // a new CurrentExpression with the previous update's elapsed/fade values.
-        var timing = PlaybackTiming(g, core);
 
         g.BeginSection("Sample current expression");
-        var sample = Sample(g, current, g.Read<string>(record, OutputSpace, "Id"), timing.Elapsed);
+        var sample = Sample(g, current, g.Read<string>(record, OutputSpace, "Id"), FieldSource(g, animationTime));
         var baseValue = g.Read<float>(record, OutputSpace, "Base");
         var desired = g.Choose<float>(g.And(g.Active(current),
             g.Binary<int>("ValueGreaterOrEqual", sample.Index, g.Constant(0))), sample.Value, baseValue);
         desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(record, OutputSpace, "TrackingWeight")));
 
         g.BeginSection("Fade and drive result");
-        var result = g.Lerp(g.Read<float>(record, OutputSpace, "Snapshot"), desired, timing.Blend);
+        var snapshot = g.Read<float>(record, OutputSpace, "Snapshot");
+        var evaluatedReference = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ReferenceSource<Slot>)
+            g.Node("ReferenceSource", typeof(Slot));
+        evaluatedReference.RootSourceReference.Target = evaluatedExpression;
+        var ready = g.And(g.Equal<Slot>(current, evaluatedReference),
+            g.Equal<float>(g.Read<float>(core, CoreSpace, "PlaybackStart"), FieldSource(g, evaluatedStart)));
+        var result = g.Choose<float>(ready, g.Lerp(snapshot, desired, FieldSource(g, blend)), snapshot);
         // All clients evaluate the same synchronized selection. An unworn instance follows
         // Base even if it has retained selection state from saving or cloning.
         DriveValue(g, output, OutputSpace, "Result", g.Choose<float>(g.IsNull<User>(g.Owner(_root)), baseValue, result));
@@ -85,13 +103,28 @@ internal sealed partial class ExpressionSystemSetup
         return (elapsed, blend);
     }
 
-    private static void DriveValue(ExpressionFlux g, Slot record, string space, string name, IWorldElement value)
+    private static IField<float> DriveValue(ExpressionFlux g, Slot record, string space, string name, IWorldElement value)
+    {
+        var field = record.GetComponents<DynamicValueVariable<float>>()
+            .Single(v => v.VariableName.Value == Path(space, name)).Value;
+        DriveField(g, field, value);
+        return field;
+    }
+
+    private static void DriveField(ExpressionFlux g, IField<float> field, IWorldElement value)
     {
         var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>)
             g.Node("ValueFieldDrive", typeof(float), ("Value", value));
-        var field = record.GetComponents<DynamicValueVariable<float>>()
-            .Single(v => v.VariableName.Value == Path(space, name)).Value;
         driver.GetRootProxy(addIfMissing: true).Drive.Target = field;
+    }
+
+    private static IWorldElement FieldSource(ExpressionFlux g, IField<float> field)
+    {
+        var source = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueSource<float>)
+            g.Node("ValueSource", typeof(float));
+        // Reference the driven field, not the producing node, to keep boards independent.
+        source.RootSourceReference.Target = field;
+        return source;
     }
 
     private static IWorldElement ClipAsset(ExpressionFlux g, IWorldElement expression) => g.Node("GetAsset", typeof(Animation),
@@ -102,12 +135,12 @@ internal sealed partial class ExpressionSystemSetup
     private static IWorldElement SampleTime(ExpressionFlux g, IWorldElement expression, IWorldElement elapsed) => g.Choose<float>(
         g.Read<bool>(expression, ClipSpace, "Loop"), g.Binary<float>("ValueMod", elapsed, g.Read<float>(expression, ClipSpace, "Duration")), elapsed);
     private static (IWorldElement Index, IWorldElement Value) Sample(ExpressionFlux g, IWorldElement expression,
-        IWorldElement property, IWorldElement elapsed)
+        IWorldElement property, IWorldElement animationTime)
     {
         var asset = ClipAsset(g, expression);
         var index = g.Node("FindAnimationTrackIndex", null, ("Animation", asset), ("Node", g.Text("Expression")), ("Property", property));
         var value = g.Node("SampleValueAnimationTrack", typeof(float),
-            ("Animation", asset), ("TrackIndex", index), ("Time", SampleTime(g, expression, elapsed)));
+            ("Animation", asset), ("TrackIndex", index), ("Time", animationTime));
         return (index, value);
     }
 }

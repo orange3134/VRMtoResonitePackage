@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 7`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 8`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -46,7 +46,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 7 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 8 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | GestureTable/各セル | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
@@ -83,15 +83,16 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | `PlaybackStart` | float | 0 | CurrentExpression の参照が変わった WorldTimeFloat（秒）。同じ表情の再指定では再生を始め直さない |
 | `FadeDuration` | float | 0.1 | 切替時に採用した FadeIn または FadeOut。途中で Catalog を編集してもその切替の値は再取得しない |
 | `PlaybackElapsed` | float | 0 | ローカル駆動の診断値。WorldTimeFloat − PlaybackStart |
-| `FadeWeight` | float | 1 | ローカル駆動の診断値。FadeDuration が正なら clamp01(PlaybackElapsed / FadeDuration)、それ以外は 1 |
+| `AnimationTime` | float | 0 | Playback が駆動する共通サンプリング時刻（秒）。Loop=true なら PlaybackElapsed % Duration、それ以外は PlaybackElapsed |
+| `FadeWeight` | float | 1 | Playback が駆動する共通フェード率。FadeDuration が正なら clamp01(PlaybackElapsed / FadeDuration)、それ以外は 1 |
 
-Core に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取った参照を検証し、
+Core の DynamicVariable に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取った参照を検証し、
 切替前後の比較・フェード設定後に CurrentExpression へ直接渡す。
 MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
 対応表の参照先の確認には PairIndex と GestureTable の行を使う。
 
 AllowExternalInput 以外は状態として扱う。SelectionStatus は生成しない。入力モードは AllowExternalInput、再生対象は CurrentExpression で確認する。未割当と無効・未ロードはいずれも CurrentExpression=null となる。
-PlaybackElapsed・FadeWeight は ValueFieldDrive で各クライアントが駆動し、毎フレームの同期書き込みを行わない。
+PlaybackElapsed・AnimationTime・FadeWeight は ValueFieldDrive で各クライアントが駆動し、毎フレームの同期書き込みを行わない。
 再生処理の実行回数を示す値ではない。
 
 Lifecycle は OnStart とローカル装着状態の変更時に動き、現在の装着者がローカルユーザーの場合だけ、初期化確認 → Selection とメニュー表示更新を実行する。
@@ -125,8 +126,10 @@ PlaybackStart・FadeDuration はここでは変更しないため、時計から
 | `OriginalDriver` | ISyncRef | 元のドライバー | 定義。既存 ActiveLink が ISyncRef の場合だけ作成。Base へ付け替えたドライバーの記録 |
 
 表情なし・該当トラックなしの場合は sample の代わりに Base を使う。
-各 Output は診断用 FadeWeight を読み戻さず、同じ PlaybackStart / FadeDuration から補間率を計算する。
-未装着時は補間せず Result=Base とする。装着中は以下の式で評価する。
+各 Output は Playback が計算した AnimationTime と FadeWeight のフィールドを ValueSource で参照する。
+Playback は計算対象の PlaybackStart と CurrentExpression も内部フィールドへ駆動する。
+切替直後にそれらが現在の選択と一致しない場合は、共有時計が更新されるまで Result=Snapshot を維持する。
+未装着時は補間せず Result=Base とする。装着中で共有時計が現在の選択に対応するときは以下の式で評価する。
 
 ```text
 desired = lerp(sample, Base, clamp01(TrackingWeight))

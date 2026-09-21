@@ -59,13 +59,48 @@ internal static class ExpressionOutputDriveChecks
 
             Select(4); await Frames(); Time(25); await Frames();
             Near(a.Value, 0.25f, "non-looping animation continues after FadeDuration"); Near(b.Value, 0.75f, "outputs share the same playback time");
+            // Replace the producer temporarily: outputs must follow shared fields even
+            // when their values differ from WorldTime and the clip's timing settings.
+            var playback = core.FindChild("Logic").FindChild("Playback");
+            global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float> Driver(string name) =>
+                playback.GetComponentsInChildren<global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>>()
+                    .Single(d => d.GetRootProxy(addIfMissing: false).Drive.Target == core.GetComponents<DynamicValueVariable<float>>()
+                        .Single(v => v.VariableName.Value == "ExpressionCore/" + name).Value);
+            var timeDriver = Driver("AnimationTime"); var fadeDriver = Driver("FadeWeight");
+            var oldTime = timeDriver.Value.Target; var oldFade = fadeDriver.Value.Target;
+            var fixedTime = playback.AddSlot("Test time").AttachComponent<global::FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<float>>();
+            var fixedFade = playback.AddSlot("Test fade").AttachComponent<global::FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<float>>();
+            try
+            {
+                fixedTime.Value.Value = 75; timeDriver.Value.Target = fixedTime;
+                await Frames(); Near(Get<float>(core, "AnimationTime"), 75, "Playback drives the shared AnimationTime field");
+                Near(a.Value, 0.75f, "A reads shared AnimationTime through ValueSource");
+                Near(b.Value, 0.25f, "B reads the same shared AnimationTime");
+                fixedTime.Value.Value = 25; await Frames();
+                Near(a.Value, 0.25f, "shared clock changes invalidate the output sampler");
+                fixedFade.Value.Value = 0.5f; fadeDriver.Value.Target = fixedFade; await Frames();
+                Near(a.Value, (Get<float>(outputA, "Snapshot") + 0.25f) / 2, "A reads shared FadeWeight");
+                Near(b.Value, (Get<float>(outputB, "Snapshot") + 0.75f) / 2, "B reads shared FadeWeight");
+            }
+            finally
+            {
+                timeDriver.Value.Target = oldTime; fadeDriver.Value.Target = oldFade;
+                fixedTime.Slot.Destroy(); fixedFade.Slot.Destroy();
+            }
             Time(150); await Frames(); Near(a.Value, 1, "non-looping animation holds its endpoint");
             Set(catalog.FindChild("Ramp"), "Loop", true); Time(125); await Frames(); Near(a.Value, 0.25f, "loop wraps by Duration");
             Set(catalog.FindChild("Ramp"), "Duration", 40f); Time(95); await Frames(); Near(a.Value, 0.15f, "edited Duration changes the loop period without stretching keys");
             Set(catalog.FindChild("Ramp"), "Loop", false); Time(25); await Frames(); Near(a.Value, 0.25f, "disabling Loop restores unwrapped time");
+            Set(catalog.FindChild("Short"), "FadeIn", 100f);
+            float beforeSwitch = Get<float>(outputA, "Result"); Select(1);
+            for (int i = 0; i < 4; i++)
+            {
+                await default(NextUpdate);
+                Near(Get<float>(outputA, "Result"), beforeSwitch, "switch resets the shared fade before mixing the new clip");
+            }
             Select(5); await Frames(); Time(2); await Frames(); Near(a.Value, 0.8f, "Hold reaches the last value beyond the last key");
 
-            Select(0); await Frames(); Near(a.Value, 0.4f, "unassigned selection returns to tracking");
+            Select(0); Time(1); await Frames(); Near(a.Value, 0.4f, "unassigned selection returns to tracking");
             Set(catalog.FindChild("Short"), "FadeIn", 0.1f);
             Select(1);
             bool sawFade = false;

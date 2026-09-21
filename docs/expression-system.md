@@ -33,7 +33,7 @@ Expressions/
     Logic/
       Lifecycle/                   初期化、装着状態の変更監視
       Selection/                   対応表からの選択と切り替え
-      Playback/                    再生時刻・フェード率の診断値を Drive
+      Playback/                    共通 AnimationTime・フェード率を Drive
   Outputs/                         BlendShape ごとのベース入力と最終出力
     各 BlendShape/Logic/           サンプリング・混合・フェード → Result を Drive
   Inputs/
@@ -74,12 +74,12 @@ Flux は1スロット1ノードで、名前付きの節を保持しながらモ�
 不一致判定は `ValueNotEquals`／`ObjectNotEquals`、null 判定は `IsNull` を使い、Equal と Not や null 定数の組み合わせを避ける。
 循環する接続は同じ階層にまとめ、モジュール間には実際の幅に応じた余白を設ける。
 ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュールを個別に Unpack する。
-モジュール間では ProtoFlux ノードを直接接続しない。所有者・時刻・定数の取得も各モジュール内で完結するため、
+モジュール間では ProtoFlux ノードを直接接続しない。共通の再生時計はフィールド経由で参照し、所有者・定数の取得は各モジュール内で完結するため、
 1つの入力や再生処理を開くだけで全機種・APIまでつながった巨大なグラフにはならない。
 
 初回起動・装着開始時は `Lifecycle` → `Selection` の順で状態を確定する。
 呼び出しには対象モジュールだけを宛先とする同期 Dynamic Impulse を使い、
-選択状態をイベント内で確定する。再生・出力の計算は各 Output の Drive が行う。
+選択状態をイベント内で確定する。共通時計は Playback、サンプリング・出力は各 Output の Drive が計算する。
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → Selection を同期実行する。
 同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態を評価する。
 表の編集・表情の無効化・アセットのロード完了は、選択結果の変化を監視して反映する。
@@ -101,7 +101,7 @@ Dynamic Impulse は装着者のクライアントで実行され、所有者に�
 | メニュー表示 | 装着開始、Catalog の項目数、対応表の有効な参照先の変化 |
 | キーボード | 左右それぞれの8キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
-| Playback | 診断値を ValueFieldDrive で継続評価 |
+| Playback | 共通 AnimationTime・FadeWeight と診断値を ValueFieldDrive で継続評価 |
 | Outputs/各項目/Logic | 各自のサンプラー・混合・フェードを ValueFieldDrive で継続評価 |
 
 変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
@@ -156,6 +156,7 @@ Inspector 上の Core の変数名には `ExpressionCore/` が付く。他のレ
 | AllowExternalInput | true=通常入力も許可、false=コンテキストメニューのみ（編集可能） |
 | `CurrentExpression` | Selection の検証を通過した再生対象。無効・未割当なら null |
 | `PlaybackStart` / `PlaybackElapsed` | 再生開始時刻と経過秒数 |
+| `AnimationTime` | 全 Output が参照するサンプリング時刻。Loop 時だけ Duration で折り返す |
 | `FadeDuration` / `FadeWeight` | フェード秒数と現在の混合率（0〜1） |
 
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
@@ -166,7 +167,8 @@ Inspector 上の Core の変数名には `ExpressionCore/` が付く。他のレ
 `AllowExternalInput` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
 変換時の警告は引き続き `Diagnostics` に残る。
 `Diagnostics/Graph modules` の各レコードには `ExpressionGraphModule/Path` と `ExpressionGraphModule/NodeCount` があり、モジュールの場所と規模を確認できる。
-`PlaybackElapsed` と `FadeWeight` はローカルに駆動する表示値で、診断のための毎フレームの同期書き込みを増やさない。
+`PlaybackElapsed`・`AnimationTime`・`FadeWeight` は Playback がローカルに駆動し、毎フレームの同期書き込みを増やさない。
+各 Output は AnimationTime と FadeWeight のフィールドを ValueSource で参照する。
 これらは時計から求める値であり、Playback の処理が実行されたことを示すカウンターではない。
 反映が止まっている場合は、アバターの装着状態、該当モジュールの有効状態と `Outputs/Result`・`Target` を確認する。
 
@@ -286,7 +288,7 @@ AnimX のトラックは Node=`Expression`、Property=出力の `Id` を使う�
 新しい BlendShape を操作する場合は Outputs の出力レコードとフィールド接続も必要になる。
 `Bindings` は編集時の参照情報であり、AnimX のトラックを自動で書き換えるものではない。
 
-## 外部イベント API（Version 7、Tag・引数は Version 4 と共通）
+## 外部イベント API（Version 8、Tag・引数は Version 4 と共通）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
 左右の通常入力・メニュー入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
@@ -349,9 +351,11 @@ Exit Time、再生オフセット、上記の固定化で扱えないパラメ�
 
 各 Output は CurrentExpression の AnimX を Id で検索してサンプリングする。
 同じシェイプキーのトラック番号が表情ごとに違っても対応でき、欠落トラックは Base を使う。
-経過時間は各ボードで WorldTime − PlaybackStart を評価し、Loop の場合だけ Duration で折り返す。
+Playback が WorldTime − PlaybackStart を一度計算し、Loop の場合だけ Duration で折り返した AnimationTime を駆動する。
 フェードには折り返し前の経過時間を使い、FadeDuration 後も動画・ループの再生を継続する。
-各ボードで同じ開始時刻から計算するため、共有の診断値の更新順序には依存しない。
+各 Output は AnimationTime と FadeWeight を ValueSource で読み、時刻や折り返しを再計算しない。
+独立したボード間では評価順が保証されないため、Playback は計算対象の開始時刻・表情参照も内部フィールドへ駆動する。
+各 Output は現在の選択と照合し、不一致なら Snapshot を維持する。これにより切替直後の古い共有値による飛びを防ぐ。
 Snapshot は切り替え時に装着者が保存し、Result は各クライアントの Drive が計算する。
 未装着時は、保存・複製で選択状態が残っていても Result を Base にする。
 Result を外部から直接書き換えず、入力・Clip・TrackingWeight などを操作する。
@@ -452,3 +456,10 @@ ExpressionSmoke で機種別設定の編集、Core 参照の結合、同一フ�
 Playback の LocalUpdate、再生用内部 Impulse、Lifecycle の Result 直接書き込みを削除した。
 ExpressionSmoke で短いクリップのフェード、途中切り替え、欠落・並べ替えトラック、ループ周期編集、追跡入力、複製・保存再読込を検証した。
 Plum v1.0.1 は102出力・左右64通りを再生確認し、旧パッケージと Catalog・全 AnimX カーブ・出力接続・対応表が一致した。
+
+2026-09-21: Version 8 は AnimationTime と FadeWeight を Playback で一度計算し、各 Output から ValueSource で参照する。
+ValueSource はフィールド変更を伝播するが、独立した FluxGroup の評価順を保証しない。
+切替直後に新しい表情へ古いフェード率が適用される回帰を再現したため、計算対象の開始時刻・表情参照を照合し、更新待ちは Snapshot を維持する。
+ExpressionSmoke は共有ドライバーの入力差し替え、切替の最初の更新、ループ周期編集、短い Clip のフェード、複製・保存再読込を検証する。
+Plum の再変換・inspect、左右64通り・102出力・8表情の再生、v7 パッケージとの全 AnimX・Catalog・出力接続・対応表の比較も成功した。
+Plum の総ノード数は5,973から5,167へ減り、130ボード・最大95ノードとボード間の独立性を維持した。

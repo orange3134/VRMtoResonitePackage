@@ -138,5 +138,8 @@ that a 0.001-second clip completes a 0.1-second fade, interrupted fades snapshot
 the mixed Result, null selection preserves FadeOut, and an unworn clone follows
 Base despite saved selection state. Playback has no impulse receiver; API calls
 still select synchronously and driven output fields update on the engine cycle.
-The fade clock is evaluated within each output board from the shared PlaybackStart
-and FadeDuration, independent of driven diagnostics and their update order.
+Version 8 computes AnimationTime and FadeWeight once in Playback. Each Output uses
+ValueSource to read these fields; graph checks forbid per-output WorldTime/ValueMod.
+Replacing the shared producers verifies that all outputs consume their driven values.
+A switch is checked from its first update: outputs hold Snapshot until Playback's
+evaluated start/expression match the current selection, avoiding stale shared timing.

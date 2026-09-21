@@ -34,6 +34,16 @@ internal static class ExpressionGraphChecks
             Check(sampling != null && sampling.Count(n => n.GetType().Name == "SampleValueAnimationTrack`1") == 1 &&
                 sampling.Count(n => n.GetType().Name == "FindAnimationTrackIndex") == 1,
                 "each output samples its own track: " + output.Name);
+            Check(sampling.All(n => n.GetType().Name is not "WorldTimeFloat" and not "ValueMod`1"),
+                "outputs do not recompute animation time: " + output.Name);
+            var sources = logic.GetComponentsInChildren<global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueSource<float>>();
+            foreach (string name in new[] { "AnimationTime", "FadeWeight" })
+            {
+                var field = expressions.FindChild("Core").GetComponents<DynamicValueVariable<float>>()
+                    .Single(v => v.VariableName.Value == "ExpressionCore/" + name).Value;
+                Check(sources.Count(source => source.RootSourceReference.Target == field) == 1,
+                    "output ValueSource references its own shared " + name + ": " + output.Name);
+            }
             var result = output.GetComponents<DynamicValueVariable<float>>()
                 .Single(v => v.VariableName.Value == "ExpressionOutput/Result").Value;
             var driver = logic.GetComponentsInChildren<global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>>().Single();
@@ -44,7 +54,7 @@ internal static class ExpressionGraphChecks
         }
         Check(Descendant(expressions, "Core/Logic/Playback").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => n.GetType().Name is not "ForEachObject`2" and not "SampleValueAnimationTrack`1"),
-            "Core playback contains only driven diagnostics, without an output loop");
+            "Core playback drives shared time and diagnostics without an output loop");
         var boards = nodes.GroupBy(Board).ToArray();
         var keyboard = Descendant(expressions, "Inputs/Keyboard");
         Check(keyboard.Children.All(hand => hand.FindChild("DV").GetComponentsInChildren<ProtoFluxNode>().Count == 0),
@@ -143,7 +153,7 @@ internal static class ExpressionGraphChecks
         Check(core.GetComponents<DynamicReferenceVariable<Slot>>().Select(v => v.VariableName.Value)
             .SequenceEqual(new[] { "ExpressionCore/CurrentExpression" }),
             "Core stores only the current expression, without intermediate diagnostic references");
-        foreach (string name in new[] { "PlaybackElapsed", "FadeWeight" })
+        foreach (string name in new[] { "PlaybackElapsed", "FadeWeight", "AnimationTime" })
         {
             var field = core.GetComponents<DynamicValueVariable<float>>()
                 .Single(v => v.VariableName.Value == "ExpressionCore/" + name).Value;
