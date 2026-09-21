@@ -23,6 +23,12 @@ It also verifies one Flux node per slot, named logic sections, and distinct node
 positions before and after package reimport. Every connection outside a feedback cycle
 must run from left to right; this includes data inputs and impulse calls. Feedback
 cycles stay within one layer.
+Layout checks also require keyboard inputs to follow port order from top to bottom
+without unrelated nodes splitting the group. Key literals/variables and sender
+Tag/target/ExcludeDisabled inputs must stay close to their consumers. A shuffled
+fixture covers creation-order independence, shallow inputs feeding deep nodes,
+cross-section links, feedback cycles, and repeatable arrangement. The synthetic run
+writes keyboard-layout.json for inspecting the generated coordinates and edges.
 Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight also receive int; Select receives a mapped ID and AllowExternalInput receives bool; no Command slots may remain.
 Each actual Flux group must stay within one logic board. Core lifecycle, selection,
 playback, the six public API receivers and menu visibility, and each controller hand have independent

@@ -42,6 +42,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         world.LocalUser.Root ??= world.AddSlot("Wearer").AttachComponent<UserRoot>();
         await default(NextUpdate);
         if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage, artifacts, baselinePackage); return; }
+        ExpressionLayoutChecks.CheckFixtures(world.LocalUser.Root.Slot);
         var avatar = world.LocalUser.Root.Slot.AddSlot("Expression smoke avatar");
         var field = avatar.AttachComponent<ValueField<float>>().Value; field.Value = 0.2f;
         var tracking = avatar.AddSlot("Tracking").AttachComponent<ValueField<float>>(); tracking.Value.Value = 0.2f;
@@ -79,6 +80,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Console.WriteLine("Built graph");
         for (int i = 0; i < 90; i++) await default(NextUpdate);
         Check(expressions.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "all generated ProtoFlux groups are valid");
+        ExpressionLayoutChecks.SaveKeyboardLayout(expressions, Path.Combine(artifacts, "keyboard-layout.json"));
         ExpressionGraphChecks.CheckLayout(expressions);
         await ExpressionDynamicInputChecks.CheckEdits(expressions);
         await ExpressionInputEventChecks.Run(expressions);

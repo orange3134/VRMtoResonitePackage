@@ -1,5 +1,6 @@
 using FrooxEngine;
 using FrooxEngine.ProtoFlux;
+using VrmToResonitePackage.Expressions;
 
 internal static class ExpressionLayoutChecks
 {
@@ -44,8 +45,110 @@ internal static class ExpressionLayoutChecks
                         $"{source.Slot.Name} ({sourceX}) -> {target.Slot.Name} ({targetX})");
             }
         }
+        CheckKeyboardInputs(expressions);
         if (dataLinks == 0 || impulseLinks == 0) throw new InvalidOperationException("Direction checks must cover both data and impulse connections");
         Console.WriteLine($"LAYOUT: {dataLinks} data/reference links and {impulseLinks} impulse links point right; {feedbackLinks} feedback links share a layer");
+    }
+
+    private static void CheckKeyboardInputs(Slot expressions)
+    {
+        foreach (var hand in expressions.FindChild("Inputs").FindChild("Keyboard").Children)
+        {
+            var board = hand.FindChild("Logic");
+            var nodes = board.GetComponentsInChildren<ProtoFluxNode>();
+            float X(ProtoFluxNode n) => board.GlobalPointToLocal(n.Slot.GlobalPosition).x;
+            float Y(ProtoFluxNode n) => board.GlobalPointToLocal(n.Slot.GlobalPosition).y;
+            foreach (string type in new[] { "IndexOfFirstValueMatch`1", "AND_Multi_Bool", "ValueEquals`1" })
+                foreach (var target in nodes.Where(n => n.GetType().Name == type))
+                {
+                    var inputs = target.AllInputs.Select(p => Owner(p.Target)).Where(n => n != null).Distinct().ToArray();
+                    for (int i = 1; i < inputs.Length; i++)
+                        Check(Y(inputs[i - 1]) > Y(inputs[i]) + 0.01f,
+                            hand.Name + ": " + type + " inputs follow port order from top to bottom");
+                    if (type == "IndexOfFirstValueMatch`1")
+                        Check(!nodes.Except(inputs).Any(n => Math.Abs(X(n) - X(inputs[0])) < 0.01f &&
+                            Y(n) < inputs.Max(Y) && Y(n) > inputs.Min(Y)),
+                            hand.Name + ": unrelated inputs do not split the keyboard fan-in");
+                    foreach (var input in inputs)
+                        Check(X(target) - X(input) is > 0 and < 0.65f,
+                            hand.Name + ": fan-in sources stay in the adjacent input column");
+                }
+            foreach (var target in nodes.Where(n => n.GetType().Name == "KeyHeld"))
+            {
+                var input = Owner(target.AllInputs.Single().Target);
+                Check(X(target) - X(input) is > 0 and < 0.65f && Math.Abs(Y(target) - Y(input)) < 0.65f,
+                    hand.Name + ": key input stays near its KeyHeld consumer");
+            }
+            var sender = nodes.Single(n => n.GetType().Name.StartsWith("DynamicImpulseTriggerWithValue", StringComparison.Ordinal));
+            foreach (string port in new[] { "Tag", "TargetHierarchy", "ExcludeDisabled" })
+            {
+                var input = Owner(((ISyncRef)ExpressionFlux.Member(sender, port)).Target);
+                Check(X(sender) - X(input) is > 0 and < 0.65f && Math.Abs(Y(sender) - Y(input)) < 0.65f,
+                    hand.Name + ": sender inputs stay near the sender");
+            }
+        }
+        Console.WriteLine("LAYOUT: keyboard fan-in order and consumer-local key/tag/target inputs verified");
+    }
+
+    public static void CheckFixtures(Slot parent)
+    {
+        var root = parent.AddSlot("Temporary layout fixtures");
+        try
+        {
+            var board = root.AddSlot("Board");
+            var g = new ExpressionFlux(board);
+            // Creation order is intentionally different from input order.
+            var second = g.Constant(20);
+            var first = g.Constant(10);
+            var sum = g.Binary<int>("ValueAdd", first, second);
+            g.BeginSection("Consumer");
+            var local = g.Constant(3);
+            var result = g.Binary<int>("ValueMul", sum, local);
+            var cycleA = g.Node("NOT_Bool");
+            var cycleB = g.Node("NOT_Bool", null, ("A", cycleA));
+            ExpressionFlux.Link(cycleA, "A", cycleB);
+            ExpressionFlux.Arrange(root);
+            Elements.Core.float3 Position(IWorldElement n) => board.GlobalPointToLocal(Owner(n).Slot.GlobalPosition);
+            Check(Position(first).y > Position(second).y, "fan-in order is independent of node creation order");
+            Check(Position(local).x > Position(first).x && Position(result).x - Position(local).x < 0.65f,
+                "a shallow input moves next to its deep consumer");
+            Check(Math.Abs(Position(sum).y - Position(result).y) < 0.65f,
+                "section boundaries do not separate a node from its consumer");
+            Check(Math.Abs(Position(cycleA).x - Position(cycleB).x) < 0.001f,
+                "feedback cycles remain in one column");
+            var nodes = root.GetComponentsInChildren<ProtoFluxNode>();
+            var before = nodes.ToDictionary(n => n, n => n.Slot.GlobalPosition);
+            ExpressionFlux.Arrange(root);
+            Check(nodes.All(n => (n.Slot.GlobalPosition - before[n]).Magnitude < 0.0001f),
+                "arranging a graph twice keeps the same positions");
+        }
+        finally { root.Destroy(); }
+        Console.WriteLine("LAYOUT: shuffled inputs, shallow dependencies, cross-section links, cycles and repeatability verified");
+    }
+
+    public static void SaveKeyboardLayout(Slot expressions, string path)
+    {
+        var board = expressions.FindChild("Inputs").FindChild("Keyboard").FindChild("Left").FindChild("Logic");
+        var nodes = board.GetComponentsInChildren<ProtoFluxNode>().ToArray();
+        var ids = nodes.Select((n, i) => (n, i)).ToDictionary(p => p.n, p => p.i);
+        File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(nodes.Select(n =>
+        {
+            var position = board.GlobalPointToLocal(n.Slot.GlobalPosition);
+            return new {
+                id = ids[n], name = n.Slot.Name,
+                variable = n.Slot.GetComponentsInChildren<GlobalValue<string>>().FirstOrDefault()?.Value.Value,
+                x = position.x, y = position.y, width = ExpressionFluxLayout.Width(n),
+                sources = n.AllInputs.Concat(n.NodeReferences).Select(p => Owner(p.Target))
+                    .Where(p => p != null && ids.ContainsKey(p)).Select(p => ids[p]).ToArray(),
+                calls = n.AllImpulses.Select(p => Owner(p.Target))
+                    .Where(p => p != null && ids.ContainsKey(p)).Select(p => ids[p]).ToArray()
+            };
+        }), new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static void Check(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
     }
 
     private static ProtoFluxNode Owner(IWorldElement element)

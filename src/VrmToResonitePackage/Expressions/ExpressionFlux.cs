@@ -55,84 +55,19 @@ internal sealed class ExpressionFlux
             .Select(input => OwningNode(input.Target)).ToHashSet();
         foreach (var unused in allNodes.OfType<Nodes.RefObjectInput<Slot>>().Where(node => !usedSources.Contains(node)).ToArray())
             unused.Slot.Destroy();
-        const float columnSpacing = 0.65f;
-        var sections = expressions.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent).ToArray();
         float boardOffset = 0;
-        foreach (var board in sections.GroupBy(s => s.Key.Parent))
+        foreach (var board in expressions.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent.Parent))
         {
-            var columns = DependencyColumns(board.SelectMany(s => s).ToArray());
+            var positions = ExpressionFluxLayout.Arrange(board.ToArray());
             board.Key.GlobalPosition = expressions.LocalPointToGlobal(new float3(boardOffset, 0, 0));
-            float sectionOffset = 0;
-            foreach (var section in board)
-            {
-                section.Key.LocalPosition = new float3(0, -sectionOffset, 0);
-                float sectionHeight = 0;
-                foreach (var column in section.GroupBy(node => columns[node]))
-                {
-                    float rowOffset = 0;
-                    foreach (var node in column)
-                    {
-                        node.Slot.LocalPosition = new float3(column.Key * columnSpacing, -rowOffset, 0);
-                        // Sequence and other variable-port nodes need more vertical space.
-                        int leftPorts = node.AllInputs.Count() + node.NodeReferenceCount + node.NodeGlobalRefCount + node.AllTargetOperations.Count();
-                        int rightPorts = node.AllSourceOutputs.Count() + node.AllImpulses.Count();
-                        rowOffset += Math.Max(0.3f, 0.18f + 0.045f * Math.Max(leftPorts, rightPorts));
-                    }
-                    sectionHeight = Math.Max(sectionHeight, rowOffset);
-                }
-                sectionOffset += sectionHeight + 0.6f;
-            }
-            boardOffset += (columns.Values.Max() + 1) * columnSpacing + 1;
+            // Sections retain their names and hierarchy, but share the board's coordinate
+            // system so an input in another section can stay near its consumer.
+            foreach (var section in board.Select(n => n.Slot.Parent).Distinct())
+                section.LocalPosition = float3.Zero;
+            foreach (var node in board)
+                node.Slot.LocalPosition = new float3(positions[node].x, positions[node].y, 0);
+            boardOffset += board.Max(n => positions[n].x + ExpressionFluxLayout.Width(n) / 2) + 0.6f;
         }
-    }
-
-    private static Dictionary<ProtoFluxNode, int> DependencyColumns(ProtoFluxNode[] nodes)
-    {
-        var outgoing = nodes.ToDictionary(node => node, _ => new HashSet<ProtoFluxNode>());
-        void Edge(ProtoFluxNode source, ProtoFluxNode target)
-        {
-            if (source != null && target != null && source != target && outgoing.ContainsKey(source) && outgoing.ContainsKey(target))
-                outgoing[source].Add(target);
-        }
-        foreach (var node in nodes)
-        {
-            // Data and node references enter on the left; impulses leave on the right.
-            // AllInputs/AllImpulses also enumerate variable-sized ports such as Sequence.Calls.
-            foreach (var input in node.AllInputs.Concat(node.NodeReferences)) Edge(OwningNode(input.Target), node);
-            foreach (var impulse in node.AllImpulses) Edge(node, OwningNode(impulse.Target));
-        }
-
-        // Feedback cannot all point right. Collapse each strongly connected component into
-        // one column, then layer the acyclic graph by its longest incoming dependency chain.
-        var indices = new Dictionary<ProtoFluxNode, int>();
-        var low = new Dictionary<ProtoFluxNode, int>();
-        var component = new Dictionary<ProtoFluxNode, int>();
-        var stack = new Stack<ProtoFluxNode>();
-        var active = new HashSet<ProtoFluxNode>();
-        int nextIndex = 0, componentCount = 0;
-        void Visit(ProtoFluxNode node)
-        {
-            indices[node] = low[node] = nextIndex++;
-            stack.Push(node); active.Add(node);
-            foreach (var target in outgoing[node])
-            {
-                if (!indices.ContainsKey(target)) { Visit(target); low[node] = Math.Min(low[node], low[target]); }
-                else if (active.Contains(target)) low[node] = Math.Min(low[node], indices[target]);
-            }
-            if (low[node] != indices[node]) return;
-            ProtoFluxNode member;
-            do { member = stack.Pop(); active.Remove(member); component[member] = componentCount; } while (member != node);
-            componentCount++;
-        }
-        foreach (var node in nodes) if (!indices.ContainsKey(node)) Visit(node);
-
-        var incoming = Enumerable.Range(0, componentCount).Select(_ => new HashSet<int>()).ToArray();
-        foreach (var source in nodes)
-            foreach (var target in outgoing[source])
-                if (component[source] != component[target]) incoming[component[target]].Add(component[source]);
-        var columns = new int?[componentCount];
-        int Column(int group) => columns[group] ??= incoming[group].Select(parent => Column(parent) + 1).DefaultIfEmpty(0).Max();
-        return nodes.ToDictionary(node => node, node => Column(component[node]));
     }
 
     private static ProtoFluxNode OwningNode(IWorldElement element)
@@ -166,12 +101,12 @@ internal sealed class ExpressionFlux
             throw new InvalidOperationException($"Cannot connect {target.GetType().Name} to {node.GetType().Name}.{port} ({reference.TargetType})");
         reference.Target = target;
     }
-    public IWorldElement Constant<T>(T value) where T : unmanaged
+    public IWorldElement Constant<T>(T value, bool shared = true) where T : unmanaged
     {
-        if (_constants.TryGetValue((typeof(T), value), out var cached)) return cached;
+        if (shared && _constants.TryGetValue((typeof(T), value), out var cached)) return cached;
         var node = NodeSlot(typeof(Nodes.ValueInput<T>), Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)).AttachComponent<Nodes.ValueInput<T>>();
         node.Value.Value = value;
-        _constants[(typeof(T), value)] = node;
+        if (shared) _constants[(typeof(T), value)] = node;
         return node;
     }
     public IWorldElement Text(string value)

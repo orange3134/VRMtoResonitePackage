@@ -153,7 +153,7 @@ internal sealed partial class ExpressionSystemSetup
         var source = g.Ref(settings);
         IWorldElement Held(InputKey key) => g.Node("KeyHeld", null, ("Key", g.Constant(key)));
         var match = (global::FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<bool>)
-            g.Node("IndexOfFirstValueMatch", typeof(bool), ("Match", g.Constant(true)));
+            g.Node("IndexOfFirstValueMatch", typeof(bool), ("Match", g.Constant(true, shared: false)));
         for (int index = 0; index < 8; index++)
             match.Values.Add((INodeValueOutput<bool>)g.Node("KeyHeld", null,
                 ("Key", g.Read<InputKey>(source, KeyboardSpace, "Key." + index))));
