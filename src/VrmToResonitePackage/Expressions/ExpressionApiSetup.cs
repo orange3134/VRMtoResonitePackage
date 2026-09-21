@@ -22,7 +22,7 @@ internal sealed partial class ExpressionSystemSetup
     private IWorldElement ApplyRequest(ExpressionFlux g, IWorldElement mutation, IWorldElement allowed = null) => g.Sequence(
         g.Trigger(g.Ref(_lifecycle), InitializeTag),
         g.If(allowed ?? g.Constant(true), g.Sequence(mutation,
-            g.Trigger(g.Ref(_selection), SelectionTickTag), g.Trigger(g.Ref(_playback), PlaybackTickTag))));
+            g.Trigger(g.Ref(_selection), SelectionTickTag))));
 
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
         g.Write<int>(g.Ref(_core), CoreSpace, hand + "Gesture", gesture);

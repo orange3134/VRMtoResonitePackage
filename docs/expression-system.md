@@ -18,7 +18,8 @@ flowchart LR
     T --> L
     L --> S
     S --> P[64通りのGestureTableから選択]
-    P --> R[再生・出力と追跡入力の合成]
+    P --> R[各 Output でサンプリング・混合・フェード]
+    R --> V[Result を Drive → BlendShape]
 ```
 
 ## 生成される構成
@@ -32,8 +33,9 @@ Expressions/
     Logic/
       Lifecycle/                   初期化、装着状態の変更監視
       Selection/                   対応表からの選択と切り替え
-      Playback/                    再生時刻、フェード、出力の合成
+      Playback/                    再生時刻・フェード率の診断値を Drive
   Outputs/                         BlendShape ごとのベース入力と最終出力
+    各 BlendShape/Logic/           サンプリング・混合・フェード → Result を Drive
   Inputs/
     ContextMenu/                   対応表にある表情のみメニュー表示
     Keyboard/
@@ -75,18 +77,20 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 モジュール間では ProtoFlux ノードを直接接続しない。所有者・時刻・定数の取得も各モジュール内で完結するため、
 1つの入力や再生処理を開くだけで全機種・APIまでつながった巨大なグラフにはならない。
 
-初回起動・装着開始時は `Lifecycle` → `Selection` → `Playback` の順で行う。
+初回起動・装着開始時は `Lifecycle` → `Selection` の順で状態を確定する。
 呼び出しには対象モジュールだけを宛先とする同期 Dynamic Impulse を使い、
-選択の更新が終わってから同じ更新内で再生・出力を計算する。
-左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → Selection → Playback を同期実行する。
+選択状態をイベント内で確定する。再生・出力の計算は各 Output の Drive が行う。
+左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → Selection を同期実行する。
 同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態を評価する。
 表の編集・表情の無効化・アセットのロード完了は、選択結果の変化を監視して反映する。
-LocalUpdate は Playback の1か所だけで使い、アニメーション・フェード・追跡値を毎フレーム出力へ反映する。
+各 Output の Logic がアニメーションをサンプリングし、追跡値との混合・フェード結果を
+ValueFieldDrive<float> で Result に反映する。LocalUpdate と再生用 Dynamic Impulse は生成しない。
+API は選択状態まで同期更新し、見た目は次の Drive / ValueCopy の更新で追従する。
 モジュール間の状態は Core の DynamicVariable で渡す。
 Dynamic Impulse は装着者のクライアントで実行され、所有者による処理制限も各入口で確認する。
 
 [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) は別資料を参照。
-現在の実装と、検討中の移行案を区別して記載している。
+検証結果を踏まえ、Version 7 は各 Output のサンプラーを Drive へ接続する方式を採用した。
 
 ## 変更監視と実行タイミング
 
@@ -97,7 +101,8 @@ Dynamic Impulse は装着者のクライアントで実行され、所有者に�
 | メニュー表示 | 装着開始、Catalog の項目数、対応表の有効な参照先の変化 |
 | キーボード | 左右それぞれの8キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
-| Playback | LocalUpdate と API・選択変更からの同期呼び出し |
+| Playback | 診断値を ValueFieldDrive で継続評価 |
+| Outputs/各項目/Logic | 各自のサンプラー・混合・フェードを ValueFieldDrive で継続評価 |
 
 変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
 比較用の前回値はローカルな実行状態で、DynamicVariable や同期・保存対象の変数には追加しない。
@@ -118,7 +123,8 @@ Dynamic Impulse は装着者のクライアントで実行され、所有者に�
 - 各手の Candidate・Stable・Since・GripHeld・TriggerHeld：`ExpressionGestureHand`。
 - 機種ごとの Grip/Trigger しきい値・StabilitySeconds：親モジュールの `ExpressionGestureSettings`。
 - Selection の左右値と、Playback の開始時刻・フェード秒数：`ExpressionCore`。
-- Selection／Playback の CurrentExpression：`ExpressionCore` の Object Input。
+- Selection の CurrentExpression：`ExpressionCore` の Object Input。
+- 各 Output の Id・Base・TrackingWeight・Snapshot：`ExpressionOutput`。
 
 Core の入力ノード化は現行の名前付き空間で再検証し、同一フレームの入力、複製、再装着、
 保存再読み込み後の選択・再生を確認した。機種別設定の編集も、両手の入力プロキシが該当する
@@ -127,8 +133,8 @@ Core の入力ノード化は現行の名前付き空間で再検証し、同一
 
 次の読み取りは `ReadDynamicValueVariable<T>`／`ReadDynamicObjectVariable<T>` を維持する。
 
-- API・機種別入力からの Core 参照：Core は兄弟階層にあり、入力ノード自身の祖先にはない。
-- ForEach の出力レコード・キー割当、選択中の Catalog：実行中に Source Slot が変わる。
+- API・機種別入力・各 Output からの Core 参照：Core は兄弟階層にあり、入力ノード自身の祖先にはない。
+- 切り替え・初期化時の ForEach の出力レコード、選択中の Catalog：実行中に Source Slot が変わる。
 - `ExpressionGestureTable/Pair.N`：左右値や走査番号で読み取る変数名が変わる。
 
 入力ノードには Source Slot を渡せないため、これらはそのまま入力ノードに置き換えない。
@@ -155,7 +161,7 @@ Inspector 上の Core の変数名には `ExpressionCore/` が付く。他のレ
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
 2. 番号が正しく表情が違う場合は、`PairIndex` に対応する `GestureTable` の参照と `AllowExternalInput` を確認し、`Selection` を調べる。
 3. `CurrentExpression` が null の場合は、`GestureTable/Pair.N`（N は PairIndex）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`、`Clip` のアセット読み込みを確認する。
-4. 選択が正しく見た目が違う場合は、`Playback` と該当する `Outputs` レコードの `Base`、`TrackingWeight`、`Snapshot`、`Result`、`Target` を調べる。
+4. 選択が正しく見た目が違う場合は、該当する `Outputs/各項目/Logic` とレコードの `Base`、`TrackingWeight`、`Snapshot`、`Result`、`Target` を調べる。
 
 `AllowExternalInput` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
 変換時の警告は引き続き `Diagnostics` に残る。
@@ -192,13 +198,13 @@ SelectionStatus は生成・計算しない。入力モードは AllowExternalIn
 
 ## 装着状態と Lifecycle
 
-Core と機種別入力は PreviousOwner を持たず、「現在の装着者がローカルユーザーか」で更新を制御する。
+Selection・Lifecycle・API と機種別入力は PreviousOwner を持たず、「現在の装着者がローカルユーザーか」で更新を制御する。
 装着者が存在するかだけでは閲覧者も実行してしまうため、ローカルユーザーとの一致判定は残す。
 Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。
 
-- 装着開始・初回起動：必要なら初期化し、Selection → Playback とメニュー表示更新を同期実行する。
+- 装着開始・初回起動：必要なら初期化し、Selection とメニュー表示更新を同期実行する。
 - 取り外し：初期化済みのクライアントが一度だけ入力・選択状態をクリアし、出力を Base に戻す。初期化済みフラグを解除する。
-- 未装着中：選択・再生を停止する。未装着で生成したものや閲覧者は共有状態を書き換えない。
+- 未装着中：選択更新は停止し、各 Output の Drive は Base に追従する。未装着で生成したものや閲覧者は共有の選択状態を書き換えない。
 - 再装着・複製・読み込み：初回に左右値を 0、入力許可を true に戻して再開する。API が先に届いた場合も同じ初期化を行う。
 
 取り外し時に別の装着者が既にいる場合は、終了側は共有値をクリアせずローカルフラグだけを解除する。
@@ -280,7 +286,7 @@ AnimX のトラックは Node=`Expression`、Property=出力の `Id` を使う�
 新しい BlendShape を操作する場合は Outputs の出力レコードとフィールド接続も必要になる。
 `Bindings` は編集時の参照情報であり、AnimX のトラックを自動で書き換えるものではない。
 
-## 外部イベント API（Version 6、Tag・引数は Version 4 と共通）
+## 外部イベント API（Version 7、Tag・引数は Version 4 と共通）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
 左右の通常入力・メニュー入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
@@ -300,7 +306,7 @@ Tag は大文字・小文字を含めて完全一致。範囲外の int、引数
 メニューの送信にも専用の Tag を使うため、通常入力を無効にしてもメニューは操作できる。
 
 左右メニューは bool と片手の値、直接選択メニューは bool と両手の値を同じ Impulse 内で更新する。
-その後、通常と同じ `Selection` → `Playback` を同期実行する。
+その後、通常と同じ `Selection` を同期実行し、各 Output の Drive が出力を更新する。
 bool を false にしただけでは左右値は変えず、表情は対応表から引き続き決定する。
 初期化は入力許可の判定より前に行い、複製・再ロード・再装着時には bool=true、左右=0 に戻す。
 Dynamic Impulse はネットワーク RPC ではなく、装着者以外のクライアントからの実行は無視する。
@@ -340,6 +346,15 @@ Exit Time、再生オフセット、上記の固定化で扱えないパラメ�
 実行時は選ばれた表情を1つの時計で再生する。元 Animator の遷移時間、自己遷移による再開始、
 レイヤーごとの独立した再生位相は再現しない。表情を切り替えると直前の出力からフェードする。
 未ループのアニメーションは終端を保持する。
+
+各 Output は CurrentExpression の AnimX を Id で検索してサンプリングする。
+同じシェイプキーのトラック番号が表情ごとに違っても対応でき、欠落トラックは Base を使う。
+経過時間は各ボードで WorldTime − PlaybackStart を評価し、Loop の場合だけ Duration で折り返す。
+フェードには折り返し前の経過時間を使い、FadeDuration 後も動画・ループの再生を継続する。
+各ボードで同じ開始時刻から計算するため、共有の診断値の更新順序には依存しない。
+Snapshot は切り替え時に装着者が保存し、Result は各クライアントの Drive が計算する。
+未装着時は、保存・複製で選択状態が残っていても Result を Base にする。
+Result を外部から直接書き換えず、入力・Clip・TrackingWeight などを操作する。
 
 既存の瞬き・口パク等のドライバーは Outputs の `Base` に接続し直す。
 表情にトラックがない出力は Base を使い、ある出力はアニメーション値を使う。
@@ -432,3 +447,8 @@ ExpressionSmoke で機種別設定の編集、Core 参照の結合、同一フ�
 2026-09-21: ResoLoop で Plum の左手キーボード Flux を読み取り、Version 6 に反映した。
 左右別の DV 設定、AvatarWornLocal、共通修飾キー、最初の一致キーを送る bool 変更検出へ移行。
 同時押し・押下中のキー追加の動作も実ワールドの配線に合わせ、右手へ同じ生成処理を適用する。
+
+2026-09-21: Version 7 は各 Output にサンプリング・混合・フェードの Logic を配置し、Result を ValueFieldDrive で駆動する。
+Playback の LocalUpdate、再生用内部 Impulse、Lifecycle の Result 直接書き込みを削除した。
+ExpressionSmoke で短いクリップのフェード、途中切り替え、欠落・並べ替えトラック、ループ周期編集、追跡入力、複製・保存再読込を検証した。
+Plum v1.0.1 は102出力・左右64通りを再生確認し、旧パッケージと Catalog・全 AnimX カーブ・出力接続・対応表が一致した。

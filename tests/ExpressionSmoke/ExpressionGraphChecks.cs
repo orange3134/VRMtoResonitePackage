@@ -21,13 +21,30 @@ internal static class ExpressionGraphChecks
 
         Slot Board(ProtoFluxNode node) => node.Slot.Parent.Parent;
         var updates = nodes.Where(n => n.GetType().Name == "LocalUpdate").ToArray();
-        Check(updates.Length == 1 && Board(updates[0]) == Descendant(expressions, "Core/Logic/Playback"),
-            "only continuous playback uses LocalUpdate");
+        Check(updates.Length == 0, "expression playback has no LocalUpdate nodes");
         Check(nodes.Any(n => n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "state transitions use local change detectors");
         Check(expressions.GetComponentsInChildren<DynamicValueVariable<bool>>()
             .All(v => v.VariableName.Value != "ExpressionSystem.Input.Keyboard/Held"),
             "keyboard edge state is local to its change detector");
+        foreach (var output in expressions.FindChild("Outputs").Children)
+        {
+            var logic = output.FindChild("Logic");
+            var sampling = logic?.GetComponentsInChildren<ProtoFluxNode>();
+            Check(sampling != null && sampling.Count(n => n.GetType().Name == "SampleValueAnimationTrack`1") == 1 &&
+                sampling.Count(n => n.GetType().Name == "FindAnimationTrackIndex") == 1,
+                "each output samples its own track: " + output.Name);
+            var result = output.GetComponents<DynamicValueVariable<float>>()
+                .Single(v => v.VariableName.Value == "ExpressionOutput/Result").Value;
+            var driver = logic.GetComponentsInChildren<global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>>().Single();
+            Check(driver.GetRootProxy(addIfMissing: false)?.Drive.Target == result && result.ActiveLink != null,
+                "each result has its own native driver: " + output.Name);
+            Check(output.GetComponent<ValueCopy<float>>().Source.Target == result,
+                "the driven result remains connected to its BlendShape target: " + output.Name);
+        }
+        Check(Descendant(expressions, "Core/Logic/Playback").GetComponentsInChildren<ProtoFluxNode>()
+            .All(n => n.GetType().Name is not "ForEachObject`2" and not "SampleValueAnimationTrack`1"),
+            "Core playback contains only driven diagnostics, without an output loop");
         var boards = nodes.GroupBy(Board).ToArray();
         var keyboard = Descendant(expressions, "Inputs/Keyboard");
         Check(keyboard.Children.All(hand => hand.FindChild("DV").GetComponentsInChildren<ProtoFluxNode>().Count == 0),

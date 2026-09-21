@@ -34,7 +34,8 @@ Each actual Flux group must stay within one logic board. Core lifecycle, selecti
 playback, the six public API receivers and menu visibility, and each controller hand have independent
 boards. The test reports node/group counts and enforces a 256-node per-board budget,
 including after package reimport. Module diagnostic counts must match the graph.
-Playback diagnostic fields must retain native driver links after import, preventing
+Each Output has its own sampling/mixing/fade board and driven Result. Result and
+playback diagnostic fields must retain native driver links after import, preventing
 a regression to synchronized writes on every frame.
 Selection/playback diagnostics, menu-only mode rejecting gesture/keyboard updates, enabling input again, mapped-only menu selection, a partial
 tracking-to-expression crossfade, wearer departure, rejection of public and internal
@@ -76,7 +77,7 @@ Physical controller sensing, keyboard focus in a desktop client, context-menu
 layout, and multi-client networking still require interactive verification.
 
 Node simplification uses scoped Dynamic Variable Inputs in controller hands, ancestor gesture settings,
-and Core selection/playback. Namespace lookup must reach the same space instance from the fixed source
+and Core selection/playback diagnostics, plus the local inputs of each Output. Namespace lookup must reach the same space instance from the fixed source
 and the input node; different intervening namespace names do not block that lookup. Dynamic source Slots,
 variable table keys and sibling Core lookups retain ReadDynamic nodes. The NATIVE report lists both forms.
 Input proxy checks inspect actual HasValue/DynamicValue for both hands and Core object inputs. Editing
@@ -86,7 +87,7 @@ wearer departure/reattachment and clone playback cover the synchronization behav
 
 Version 4 removes Override Slot state. Actual menu buttons must disable ordinary input and update the same
 LeftGesture/RightGesture fields used by gesture input. Unmapped IDs must leave the pair and mode unchanged.
-Only Playback uses LocalUpdate; lifecycle, selection, menu availability and input actions use
+No expression board uses LocalUpdate; lifecycle, selection, menu availability and input actions use
 local change detectors. OnStart handles initial values without storing previous inputs in shared state.
 The sensor-event fixture replaces hardware outputs temporarily and executes the exported graph:
 both hands must wait for stability, fire when the timer expires without more sensor changes,
@@ -101,8 +102,8 @@ Control, Shift and Key.0 through Key.7 only. Simultaneous keys select the lowest
 index; adding or releasing another key while the chord stays valid does not resend.
 Runtime checks cover shared modifier edits, independent hand settings, edited Tags,
 and AvatarWornLocal blocking input even while the avatar remains under the active user.
-Graph checks require exactly one LocalUpdate, in Playback, and two keyboard boards
-before and after package reload. Version 6 identifies this keyboard schema.
+Graph checks require no LocalUpdate and two keyboard boards before and after package reload.
+Version 7 retains the Version 6 keyboard schema and moves playback sampling to each Output.
 The avatar identification graph is also installed for avatars without FirstPerson settings.
 The synthetic fixture supplies the wearer reference normally assigned by AvatarUserReferenceAssigner on equip.
 Key.1 reassignment must update only its hand and retain valid Dynamic Input bindings after clone and package reload.
@@ -129,3 +130,13 @@ entry in a local value and writes it directly after snapshotting and configuring
 Graph checks enforce the absence of intermediate diagnostic references before and after
 package reload. Core must not retain a SelectionStatus field. Disabling the selected clip must clear CurrentExpression,
 and preserve that clip's FadeOut and the previous output snapshot.
+
+Version 7 adds a two-output regression fixture for reordered and missing tracks,
+tracking changes and weight clamping, non-looping endpoints (including Hold),
+edited loop periods, and continued animation after fade completion. It verifies
+that a 0.001-second clip completes a 0.1-second fade, interrupted fades snapshot
+the mixed Result, null selection preserves FadeOut, and an unworn clone follows
+Base despite saved selection state. Playback has no impulse receiver; API calls
+still select synchronously and driven output fields update on the engine cycle.
+The fade clock is evaluated within each output board from the shared PlaybackStart
+and FadeDuration, independent of driven diagnostics and their update order.

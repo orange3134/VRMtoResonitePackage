@@ -19,7 +19,6 @@ internal sealed partial class ExpressionSystemSetup
     private readonly Slot _root, _catalog, _core, _outputs, _table, _api, _inputs;
     private readonly Slot _lifecycle, _selection, _playback;
     private const string SelectionTickTag = "ResoPon/Expression/Internal/Selection";
-    private const string PlaybackTickTag = "ResoPon/Expression/Internal/Playback";
     private const string InitializeTag = "ResoPon/Expression/Internal/Initialize";
     private const string MenuRefreshTag = "ResoPon/Expression/Internal/MenuRefresh";
     private Slot _menuAvailability;
@@ -51,7 +50,7 @@ internal sealed partial class ExpressionSystemSetup
         Data(_core, "PlaybackStart", 0f); Data(_core, "FadeDuration", 0.1f);
         Data(_core, "PairIndex", 0);
         Data(_core, "PlaybackElapsed", 0f); Data(_core, "FadeWeight", 1f);
-        Data(_root, "Version", 6);
+        Data(_root, "Version", 7);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");

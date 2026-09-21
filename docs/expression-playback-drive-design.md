@@ -1,7 +1,7 @@
 # Playback を Animator / Drive へ移す設計検証
 
-2026-09-21 時点の設計検証。以下は移行案であり、現在の生成コードはまだ
-`LocalUpdate` から各 Output の `Result` を書き込む実装である。
+2026-09-21 の設計検証記録。検証後、Version 7 では末尾の「各 Output のサンプラーを ValueFieldDrive へ接続する」方式を実装した。
+現在の実装は [表情システム](expression-system.md) を参照。以下の Animator 構成は比較用の検討記録であり、採用していない。
 
 ## 結論と維持する仕様
 

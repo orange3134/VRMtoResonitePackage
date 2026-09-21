@@ -59,8 +59,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>(); References<IAssetProvider<Animation>>();
-        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 6,
-            "hand-level keyboard schema is identified by package version 6");
+        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 7,
+            "per-output driven playback is identified by package version 7");
         var core = root.FindChild("Core");
         Check(core.WriteDynamicVariable("Expr/AllowExternalInput", false) != DynamicVariableWriteResult.Success,
             "legacy shared-space writes cannot modify the new Core");

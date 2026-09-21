@@ -42,6 +42,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         world.LocalUser.Root ??= world.AddSlot("Wearer").AttachComponent<UserRoot>();
         await default(NextUpdate);
         if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage, artifacts, baselinePackage); return; }
+        await ExpressionOutputDriveChecks.Run(world.LocalUser.Root.Slot);
         ExpressionLayoutChecks.CheckFixtures(world.LocalUser.Root.Slot);
         var avatar = world.LocalUser.Root.Slot.AddSlot("Expression smoke avatar");
         var field = avatar.AttachComponent<ValueField<float>>().Value; field.Value = 0.2f;
@@ -340,16 +341,17 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         AllowInput(); await Frames();
         Check(!Get<bool>(core, "AllowExternalInput"),
             "input-mode requests are ignored without a local wearer");
-        // Sentinel stored state proves private stages did no work. Playback diagnostics
-        // are locally driven values and must not be overwritten by the fixture.
+        // Sentinel stored state proves private stages did no work. Result and playback
+        // diagnostics are driven values; only Snapshot is writable state.
         var outputState = expressions.FindChild("Outputs").Children.Single();
-        Set(core, "PairIndex", -42); Set(outputState, "Result", -42f);
+        Set(core, "PairIndex", -42); Set(outputState, "Snapshot", -42f);
         foreach (var (board, tag) in new[] { ("Selection", "ResoPon/Expression/Internal/Selection"),
-            ("Playback", "ResoPon/Expression/Internal/Playback"), ("Lifecycle", "ResoPon/Expression/Internal/Initialize") })
+            ("Lifecycle", "ResoPon/Expression/Internal/Initialize") })
             Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core.FindChild("Logic").FindChild(board), tag, true) == 1,
                 "private stage receiver remains discoverable: " + board);
         await Frames();
-        Check(Get<int>(core, "PairIndex") == -42 && Get<float>(outputState, "Result") == -42f,
+        Check(Get<int>(core, "PairIndex") == -42 && Get<float>(outputState, "Snapshot") == -42f &&
+            Math.Abs(Get<float>(outputState, "Result") - 0.4f) < 0.01f,
             "private stages also reject updates without a local wearer");
         // A loaded/cloned instance with no wearer must not mutate shared state just
         // because its local initialization flag starts false.

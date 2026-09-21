@@ -38,7 +38,7 @@ internal static class ExpressionDynamicInputChecks
                     "keyboard key input follows its own hand: " + hand.Name + "/" + Name(input));
             }
         }
-        foreach (string board in new[] { "Selection", "Playback" })
+        foreach (string board in new[] { "Selection" })
         {
             var logic = root.FindChild("Core").FindChild("Logic").FindChild(board);
             var current = logic.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>()
@@ -48,7 +48,7 @@ internal static class ExpressionDynamicInputChecks
                 .Single(variable => variable.VariableName.Value == "ExpressionCore/CurrentExpression");
             Check(proxy != null && proxy.HasValue && proxy.DynamicValue == field.Reference.Target,
                 "Core object input follows this avatar's selected expression: " + board);
-            Check(logic.GetComponentsInChildren<DynamicVariableValueInput<int>>().Count > 0 || board == "Playback",
+            Check(logic.GetComponentsInChildren<DynamicVariableValueInput<int>>().Count > 0,
                 "Selection uses Dynamic Inputs for hand values");
         }
     }

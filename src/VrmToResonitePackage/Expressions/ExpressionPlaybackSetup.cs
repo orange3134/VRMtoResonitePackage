@@ -37,48 +37,61 @@ internal sealed partial class ExpressionSystemSetup
         ReceiveUpdate(g, SelectionTickTag, select);
         // API requests retain synchronous selection. Inspector/table/asset edits also
         // update selection, but an unchanged pair/clip no longer runs this sequence.
-        var changed = g.If(g.IsOwner(_root), g.Sequence(select, g.Trigger(g.Ref(_playback), PlaybackTickTag)));
+        var changed = g.If(g.IsOwner(_root), select);
         g.OnChanged<int>(index, changed);
         g.OnChanged<Slot>(resolved, changed);
     }
 
     private void BuildPlayback()
     {
-        // Core inputs bind locally; output records and the current clip are runtime Sources.
         var g = new ExpressionFlux(_playback);
+        var timing = PlaybackTiming(g, g.Ref(_core));
+        // Diagnostics and outputs are evaluated locally, without synchronized per-frame writes.
+        DriveValue(g, _core, CoreSpace, "PlaybackElapsed", timing.Elapsed);
+        DriveValue(g, _core, CoreSpace, "FadeWeight", timing.Blend);
+        foreach (var output in _outputSlots.Values) BuildOutputPlayback(output);
+    }
+
+    private void BuildOutputPlayback(Slot output)
+    {
+        var g = new ExpressionFlux(output.AddSlot("Logic"));
         var core = g.Ref(_core);
+        var record = g.Ref(output);
         var current = g.Read<Slot>(core, CoreSpace, "CurrentExpression");
+        // Evaluate the clock in this board. Reading driven diagnostic fields could combine
+        // a new CurrentExpression with the previous update's elapsed/fade values.
+        var timing = PlaybackTiming(g, core);
+
+        g.BeginSection("Sample current expression");
+        var sample = Sample(g, current, g.Read<string>(record, OutputSpace, "Id"), timing.Elapsed);
+        var baseValue = g.Read<float>(record, OutputSpace, "Base");
+        var desired = g.Choose<float>(g.And(g.Active(current),
+            g.Binary<int>("ValueGreaterOrEqual", sample.Index, g.Constant(0))), sample.Value, baseValue);
+        desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(record, OutputSpace, "TrackingWeight")));
+
+        g.BeginSection("Fade and drive result");
+        var result = g.Lerp(g.Read<float>(record, OutputSpace, "Snapshot"), desired, timing.Blend);
+        // All clients evaluate the same synchronized selection. An unworn instance follows
+        // Base even if it has retained selection state from saving or cloning.
+        DriveValue(g, output, OutputSpace, "Result", g.Choose<float>(g.IsNull<User>(g.Owner(_root)), baseValue, result));
+    }
+
+    private static (IWorldElement Elapsed, IWorldElement Blend) PlaybackTiming(ExpressionFlux g, IWorldElement core)
+    {
         var elapsed = g.Sub(g.Now, g.Read<float>(core, CoreSpace, "PlaybackStart"));
         var duration = g.Read<float>(core, CoreSpace, "FadeDuration");
         var blend = g.Choose<float>(g.Greater(duration, g.Constant(0f)),
             g.Clamp01(g.Div(elapsed, duration)), g.Constant(1f));
+        return (elapsed, blend);
+    }
 
-        g.BeginSection("Sample, mix tracking, and fade");
-        var mix = g.Each(g.Ref(_outputs), output =>
-        {
-            var sample = Sample(g, current, g.Read<string>(output, OutputSpace, "Id"), elapsed);
-            var baseValue = g.Read<float>(output, OutputSpace, "Base");
-            var desired = g.Choose<float>(g.And(g.Active(current),
-                g.Binary<int>("ValueGreaterOrEqual", sample.Index, g.Constant(0))), sample.Value, baseValue);
-            desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(output, OutputSpace, "TrackingWeight")));
-            return g.Write<float>(output, OutputSpace, "Result", g.Lerp(g.Read<float>(output, OutputSpace, "Snapshot"), desired, blend));
-        });
-        // Diagnostics are derived locally on each client. Writing elapsed every update would
-        // otherwise add continuous network traffic even while a static expression is unchanged.
-        DriveDiagnostic("PlaybackElapsed", elapsed);
-        DriveDiagnostic("FadeWeight", blend);
-        ReceiveUpdate(g, PlaybackTickTag, mix);
-        // Animation time, crossfades and live tracking still require continuous sampling.
-        Link(g.Node("LocalUpdate"), "OnUpdate", g.If(g.IsOwner(_root), mix));
-
-        void DriveDiagnostic(string name, IWorldElement value)
-        {
-            var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>)
-                g.Node("ValueFieldDrive", typeof(float), ("Value", value));
-            var field = _core.GetComponents<DynamicValueVariable<float>>()
-                .Single(v => v.VariableName.Value == Path(CoreSpace, name)).Value;
-            driver.GetRootProxy(addIfMissing: true).Drive.Target = field;
-        }
+    private static void DriveValue(ExpressionFlux g, Slot record, string space, string name, IWorldElement value)
+    {
+        var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>)
+            g.Node("ValueFieldDrive", typeof(float), ("Value", value));
+        var field = record.GetComponents<DynamicValueVariable<float>>()
+            .Single(v => v.VariableName.Value == Path(space, name)).Value;
+        driver.GetRootProxy(addIfMissing: true).Drive.Target = field;
     }
 
     private static IWorldElement ClipAsset(ExpressionFlux g, IWorldElement expression) => g.Node("GetAsset", typeof(Animation),
