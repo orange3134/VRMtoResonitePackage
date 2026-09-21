@@ -85,6 +85,9 @@ LocalUpdate は Playback の1か所だけで使い、アニメーション・フ
 モジュール間の状態は Core の DynamicVariable で渡す。
 Dynamic Impulse は装着者のクライアントで実行され、所有者による処理制限も各入口で確認する。
 
+[Animator / Drive への移行設計と検証](expression-playback-drive-design.md) は別資料を参照。
+現在の実装と、検討中の移行案を区別して記載している。
+
 ## 変更監視と実行タイミング
 
 | 処理 | 実行するきっかけ |
