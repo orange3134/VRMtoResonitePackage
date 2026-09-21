@@ -66,6 +66,8 @@ internal static class ExpressionInputEventChecks
                 var active = Replace<bool>(hand, ExpressionFlux.Out(controller, "IsActive"));
                 var grip = Replace<float>(hand, ExpressionFlux.Out(controller, "Grip"));
                 var trigger = Replace<float>(hand, ExpressionFlux.Out(controller, "Trigger"));
+                var buttons = new[] { "JoystickTouch", "ButtonXA_Touch", "ButtonYB_Touch", "ButtonXA", "ButtonYB" }
+                    .Select(port => Replace<bool>(hand, ExpressionFlux.Out(controller, port))).ToArray();
                 await Frames(10);
                 Set(touch, "StabilitySeconds", 10f);
                 Gesture(side, 1);
@@ -115,7 +117,31 @@ internal static class ExpressionInputEventChecks
                 active.Value.Value = true;
                 await Frames(30);
                 Check(Get<int>(core, side + "Gesture") == 2, side + ": reconnect submits the stable physical gesture");
+                Set(touch, "StabilitySeconds", 0f);
+                // Exhaust the raw sensors, independently of the packed table implementation.
+                // Bits 0/1 are analog grip/trigger extremes; 2..6 are the five bool sensors.
+                for (int mask = 0; mask < 128; mask++)
+                {
+                    bool Held(int bit) => (mask & (1 << bit)) != 0;
+                    grip.Value.Value = Held(0) ? 1f : 0f;
+                    trigger.Value.Value = Held(1) ? 1f : 0f;
+                    for (int i = 0; i < buttons.Length; i++) buttons[i].Value.Value = Held(i + 2);
+                    await Frames(6);
+                    bool thumbTouch = Held(2) || Held(3) || Held(4);
+                    int expected;
+                    if (Held(6)) expected = 5;
+                    else if (Held(5)) expected = 4;
+                    else if (!Held(0)) expected = 2;
+                    else if (Held(1)) expected = thumbTouch ? 1 : 7;
+                    else expected = thumbTouch ? 3 : 6;
+                    Check(Get<int>(hand, "Candidate") == expected && Get<int>(hand, "Stable") == expected &&
+                        Get<int>(core, side + "Gesture") == expected,
+                        $"{side}: sensor combination {mask} preserves gesture {expected}");
+                }
                 active.Value.Value = false;
+                grip.Value.Value = trigger.Value.Value = 0f;
+                foreach (var button in buttons) button.Value.Value = false;
+                Set(touch, "StabilitySeconds", originalStability);
                 await Frames(10);
             }
 

@@ -159,3 +159,11 @@ a shape added after a Catalog asset await, untouched mesh weights, dynamic Resul
 reads and Selection snapshots, blink routing, cloning and package reload.
 Standalone test fields are driven directly and exposed through the same DynamicField.
 Imported-package checks wait for driver mesh assets before verifying named shape links.
+
+Touch controller checks exhaust all 128 raw input combinations on each hand using
+actual exported Flux, preserving the existing button priority, all three thumb-touch
+sources, and grip/trigger interpretation. Existing stability, hysteresis, reconnect,
+input-gate and manual-input-retention checks still run. The graph must use bit packing,
+a finger-pose table and a separate button-priority table, without chained OR/conditional
+nodes in the classifier. Layout checks require their inputs to follow port order in the
+adjacent column, including in saved/reloaded real-mesh fixtures and imported avatars.
