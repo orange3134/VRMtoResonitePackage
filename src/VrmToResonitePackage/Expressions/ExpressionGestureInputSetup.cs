@@ -7,15 +7,25 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
-    private static IWorldElement BuildTouchGesture(ExpressionFlux g, Component controller,
+    private static IWorldElement BuildControllerGesture(ExpressionFlux g, Component controller, string device,
         IWorldElement grip, IWorldElement trigger)
     {
         // AvatarAddonSystem / Touch V1.4.3 separates input bit packing from pose matching.
         // Keep our existing thresholds and button priority; only adopt that graph structure.
-        g.BeginSection("Touch input bits");
-        var thumb = (Nodes.Operators.OR_Multi_Bool)g.Node("OR_Multi_Bool");
-        foreach (string port in new[] { "JoystickTouch", "ButtonXA_Touch", "ButtonYB_Touch" })
-            thumb.Operands.Add((INodeValueOutput<bool>)Out(controller, port));
+        string module = device.Replace("Controller", "");
+        bool wand = device is "ViveController" or "WindowsMRController";
+        g.BeginSection(module + " input bits");
+        IWorldElement thumb;
+        if (wand) thumb = Out(controller, "TouchpadTouch");
+        else
+        {
+            var contacts = (Nodes.Operators.OR_Multi_Bool)g.Node("OR_Multi_Bool");
+            string[] ports = device == "TouchController"
+                ? new[] { "JoystickTouch", "ButtonXA_Touch", "ButtonYB_Touch" }
+                : new[] { "JoystickTouch", "ButtonA_Touch", "ButtonB_Touch" };
+            foreach (string port in ports) contacts.Operands.Add((INodeValueOutput<bool>)Out(controller, port));
+            thumb = contacts;
+        }
 
         var bits = g.Node("ComposeBits_byte");
         var inputs = new (string Name, IWorldElement Value)[] {
@@ -27,7 +37,7 @@ internal sealed partial class ExpressionSystemSetup
             Link(bits, "Bit" + bit, input);
         }
 
-        g.BeginSection("Touch gesture table");
+        g.BeginSection(module + " gesture table");
         // Index bits (low to high): Grip, Trigger, Thumb. An open grip always means HandOpen.
         int[] gestures = { 2, 6, 2, 7, 2, 3, 2, 1 }; // Open, Gun, Open, ThumbsUp, Open, Point, Open, Fist
         var index = g.Node("Cast_byte_To_int", null, ("Input", bits));
@@ -40,13 +50,29 @@ internal sealed partial class ExpressionSystemSetup
             table.Inputs.Add((INodeValueOutput<int>)value);
         }
 
-        g.BeginSection("Touch button priority");
-        // First matching row wins: B/Y, A/X, then the finger pose. No conditional chain.
+        g.BeginSection(module + " button priority");
+        // First matching row wins: RockNRoll, Victory, then the finger pose.
+        // Vive/WindowsMR use the pad-click/grip chord; Touch/Index use B then A.
+        string rockName, victoryName;
+        IWorldElement rock, victory;
+        if (wand)
+        {
+            rockName = "Pad click with grip"; victoryName = "Pad click without grip";
+            var click = Out(controller, "TouchpadClick");
+            rock = g.And(click, grip); victory = g.And(click, g.Not(grip));
+        }
+        else
+        {
+            bool touch = device == "TouchController";
+            rockName = touch ? "B or Y pressed" : "B pressed";
+            victoryName = touch ? "A or X pressed" : "A pressed";
+            rock = Out(controller, touch ? "ButtonYB" : "ButtonB");
+            victory = Out(controller, touch ? "ButtonXA" : "ButtonA");
+        }
         var priority = (Nodes.Utility.IndexOfFirstValueMatch<bool>)g.Node("IndexOfFirstValueMatch", typeof(bool),
             ("Match", g.Constant(true, shared: false)));
         foreach (var (name, condition) in new[] {
-            ("B or Y pressed", Out(controller, "ButtonYB")),
-            ("A or X pressed", Out(controller, "ButtonXA")),
+            (rockName, rock), (victoryName, victory),
             ("Otherwise use finger pose", g.Constant(true, shared: false)) })
         {
             var input = g.Node("ValueRelay", typeof(bool), ("Input", condition));
@@ -55,7 +81,7 @@ internal sealed partial class ExpressionSystemSetup
         }
         var selected = (Nodes.ValueMultiplex<int>)g.Node("ValueMultiplex", typeof(int), ("Index", Out(priority, "Index")));
         var results = new (string Name, IWorldElement Value)[] {
-            ("B or Y: RockNRoll", g.Constant(5)), ("A or X: Victory", g.Constant(4)), ("Finger pose", Out(table, "Output")) };
+            (rockName + ": RockNRoll", g.Constant(5)), (victoryName + ": Victory", g.Constant(4)), ("Finger pose", Out(table, "Output")) };
         foreach (var (name, value) in results)
         {
             var input = g.Node("ValueRelay", typeof(int), ("Input", value));

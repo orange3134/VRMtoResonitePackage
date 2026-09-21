@@ -160,10 +160,12 @@ reads and Selection snapshots, blink routing, cloning and package reload.
 Standalone test fields are driven directly and exposed through the same DynamicField.
 Imported-package checks wait for driver mesh assets before verifying named shape links.
 
-Touch controller checks exhaust all 128 raw input combinations on each hand using
-actual exported Flux, preserving the existing button priority, all three thumb-touch
-sources, and grip/trigger interpretation. Existing stability, hysteresis, reconnect,
-input-gate and manual-input-retention checks still run. The graph must use bit packing,
-a finger-pose table and a separate button-priority table, without chained OR/conditional
-nodes in the classifier. Layout checks require their inputs to follow port order in the
-adjacent column, including in saved/reloaded real-mesh fixtures and imported avatars.
+Controller checks exhaust 128 raw input combinations per hand for Touch and Index,
+and 16 per hand for Vive and WindowsMR (576 cases total) using actual exported Flux.
+They preserve each device's thumb-touch sources, analog/digital grip interpretation,
+and button priority: B before A, or pad click with/without grip. Stability, analog
+hysteresis, reconnect, input gates and manual-input retention run on every device.
+Every classifier must use bit packing, a finger-pose table and a separate button-priority
+table, without chained OR/conditional nodes. Layout checks require their inputs to
+follow port order in the adjacent column, including in saved/reloaded real-mesh fixtures
+and imported avatars.

@@ -13,7 +13,7 @@ internal static class ExpressionInputEventChecks
         var core = expressions.FindChild("Core");
         var api = expressions.FindChild("API").FindChild("Receivers");
         var catalog = expressions.FindChild("Catalog");
-        var touch = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules").FindChild("Touch");
+        var modules = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");
         var mocks = expressions.Parent.AddSlot("Temporary sensor inputs");
         var restore = new List<(ISyncRef Port, IWorldElement Target)>();
         // The synthetic fixture is parented to UserRoot rather than equipped through
@@ -21,7 +21,7 @@ internal static class ExpressionInputEventChecks
         var assigner = expressions.Parent.FindChild("Avatar Root Identification")
             .GetComponent<FrooxEngine.CommonAvatar.AvatarUserReferenceAssigner>();
         var wearerReferences = assigner.References.Select(r => (Reference: r, User: r.Target)).ToArray();
-        float originalStability = Get<float>(touch, "StabilitySeconds");
+        var originalStability = modules.Children.ToDictionary(module => module, module => Get<float>(module, "StabilitySeconds"));
         void Gesture(string side, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             api, side == "Left" ? ExpressionSystemSetup.LeftTag : ExpressionSystemSetup.RightTag, true, value);
         void Allow(bool value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
@@ -59,89 +59,106 @@ internal static class ExpressionInputEventChecks
             Check(Reference<Slot>(core, "CurrentExpression") == smile && Get<bool>(smile, "MenuAvailable"),
                 "enabling a mapped clip refreshes selection and menu availability");
 
+            foreach (var module in modules.Children)
             foreach (string side in new[] { "Left", "Right" })
             {
-                var hand = touch.FindChild(side);
-                var controller = hand.GetComponentsInChildren<ProtoFluxNode>().Single(n => n.GetType().Name == "TouchController");
+                var hand = module.FindChild(side);
+                bool wand = module.Name is "Vive" or "WindowsMR";
+                var controller = hand.GetComponentsInChildren<ProtoFluxNode>().Single(n => n.GetType().Name == module.Name + "Controller");
                 var active = Replace<bool>(hand, ExpressionFlux.Out(controller, "IsActive"));
-                var grip = Replace<float>(hand, ExpressionFlux.Out(controller, "Grip"));
+                var grip = wand ? null : Replace<float>(hand, ExpressionFlux.Out(controller, "Grip"));
+                var gripButton = wand ? Replace<bool>(hand, ExpressionFlux.Out(controller, "Grip")) : null;
+                void SetGrip(float value)
+                {
+                    if (wand) gripButton.Value.Value = value > 0.5f;
+                    else grip.Value.Value = value;
+                }
                 var trigger = Replace<float>(hand, ExpressionFlux.Out(controller, "Trigger"));
-                var buttons = new[] { "JoystickTouch", "ButtonXA_Touch", "ButtonYB_Touch", "ButtonXA", "ButtonYB" }
-                    .Select(port => Replace<bool>(hand, ExpressionFlux.Out(controller, port))).ToArray();
+                string[] buttonPorts = wand ? new[] { "TouchpadTouch", "TouchpadClick" }
+                    : module.Name == "Touch" ? new[] { "JoystickTouch", "ButtonXA_Touch", "ButtonYB_Touch", "ButtonXA", "ButtonYB" }
+                    : new[] { "JoystickTouch", "ButtonA_Touch", "ButtonB_Touch", "ButtonA", "ButtonB" };
+                var buttons = buttonPorts.Select(port => Replace<bool>(hand, ExpressionFlux.Out(controller, port))).ToArray();
                 await Frames(10);
-                Set(touch, "StabilitySeconds", 10f);
+                Set(module, "StabilitySeconds", 10f);
                 Gesture(side, 1);
                 active.Value.Value = true;
                 await Frames(3);
                 Check(Get<int>(hand, "Candidate") == 2 && Get<int>(core, side + "Gesture") == 1,
-                    side + ": new sensor candidate waits for stability");
-                Set(touch, "StabilitySeconds", 0.05f);
+                    module.Name + "/" + side + ": new sensor candidate waits for stability");
+                Set(module, "StabilitySeconds", 0.05f);
                 await Frames(30);
                 Check(Get<int>(core, side + "Gesture") == 2 && Get<int>(hand, "Stable") == 2,
-                    side + ": time threshold sends the gesture without a further sensor change");
+                    module.Name + "/" + side + ": time threshold sends the gesture without a further sensor change");
                 Gesture(side, 1);
-                grip.Value.Value = 0.1f;
+                SetGrip(0.1f);
                 await Frames(10);
-                Check(Get<int>(core, side + "Gesture") == 1, side + ": unchanged interpreted gesture preserves newer manual input");
-                grip.Value.Value = 0.8f;
+                Check(Get<int>(core, side + "Gesture") == 1, module.Name + "/" + side + ": unchanged interpreted gesture preserves newer manual input");
+                SetGrip(0.8f);
                 await Frames(30);
                 Check(Get<int>(core, side + "Gesture") == 6 && Get<bool>(hand, "GripHeld"),
-                    side + ": grip transition sends HandGun");
-                grip.Value.Value = 0.5f;
-                await Frames(10);
-                Check(Get<int>(core, side + "Gesture") == 6 && Get<bool>(hand, "GripHeld"),
-                    side + ": grip hysteresis retains held state");
-                grip.Value.Value = 0.4f;
+                    module.Name + "/" + side + ": grip transition sends HandGun");
+                if (!wand)
+                {
+                    SetGrip(0.5f); await Frames(10);
+                    Check(Get<int>(core, side + "Gesture") == 6 && Get<bool>(hand, "GripHeld"),
+                        module.Name + "/" + side + ": grip hysteresis retains held state");
+                }
+                SetGrip(0.4f);
                 await Frames(30);
                 Check(Get<int>(core, side + "Gesture") == 2 && !Get<bool>(hand, "GripHeld"),
-                    side + ": crossing release threshold sends HandOpen");
+                    module.Name + "/" + side + ": releasing grip sends HandOpen");
                 trigger.Value.Value = 0.8f;
                 await Frames(10);
-                Check(Get<bool>(hand, "TriggerHeld"), side + ": trigger state updates even when the gesture is unchanged");
+                Check(Get<bool>(hand, "TriggerHeld"), module.Name + "/" + side + ": trigger state updates even when the gesture is unchanged");
+                trigger.Value.Value = 0.5f;
+                await Frames(10);
+                Check(Get<bool>(hand, "TriggerHeld"), module.Name + "/" + side + ": trigger hysteresis retains held state");
                 trigger.Value.Value = 0.4f;
                 await Frames(10);
-                Check(!Get<bool>(hand, "TriggerHeld"), side + ": trigger release updates independently");
+                Check(!Get<bool>(hand, "TriggerHeld"), module.Name + "/" + side + ": trigger release updates independently");
                 Allow(false);
                 await Frames(10);
                 Check(Get<int>(hand, "Candidate") == -1 && Get<int>(hand, "Stable") == -1 &&
-                    Get<int>(core, side + "Gesture") == 2, side + ": input gate resets sensing while retaining the last value");
+                    Get<int>(core, side + "Gesture") == 2, module.Name + "/" + side + ": input gate resets sensing while retaining the last value");
                 Allow(true);
                 await Frames(30);
-                Check(Get<int>(hand, "Stable") == 2, side + ": re-enabling input redetects a stable gesture");
+                Check(Get<int>(hand, "Stable") == 2, module.Name + "/" + side + ": re-enabling input redetects a stable gesture");
                 active.Value.Value = false;
                 await Frames(10);
                 Check(Get<int>(core, side + "Gesture") == 2 && Get<int>(hand, "Candidate") == -1 &&
                     Get<int>(hand, "Stable") == -1 && !Get<bool>(hand, "GripHeld") && !Get<bool>(hand, "TriggerHeld"),
-                    side + ": disconnect retains input and resets sensing once");
+                    module.Name + "/" + side + ": disconnect retains input and resets sensing once");
                 Gesture(side, 4);
                 active.Value.Value = true;
                 await Frames(30);
-                Check(Get<int>(core, side + "Gesture") == 2, side + ": reconnect submits the stable physical gesture");
-                Set(touch, "StabilitySeconds", 0f);
+                Check(Get<int>(core, side + "Gesture") == 2, module.Name + "/" + side + ": reconnect submits the stable physical gesture");
+                Set(module, "StabilitySeconds", 0f);
                 // Exhaust the raw sensors, independently of the packed table implementation.
-                // Bits 0/1 are analog grip/trigger extremes; 2..6 are the five bool sensors.
-                for (int mask = 0; mask < 128; mask++)
+                // Bits 0/1 are grip/trigger extremes; remaining bits are the device button/touch sensors.
+                for (int mask = 0; mask < (1 << (buttonPorts.Length + 2)); mask++)
                 {
                     bool Held(int bit) => (mask & (1 << bit)) != 0;
-                    grip.Value.Value = Held(0) ? 1f : 0f;
+                    SetGrip(Held(0) ? 1f : 0f);
                     trigger.Value.Value = Held(1) ? 1f : 0f;
                     for (int i = 0; i < buttons.Length; i++) buttons[i].Value.Value = Held(i + 2);
                     await Frames(6);
-                    bool thumbTouch = Held(2) || Held(3) || Held(4);
+                    bool thumbTouch = wand ? Held(2) : Held(2) || Held(3) || Held(4);
+                    bool rock = wand ? Held(3) && Held(0) : Held(6);
+                    bool victory = wand ? Held(3) && !Held(0) : Held(5);
                     int expected;
-                    if (Held(6)) expected = 5;
-                    else if (Held(5)) expected = 4;
+                    if (rock) expected = 5;
+                    else if (victory) expected = 4;
                     else if (!Held(0)) expected = 2;
                     else if (Held(1)) expected = thumbTouch ? 1 : 7;
                     else expected = thumbTouch ? 3 : 6;
                     Check(Get<int>(hand, "Candidate") == expected && Get<int>(hand, "Stable") == expected &&
                         Get<int>(core, side + "Gesture") == expected,
-                        $"{side}: sensor combination {mask} preserves gesture {expected}");
+                        $"{module.Name}/{side}: sensor combination {mask} preserves gesture {expected}");
                 }
                 active.Value.Value = false;
-                grip.Value.Value = trigger.Value.Value = 0f;
+                SetGrip(0f); trigger.Value.Value = 0f;
                 foreach (var button in buttons) button.Value.Value = false;
-                Set(touch, "StabilitySeconds", originalStability);
+                Set(module, "StabilitySeconds", originalStability[module]);
                 await Frames(10);
             }
 
@@ -277,7 +294,7 @@ internal static class ExpressionInputEventChecks
             foreach (var entry in wearerReferences) entry.Reference.Target = entry.User;
             foreach (var (port, target) in restore) port.Target = target;
             mocks.Destroy();
-            Set(touch, "StabilitySeconds", originalStability);
+            foreach (var (module, stability) in originalStability) Set(module, "StabilitySeconds", stability);
         }
         await Frames(10);
         Allow(true); Gesture("Left", 0); Gesture("Right", 0);

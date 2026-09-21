@@ -268,15 +268,15 @@ Catalog の Slot を固定用に保持する Override 変数は生成しない�
 コンテキストメニューの左右項目・直接選択は bool が false でも使える。
 元の ExpressionMenu の Button/Toggle は、このメニュー専用選択へ変換する。
 
-### Touch のハンドサイン判定
+### コントローラーのハンドサイン判定
 
-`Inputs/HandGestures/Modules/Touch/Left|Right/Logic` は次の順で読む。
+`Inputs/HandGestures/Modules/<機種>/Left|Right/Logic` は全機種共通で次の順に読む。
 
-1. `Shared inputs`: TouchController と、Grip・Trigger の押下／解放しきい値による判定。
-2. `Touch input bits`: 親指の3つの接触を1つの `OR_Multi_Bool` にまとめる。
+1. `Shared inputs`: 機種別 Controller と、Grip・Trigger の押下／解放判定。Vive・WindowsMR の Grip は bool を直接使用する。
+2. `<機種> input bits`: Touch・Index は親指の3つの接触を1つの `OR_Multi_Bool` にまとめ、Vive・WindowsMR は TouchpadTouch を使う。
    名前付き Relay の `Bit0=GripHeld`、`Bit1=TriggerHeld`、`Bit2=親指接触` を `ComposeBits_byte` へ接続する。
-3. `Touch gesture table`: ビット値を添字にして `ValueMultiplex<int>` の8行から指の形を選ぶ。
-4. `Touch button priority`: `IndexOfFirstValueMatch<bool>` で B/Y 押下、A/X 押下、常時 true の順に判定し、
+3. `<機種> gesture table`: ビット値を添字にして `ValueMultiplex<int>` の8行から指の形を選ぶ。
+4. `<機種> button priority`: `IndexOfFirstValueMatch<bool>` で下表の優先1、優先2、常時 true の順に判定し、
    `ValueMultiplex<int>` の RockNRoll、Victory、指の形から選ぶ。
 5. `Stability and dispatch`: 従来どおり安定待ちと入力制限を適用し、変化した手の値だけを送信する。
 
@@ -291,8 +291,17 @@ Catalog の Slot を固定用に保持する Override 変数は生成しない�
 | 6 | 110 | HandOpen (2) |
 | 7 | 111 | Fist (1) |
 
-親指接触は JoystickTouch / ButtonXA_Touch / ButtonYB_Touch のいずれか。
-B/Y 押下を最優先、次に A/X 押下を優先するため、両ボタンを押した場合は RockNRoll。
+機種ごとの入力と優先順位は次のとおり。どちらにも一致しない場合に指形状表を使う。
+
+| 機種 | Grip | 親指接触 | 優先1: RockNRoll (5) | 優先2: Victory (4) |
+|---|---|---|---|---|
+| Touch | float・ヒステリシス | JoystickTouch / ButtonXA_Touch / ButtonYB_Touch の OR | B/Y 押下 | A/X 押下 |
+| Index | float・ヒステリシス | JoystickTouch / ButtonA_Touch / ButtonB_Touch の OR | B 押下 | A 押下 |
+| Vive | bool | TouchpadTouch | TouchpadClick かつ Grip | TouchpadClick かつ Grip なし |
+| WindowsMR | bool | TouchpadTouch | TouchpadClick かつ Grip | TouchpadClick かつ Grip なし |
+
+Touch・Index で両ボタンを押した場合は RockNRoll。Trigger は全機種で float のヒステリシス判定を使う。
+`ExpressionGestureInputSetup.cs` の共通処理で、全機種の指形状表とボタン優先表を生成する。
 入力は接続先の左隣に上からポート順で配置し、8行の定数を共有しないことで対応する入力行の近くに置く。
 入力 Relay と定数の Slot 名に、ビットの意味・ビット値・ジェスチャー名を付ける。
 判定条件と既定のしきい値（押下0.55／解放0.45）、安定待ち0.05秒は変更していない。
@@ -535,3 +544,8 @@ Plum の再変換・inspect と保存パッケージの左右64通り・102出�
 2026-09-21: Touch 入力は AvatarAddonSystem の Touch V1.4.3 を読み取り調査し、ビット化・指形状表・ボタン優先表に整理した。
 既存の条件としきい値を維持し、左右各128通りの入力・ヒステリシス・安定待ち・再接続・手動入力保持を ExpressionSmoke で検証した。
 入力を左隣のポート順に配置する検証は複製・保存再読込でも成功。Plum の変換・inspect・左右64通りの再生と変更前の全 AnimX・Catalog・対応表の比較も成功した。
+
+2026-09-21: 同じ判定構成を Index・Vive・WindowsMR に展開し、全4機種で生成処理を共通化した。
+機種固有の接触入力、B/A の優先順位、パッドクリックと Grip の組み合わせ、アナログ／bool の Grip の違いは維持する。
+ExpressionSmoke は左右合計576通りの入力と各機種の安定待ち・ヒステリシス・再接続・入力制限・手動入力保持を検証した。
+全機種の入力配置と複製・保存再読込の検証、Plum の再変換・inspect も成功した。

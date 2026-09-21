@@ -189,8 +189,8 @@ Touch・Index・Vive・WindowsMR の各モジュールに以下の設定を持�
 | `StabilitySeconds` | float | 0.05 | 候補が変わらず続く必要時間（秒） |
 
 比較は厳密な `入力値 > しきい値`。Vive・WindowsMR は Grip の bool 出力を直接使うため、Grip の2設定は判定に使わない。
-Touch はこのしきい値で判定した Grip・Trigger と親指接触をビット化し、8行の指形状表と3行のボタン優先表で選ぶ。
-判定条件・公開設定は従来と同じ。詳細は[Touch のハンドサイン判定](expression-system.md#touch-のハンドサイン判定)を参照。
+全4機種で Grip・Trigger の判定結果と親指接触をビット化し、8行の指形状表と3行のボタン優先表で選ぶ。
+判定条件・公開設定は従来と同じ。詳細は[コントローラーのハンドサイン判定](expression-system.md#コントローラーのハンドサイン判定)を参照。
 各モジュールの Left / Right は独立した ExpressionGestureHand スコープを持つ。
 機種別入力もローカルな `StoredValue<bool>` で初期化済みかを管理し、User 参照は保持しない。
 ローカルユーザーが装着者でなくなるとフラグを false に戻し、次の装着時に候補・安定値・押下判定を初期化する。

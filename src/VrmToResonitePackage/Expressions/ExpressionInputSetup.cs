@@ -202,30 +202,8 @@ internal sealed partial class ExpressionSystemSetup
             g.Read<float>(modRef, GestureSettingsSpace, "GripReleaseThreshold"), g.Read<float>(modRef, GestureSettingsSpace, "GripThreshold")));
         var indexCurled = g.Greater(trigger, g.Choose<float>(g.Read<bool>(handRef, GestureHandSpace, "TriggerHeld"),
             g.Read<float>(modRef, GestureSettingsSpace, "TriggerReleaseThreshold"), g.Read<float>(modRef, GestureSettingsSpace, "TriggerThreshold")));
-        IWorldElement gesture;
-        if (device == "TouchController")
-            gesture = BuildTouchGesture(g, controller, grip, indexCurled);
-        else
-        {
-            IWorldElement thumb, victory, rock;
-            if (wand)
-            {
-                thumb = Out(controller, "TouchpadTouch");
-                victory = g.And(Out(controller, "TouchpadClick"), g.Not(grip));
-                rock = g.And(Out(controller, "TouchpadClick"), grip);
-            }
-            else
-            {
-                thumb = g.Or(Out(controller, "JoystickTouch"), Out(controller, "ButtonA_Touch"), Out(controller, "ButtonB_Touch"));
-                victory = Out(controller, "ButtonA");
-                rock = Out(controller, "ButtonB");
-            }
-            // Devices without individual finger curl use explicit button chords for Victory/Rock.
-            gesture = g.Choose<int>(rock, g.Constant(5), g.Choose<int>(victory, g.Constant(4),
-                g.Choose<int>(grip, g.Choose<int>(indexCurled, g.Choose<int>(thumb, g.Constant(1), g.Constant(7)),
-                    g.Choose<int>(thumb, g.Constant(3), g.Constant(6))), g.Constant(2))));
-        }
-        if (device == "TouchController") g.BeginSection("Stability and dispatch");
+        var gesture = BuildControllerGesture(g, controller, device, grip, indexCurled);
+        g.BeginSection("Stability and dispatch");
         var changed = g.NotEqual<int>(gesture, g.Read<int>(handRef, GestureHandSpace, "Candidate"));
         var stable = g.Not(g.Greater(g.Add(g.Read<float>(handRef, GestureHandSpace, "Since"), g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds")), g.Now));
         var send = g.Sequence(SendGesture(g, g.Text(GestureTag(kind)), gesture),

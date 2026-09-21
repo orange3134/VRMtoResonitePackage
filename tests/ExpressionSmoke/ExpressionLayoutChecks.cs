@@ -46,44 +46,44 @@ internal static class ExpressionLayoutChecks
             }
         }
         CheckKeyboardInputs(expressions);
-        CheckTouchInputs(expressions);
+        CheckControllerInputs(expressions);
         if (dataLinks == 0 || impulseLinks == 0) throw new InvalidOperationException("Direction checks must cover both data and impulse connections");
         Console.WriteLine($"LAYOUT: {dataLinks} data/reference links and {impulseLinks} impulse links point right; {feedbackLinks} feedback links share a layer");
     }
 
-    private static void CheckTouchInputs(Slot expressions)
+    private static void CheckControllerInputs(Slot expressions)
     {
-        var touch = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules").FindChild("Touch");
-        if (touch == null) return; // The removable-module regression deliberately deletes Touch.
-        foreach (var hand in touch.Children.Where(s => s.Name is "Left" or "Right"))
+        var modules = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");
+        foreach (var module in modules.Children)
+        foreach (var hand in module.Children.Where(s => s.Name is "Left" or "Right"))
         {
             var board = hand.FindChild("Logic");
             var nodes = board.GetComponentsInChildren<ProtoFluxNode>();
-            var classifier = nodes.Where(n => n.Slot.Parent.Name.Contains("Touch ", StringComparison.Ordinal)).ToArray();
+            var classifier = nodes.Where(n => n.Slot.Parent.Name.Contains(module.Name + " ", StringComparison.Ordinal)).ToArray();
             Check(classifier.Count(n => n.GetType().Name == "ComposeBits_byte") == 1 &&
                 classifier.Count(n => n.GetType().Name == "ValueMultiplex`1") == 2 &&
                 classifier.Count(n => n.GetType().Name == "IndexOfFirstValueMatch`1") == 1 &&
-                classifier.Count(n => n.GetType().Name == "OR_Multi_Bool") == 1,
-                "Touch separates bit packing, finger table and button priority");
+                classifier.Count(n => n.GetType().Name == "OR_Multi_Bool") == (module.Name is "Touch" or "Index" ? 1 : 0),
+                module.Name + " separates bit packing, finger table and button priority");
             Check(classifier.All(n => n.GetType().Name is not "ValueConditional`1" and not "OR_Bool"),
-                "Touch classifier contains no chained conditionals or binary OR nodes");
+                module.Name + " classifier contains no chained conditionals or binary OR nodes");
             float X(ProtoFluxNode n) => board.GlobalPointToLocal(n.Slot.GlobalPosition).x;
             float Y(ProtoFluxNode n) => board.GlobalPointToLocal(n.Slot.GlobalPosition).y;
             foreach (var target in classifier.Where(n => n.GetType().Name is "ComposeBits_byte" or "ValueMultiplex`1" or "IndexOfFirstValueMatch`1"))
             {
                 var inputs = target.AllInputs.Select(p => Owner(p.Target)).Where(n => n != null).Distinct().ToArray();
                 for (int i = 1; i < inputs.Length; i++)
-                    Check(Y(inputs[i - 1]) > Y(inputs[i]) + 0.01f, hand.Name + ": Touch inputs follow top-to-bottom port order");
+                    Check(Y(inputs[i - 1]) > Y(inputs[i]) + 0.01f, module.Name + "/" + hand.Name + ": controller inputs follow top-to-bottom port order");
                 foreach (var input in inputs)
                     Check(X(target) - X(input) is > 0 and < 0.65f,
-                        hand.Name + ": Touch inputs stay in the adjacent column");
+                        module.Name + "/" + hand.Name + ": controller inputs stay in the adjacent column");
             }
             var fingerTable = classifier.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueMultiplex<int>>()
                 .Single(n => n.Slot.Parent.Name.Contains("gesture table", StringComparison.Ordinal));
             Check(fingerTable.Inputs.Count == 8 && fingerTable.Inputs.Distinct().Count() == 8,
                 "eight separately labelled finger poses remain easy to inspect");
         }
-        Console.WriteLine("LAYOUT: Touch bit inputs, finger table and button priority are ordered and consumer-local");
+        Console.WriteLine("LAYOUT: controller bit inputs, finger table and button priority are ordered and consumer-local");
     }
 
     private static void CheckKeyboardInputs(Slot expressions)
