@@ -355,6 +355,37 @@ copy's GameObject identity. Same-named copies must not replace the primary model
 table. Descriptor blink indices resolve through the referenced renderer's source mesh,
 so an accessory with a different shape order retains its own blink name.
 
+Descriptor に有効な Blink 番号と renderer があれば、既存の Parser → ModelAdapter → AvatarSetup の経路で OpenCloseTarget まで設定する。
+未割当の -1 は設定情報の欠如として扱い、名前検出で補うかは別の方針になる。
+
+### Plum の瞬き未設定と AvatarCreator の違い
+
+2026-09-21、Plum v1.0.1 と Resonite 2026.9.18.82 の実 DLL を調査した。
+Plum.prefab は enableEyeLook=1、eyelidType=2、eyelidsSkinnedMesh に参照ありだが、
+eyelidsBlendshapes の packed 値 `ffffffff1300000014000000` は `[-1, 19, 20]`。
+配列は Blink / LookingUp / LookingDown の順なので、瞬きだけが未割当である。
+Body の19・20はそれぞれ vrc.Looking_Up / vrc.Looking_Down。vrc.Blink 自体は18番に存在するが、Descriptor は18を指定していない。
+VrchatAvatarParser は先頭が負なら avatar.Blink を作らない。19・20を代わりの瞬きとして使わない。
+
+Animator の補完は、初期状態のループClip、開0・閉100を持つ単一shape、名前が `blink` と完全一致、
+他レイヤーとの競合なし、などを満たす場合だけ。Plum の `eye_blink_1` / `eye_blink_2` はこの名前条件を満たさない。
+avatar.Blink=null のままなので VrchatModelAdapter が blink preset を作らず、AvatarSetup.SetupEyesAndBlink の
+ResolveBinds は空になる。目の回転用コンポーネントは作られるが、EyeLinearDriver.Eyes は0件になる。
+
+一方、実 DLL の AvatarCreator.SetupEyes はアバター内の SkinnedMeshRenderer ごとに BlendShape 名を走査する。
+NameHeuristicsHelper.SplitName → IsBlinkBlendshape → NameToChirality → GetBetterBlinkCandidate で候補を選び、
+左右別候補が揃えば Left/Right、共通候補なら Combined の OpenCloseTarget を接続する。
+判定には `blink`、`blinking`、`wink`、`eye` と `close` / `closed` の組合せ、日本語のまばたき・ウィンクを使う。
+同点候補は短い名前を優先し、長さも同じなら後から走査した候補を採る。形状の閉じ方を比較しているわけではない。
+AvatarCreator の呼び出し側は Setup Eyes 有効かつ左右の目ボーンが見つかる場合に SetupEyes を実行する。
+Plum の実 FBX 順序に実 DLL の判定関数を適用すると、Left=eye_blink_2_L（26番）、Right=eye_blink_2_R（27番）となった。
+共通候補では vrc.Blink が最上位だが、左右候補が揃うと左右別を使う。これは名前判定の検証で、見た目の比較ではない。
+
+ResoPon は目のピボット配置を AvatarCreator に合わせているが、この BlendShape 名による瞬き補完は実装していない。
+補完を追加するなら、明示的な瞬きbindingを優先し、名前による候補の曖昧さと適用条件を定める必要がある。
+接続は表情システムの構築前に行う。対象が表情の出力にも含まれる場合は、既存の OpenCloseTarget → Outputs/Base への付け替えと BlinkMode 初期化へ渡せる。
+表情構築後に AvatarCreator.SetupEyes をそのまま実行すると、目のpivot/managerの重複や既存Driveとの競合を起こし得る。
+
 ## PhysBone
 
 - unpack済みprefabが複数のFBXを参照しても、物理用の親骨は主モデルを候補にして所属とフルパスを照合する。

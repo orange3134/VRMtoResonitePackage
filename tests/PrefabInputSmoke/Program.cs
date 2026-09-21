@@ -905,6 +905,11 @@ Transform:
     Check(cleared.Visemes.Count == 0 && cleared.Blink == null &&
           VrchatModelAdapter.ToVrmModel(cleared).Expressions.Count == 0,
         "Descriptor arrays can shrink and object references can be explicitly cleared");
+    var noBlink = Read(settings
+        + Change("customEyeLookSettings.eyelidsBlendshapes", "ffffffff1300000014000000")
+        + Change("customEyeLookSettings.eyelidsBlendshapes.Array.data[0]", "-1") + localObjects);
+    Check(noBlink.Blink == null && VrchatModelAdapter.ToVrmModel(noBlink).Expressions.All(e => e.Preset != "blink"),
+        "Descriptor Blink=-1 never substitutes LookingUp/LookingDown indices (Plum layout)");
     Check(Read(settings + Change("enableEyeLook", "0") + localObjects).LeftEyeBoneName == null,
         "Variant can disable inherited eye settings");
     var stripped = Read(settings + Change("VisemeSkinnedMesh", "{fileID: 904}", true) + localObjects + $$"""
