@@ -89,6 +89,11 @@ internal sealed partial class ExpressionSystemSetup
         var ready = g.And(g.Equal<Slot>(current, evaluatedReference),
             g.Equal<float>(g.Read<float>(core, CoreSpace, "PlaybackStart"), FieldSource(g, evaluatedStart)));
         var result = g.Choose<float>(ready, g.Lerp(snapshot, desired, FieldSource(g, blend)), snapshot);
+        // Blink is applied after expression fading so its amplitude is not attenuated
+        // by FadeWeight. Base is the EyeLinearDriver's independent driven input.
+        var blinkMode = g.Read<int>(record, OutputSpace, "BlinkMode");
+        result = g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(1)), g.Binary<float>("ValueMax", result, baseValue),
+            g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(2)), g.Binary<float>("ValueMin", result, baseValue), result));
         // All clients evaluate the same synchronized selection. An unworn instance follows
         // Base even if it has retained selection state from saving or cloning.
         DriveValue(g, output, OutputSpace, "Result", g.Choose<float>(g.IsNull<User>(g.Owner(_root)), baseValue, result));

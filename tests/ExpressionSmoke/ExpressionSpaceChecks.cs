@@ -59,8 +59,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>(); References<IAssetProvider<Animation>>();
-        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 8,
-            "shared playback timing is identified by package version 8");
+        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 9,
+            "blink cooperation is identified by package version 9");
         var core = root.FindChild("Core");
         Check(core.WriteDynamicVariable("Expr/AllowExternalInput", false) != DynamicVariableWriteResult.Success,
             "legacy shared-space writes cannot modify the new Core");

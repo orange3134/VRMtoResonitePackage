@@ -288,7 +288,7 @@ AnimX のトラックは Node=`Expression`、Property=出力の `Id` を使う�
 新しい BlendShape を操作する場合は Outputs の出力レコードとフィールド接続も必要になる。
 `Bindings` は編集時の参照情報であり、AnimX のトラックを自動で書き換えるものではない。
 
-## 外部イベント API（Version 8、Tag・引数は Version 4 と共通）
+## 外部イベント API（Version 9、Tag・引数は Version 4 と共通）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
 左右の通常入力・メニュー入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
@@ -355,7 +355,7 @@ Playback が WorldTime − PlaybackStart を一度計算し、Loop の場合だ�
 フェードには折り返し前の経過時間を使い、FadeDuration 後も動画・ループの再生を継続する。
 各 Output は AnimationTime と FadeWeight を ValueSource で読み、時刻や折り返しを再計算しない。
 独立したボード間では評価順が保証されないため、Playback は計算対象の開始時刻・表情参照も内部フィールドへ駆動する。
-各 Output は現在の選択と照合し、不一致なら Snapshot を維持する。これにより切替直後の古い共有値による飛びを防ぐ。
+各 Output は現在の選択と照合し、不一致なら表情の補間値を Snapshot に保つ（瞬き合成はその後に適用）。これにより切替直後の古い共有値による飛びを防ぐ。
 Snapshot は切り替え時に装着者が保存し、Result は各クライアントの Drive が計算する。
 未装着時は、保存・複製で選択状態が残っていても Result を Base にする。
 Result を外部から直接書き換えず、入力・Clip・TrackingWeight などを操作する。
@@ -363,6 +363,14 @@ Result を外部から直接書き換えず、入力・Clip・TrackingWeight な
 既存の瞬き・口パク等のドライバーは Outputs の `Base` に接続し直す。
 表情にトラックがない出力は Base を使い、ある出力はアニメーション値を使う。
 出力ごとの `TrackingWeight`（0〜1）で Base の混合率を調整できる。
+瞬きは `BlinkMode` で別に合成する。0は通常の混合、1はフェード後の表情値と Base の最大値、2は最小値を採用する。
+生成時に既存の `EyeLinearDriver.Eyes[].OpenCloseTarget` を検出した出力だけ、閉じる方向に合わせて1または2に初期化する。
+開いている表情でも瞬きが通り、閉じている表情は瞬きが終わっても開かない。フェード中も瞬きの振幅を減らさない。
+口パク・視線などの他のドライバーにはこの合成を自動適用しない。
+後から瞬きを設定する場合は、OpenCloseTarget を該当 `Outputs/シェイプキー` の `Base` の Value フィールドへ接続し、
+`BlinkMode=1`（大きいほど閉じる通常の設定）にする。小さいほど閉じる設定では2にする。`TrackingWeight` は0のままでよい。
+元の BlendShape フィールドは Result からの ValueCopy が Drive するため、OpenCloseTarget を直接重ねて接続しない。
+既存パッケージをこの方式にするには再変換が必要。瞬き binding がないアバターは、再変換だけで Eyes の接続先が増えるわけではない。
 複製・再ロード・再装着時には左右状態を0に、AllowExternalInput を true に初期化する。
 VRM の感情表情も同じ Catalog を使うが、VRChat の条件がないため対応表は未設定から始まる。
 
@@ -463,3 +471,9 @@ ValueSource はフィールド変更を伝播するが、独立した FluxGroup 
 ExpressionSmoke は共有ドライバーの入力差し替え、切替の最初の更新、ループ周期編集、短い Clip のフェード、複製・保存再読込を検証する。
 Plum の再変換・inspect、左右64通り・102出力・8表情の再生、v7 パッケージとの全 AnimX・Catalog・出力接続・対応表の比較も成功した。
 Plum の総ノード数は5,973から5,167へ減り、130ボード・最大95ノードとボード間の独立性を維持した。
+
+2026-09-21: Version 9 は EyeLinearDriver の OpenCloseTarget を Base へ移した出力に BlinkMode を設定し、フェード後に閉じる側を合成する。
+Base に瞬きが届いても、Clip が同じトラックを持ち TrackingWeight=0 なら従来の混合では使われなかった。
+実 DLL の EyeLinearDriver.UpdateTarget は OpenState／ClosedState へ値を写すため、閉じるほど小さい設定では min が必要。
+ExpressionSmoke は実 EyeManager／EyeLinearDriver で開眼・閉眼・左右別入力・逆方向・フェード中の瞬きと、複製・保存再読込を検証した。
+Plum の再変換・inspect、左右64通り・102出力・8表情の再生、v8 パッケージとの Catalog・全 AnimX・対応表の比較も成功した。

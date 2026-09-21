@@ -143,3 +143,9 @@ ValueSource to read these fields; graph checks forbid per-output WorldTime/Value
 Replacing the shared producers verifies that all outputs consume their driven values.
 A switch is checked from its first update: outputs hold Snapshot until Playback's
 evaluated start/expression match the current selection, avoiding stale shared timing.
+
+Version 9 adds a real EyeManager/EyeLinearDriver fixture. Deterministic eye-close
+overrides exercise zero-valued animation tracks, independent eyes, max/min closure,
+closed expressions, missing tracks, fade-in/out, existing viseme weighting, and
+manual BlinkMode edits. The same checks run on a clone and a saved/reloaded package,
+including OpenCloseTarget-to-Base and OriginalDriver reference remapping.

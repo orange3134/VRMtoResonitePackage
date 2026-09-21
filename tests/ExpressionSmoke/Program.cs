@@ -43,6 +43,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await default(NextUpdate);
         if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage, artifacts, baselinePackage); return; }
         await ExpressionOutputDriveChecks.Run(world.LocalUser.Root.Slot);
+        await ExpressionBlinkChecks.Run(world.LocalUser.Root.Slot, artifacts);
         ExpressionLayoutChecks.CheckFixtures(world.LocalUser.Root.Slot);
         var avatar = world.LocalUser.Root.Slot.AddSlot("Expression smoke avatar");
         var field = avatar.AttachComponent<ValueField<float>>().Value; field.Value = 0.2f;

@@ -1,5 +1,6 @@
 using Elements.Core;
 using FrooxEngine;
+using FrooxEngine.CommonAvatar;
 using FrooxEngine.ProtoFlux;
 using FrooxEngine.Store;
 using static VrmToResonitePackage.Expressions.ExpressionFlux;
@@ -51,7 +52,7 @@ internal sealed partial class ExpressionSystemSetup
         Data(_core, "PairIndex", 0);
         Data(_core, "PlaybackElapsed", 0f); Data(_core, "FadeWeight", 1f);
         Data(_core, "AnimationTime", 0f);
-        Data(_root, "Version", 8);
+        Data(_root, "Version", 9);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -143,6 +144,12 @@ internal sealed partial class ExpressionSystemSetup
                 Data(output, "Id", id); Data(output, "Path", curve.Binding.Path); Data(output, "Shape", curve.Binding.Shape);
                 Data(output, "Baseline", initialWeight?.Invoke(field) ?? field.Value);
                 Data(output, "TrackingWeight", 0f);
+                // Only eyelid openness uses a closing-side union. Other tracking drivers
+                // (visemes, gaze, etc.) retain their existing TrackingWeight behavior.
+                var eye = field.ActiveLink?.Parent as EyeLinearDriver.Eye;
+                int blinkMode = eye != null && eye.OpenCloseTarget == field.ActiveLink
+                    ? (eye.ClosedState.Value < eye.OpenState.Value ? 2 : 1) : 0;
+                Data(output, "BlinkMode", blinkMode);
                 var baseValue = Data(output, "Base", field.Value);
                 var result = Data(output, "Result", field.Value);
                 Reference<IField<float>>(output, "Target", field);

@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 8`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 9`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -46,7 +46,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 8 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 9 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | GestureTable/各セル | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
@@ -120,6 +120,7 @@ PlaybackStart・FadeDuration はここでは変更しないため、時計から
 | `Baseline` | float | initialWeight があればその値、なければ元フィールド値 | 定義。生成時の基準値の記録。Playback は読まない。編集しても生成済み Neutral の AnimX は変わらない |
 | `Base` | float | 元フィールド値 | 状態／基礎入力。既存の瞬き・viseme ドライバーがあれば出力先をここへ移す。表情にトラックがない場合の値でもある |
 | `TrackingWeight` | float | 0 | 設定。表情値から Base へ寄せる割合。使用時に 0〜1 に制限。0=表情値、1=Base。自動更新処理はない |
+| `BlinkMode` | int | 通常0、既存の OpenCloseTarget は1または2 | 設定。0=通常の混合、1=フェード後に max(補間値, Base)、2=min(補間値, Base)。生成時の Eye.ClosedState が OpenState より小さい場合は2。それ以外の瞬きは1 |
 | `Result` | float | 元フィールド値 | 状態。各 Output の ValueFieldDrive がローカル駆動する最終出力。直接書き込まない。ValueCopy が元フィールドへコピー |
 | `Snapshot` | float | 元フィールド値 | 状態。表情が変わる直前の Result。フェードの始点 |
 | `Target` | IField&lt;float&gt; | 元の BlendShape フィールド | 定義。出力先の記録。ValueCopy の送信先は生成時に別途設定するため、この参照だけ変更しても送信先は変わらない |
@@ -128,14 +129,22 @@ PlaybackStart・FadeDuration はここでは変更しないため、時計から
 表情なし・該当トラックなしの場合は sample の代わりに Base を使う。
 各 Output は Playback が計算した AnimationTime と FadeWeight のフィールドを ValueSource で参照する。
 Playback は計算対象の PlaybackStart と CurrentExpression も内部フィールドへ駆動する。
-切替直後にそれらが現在の選択と一致しない場合は、共有時計が更新されるまで Result=Snapshot を維持する。
+切替直後にそれらが現在の選択と一致しない場合は、共有時計が更新されるまで表情の補間値を Snapshot に保つ。その後、BlinkMode の瞬き合成を適用する。
 未装着時は補間せず Result=Base とする。装着中で共有時計が現在の選択に対応するときは以下の式で評価する。
 
 ```text
 desired = lerp(sample, Base, clamp01(TrackingWeight))
-Result  = lerp(Snapshot, desired, FadeWeight)
+faded   = lerp(Snapshot, desired, FadeWeight)
+Result  = BlinkMode == 1 ? max(faded, Base) : BlinkMode == 2 ? min(faded, Base) : faded
 Result → ValueCopy → 元の BlendShape フィールド
 ```
+
+EyeLinearDriver の OpenCloseTarget を後から追加する場合は、該当 Output の Base の Value フィールドへ接続し、
+BlinkMode を閉じる方向に合わせて1または2にする。TrackingWeight=0でも瞬きが合成される。
+同じ BlendShape を ValueCopy と EyeLinearDriver の両方から直接 Drive しない。
+BlinkMode は生成時に閉じる方向を設定する。後から OpenState／ClosedState を反転した場合は BlinkMode も変更する。
+フェード前の値に max/min をかけるだけでは瞬きまで FadeWeight で弱くなるため、合成はフェード後に行う。
+Snapshot は従来どおり切替前の最終 Result を保存するため、瞬き中の切替ではその閉じた値もフェードの始点に含まれる。
 
 ## Inputs/Keyboard/Left・Right
 
