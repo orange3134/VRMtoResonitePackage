@@ -26,21 +26,37 @@ internal static class ExpressionGraphChecks
         Check(nodes.Any(n => n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "state transitions use local change detectors");
         Check(expressions.GetComponentsInChildren<DynamicValueVariable<bool>>()
-            .All(v => v.VariableName.Value != "ExpressionKeyboardBinding/Held"),
+            .All(v => v.VariableName.Value != "ExpressionSystem.Input.Keyboard/Held"),
             "keyboard edge state is local to its change detector");
         var boards = nodes.GroupBy(Board).ToArray();
         var keyboard = Descendant(expressions, "Inputs/Keyboard");
-        Check(Descendant(keyboard, "Bindings").GetComponentsInChildren<ProtoFluxNode>().Count == 0,
+        Check(keyboard.Children.All(hand => hand.FindChild("DV").GetComponentsInChildren<ProtoFluxNode>().Count == 0),
             "keyboard binding records contain no per-key Flux");
         var keyboardBoards = keyboard.GetComponentsInChildren<ProtoFluxNode>().GroupBy(Board).ToArray();
         Check(keyboardBoards.Length == 2 &&
             keyboardBoards.Select(b => b.Key).ToHashSet().SetEquals(new[] {
-                Descendant(keyboard, "Logic/Left"), Descendant(keyboard, "Logic/Right") }),
+                Descendant(keyboard, "Left/Logic"), Descendant(keyboard, "Right/Logic") }),
             "keyboard has exactly two logic boards, Left and Right");
         foreach (var board in keyboardBoards)
-            Check(board.Count(n => n.GetType().Name == "FireOnLocalValueChange`1") == 1 &&
-                board.Count(n => n.GetType().Name.StartsWith("DynamicImpulseTriggerWithValue", StringComparison.Ordinal)) == 1,
-                "each keyboard hand has one change detector and one shared sender");
+        {
+            var detector = board.Single(n => n.GetType().Name == "FireOnLocalValueChange`1");
+            Check(detector.GetType().GetGenericArguments().Single() == typeof(bool) &&
+                board.Count(n => n.GetType().Name.StartsWith("DynamicImpulseTriggerWithValue", StringComparison.Ordinal)) == 1 &&
+                board.Count(n => n.GetType().Name == "IndexOfFirstValueMatch`1") == 1,
+                "each keyboard hand has one bool change detector, first-match selector and sender");
+            Check(board.All(n => n.GetType().Name is not "GetActiveUserSelf" and not "IsLocalUser" and not "For" and not "ComposeBits_byte"),
+                "keyboard uses the shared avatar worn variable and no per-key send loop");
+            var names = board.SelectMany(n => n.Slot.GetComponentsInChildren<GlobalValue<string>>()).Select(v => v.Value.Value).ToArray();
+            Check(names.Count(n => n == "modular_avatar/AvatarWornLocal") == 1,
+                "each keyboard hand binds AvatarWornLocal once");
+        }
+        foreach (var hand in keyboard.Children)
+        {
+            var data = hand.FindChild("DV");
+            Check(data.Children.Select(s => s.Name).ToHashSet().SetEquals(
+                new[] { "Tag", "Control", "Shift" }.Concat(Enumerable.Range(0, 8).Select(i => "Key." + i))),
+                "keyboard settings expose only the hand tag, shared modifiers and eight indexed keys");
+        }
         foreach (var group in nodes.GroupBy(n => n.Group))
         {
             var owners = group.Select(Board).Distinct().ToArray();

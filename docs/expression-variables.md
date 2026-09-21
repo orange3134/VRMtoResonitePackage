@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 5`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 6`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -17,7 +17,7 @@
 | Catalog/各表情、API/Templates/各表情 | `ExpressionClip` | 表情の設定と AnimX 参照 |
 | 各表情/Bindings/各項目 | `ExpressionBinding` | 出力レコードへの参照 |
 | Outputs/各項目 | `ExpressionOutput` | BlendShape の基礎入力・混合・最終出力 |
-| Inputs/Keyboard/Bindings/各項目 | `ExpressionKeyboardBinding` | キー割当と押下状態 |
+| Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と8キーの割当 |
 | Inputs/HandGestures/Modules/各機種 | `ExpressionGestureSettings` | しきい値と安定待ち時間 |
 | 各機種/Left、Right | `ExpressionGestureHand` | 片手の入力判定状態 |
 | Diagnostics/Import warning | `ExpressionImportWarning` | 変換時の警告文 |
@@ -29,8 +29,8 @@
 名前の定義は [ExpressionSpaces.cs](../src/VrmToResonitePackage/Expressions/ExpressionSpaces.cs) に集約する。
 ProtoFlux の読み書きは対象の空間名を明示し、変数生成は配置先の空間名を使う。
 固定の読み取り先がノード自身の祖先と同じ名前付き空間を指す場合は Dynamic Variable Input にする。
-各手の状態と親機種の設定、Core 内の Selection／Playback の状態・表情参照が対象。
-実行時に対象が変わるレコード、Pair.N の可変名、祖先にない兄弟 Core やキーボードの割当レコードへの参照は ReadDynamicVariable を使う。
+各手のキーボード設定・装着状態、コントローラーの状態と親機種の設定、Core 内の Selection／Playback の状態・表情参照が対象。
+実行時に対象が変わるレコード、Pair.N の可変名、祖先にない兄弟 Core への参照は ReadDynamicVariable を使う。
 
 Version 4 以前の共通 `Expr` 空間は新規生成しない。既存パッケージは再変換・再インポートで更新する。
 DynamicVariable を直接読む外部処理は新しい名前へ変更する。公開 Dynamic Impulse の Tag・引数は Version 4 と同じ。
@@ -46,7 +46,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 5 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 6 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | GestureTable/各セル | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
@@ -132,23 +132,30 @@ Result  = lerp(Snapshot, desired, FadeWeight)
 Result → ValueCopy → 元の BlendShape フィールド
 ```
 
-## Inputs/Keyboard/Bindings/各項目
+## Inputs/Keyboard/Left・Right
+
+各手の DynamicVariableSpace は `ExpressionSystem.Input.Keyboard`。
+変数は `DV/Tag`、`DV/Shift`、`DV/Control`、`DV/Key.0`〜`DV/Key.7` の各 Slot に置く。
 
 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|
 | `Tag` | string | 左右の Gesture API Tag | 設定。イベントの送信先 Tag |
-| `Gesture` | int | 項目ごとの 0〜7 | 設定。送信する手の状態 |
-| `Enabled` | bool | true | 設定。そのショートカットの有効・無効 |
-| `Key` | Renderite.Shared.Key | Keypad0〜Keypad7 | 設定。テンキー0=Neutral、1=Fist、以降は順に7=ThumbsUp。None は無効 |
-| `Shift` | bool | true | 設定。Shift 押下状態の一致条件。左右とも標準では必須 |
-| `Control` | bool | 左=false、右=true | 設定。Ctrl 押下状態の一致条件。標準では Ctrl なしが左手、Ctrl ありが右手 |
+| `Key.0`〜`Key.7` | Renderite.Shared.Key | Keypad0〜Keypad7 | 設定。添字が送信する手の状態（0=Neutral、1=Fist、7=ThumbsUp）。None は未割当 |
+| `Shift` | bool | true | 設定。その手の全キーに共通の Shift 押下状態の一致条件 |
+| `Control` | bool | 左=false、右=true | 設定。その手の全キーに共通の Ctrl 押下状態の一致条件 |
 
-各割当は編集用データのみで、Flux は Keyboard/Logic/Left と Right の2つにまとめる。
-各手の8条件を ComposeBits_byte で1つの byte にし、FireOnLocalValueChange<byte> で監視する。
-変化時に LocalValue<byte> へ今回の状態を取得し、StoredValue<byte> の前回状態と比較する共通ループで新しい押下だけを送信する。
-処理後に前回状態を更新する。これらはローカルな実行状態で、Held などの DynamicVariable は追加しない。
-Shift・Ctrl は左右どちらのキーでもよく、Alt の状態は判定しない。
+キーごとの Enabled・Gesture は持たない。Flux は各手の `Logic` にまとめる。
+`KeyHeld(Key.Control)` と `KeyHeld(Key.Shift)` で左右どちらの修飾キーも扱い、Alt は判定しない。
+8個の KeyHeld を `IndexOfFirstValueMatch<bool>` に渡し、最初の true の添字をペイロードにする。
+`modular_avatar/AvatarWornLocal`、修飾キーの一致、FoundMatch の AND を
+`FireOnLocalValueChange<bool>` で監視し、true になった時だけ送信する。OnStart も同じ条件を使う。
+着用判定は既存の Avatar Root Identification が提供し、FirstPerson 設定がなくても表情生成時に用意する。
+
+条件が成立したまま別キーを追加・解放・切り替えしても再送しない。
+同時押しは最小の添字を採用する。一度条件を false に戻すと、次の成立時に送信できる。
 キーを離しても Neutral は送らない。入力禁止中の押下は API が拒否し、押したまま再許可しても再送しない。
+未着用では送信せず、押したまま着用した場合は条件成立時に送信する。
+Held や前回マスクなどの DynamicVariable は作らず、変更検出の状態はローカルに保持する。
 
 ## Inputs/HandGestures/Modules：機種別入力
 

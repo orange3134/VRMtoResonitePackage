@@ -1169,8 +1169,14 @@ internal static class AvatarSetup
         }
     }
 
-    private static void ImportAvatarRootIdentification(Slot root)
+    internal static void ImportAvatarRootIdentification(Slot root)
     {
+        var space = root.GetComponents<DynamicVariableSpace>()
+            .FirstOrDefault(s => s.SpaceName.Value == ModularAvatarNamespace)
+            ?? root.AttachComponent<DynamicVariableSpace>();
+        space.SpaceName.Value = ModularAvatarNamespace;
+        space.OnlyDirectBinding.Value = true;
+
         // The imported identification graph consumes this reference to determine whether
         // the avatar is worn. Keep its value driven so dynamic-variable linking cannot clear it.
         const string variableName = ModularAvatarNamespace + "/AvatarRoot";

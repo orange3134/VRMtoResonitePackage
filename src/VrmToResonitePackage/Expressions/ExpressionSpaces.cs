@@ -9,7 +9,7 @@ internal static class ExpressionSpaces
     public const string ClipSpace = "ExpressionClip";
     public const string BindingSpace = "ExpressionBinding";
     public const string OutputSpace = "ExpressionOutput";
-    public const string KeyboardSpace = "ExpressionKeyboardBinding";
+    public const string KeyboardSpace = "ExpressionSystem.Input.Keyboard";
     public const string GestureSettingsSpace = "ExpressionGestureSettings";
     public const string GestureHandSpace = "ExpressionGestureHand";
     public const string WarningSpace = "ExpressionImportWarning";

@@ -251,13 +251,13 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await Frames();
         Check(Get<int>(core, "LeftGesture") == 1 && Math.Abs(field.Value - 1) < 0.01,
             "actual menu button trigger updates hand state and expression using its int payload");
-        var keyboard = expressions.FindChild("Inputs").FindChild("Keyboard").FindChild("Bindings");
-        Check(keyboard.Children.Count == 16, "keyboard exposes eight gestures for each hand");
-        var shortcut = keyboard.Children.Single(s => Get<string>(s, "Tag") == ExpressionSystemSetup.RightTag && Get<int>(s, "Gesture") == 7);
-        Request(Get<string>(shortcut, "Tag"), Get<int>(shortcut, "Gesture")); await Frames();
+        var keyboard = expressions.FindChild("Inputs").FindChild("Keyboard");
+        Check(keyboard.Children.Count == 2, "keyboard exposes settings for each hand");
+        var shortcut = keyboard.FindChild("Right").FindChild("DV").FindChild("Tag");
+        Request(Get<string>(shortcut, "Tag"), 7); await Frames();
         Check(Get<int>(core, "RightGesture") == 1, "keyboard binding is ignored in menu-only mode");
         AllowInput();
-        Request(Get<string>(shortcut, "Tag"), Get<int>(shortcut, "Gesture")); await Frames();
+        Request(Get<string>(shortcut, "Tag"), 7); await Frames();
         Check(Get<int>(core, "RightGesture") == 7, "keyboard binding works after enabling ordinary input");
 
         var directExpression = catalog.FindChild("Smile");

@@ -88,11 +88,18 @@ preserve hysteresis, reset on gate/disconnect transitions, and redetect on recon
 Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends only the left hand; Ctrl+Shift+keypad sends only the right. Keypad alone and Ctrl+keypad without Shift must leave both hands unchanged.
 Idle sentinels prove Selection and menu scans do not run on unchanged frames. Table edits and
 clip enable/disable changes must update selection and menu visibility without API requests.
-Keyboard Flux consists of exactly two boards, Logic/Left and Logic/Right, with one byte-mask
-change detector and one shared send loop per hand. Binding records contain no Flux.
-Multiple-key checks verify that only newly pressed keys send, releases do not resend older held keys,
-simultaneous new presses use binding order, and edited payloads/enabled flags still work.
-Graph checks require exactly one LocalUpdate, in Playback, and two keyboard boards before and after package reload.
+Keyboard Flux consists of exactly two boards, Left/Logic and Right/Logic, with one
+bool change detector, IndexOfFirstValueMatch<bool>, and sender per hand. Settings
+live under each hand's DV in the ExpressionSystem.Input.Keyboard space, with Tag,
+Control, Shift and Key.0 through Key.7 only. Simultaneous keys select the lowest
+index; adding or releasing another key while the chord stays valid does not resend.
+Runtime checks cover shared modifier edits, independent hand settings, edited Tags,
+and AvatarWornLocal blocking input even while the avatar remains under the active user.
+Graph checks require exactly one LocalUpdate, in Playback, and two keyboard boards
+before and after package reload. Version 6 identifies this keyboard schema.
+The avatar identification graph is also installed for avatars without FirstPerson settings.
+The synthetic fixture supplies the wearer reference normally assigned by AvatarUserReferenceAssigner on equip.
+Key.1 reassignment must update only its hand and retain valid Dynamic Input bindings after clone and package reload.
 
 Lifecycle and controller hands retain no User references. Local StoredValue<bool> flags
 initialize once while worn and rearm when the local user stops wearing the avatar.

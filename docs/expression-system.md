@@ -37,9 +37,9 @@ Expressions/
   Inputs/
     ContextMenu/                   対応表にある表情のみメニュー表示
     Keyboard/
-      Bindings/                    左右8種ずつの編集用データ（Flux なし）
-      Logic/Left/                  左手8キーの変更監視・共通送信
-      Logic/Right/                 右手8キーの変更監視・共通送信
+      Left|Right/                  各手の共通設定用の変数空間
+        DV/                        Tag、Shift、Control、Key.0〜Key.7
+        Logic/                     着用・修飾キー・押下成立の変更監視と送信
     HandGestures/Modules/
       Touch|Index|Vive|WindowsMR/   削除できる機種別入力
         Left/Logic/                左手の入力検出・安定化・通知
@@ -223,12 +223,13 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
 
 - コンテキストメニュー: `Left hand` / `Right hand` に各8項目。
 - キーボード: 左手は Shift+テンキー0〜7（Ctrl なし）、右手は Ctrl+Shift+テンキー0〜7。テンキー0が Neutral、1が Fist、以降は順に7の ThumbsUp まで。
-  `Bindings` の `Key`、`Shift`、`Control`、`Enabled`、送信先の `Tag` と整数値の `Gesture` を編集できる。
-  Flux は `Keyboard/Logic/Left` と `Right` の2つだけで、各割当には生成しない。
-  各手の8条件を ComposeBits_byte でまとめ、1つの FireOnLocalValueChange<byte> で監視する。
-  変化時は共通ループで前回 false・今回 true の割当だけを送る。キーの解放や他のキーの押下で、既に押しているキーを再送しない。
-  同じ検出で複数の割当が成立した場合は、生成時の割当順（標準では0〜7）に送り、後の入力が残る。
-  監視先は生成した各手8個のレコード参照で固定するため、並べ替えても対応は変わらない。
+  `Left/DV` と `Right/DV` の `Key.0`〜`Key.7`、共通の `Shift`・`Control`、送信先の `Tag` を編集できる。
+  各手は `ExpressionSystem.Input.Keyboard` 空間を持ち、Enabled とキーごとの Gesture は作らない。
+  Flux は `Keyboard/Left/Logic` と `Right/Logic` の2つに生成する。
+  `modular_avatar/AvatarWornLocal`、修飾キーの一致、8キーのいずれかの押下を AND でまとめ、
+  1つの FireOnLocalValueChange<bool> で監視する。条件成立時は最小番号のキーの添字を一度送る。
+  条件が成立したまま他のキーを追加・解放しても再送しない。全キーを離すなどして条件を false に戻すと再度送信できる。
+  Control・Shift は左右どちらの物理キーでもよい。各手の設定は独立して変更できる。
 - コントローラー: 不要な `Modules/Touch|Index|Vive|WindowsMR` を削除できる。
   機器の切断・非アクティブ化では判定状態だけをリセットし、Neutral は送らない。
   最後に受理した左右値を保持し、再接続後に安定した手形を検出すると、その手の値を更新する。
@@ -270,7 +271,7 @@ AnimX のトラックは Node=`Expression`、Property=出力の `Id` を使う�
 新しい BlendShape を操作する場合は Outputs の出力レコードとフィールド接続も必要になる。
 `Bindings` は編集時の参照情報であり、AnimX のトラックを自動で書き換えるものではない。
 
-## 外部イベント API（Version 5、Tag・引数は Version 4 と共通）
+## 外部イベント API（Version 6、Tag・引数は Version 4 と共通）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
 左右の通常入力・メニュー入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
@@ -418,3 +419,7 @@ DynamicVariableValueInput は44→81、DynamicVariableObjectInput は0→2。
 ExpressionSmoke で機種別設定の編集、Core 参照の結合、同一フレームの左右入力、
 複製・再装着・保存再読み込み後の再生を確認した。Plum の再変換・inspect、旧版との全表情データ比較、
 保存済みメニューの64通り・102出力・8表情、直接選択と入力モードの実行検証も成功した。
+
+2026-09-21: ResoLoop で Plum の左手キーボード Flux を読み取り、Version 6 に反映した。
+左右別の DV 設定、AvatarWornLocal、共通修飾キー、最初の一致キーを送る bool 変更検出へ移行。
+同時押し・押下中のキー追加の動作も実ワールドの配線に合わせ、右手へ同じ生成処理を適用する。

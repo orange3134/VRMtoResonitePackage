@@ -51,7 +51,7 @@ internal sealed partial class ExpressionSystemSetup
         Data(_core, "PlaybackStart", 0f); Data(_core, "FadeDuration", 0.1f);
         Data(_core, "PairIndex", 0);
         Data(_core, "PlaybackElapsed", 0f); Data(_core, "FadeWeight", 1f);
-        Data(_root, "Version", 5);
+        Data(_root, "Version", 6);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -61,6 +61,7 @@ internal sealed partial class ExpressionSystemSetup
         bool menu = true, Func<IField<float>, float?> initialWeight = null)
     {
         if (model.Clips.Count == 0) return null;
+        AvatarSetup.ImportAvatarRootIdentification(avatar);
         var setup = new ExpressionSystemSetup(avatar, model);
         await setup.BuildCatalog(resolve, initialWeight);
         for (int index = 0; index < 64; index++)

@@ -16,6 +16,11 @@ internal static class ExpressionInputEventChecks
         var touch = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules").FindChild("Touch");
         var mocks = expressions.Parent.AddSlot("Temporary sensor inputs");
         var restore = new List<(ISyncRef Port, IWorldElement Target)>();
+        // The synthetic fixture is parented to UserRoot rather than equipped through
+        // AvatarRoot. Supply the reference normally assigned by the equip operation.
+        var assigner = expressions.Parent.FindChild("Avatar Root Identification")
+            .GetComponent<FrooxEngine.CommonAvatar.AvatarUserReferenceAssigner>();
+        var wearerReferences = assigner.References.Select(r => (Reference: r, User: r.Target)).ToArray();
         float originalStability = Get<float>(touch, "StabilitySeconds");
         void Gesture(string side, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             api, side == "Left" ? ExpressionSystemSetup.LeftTag : ExpressionSystemSetup.RightTag, true, value);
@@ -34,6 +39,7 @@ internal static class ExpressionInputEventChecks
         }
         try
         {
+            foreach (var entry in wearerReferences) entry.Reference.Target = expressions.World.LocalUser;
             Allow(true); Gesture("Left", 1); Gesture("Right", 0);
             await Frames(30);
             int pair = Get<int>(core, "PairIndex");
@@ -115,7 +121,7 @@ internal static class ExpressionInputEventChecks
 
             var keys = new Dictionary<InputKey, List<Nodes.ValueInput<bool>>>();
             var keyboard = expressions.FindChild("Inputs").FindChild("Keyboard");
-            foreach (var board in keyboard.FindChild("Logic").Children)
+            foreach (var board in keyboard.Children.Select(hand => hand.FindChild("Logic")))
             {
                 foreach (var keyNode in board.GetComponentsInChildren<ProtoFluxNode>().Where(n => n.GetType().Name == "KeyHeld").ToArray())
                 {
@@ -125,8 +131,9 @@ internal static class ExpressionInputEventChecks
                     else
                     {
                         while (input is not ProtoFluxNode) input = input.Parent;
-                        var source = (Nodes.RefObjectInput<Slot>)((ISyncRef)ExpressionFlux.Member(input, "Source")).Target;
-                        key = Get<InputKey>(source.Target.Target, "Key");
+                        string path = ((ProtoFluxNode)input).Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value;
+                        string name = path.Split('/').Last();
+                        key = Get<InputKey>(board.Parent.FindChild("DV").FindChild(name), name);
                     }
                     if (!keys.TryGetValue(key, out var sensors)) keys[key] = sensors = new();
                     sensors.Add(Replace<bool>(board, keyNode));
@@ -142,7 +149,7 @@ internal static class ExpressionInputEventChecks
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 0,
                 "keypad alone does not trigger either hand");
-            Key(InputKey.LeftShift, true);
+            Key(InputKey.Shift, true);
             await Frames(10);
             Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 0,
                 "Shift plus keypad sends only the left-hand input");
@@ -165,55 +172,83 @@ internal static class ExpressionInputEventChecks
             Check(Get<int>(core, "LeftGesture") == 1, "keyboard chord fires again after release and repress");
             Key(InputKey.Keypad2, true);
             await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 2, "pressing another keypad key while holding the first sends only the new key");
+            Check(Get<int>(core, "LeftGesture") == 1, "pressing another keypad key while holding the first does not retrigger");
             Key(InputKey.Keypad2, false);
             await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 2, "releasing the newer key does not resend the older held key");
+            Check(Get<int>(core, "LeftGesture") == 1, "releasing another key does not retrigger the held chord");
             Key(InputKey.Keypad1, false);
             await Frames(5);
             Key(InputKey.Keypad1, true); Key(InputKey.Keypad3, true);
             await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 3, "simultaneous new keys are sent in binding order");
+            Check(Get<int>(core, "LeftGesture") == 1, "simultaneous keys select the lowest gesture index");
             Key(InputKey.Keypad1, false); Key(InputKey.Keypad3, false);
             await Frames(5);
-            var leftFist = keyboard.FindChild("Bindings").Children.Single(s =>
-                Get<string>(s, "Tag") == ExpressionSystemSetup.LeftTag && Get<int>(s, "Gesture") == 1);
-            Set(leftFist, "Gesture", 6);
+            var leftSettings = keyboard.FindChild("Left").FindChild("DV");
+            var rightSettings = keyboard.FindChild("Right").FindChild("DV");
+            Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.RightTag);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 6, "shared keyboard sender reads the edited binding payload");
+            Check(Get<int>(core, "RightGesture") == 1, "keyboard sender reads the edited hand tag");
             Key(InputKey.Keypad1, false);
-            Set(leftFist, "Gesture", 1); Set(leftFist, "Enabled", false);
+            Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.LeftTag);
             await Frames(5);
+            Set(leftSettings.FindChild("Control"), "Control", true);
+            Gesture("Left", 6);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 6, "disabled binding does not send through the shared keyboard loop");
-            Set(leftFist, "Enabled", true);
+            Check(Get<int>(core, "LeftGesture") == 6, "shared Control setting gates the whole hand");
+            Set(leftSettings.FindChild("Control"), "Control", false);
             await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 1, "enabling a held binding is detected by the shared keyboard mask");
+            Check(Get<int>(core, "LeftGesture") == 1, "editing shared modifiers detects a newly valid held chord");
             Key(InputKey.Keypad1, false);
             await Frames(5);
+            Set(leftSettings.FindChild("Shift"), "Shift", false);
+            Key(InputKey.Shift, false);
+            Key(InputKey.Keypad2, true);
+            await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 2, "shared Shift can be disabled for the left hand");
+            Key(InputKey.Keypad2, false);
+            Set(leftSettings.FindChild("Shift"), "Shift", true);
+            Key(InputKey.Shift, true);
+            await Frames(5);
+            Check(Get<bool>(rightSettings.FindChild("Control"), "Control") && Get<bool>(rightSettings.FindChild("Shift"), "Shift"),
+                "editing left-hand modifiers preserves right-hand settings");
             Key(InputKey.Keypad0, true);
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 0, "keypad zero sends Neutral through the shared sender");
             Key(InputKey.Keypad0, false);
-            Key(InputKey.LeftShift, false);
-            Key(InputKey.RightControl, true);
+            Key(InputKey.Shift, false);
+            Key(InputKey.Control, true);
             Gesture("Left", 4); Gesture("Right", 4);
             await Frames(5);
             Key(InputKey.Keypad1, true);
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 4 && Get<int>(core, "RightGesture") == 4,
                 "Ctrl plus keypad without Shift does not trigger either hand");
-            Key(InputKey.RightShift, true);
+            Key(InputKey.Shift, true);
             await Frames(10);
             Check(Get<int>(core, "LeftGesture") == 4 && Get<int>(core, "RightGesture") == 1,
-                "Ctrl plus Shift plus keypad sends only the right-hand input, including right-side modifiers");
+                "Ctrl plus Shift plus keypad sends only the right-hand input");
             Key(InputKey.Keypad1, false);
+            await Frames(5);
+            Key(InputKey.Control, false);
+            await Frames(5);
+            foreach (var entry in wearerReferences) entry.Reference.Target = null;
+            await Frames(5);
+            Gesture("Left", 6);
+            Key(InputKey.Keypad1, true);
+            await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 6, "AvatarWornLocal false blocks keyboard even under the active user");
+            foreach (var entry in wearerReferences) entry.Reference.Target = expressions.World.LocalUser;
+            await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 1, "AvatarWornLocal true accepts a held chord when wearing begins");
+            Key(InputKey.Keypad1, false);
+            Key(InputKey.Shift, false);
             await Frames(5);
         }
         finally
         {
+            foreach (var entry in wearerReferences) entry.Reference.Target = entry.User;
             foreach (var (port, target) in restore) port.Target = target;
             mocks.Destroy();
             Set(touch, "StabilitySeconds", originalStability);

@@ -210,14 +210,20 @@ internal sealed class ExpressionFlux
         if (source is Nodes.RefObjectInput<Slot> reference && reference.Target.Target is Slot slot &&
             NamedSpace(slot, spaceName) is { } space && space == NamedSpace(_section, spaceName))
         {
-            if (_dynamicInputs.TryGetValue((typeof(T), path), out var cached)) return cached;
-            var node = Node(typeof(T).IsValueType ? "DynamicVariableValueInput" : "DynamicVariableObjectInput", typeof(T));
-            var name = node.Slot.AddSlot("VariableName").AttachComponent<GlobalValue<string>>();
-            name.Value.Value = path;
-            Link(node, "VariableName", name);
-            return _dynamicInputs[(typeof(T), path)] = Out(node, "Value");
+            return DynamicInput<T>(spaceName, key);
         }
         return Read<T>(source, Text(path));
+    }
+
+    public IWorldElement DynamicInput<T>(string spaceName, string key)
+    {
+        string path = Path(spaceName, key);
+        if (_dynamicInputs.TryGetValue((typeof(T), path), out var cached)) return cached;
+        var node = Node(typeof(T).IsValueType ? "DynamicVariableValueInput" : "DynamicVariableObjectInput", typeof(T));
+        var name = node.Slot.AddSlot("VariableName").AttachComponent<GlobalValue<string>>();
+        name.Value.Value = path;
+        Link(node, "VariableName", name);
+        return _dynamicInputs[(typeof(T), path)] = Out(node, "Value");
     }
 
     private static DynamicVariableSpace NamedSpace(Slot slot) =>

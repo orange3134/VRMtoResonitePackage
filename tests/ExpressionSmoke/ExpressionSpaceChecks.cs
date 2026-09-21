@@ -24,7 +24,7 @@ internal static class ExpressionSpaceChecks
         Clips(root.FindChild("API").FindChild("Templates"));
         Records(root.FindChild("Outputs"), "ExpressionOutput");
         var inputs = root.FindChild("Inputs");
-        Records(inputs.FindChild("Keyboard").FindChild("Bindings"), "ExpressionKeyboardBinding");
+        Records(inputs.FindChild("Keyboard"), "ExpressionSystem.Input.Keyboard");
         var modules = inputs.FindChild("HandGestures").FindChild("Modules");
         Records(modules, "ExpressionGestureSettings");
         foreach (var module in modules.Children) Records(module, "ExpressionGestureHand");
@@ -40,7 +40,7 @@ internal static class ExpressionSpaceChecks
             Check(expected.TryGetValue(space.Slot, out string name) && space.SpaceName.Value == name,
                 "space matches record schema: " + space.Slot.Name);
             Check(space.OnlyDirectBinding.Value == (name != "ExpressionGestureTable"),
-                "only the gesture table binds variables defined on child rows");
+                "only the gesture table permits unqualified binding");
         }
         // Check prefixes independently of the generator's helpers, including child table
         // variables and optional output drivers, before and after package serialization.
@@ -59,8 +59,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>(); References<IAssetProvider<Animation>>();
-        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 5,
-            "schema split is identified by package version 5");
+        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 6,
+            "hand-level keyboard schema is identified by package version 6");
         var core = root.FindChild("Core");
         Check(core.WriteDynamicVariable("Expr/AllowExternalInput", false) != DynamicVariableWriteResult.Success,
             "legacy shared-space writes cannot modify the new Core");
