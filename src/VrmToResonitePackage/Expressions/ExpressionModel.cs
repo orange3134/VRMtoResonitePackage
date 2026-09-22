@@ -56,6 +56,8 @@ public sealed class ExpressionLayer
     public string Name { get; init; }
     public float Weight { get; init; } = 1;
     public int DefaultState { get; set; }
+    // Explicit approximation for validated Entry/Exit selectors: empty motions pass through the lower stream.
+    public bool EmptyStatesUseBaseStream { get; init; }
     public List<ExpressionState> States { get; } = new();
     public List<ExpressionTransition> Entry { get; } = new();
     public List<ExpressionTransition> Transitions { get; } = new();

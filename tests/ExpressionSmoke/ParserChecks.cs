@@ -6,6 +6,7 @@ internal static class ParserChecks
     public static void Run(string artifacts)
     {
         GestureRouterChecks.Run(artifacts);
+        EntryGestureRouterChecks.Run(artifacts);
         string root = Path.Combine(artifacts, "ParserFixture");
         Directory.CreateDirectory(Path.Combine(root, "ProjectSettings"));
         Directory.CreateDirectory(Path.Combine(root, "Assets"));

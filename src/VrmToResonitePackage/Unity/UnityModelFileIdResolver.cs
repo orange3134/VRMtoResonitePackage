@@ -20,6 +20,8 @@ public sealed class UnityModelFileIdResolver
     internal Dictionary<string, bool[]> MeshWeightedBonesByPath { get; } = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNames =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _blendShapeAliasesByPath = new(StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> BlendShapeAliasesByPath => _blendShapeAliasesByPath;
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNamesByPath =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<float>> _blendShapeDefaultWeightsByPath =
@@ -291,6 +293,10 @@ public sealed class UnityModelFileIdResolver
             }
             names.Add(name);
         }
+        var aliases = BlendShapeNameNormalizer.ChannelAliases(names,
+            _defaultWeightChannels.Where(c => c.RendererPath == path).Select(c => (c.Name, c.ShapeName)));
+        for (int i = 0; i < names.Count; i++) names[i] = aliases.GetValueOrDefault(names[i], names[i]);
+        if (aliases.Count > 0) _blendShapeAliasesByPath[path] = aliases;
         _blendShapeNames.TryAdd(node.Name, names);
         _blendShapeNamesByPath[path] = names;
         var defaults = new float[names.Count];

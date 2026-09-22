@@ -231,6 +231,8 @@ public static class VrchatAvatarParser
                 avatar.FbxBlendShapeNames.TryAdd(rendererName, names);
                 avatar.ModelBlendShapeNames[new VrchatGameObjectReference(guid, rendererName)] = names;
             }
+            foreach (var (path, aliases) in resolver.BlendShapeAliasesByPath)
+                avatar.ModelBlendShapeAliasesByPath[new(guid, path)] = aliases;
             foreach (var (path, names) in resolver.BlendShapeNamesByPath)
                 avatar.ModelBlendShapeNamesByPath[new(guid, path)] = names;
             foreach ((string path, IReadOnlyList<float> weights) in

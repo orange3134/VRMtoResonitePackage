@@ -101,6 +101,15 @@ public static class VrchatExpressionParser
                     Warn(label + ": gesture router projected using ordered default-state routes; prior-state latching, " +
                         "external Any State overrides, parameter-driver side effects and transition timing are not imported.");
                 }
+                else if (errors.All(e => e is "AvatarMask" or "state behaviour" or "exit or unresolved transition" or
+                    "history-dependent unanimated properties") &&
+                    VrchatEntryGestureRouter.TryProject(package, scene, machine, layerNode["m_Mask"], layer, ids, ReadClip, out var entryProjected))
+                {
+                    model.Layers.Add(entryProjected);
+                    Warn(label + ": Entry/Exit gesture selector projected; empty motions use the lower-layer/base stream " +
+                        "instead of retaining previous values. Eye/mouth tracking-control overrides and transition timing " +
+                        "are not imported; ResoPon blink/viseme cooperation is retained.");
+                }
                 else Warn(label + ": automatic layer omitted (" + string.Join(", ", errors.Distinct()) + "); supported clips remain directly selectable");
 
                 void Collect(YamlNode stateMachine, HashSet<long> visited)

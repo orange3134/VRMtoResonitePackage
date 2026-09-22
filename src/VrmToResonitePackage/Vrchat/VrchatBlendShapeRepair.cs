@@ -51,11 +51,14 @@ internal static class VrchatBlendShapeRepair
             {
                 continue;
             }
+            var copy = objectKey == null ? null : avatar.MeshCopies.FirstOrDefault(c => c.Transform?.GameObjectKey == objectKey);
+            var sourcePath = copy?.SourcePath ?? importedPaths?.GetValueOrDefault(renderer.Slot);
+            var aliases = sourcePath == null ? null : avatar.ModelBlendShapeAliasesByPath.GetValueOrDefault(new(copy?.FbxGuid ?? guid, sourcePath));
             int maxReferencedIndex = MaxReferencedBlendShapeIndex(avatar, renderer.Slot.Name);
             var requestedNames = uniqueRenderers.TryGetValue(renderer, out string expressionPath) &&
                 expressionShapes.TryGetValue(expressionPath, out var names) ? names : new HashSet<string>();
             int requiredCount = Math.Min(expected.Count, maxReferencedIndex + 1);
-            if (requiredCount == 0 && !expected.Any(name => requestedNames.Contains(name) && !renderer.Mesh.Asset.Data.HasBlendShape(name)))
+            if (requiredCount == 0 && (aliases == null || !aliases.Keys.Any(renderer.Mesh.Asset.Data.HasBlendShape)) && !expected.Any(name => requestedNames.Contains(name) && !renderer.Mesh.Asset.Data.HasBlendShape(name)))
             {
                 continue;
             }
@@ -68,6 +71,7 @@ internal static class VrchatBlendShapeRepair
             for (int i = 0; i < renderer.MeshBlendshapeCount; i++)
             {
                 string name = renderer.BlendShapeName(i);
+                name = aliases?.GetValueOrDefault(name, name) ?? name;
                 if (!oldWeights.TryGetValue(name, out Queue<float> values))
                 {
                     values = new Queue<float>();
@@ -88,6 +92,13 @@ internal static class VrchatBlendShapeRepair
                 renderer.Mesh.Asset.ReleaseReadLock(readLock);
             }
 
+            int renamed = RestoreChannelNames(mesh, aliases);
+            if (renamed < 0)
+            {
+                UniLog.Warning($"Ambiguous FBX channel names on {renderer.Slot.Name}; mesh left unchanged.");
+                await default(ToWorld);
+                continue;
+            }
             int inserted = InsertMissingBlendShapes(mesh, expected, requiredCount);
             if (inserted < 0)
             {
@@ -96,7 +107,7 @@ internal static class VrchatBlendShapeRepair
                 continue;
             }
             inserted += InsertMissingNamedBlendShapes(mesh, expected, requestedNames);
-            if (inserted == 0)
+            if (inserted == 0 && renamed == 0)
             {
                 await default(ToWorld);
                 continue;
@@ -125,7 +136,7 @@ internal static class VrchatBlendShapeRepair
             }
 
             repaired++;
-            UniLog.Log($"Restored {inserted} stripped blendshape(s) on {renderer.Slot.Name}.");
+            UniLog.Log($"Restored {inserted} stripped blendshape(s) and {renamed} FBX channel name(s) on {renderer.Slot.Name}.");
         }
         return repaired;
     }
@@ -271,6 +282,25 @@ internal static class VrchatBlendShapeRepair
         }
         UniLog.Warning($"Could not restore stripped blendshapes on {rendererName}: " +
                        $"FBX={expected.Count}, imported={current.Count}, matched={importedIndex}.");
+    }
+
+    internal static int RestoreChannelNames(MeshX mesh, IReadOnlyDictionary<string, string> aliases)
+    {
+        if (aliases == null || aliases.Count == 0) return 0;
+        var snapshots = new List<BlendShapeSnapshot>();
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        int renamed = 0;
+        foreach (var shape in mesh.BlendShapes)
+        {
+            string name = aliases.GetValueOrDefault(shape.Name, shape.Name);
+            if (!names.Add(name)) return -1;
+            if (name != shape.Name) renamed++;
+            snapshots.Add(BlendShapeSnapshot.Capture(shape, name));
+        }
+        if (renamed == 0) return 0;
+        while (mesh.BlendShapeCount > 0) mesh.RemoveBlendShape(mesh.BlendShapeCount - 1);
+        foreach (var snapshot in snapshots) snapshot.Restore(mesh);
+        return renamed;
     }
 
     internal static int InsertMissingNamedBlendShapes(MeshX mesh, IReadOnlyList<string> expected, IReadOnlySet<string> requested)

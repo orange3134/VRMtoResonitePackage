@@ -73,6 +73,7 @@ public sealed class VrchatAvatar
         new(StringComparer.Ordinal);
     public Dictionary<VrchatGameObjectReference, IReadOnlyList<string>> ModelBlendShapeNames { get; } = new();
     public Dictionary<VrchatModelRendererReference, IReadOnlyList<string>> ModelBlendShapeNamesByPath { get; } = new();
+    public Dictionary<VrchatModelRendererReference, IReadOnlyDictionary<string, string>> ModelBlendShapeAliasesByPath { get; } = new();
 
     public IReadOnlyList<string> BlendShapeNamesFor(string fbxGuid, string rendererName, string objectKey = null,
         string rendererPath = null)

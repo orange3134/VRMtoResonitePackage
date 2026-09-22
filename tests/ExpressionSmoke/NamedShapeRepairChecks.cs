@@ -55,6 +55,20 @@ internal static class NamedShapeRepairChecks
             Check(face.Mesh.Asset.Data.GetBlendShape(1).Frames.Single().RawPositions.All(p => p == float3.Zero), "restored frame is empty");
             Check(await VrchatBlendShapeRepair.Apply(root, avatar, new Dictionary<Slot, string>(),
                 new Dictionary<string, Slot>(), expressionRoot: descriptor) == 0, "repair is idempotent");
+            avatar.ModelBlendShapeNamesByPath[new(null, "Face")] = new[] { "eye.Existing", "Stripped", "Unreferenced" };
+            avatar.ModelBlendShapeAliasesByPath[new(null, "Face")] = new Dictionary<string, string> { ["Existing"] = "eye.Existing" };
+            var paths = new Dictionary<Slot, string> { [face.Slot] = "RootNode/Face" };
+            Check(await VrchatBlendShapeRepair.Apply(root, avatar, new Dictionary<Slot, string>(),
+                new Dictionary<string, Slot>(), paths, descriptor) == 1, "channel name restored on the correct source path");
+            for (int i = 0; i < 7200 && face.BlendShapeName(0) != "eye.Existing"; i++) await default(NextUpdate);
+            Check(face.BlendShapeName(0) == "eye.Existing" && Math.Abs(face.GetBlendShapeWeight("eye.Existing") - 0.37f) < 0.0001f,
+                "canonical name retains weight and original index");
+            Check(face.Mesh.Asset.Data.GetBlendShape(0).Frames.Single().RawPositions[0] == new float3(0, 0.1f, 0),
+                "channel rename preserves actual vertex deltas instead of inserting an empty frame");
+            Check(renderers.Skip(1).All(r => r.BlendShapeName(0) == "Existing"), "same-named other meshes remain unchanged");
+            var conflict = new MeshX(source); conflict.AddBlendShape("eye.Existing").AddFrame(1);
+            Check(VrchatBlendShapeRepair.RestoreChannelNames(conflict, avatar.ModelBlendShapeAliasesByPath[new(null, "Face")]) == -1 &&
+                conflict.GetBlendShape(0).Name == "Existing", "ambiguous rename is atomic and leaves original geometry intact");
             Console.WriteLine("PASS: named stripped-shape repair preserves weights, source identity, exact paths and ambiguity");
         }
         finally { root.Destroy(); }

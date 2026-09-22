@@ -9,7 +9,7 @@ namespace VrmToResonitePackage.Unity;
 /// </summary>
 internal static class UnityFbxBlendShapeDefaults
 {
-    internal readonly record struct Channel(string Name, float Weight, string RendererPath);
+    internal readonly record struct Channel(string Name, float Weight, string RendererPath, string ShapeName = null);
 
     public static IReadOnlyList<Channel> Read(string path)
     {
@@ -67,9 +67,12 @@ internal static class UnityFbxBlendShapeDefaults
                     ?.Properties.FirstOrDefault() as double? ?? 0d;
                 double endWeight = GetEndFrameWeight(channel);
                 float weight = endWeight > 0 ? (float)(percent / endWeight * 100d) : (float)percent;
+                var shapes = objects.Where(o => o.Value.Name == "Geometry" && o.Value.Properties[2] as string == "Shape" &&
+                    (parents.GetValueOrDefault(o.Key)?.Contains(entry.Key) ?? false)).Select(o => o.Value).ToArray();
+                string shapeName = shapes.Length == 1 ? NormalizeObjectName(shapes[0].Properties[1] as string) : null;
                 foreach (long model in ModelsAbove(entry.Key, new()))
                     if (ModelPath(model, new()) is string path)
-                        result.Add(new Channel(NormalizeObjectName(channel.Properties[1] as string), weight, path));
+                        result.Add(new Channel(NormalizeObjectName(channel.Properties[1] as string), weight, path, shapeName));
             }
             return result;
 

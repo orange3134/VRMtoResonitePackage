@@ -175,3 +175,12 @@ exit-only complete poses, all 64 pairs and rejected unsafe router structures.
 `NamedShapeRepairChecks` restores only source-FBX shapes requested by an exact,
 unique expression renderer path; it checks retained weights, same-named siblings,
 ambiguous paths, missing source names, empty restored frames and idempotence.
+
+`EntryGestureRouterChecks` validates two flat Entry/Exit hand selectors over all 64
+pairs, right-layer priority, empty-motion base/lower-layer fallback, humanoid-only
+masks and recognized eye/mouth tracking controls. Negative cases reject latches,
+cycles, timed exits, partial poses, unresolved assets and unsupported behaviours.
+`NamedShapeRepairChecks` also verifies FBX channel-name restoration preserves real
+vertex deltas and weights, stays within the source renderer path, and rejects name
+collisions atomically. PrefabInputSmoke covers binary FBX Shape-to-Channel links,
+shared geometry, connection ordering, scoped defaults and ambiguous aliases.

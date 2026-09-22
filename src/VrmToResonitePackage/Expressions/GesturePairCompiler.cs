@@ -76,7 +76,8 @@ internal sealed class GesturePairCompiler
         else if (layer.States.Any(s => !s.WriteDefaults))
         {
             var sets = layer.States.Select(s => s.ClipId == null ? new HashSet<ExpressionBinding>() :
-                _clips[s.ClipId].Curves.Select(c => c.Binding).ToHashSet()).ToArray();
+                _clips[s.ClipId].Curves.Select(c => c.Binding).ToHashSet())
+                .Where(set => !layer.EmptyStatesUseBaseStream || set.Count > 0).ToArray();
             if (sets.Skip(1).Any(s => !s.SetEquals(sets[0]))) reason = "retains unanimated properties from previous states";
         }
         if (reason != null && diagnose) Warn(layer.Name + ": omitted from gesture table (" + reason + ").");

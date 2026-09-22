@@ -7,6 +7,7 @@ internal static class DefaultBlendShapeChecks
 {
     public static void Run(Func<string, string, string, string> asset)
     {
+        CheckChannelNames(asset);
         const string modelGuid = "adef0000000000000000000000000001";
         string model = asset("Assets/DefaultWeightChannels.fbx", modelGuid, "");
         foreach (bool reverse in new[] { false, true })
@@ -73,12 +74,52 @@ internal static class DefaultBlendShapeChecks
         }
     }
 
+    private static void CheckChannelNames(Func<string, string, string, string> asset)
+    {
+        string path = asset("Assets/ChannelNames.fbx", "adef0000000000000000000000000003", "");
+        foreach (bool reverse in new[] { false, true })
+        {
+            WriteFbx(path, reverse, channelNames: true);
+            var channels = UnityFbxBlendShapeDefaults.Read(path);
+            Require(channels.Count == 3 && channels.All(c => c.ShapeName == "Smile") &&
+                channels.Single(c => c.RendererPath == "RootNode/Left/Body").Name == "Left.Smile" &&
+                channels.Single(c => c.RendererPath == "RootNode/Twin/Body").Name == "Left.Smile",
+                "Shape geometry connects to the correct named channel and shared model regardless of object order");
+            var resolver = new UnityModelFileIdResolver(null);
+            typeof(UnityModelFileIdResolver).GetField("_defaultWeightChannels", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .SetValue(resolver, channels);
+            var scene = new Assimp.Scene();
+            foreach (string branch in new[] { "Left", "Right", "Twin", "Missing" })
+            {
+                var mesh = new Assimp.Mesh();
+                mesh.MeshAnimationAttachments.Add(new Assimp.MeshAnimationAttachment { Name = "Smile.Smile" });
+                scene.Meshes.Add(mesh);
+                var node = new Assimp.Node("Body"); node.MeshIndices.Add(scene.Meshes.Count - 1);
+                typeof(UnityModelFileIdResolver).GetMethod("AddBlendShapeNames", BindingFlags.NonPublic | BindingFlags.Instance)!
+                    .Invoke(resolver, new object[] { scene, node, "RootNode/" + branch + "/Body" });
+            }
+            Require(resolver.BlendShapeNamesByPath["RootNode/Left/Body"].Single() == "Left.Smile" &&
+                resolver.BlendShapeNamesByPath["RootNode/Right/Body"].Single() == "Right.Smile" &&
+                resolver.BlendShapeNamesByPath["RootNode/Missing/Body"].Single() == "Smile" &&
+                resolver.BlendShapeAliasesByPath["RootNode/Right/Body"]["Smile"] == "Right.Smile" &&
+                resolver.BlendShapeDefaultWeightsByPath["RootNode/Right/Body"].Single() == 75,
+                "Canonical channel names, aliases and default weights remain scoped to model paths");
+        }
+        Dictionary<string, string> Map(string[] imported, params (string, string)[] channels) =>
+            VrmToResonitePackage.BlendShapeNameNormalizer.ChannelAliases(imported, channels);
+        Require(Map(new[] { "Smile" }, ("eye.Smile", "Smile"))["Smile"] == "eye.Smile", "connected channel alias restored");
+        Require(Map(new[] { "Smile" }, ("eye.Smile", null)).Count == 0, "dotted suffix alone never establishes identity");
+        Require(Map(new[] { "Smile" }, ("eye.Smile", "Smile"), ("mouth.Smile", "Smile")).Count == 0, "ambiguous geometry alias rejected");
+        Require(Map(new[] { "Smile", "eye.Smile" }, ("eye.Smile", "Smile")).Count == 0, "existing channel name is not overwritten");
+        Require(Map(new[] { "Smile" }, ("Smile", "Other"), ("eye.Smile", "Smile")).Count == 0, "exact channel identity takes priority");
+    }
+
     private static void Call(string method, params object[] arguments) => typeof(VrchatAvatarParser)
         .GetMethod(method, BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, arguments);
 
     private sealed record Node(string Name, object[] Properties, params Node[] Children);
 
-    private static void WriteFbx(string path, bool reverse)
+    private static void WriteFbx(string path, bool reverse, bool channelNames = false)
     {
         // Binary FBX nodes exercise the production reader. Channels deliberately have the
         // same name; their object order disagrees with the renderer traversal above.
@@ -94,11 +135,13 @@ internal static class DefaultBlendShapeChecks
             if (branch == "Twin") { Connect(12, id + 1); continue; }
             objects.Add(new("Geometry", new object[] { id + 2, "Mesh\0\u0001Geometry", "Mesh" }));
             objects.Add(new("Deformer", new object[] { id + 3, "Shape\0\u0001Deformer", "BlendShape" }));
-            objects.Add(new("Deformer", new object[] { id + 4, "Smile\0\u0001Deformer", "BlendShapeChannel" },
+            objects.Add(new("Deformer", new object[] { id + 4, (channelNames ? branch + "." : "") + "Smile\0\u0001Deformer", "BlendShapeChannel" },
                 new Node("DeformPercent", new object[] { percent })));
             Connect(id + 2, id + 1);
             Connect(id + 3, id + 2);
             Connect(id + 4, id + 3);
+            objects.Add(new("Geometry", new object[] { id + 5, "Smile\0\u0001Geometry", "Shape" }));
+            Connect(id + 5, id + 4);
         }
         if (reverse) { objects.Reverse(); connections.Reverse(); }
         using var stream = File.Create(path);

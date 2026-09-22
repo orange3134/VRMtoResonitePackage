@@ -579,3 +579,34 @@ Kipfel ではさらに `eye_highlight_main_small`、`mouth_tooth_gizagiza`、
 欠落シェイプだけを空 Frame として末尾へ復元する。番号参照が必要な場合は先に既存の
 順序補修を行う。既存シェイプの値は名前ごとに保持し、元FBXにない名前、未参照の空シェイプ、
 別パスの同名 Renderer、曖昧なパスは補修しない。
+
+### Entry/Exit ジェスチャーと FBX チャンネル名（LuciferDevil V2.00）
+
+LuciferDevil の左右 Gesture レイヤーは Entry から条件付きで8状態へ進み、ジェスチャー変更時に
+Exit へ戻る。Idle/Fist は空の Motion、残り6状態は同じ225個の BlendShape を書く。
+`VrchatEntryGestureRouter` は64組すべてについて、選択状態だけが安定し、それ以外の全状態が
+Exit へ進むことを検証して対応表へ投影する。Any State、待ち時間、割り込み、部分的なポーズ、
+未解決 Motion、未知の Behaviour、身体の TrackingControl、Transform マスクは拒否する。
+Transform 要素が空の Humanoid マスクと、既知の目・口のみの TrackingControl は許容する。
+
+空状態の Write Defaults=false による過去の値の保持は再現せず、下位レイヤーまたは Base へ戻す。
+この例外は検証済みレイヤーの `EmptyStatesUseBaseStream` に限定する。TrackingControl による
+目・口の追跡切替と遷移時間も再現せず、ResoPon の瞬き・リップシンク合成を使う。
+近似内容はログと Diagnostics に記録する。Facial パラメーターによる別レイヤーの状態遷移は
+引き続き自動対応表の対象外で、対応可能な Clip は直接選択用 Catalog に残す。
+[VRChat のレイヤーとマスク](https://creators.vrchat.com/avatars/playable-layers/) および
+[TrackingControl](https://creators.vrchat.com/avatars/state-behaviors/) も参照。
+
+このモデルはさらに、FBX の BlendShapeChannel 名が `eye.blink` / `vrc.v_aa`、接続先の Shape
+Geometry 名が `blink` / `v_aa` と異なる。複数マテリアル時の
+[Assimp FBXConverter](https://github.com/assimp/assimp/blob/master/code/AssetLib/FBX/FBXConverter.cpp)
+は Shape Geometry 名を使用する経路があり、Unity の Clip と Descriptor が参照する名前を失う。
+`UnityFbxBlendShapeDefaults` は実際の Shape → Channel 接続を読み、FBX GUID と Renderer パスを
+限定した一意な別名対応を生成する。名前の接尾辞からは推測しない。複数 Shape のチャンネル、
+曖昧な接続、既存名との衝突は変更しない。元のチャンネル名と完全一致する名前を優先する。
+`VrchatBlendShapeRepair` は欠落シェイプ補完より先に名前を戻し、頂点差分、法線、接線、
+フレーム重量と現在のシェイプ値を保持する。これにより実形状を空シェイプで置換しない。
+
+回帰検証は合成 FBX の接続順・共有 Geometry・同名 Renderer、全64組の Entry/Exit 選択、
+危険な遷移の拒否、名前復元時の形状と値の保持を含む。実 LuciferDevil の変換・inspect と
+保存パッケージの64組・226出力・13ポーズ再生を確認した。
