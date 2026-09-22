@@ -68,7 +68,7 @@ internal sealed class GesturePairCompiler
         if (Parameters(layer).Any(p => !parameters.Contains(p))) reason = "depends on other parameters";
         else if (layer.Entry.Concat(layer.Transitions).Any(t => t.HasExitTime || t.Offset != 0)) reason = "requires exit time or playback offset";
         else if (layer.States.Any(s => s.ClipId != null && !_clips.ContainsKey(s.ClipId))) reason = "has unavailable clips";
-        else if (layer.States.Any(s => s.Speed <= 0 || !float.IsFinite(s.Speed))) reason = "has invalid playback speed";
+        else if (layer.States.Any(s => !ExpressionState.SupportsSpeed(s.Speed, s.TimeParameter))) reason = "has invalid playback speed";
         else if (layer.States.Any(s => s.TimeParameter != null && s.TimeParameter is not ("GestureLeftWeight" or "GestureRightWeight"))) reason = "has unsupported motion time parameter";
         else if (layer.States.Select(s => s.WriteDefaults).Distinct().Count() > 1) reason = "mixes Write Defaults";
         else if (layer.States.Any(s => !s.WriteDefaults))

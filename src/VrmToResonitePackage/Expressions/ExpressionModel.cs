@@ -67,7 +67,12 @@ public sealed class ExpressionLayer
     public List<ExpressionTransition> Transitions { get; } = new();
 }
 
-public sealed record ExpressionState(string Name, string ClipId, float Speed, bool WriteDefaults, string TimeParameter = null);
+public sealed record ExpressionState(string Name, string ClipId, float Speed, bool WriteDefaults, string TimeParameter = null)
+{
+    // A gesture-weight motion is sampled at a fixed position; its playback speed does not advance time.
+    internal static bool SupportsSpeed(float speed, string timeParameter) => float.IsFinite(speed) &&
+        (speed > 0 || timeParameter is "GestureLeftWeight" or "GestureRightWeight");
+}
 public sealed class ExpressionTransition
 {
     public int Source { get; init; } = -1;

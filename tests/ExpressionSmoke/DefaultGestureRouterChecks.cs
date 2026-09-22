@@ -69,6 +69,13 @@ internal static class DefaultGestureRouterChecks
             Check(model.Diagnostics.Any(d => d.Contains("Bank=" + bank) && d.Contains("Gate=0.35")), "frozen defaults diagnosed");
         }
         CheckBank(1, source);
+        string paused = source.Replace("  m_Name: Pose", "  m_Speed: 0\n  m_TimeParameterActive: 1\n  m_TimeParameter: GestureLeftWeight\n  m_Name: Pose");
+        CheckBank(1, paused);
+        CheckBank(1, paused.Replace("GestureLeftWeight", "GestureRightWeight"));
+        Check(Parse(paused.Replace("m_TimeParameterActive: 1", "m_TimeParameterActive: 0")).Layers.Count == 0,
+            "zero speed without supported motion time is rejected");
+        Check(Parse(paused.Replace("GestureLeftWeight", "UnknownWeight")).Layers.Count == 0,
+            "unknown motion time cannot bypass speed validation");
         Defaults(0); CheckBank(0, source);
         File.WriteAllText(Path.Combine(root, "Assets", "Pose1011.anim"), "invalid");
         CheckBank(0, source); // Unselected bank must not block the default bank.

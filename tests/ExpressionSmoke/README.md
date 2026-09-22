@@ -208,3 +208,8 @@ The imported-package pose check temporarily freezes OriginalDriver inputs at the
 Baseline while keeping the exported tracking mixer enabled. Expected output includes
 TrackingWeight and BlinkMode; automatic blink timing must not cause a false pose mismatch.
 Live native blink/viseme behavior remains covered by the separate synthetic tracking checks.
+
+
+DefaultGestureRouterChecks and CompilerChecks cover zero-speed gesture-weight motion time
+(Eku), both hand clocks, final values of changing curves, and rejection of stopped
+playback without a known position parameter or non-finite speeds.

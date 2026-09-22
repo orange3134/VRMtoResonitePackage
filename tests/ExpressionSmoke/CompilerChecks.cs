@@ -83,6 +83,20 @@ internal static class CompilerChecks
         float Pose(GesturePairCompiler c, int index) => model.Clips.Concat(c.Generated).Single(p => p.Id == c.Pairs[index]).Curves[0].Sample(0);
         Check(banks.Pairs.All(p => p != null) && Pose(banks, 8) == 1 && Pose(banks, 1) == 0.6f && Pose(banks, 9) == 0.6f,
             "declared menu default specializes both gesture layers; idle upper hand preserves lower hand; active upper hand wins");
+        foreach (float speed in new[] { 0f, -1f })
+        {
+            left.States[1] = left.States[1] with { Speed = speed };
+            var fixedTime = new GesturePairCompiler(model, model.Clips, _ => 0.2f);
+            Check(fixedTime.Pairs.All(p => p != null) && Pose(fixedTime, 8) == 1 && Pose(fixedTime, 9) == 0.6f,
+                "gesture motion time samples the final pose independently of finite playback speed");
+        }
+        left.States[1] = left.States[1] with { Speed = float.NaN };
+        var invalidSpeed = new GesturePairCompiler(model, model.Clips, _ => 0.2f);
+        Check(Pose(invalidSpeed, 8) == 0.2f, "non-finite speed remains invalid with gesture motion time");
+        left.States[1] = left.States[1] with { Speed = 0, TimeParameter = null };
+        var stopped = new GesturePairCompiler(model, model.Clips, _ => 0.2f);
+        Check(Pose(stopped, 8) == 0.2f, "zero-speed playback without motion time remains excluded");
+        left.States[1] = left.States[1] with { Speed = 1, TimeParameter = "GestureLeftWeight" };
         model.Parameters["FacialSet"] = new("FacialSet", 3, 1);
         var bank1 = new GesturePairCompiler(model, model.Clips, _ => 0.2f);
         Check(Pose(bank1, 8) == 0.9f, "use authored default rather than hardcoding bank zero");

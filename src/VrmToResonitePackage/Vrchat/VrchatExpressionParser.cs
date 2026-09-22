@@ -70,7 +70,7 @@ public static class VrchatExpressionParser
                     if (timeParameter != null && timeParameter is not ("GestureLeftWeight" or "GestureRightWeight"))
                         errors.Add("unsupported motion time parameter " + timeParameter);
                     float speed = state?["m_Speed"]?.AsFloat(1) ?? 1;
-                    if (!float.IsFinite(speed) || speed <= 0) errors.Add("non-positive playback speed");
+                    if (!ExpressionState.SupportsSpeed(speed, timeParameter)) errors.Add("invalid playback speed");
                     layer.States.Add(new(state?["m_Name"]?.AsString() ?? "State", clip?.Id, speed,
                         state?["m_WriteDefaultValues"]?.AsBool() == true, timeParameter));
                 }

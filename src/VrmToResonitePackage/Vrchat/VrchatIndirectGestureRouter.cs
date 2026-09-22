@@ -98,7 +98,7 @@ internal static class VrchatIndirectGestureRouter
             if ((motion?.FileID ?? 0) != 0 && clip == null) return false;
             float speed = state["m_Speed"]?.AsFloat(1) ?? 1;
             string time = state["m_TimeParameterActive"]?.AsBool() == true ? state["m_TimeParameter"]?.AsString() ?? "" : null;
-            if (!float.IsFinite(speed) || speed <= 0 || (time != null && time is not ("GestureLeftWeight" or "GestureRightWeight")) ||
+            if (!ExpressionState.SupportsSpeed(speed, time) || (time != null && time is not ("GestureLeftWeight" or "GestureRightWeight")) ||
                 (state["m_CycleOffset"]?.AsFloat() ?? 0) != 0 ||
                 new[] { "m_SpeedParameterActive", "m_CycleOffsetParameterActive", "m_MirrorParameterActive" }
                     .Any(k => state[k]?.AsBool() == true)) return false;

@@ -132,7 +132,7 @@ internal static class VrchatDefaultGestureRouter
                     if (transition != null && (clip?.Curves.Count ?? 0) == 0) return false;
                     float speed = state["m_Speed"]?.AsFloat(1) ?? 1;
                     string time = state["m_TimeParameterActive"]?.AsBool() == true ? state["m_TimeParameter"]?.AsString() ?? "" : null;
-                    if (!float.IsFinite(speed) || speed <= 0 || (time != null && time is not ("GestureLeftWeight" or "GestureRightWeight")) ||
+                    if (!ExpressionState.SupportsSpeed(speed, time) || (time != null && time is not ("GestureLeftWeight" or "GestureRightWeight")) ||
                         new[] { "m_SpeedParameterActive", "m_CycleOffsetParameterActive", "m_MirrorParameterActive" }.Any(k => state[k]?.AsBool() == true) ||
                         (state["m_CycleOffset"]?.AsFloat() ?? 0) != 0) return false;
                     index = projected.States.Count; selectedStates[id] = index;
