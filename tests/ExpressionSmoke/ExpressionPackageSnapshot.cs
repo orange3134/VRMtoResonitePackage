@@ -1,10 +1,8 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using FrooxEngine;
 
 // Compare authored data independently of runtime graph layout and session-local IDs.
-// Re-saving loaded AnimX data includes every key, interpolation mode and tangent;
-// sampling just a few times could miss a changed curve between those samples.
+// Legacy animation packages are compared by their endpoints, which are all the new system retains.
 internal static class ExpressionPackageSnapshot
 {
     public static string Capture(Slot root, string artifacts)
@@ -20,14 +18,10 @@ internal static class ExpressionPackageSnapshot
         foreach (var entry in root.FindChild("Catalog").Children)
         {
             string id = Value<string>(entry, "Id");
-            var data = entry.GetComponent<StaticAnimationProvider>()?.Asset?.Data
-                ?? throw new InvalidOperationException("Baseline comparison needs a loaded animation: " + id);
-            string animationPath = Path.Combine(artifacts, clips.Count.ToString("D4") + ".animx");
-            data.SaveToFile(animationPath);
             clips.Add(id, new
             {
                 Name = Value<string>(entry, "DisplayName"), Enabled = Value<bool>(entry, "Enabled"),
-                AnimationSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(animationPath))),
+                Values = Pose(entry),
                 Bindings = entry.FindChild("Bindings").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
                     .Where(v => v.VariableName.Value == ExpressionTestFields.VariablePath(v.Slot, "Output"))
                     .Select(v => Value<string>(v.Reference.Target, "Id")).OrderBy(v => v, StringComparer.Ordinal).ToArray()
@@ -47,6 +41,25 @@ internal static class ExpressionPackageSnapshot
         }, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(Path.Combine(artifacts, "expressions.json"), json);
         return json;
+    }
+
+    public static SortedDictionary<string, float> Pose(Slot entry)
+    {
+        var values = new SortedDictionary<string, float>(StringComparer.Ordinal);
+        // Reading legacy AnimX is only for old/new regression comparisons, never generation.
+        var legacy = entry.GetComponent<StaticAnimationProvider>();
+        foreach (var binding in entry.FindChild("Bindings").Children)
+        {
+            string id = Value<string>(ExpressionTestFields.Reference<Slot>(binding, "Output"), "Id");
+            if (legacy == null) values.Add(id, Value<float>(binding, "Value"));
+            else
+            {
+                var data = legacy.Asset?.Data ?? throw new InvalidOperationException("Legacy asset not loaded");
+                int index = data.FindTrackIndex("Expression", id);
+                values.Add(id, ((Elements.Assets.IAnimationTrack<float>)data[index]).Sample(float.MaxValue));
+            }
+        }
+        return values;
     }
 
     private static T Value<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>()

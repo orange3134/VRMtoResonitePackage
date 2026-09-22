@@ -373,7 +373,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await default(ToWorld);
         for (int i = 0; i < 120; i++) await default(NextUpdate);
         Check(Math.Abs(restored.GetComponent<ValueField<float>>().Value.Value - 0.4f) < 0.01, "package reload discards active requests and restores tracking");
-        Check(restored.GetComponentsInChildren<StaticAnimationProvider>().All(p => p.Asset != null), "packaged AnimX assets reload");
+        Check(restored.GetComponentsInChildren<StaticAnimationProvider>().Count == 0, "saved poses reload without animation assets");
         var restoredExpressions = restored.FindChild("Expressions");
         ExpressionGraphChecks.CheckLayout(restoredExpressions);
         await ExpressionDynamicInputChecks.CheckEdits(restoredExpressions);
@@ -392,9 +392,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         // Curves with equal endpoints may still have a tangent excursion.
         var testCurve = new ExpressionCurve { Binding = new("Face", "Curve") };
         testCurve.Keys.Add(new(0, 0, 0, 4)); testCurve.Keys.Add(new(1, 0, -4, 0));
-        var testClip = new ExpressionClip { Name = "Tangent", Duration = 1 }; testClip.Curves.Add(testCurve);
-        var animation = ExpressionAnimationConverter.ConvertClip(testClip);
-        Check(Math.Abs(((Elements.Assets.IAnimationTrack<float>)animation[0]).Sample(0.5f) - 1) < 0.0001, "Hermite tangent excursion preserved");
+        Check(Math.Abs(testCurve.Sample(0.5f) - 1) < 0.0001, "source Hermite curve remains available for compile-time composition");
     });
 }
 

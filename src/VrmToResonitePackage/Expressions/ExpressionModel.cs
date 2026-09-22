@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace VrmToResonitePackage.Expressions;
 
 /// <summary>Serializable, engine-independent subset shared by the importer and scene compiler.</summary>
@@ -14,6 +17,7 @@ public sealed record ExpressionParameter(string Name, int Type, float Default, b
 public sealed record ExpressionBinding(string Path, string Shape)
 {
     public string Key => Path + "\n" + Shape;
+    public string Id => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Key))).ToLowerInvariant()[..24];
 }
 public sealed record ExpressionKey(float Time, float Value, float InSlope, float OutSlope);
 public sealed class ExpressionCurve

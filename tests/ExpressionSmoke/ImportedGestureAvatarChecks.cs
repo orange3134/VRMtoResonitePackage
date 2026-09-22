@@ -1,4 +1,3 @@
-using Elements.Assets;
 using FrooxEngine;
 using FrooxEngine.ProtoFlux;
 using VrmToResonitePackage.Expressions;
@@ -34,7 +33,7 @@ internal static class ImportedGestureAvatarChecks
             string previous = ExpressionPackageSnapshot.Capture(baselineRoot, Path.Combine(artifacts, "baseline-expressions"));
             Check(current == previous, "Expression semantics differ from baseline; compare current-expressions/expressions.json and baseline-expressions/expressions.json");
             baseline.Destroy();
-            Console.WriteLine("PASS: baseline catalog, complete AnimX curves, output bindings and all 64 gesture mappings are unchanged");
+            Console.WriteLine("PASS: baseline catalog, final pose values, output bindings and all 64 gesture mappings are unchanged");
         }
         var core = root.FindChild("Core"); var table = root.FindChild("GestureTable");
         var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
@@ -64,14 +63,11 @@ internal static class ImportedGestureAvatarChecks
                 Check(Get<int>(core, "PairIndex") == l * 8 + r && !Get<bool>(core, "AllowExternalInput"),
                     "Imported pair or input mode disagrees with the selected gesture pair");
                 for (int i = 0; i < 6; i++) await default(NextUpdate);
-                var data = mapped.GetComponent<StaticAnimationProvider>().Asset?.Data;
-                Check(data != null, "Pose animation asset did not load");
-                float animationTime = float.MaxValue;
+                var pose = ExpressionPackageSnapshot.Pose(mapped);
                 var values = new List<float>();
                 foreach (var output in root.FindChild("Outputs").Children)
                 {
-                    int index = data.FindTrackIndex("Expression", Get<string>(output, "Id"));
-                    float expected = index >= 0 ? ((IAnimationTrack<float>)data[index]).Sample(animationTime) : Get<float>(output, "Base");
+                    float expected = pose.TryGetValue(Get<string>(output, "Id"), out float fixedValue) ? fixedValue : Get<float>(output, "Base");
                     float actual = Reference<IField<float>>(output, "Target").Value;
                     Check(Math.Abs(expected - actual) < 0.001f, $"Pair {l},{r}: output {Get<string>(output, "Shape")} expected {expected}, got {actual}");
                     values.Add(actual);

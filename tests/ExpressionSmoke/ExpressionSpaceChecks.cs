@@ -58,8 +58,8 @@ internal static class ExpressionSpaceChecks
                     "reference belongs to its record's space: " + variable.VariableName.Value);
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
-        References<Slot>(); References<IField<float>>(); References<ISyncRef>(); References<IAssetProvider<Animation>>();
-        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 12,
+        References<Slot>(); References<IField<float>>(); References<ISyncRef>();
+        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 13,
             "mesh driver outputs are identified by package version 10");
         var core = root.FindChild("Core");
         Check(core.WriteDynamicVariable("Expr/AllowExternalInput", false) != DynamicVariableWriteResult.Success,

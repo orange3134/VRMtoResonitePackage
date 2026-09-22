@@ -62,9 +62,20 @@ internal static class ExpressionGraphChecks
         foreach (var meshDriver in meshDrivers)
             Check(meshDriver.BlendShapes.Count == meshOutputs.Count(r => r == meshDriver.Renderer.Target),
                 "mesh driver contains only required shape entries");
-        Check(Descendant(expressions, "Core/Logic/Playback").GetComponentsInChildren<ProtoFluxNode>()
-            .Count(n => n.GetType().Name == "SampleValueAnimationTrack`1") == 1,
-            "one sampler captures all tracks when selection changes");
+        Check(nodes.All(n => n.GetType().Name is not "SampleValueAnimationTrack`1" and not "FindAnimationTrackIndex"),
+            "no runtime animation samplers or track lookup");
+        Check(expressions.GetComponentsInChildren<StaticAnimationProvider>().Count == 0 &&
+            expressions.GetComponentsInChildren<AssetLoader<Animation>>().Count == 0 &&
+            expressions.GetComponentsInChildren<DynamicReferenceVariable<IAssetProvider<Animation>>>().Count == 0,
+            "expressions contain no animation providers, loaders or asset references");
+        foreach (var entry in expressions.FindChild("Catalog").Children)
+        {
+            Check(ExpressionTestFields.Reference<Slot>(entry, "Bindings") == entry.FindChild("Bindings"),
+                "Catalog directly references its pose records");
+            foreach (var binding in entry.FindChild("Bindings").Children)
+                Check(binding.GetComponents<DynamicValueVariable<float>>().Count(v => v.VariableName.Value == "ExpressionBinding/Value") == 1,
+                    "each binding stores one final float value");
+        }
         var boards = nodes.GroupBy(Board).ToArray();
         var keyboard = Descendant(expressions, "Inputs/Keyboard");
         Check(keyboard.Children.All(hand => hand.FindChild("DV").GetComponentsInChildren<ProtoFluxNode>().Count == 0),

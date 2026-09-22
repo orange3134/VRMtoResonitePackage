@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 12`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 13`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -14,8 +14,8 @@
 | Expressions 自身 | `ExpressionSystem` | バージョンと入口への参照 |
 | Core | `ExpressionCore` | 入力・選択・再生状態 |
 | GestureTable | `ExpressionGestureTable` | 左右64通りの表情参照 |
-| Catalog/各表情、API/Templates/各表情 | `ExpressionClip` | 表情の設定と AnimX 参照 |
-| 各表情/Bindings/各項目 | `ExpressionBinding` | 出力レコードへの参照 |
+| Catalog/各表情、API/Templates/各表情 | `ExpressionClip` | 表情の設定と固定値一覧への参照 |
+| 各表情/Bindings/各項目 | `ExpressionBinding` | 出力レコードへの参照と固定値 |
 | Outputs/各項目 | `ExpressionOutput` | BlendShape の基礎入力・混合・最終出力 |
 | Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と8キーの割当 |
 | Inputs/HandGestures/Modules/各機種 | `ExpressionGestureSettings` | しきい値と安定待ち時間 |
@@ -46,7 +46,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 12 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 13 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | GestureTable/各セル | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
@@ -59,14 +59,21 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | `DisplayName` | string | 表情名 | 設定。直接選択メニューの表示名 |
 | `Enabled` | bool | true | 設定。false は選択・メニュー利用対象外 |
 | `Source` | string | 元データの説明、または空文字 | 定義。由来の記録。再生判定には使わない |
-| `Clip` | IAssetProvider&lt;Animation&gt; | 同じ Slot の StaticAnimationProvider | 定義。AnimX 供給元。AssetLoader にも参照をコピーする。アセット未ロードなら選択無効 |
+| `Bindings` | Slot | 直下の Bindings | 定義。固定ポーズの値一覧への参照。null・削除・無効化時は選択無効 |
 | `MenuAvailable` | bool | false | 状態。メニュー生成時のみ作成。装着開始・対応表や有効状態などの変更時に再計算。Slot が有効・Enabled=true・対応表に参照ありなら true。ロード完了は判定しない |
 
-`Bindings/各項目` の `Output`（Slot）は対応する Outputs レコードへの定義参照。
-共有 Playback は選択時に Output の Id で AnimX トラックを検索し、最後のキーを取得する。Bindings は走査しない。
+Bindings の子には ExpressionBinding 空間で次の2項目を保存する。
+
+| 名前 | 型 | 初期値 | 区分・役割 |
+|---|---|---|---|
+| `Output` | Slot | 対応するOutputsレコード | 定義。値の適用先 |
+| `Value` | float | コンパイル済みカーブの最後のキー値 | 設定。表情の固定値。元カーブや接線は保存しない |
+
+選択時は全出力のHasPoseをfalseにしてから、有効なBindingsの子を列挙し、各OutputのPoseへValueを書き込んでHasPose=trueにする。
+値や子レコードの編集後は表情を再選択する。Bindings参照自体の変更は自動反映する。
 
 `API/Templates/Expression (copy into Catalog)` は最初の表情の複製で、Id を空文字、Enabled を false に変更する。
-コピー後は一意の ID、Clip、必要な定義を整え、有効にして Pair へ割り当てる。表にない ID は Select API で選べない。
+コピー後は一意の ID、Bindings、必要な定義を整え、有効にして Pair へ割り当てる。表にない ID は Select API で選べない。
 
 ## Core：入力・選択・再生
 
@@ -75,14 +82,14 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | `AllowExternalInput` | bool | true | **設定**。通常のジェスチャー・キーボード・外部左右 API の受付可否。メニュー操作で false、初期化で true。許可 API でも変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の 0〜7。メニューも同じ値を更新 |
 | `PairIndex` | int | 0 | Selection が計算した LeftGesture × 8 + RightGesture（0〜63） |
-| `CurrentExpression` | Slot | null | Slot 有効・Enabled=true・アセット取得済みの候補。それ以外は null |
+| `CurrentExpression` | Slot | null | Slot 有効・Enabled=true・Bindings参照先が有効な候補。それ以外は null |
 
 Core の DynamicVariable に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取った参照を検証し、
 切替前後の比較後に CurrentExpression へ直接渡す。
 MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
 対応表の参照先の確認には PairIndex と GestureTable の行を使う。
 
-AllowExternalInput 以外は状態として扱う。SelectionStatus は生成しない。入力モードは AllowExternalInput、再生対象は CurrentExpression で確認する。未割当と無効・未ロードはいずれも CurrentExpression=null となる。
+AllowExternalInput 以外は状態として扱う。SelectionStatus は生成しない。入力モードは AllowExternalInput、再生対象は CurrentExpression で確認する。未割当と無効はいずれも CurrentExpression=null となる。
 PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の時間再生は行わない。
 
 Lifecycle は OnStart とローカル装着状態の変更時に動き、現在の装着者がローカルユーザーの場合だけ、初期化確認 → Selection とメニュー表示更新を実行する。
@@ -103,10 +110,10 @@ CurrentExpression を null、Outputs の Result を Base に書き戻す。
 
 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|
-| `Id` | string | binding キーの SHA-256 の先頭24桁（小文字16進数） | 定義。AnimX の Node=Expression、Property=この ID のトラックを検索 |
+| `Id` | string | binding キーの SHA-256 の先頭24桁（小文字16進数） | 定義。出力の安定した識別子。実行時はOutput参照を使う |
 | `Path` | string | 元 binding のパス | 定義。出力の由来・識別情報 |
 | `Shape` | string | BlendShape 名 | 定義。出力の由来・識別情報 |
-| `Baseline` | float | initialWeight があればその値、なければ元フィールド値 | 定義。生成時の基準値の記録。Playback は読まない。編集しても生成済み Neutral の AnimX は変わらない |
+| `Baseline` | float | initialWeight があればその値、なければ元フィールド値 | 定義。生成時の基準値の記録。Playback は読まない。編集しても生成済み Neutral の固定値 は変わらない |
 | `Base` | float | 元フィールド値 | 状態／基礎入力。既存の瞬き・viseme ドライバーがあれば出力先をここへ移す。表情にトラックがない場合の値でもある |
 | `Pose` | float | 0 | 状態。選択時に取得したトラック終端値。時間で変化しない |
 | `HasPose` | bool | false | 状態。選択した表情に該当トラックがある場合はtrue。falseなら現在のBaseを使用 |
@@ -121,7 +128,7 @@ DynamicVariable としてのパスと float 型は同じなので、Read Dynamic
 メッシュ以外の単独 IField を使う内部テスト等では、そのフィールドへ直接Writeし Result から参照する。
 
 表情なし・該当トラックなしの場合は sample の代わりに Base を使う。
-選択時に取得した Pose / HasPose を共有ループが読む。毎フレームのアセット検索・サンプリングはせず、切り替え補間もしない。
+選択時に取得した Pose / HasPose を共有ループが読む。アセット検索・サンプリングはせず、切り替え補間もしない。
 未装着時は Result=Base とする。装着中は以下の式で評価し、値が異なる場合だけ書き込む。
 
 ```text
@@ -225,8 +232,6 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | -1 | 手の未確定、Select の一致する Pair が未発見 |
 | 0 / 1（float） | 追跡混合率の端点 |
 | null | 未選択 Slot、未記録 User など参照なし |
-| `Expression` | AnimX の固定トラック Node 名 |
-| float.MaxValue | 選択時に各トラックの最後のキーを取得する固定サンプリング位置 |
 
 公開イベント Tag は変数名とは別の仕組みで、Receiver へ値を送る。
 
@@ -256,4 +261,4 @@ Internal の4つは公開操作用ではない。メニューボタンの送信�
 - [ExpressionLifecycleSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionLifecycleSetup.cs)：装着状態による初期化・終了処理。
 - [ExpressionPlaybackSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionPlaybackSetup.cs)：選択検証、終端ポーズの取得・追跡入力との合成とWrite。
 - [ExpressionInputSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionInputSetup.cs)：メニュー、キー割当、機種別入力。
-- [ExpressionAnimationConverter.cs](../src/VrmToResonitePackage/Expressions/ExpressionAnimationConverter.cs)：出力 ID と AnimX トラック。
+- [ExpressionModel.cs](../src/VrmToResonitePackage/Expressions/ExpressionModel.cs)：変換用の中間カーブと安定した出力 ID。

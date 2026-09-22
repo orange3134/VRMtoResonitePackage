@@ -2,7 +2,6 @@ using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.CommonAvatar;
 using FrooxEngine.ProtoFlux;
-using FrooxEngine.Store;
 using static VrmToResonitePackage.Expressions.ExpressionFlux;
 using static VrmToResonitePackage.Expressions.ExpressionSpaces;
 
@@ -50,19 +49,19 @@ internal sealed partial class ExpressionSystemSetup
         Data(_core, "AllowExternalInput", true);
         Reference<Slot>(_core, "CurrentExpression", null);
         Data(_core, "PairIndex", 0);
-        Data(_root, "Version", 12);
+        Data(_root, "Version", 13);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
     }
 
-    public static async Task<Slot> BuildAsync(Slot avatar, ExpressionModel model, Func<ExpressionBinding, IField<float>> resolve,
+    public static Task<Slot> BuildAsync(Slot avatar, ExpressionModel model, Func<ExpressionBinding, IField<float>> resolve,
         bool menu = true, Func<IField<float>, float?> initialWeight = null)
     {
-        if (model.Clips.Count == 0) return null;
+        if (model.Clips.Count == 0) return Task.FromResult<Slot>(null);
         AvatarSetup.ImportAvatarRootIdentification(avatar);
         var setup = new ExpressionSystemSetup(avatar, model);
-        await setup.BuildCatalog(resolve, initialWeight);
+        setup.BuildCatalog(resolve, initialWeight);
         for (int index = 0; index < 64; index++)
         {
             var cell = setup._table.AddSlot($"{index:D2} Left {index / 8} - Right {index % 8}");
@@ -87,10 +86,10 @@ internal sealed partial class ExpressionSystemSetup
         int assigned = setup._compiled.Pairs.Count(id => id != null && setup._clips.ContainsKey(id));
         Console.WriteLine($"Expression system: {setup._clips.Count} clips, {setup._outputSlots.Count} outputs, {assigned}/64 gesture pairs assigned, " +
             $"{setup._root.GetComponentsInChildren<ProtoFluxNode>().Count} Flux nodes");
-        return setup._root;
+        return Task.FromResult(setup._root);
     }
 
-    private async Task BuildCatalog(Func<ExpressionBinding, IField<float>> resolve, Func<IField<float>, float?> initialWeight)
+    private void BuildCatalog(Func<ExpressionBinding, IField<float>> resolve, Func<IField<float>, float?> initialWeight)
     {
         var fields = new Dictionary<IField<float>, Slot>();
         var definitions = _model.Clips.Where(clip =>
@@ -125,7 +124,7 @@ internal sealed partial class ExpressionSystemSetup
         {
             foreach (var curve in clip.Curves)
             {
-                string id = ExpressionAnimationConverter.BindingId(curve.Binding);
+                string id = curve.Binding.Id;
                 if (_outputSlots.ContainsKey(id)) continue;
                 var field = resolve(curve.Binding);
                 if (field == null)
@@ -165,28 +164,19 @@ internal sealed partial class ExpressionSystemSetup
                 _outputSlots[id] = output; fields[field] = output;
             }
             // A partially resolved face must not be presented as a faithfully imported clip.
-            if (clip.Curves.Any(c => !_outputSlots.ContainsKey(ExpressionAnimationConverter.BindingId(c.Binding))))
+            if (clip.Curves.Any(c => !_outputSlots.ContainsKey(c.Binding.Id)))
             { UniLog.Warning($"Expression '{clip.Name}' omitted: one or more output bindings were not resolved"); continue; }
             Slot entry = Record(_catalog, clip.Name, ClipSpace);
             Data(entry, "Id", clip.Id); Data(entry, "DisplayName", clip.Name); Data(entry, "Enabled", true);
             Data(entry, "Source", clip.Source ?? "");
-            var animation = ExpressionAnimationConverter.ConvertClip(clip);
-            string temporary = _root.Engine.LocalDB.GetTempFilePath("animx");
-            animation.SaveToFile(temporary);
-            Uri uri = await _root.Engine.LocalDB.ImportLocalAssetAsync(temporary, LocalDB.ImportLocation.Move);
-            await default(ToWorld);
-            var provider = entry.AttachComponent<StaticAnimationProvider>();
-            provider.URL.Value = uri;
-            var clipReference = Reference<IAssetProvider<Animation>>(entry, "Clip", provider);
-            var loader = entry.AttachComponent<AssetLoader<Animation>>();
-            var loaderReference = entry.AttachComponent<ReferenceCopy<IAssetProvider<Animation>>>();
-            loaderReference.Source.Target = clipReference.Reference;
-            loaderReference.Target.Target = loader.Asset;
             var bindings = entry.AddSlot("Bindings");
+            Reference(entry, "Bindings", bindings);
             foreach (var curve in clip.Curves)
             {
-                string id = ExpressionAnimationConverter.BindingId(curve.Binding);
-                Reference(Record(bindings, curve.Binding.Shape, BindingSpace), "Output", _outputSlots[id]);
+                string id = curve.Binding.Id;
+                var record = Record(bindings, curve.Binding.Shape, BindingSpace);
+                Reference(record, "Output", _outputSlots[id]);
+                Data(record, "Value", curve.Keys[^1].Value);
             }
             _clips[clip.Id] = entry;
         }

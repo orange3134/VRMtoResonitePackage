@@ -1,5 +1,4 @@
 using System.Globalization;
-using Elements.Assets;
 using VrmToResonitePackage.Expressions;
 using VrmToResonitePackage.Unity;
 using VrmToResonitePackage.Vrchat;
@@ -14,9 +13,6 @@ internal static class WeightedCurveChecks
             curve.Keys.Add(new(0, 0.2f, 0, 1.7f)); curve.Keys.Add(new(2, 0.8f, -0.3f, 0));
             var yaml = Keys(outWeight, inWeight);
             Check(UnityWeightedExpressionCurve.TryBake(curve, yaml), $"valid weighted segment accepted ({outWeight}, {inWeight})");
-            var clip = new ExpressionClip { Id = "weighted", Name = "weighted", Duration = 2 };
-            clip.Curves.Add(curve);
-            var track = (CurveFloatAnimationTrack)ExpressionAnimationConverter.ConvertClip(clip)[0];
             // Independent parametric Bezier oracle: no inverse-time solver or baker used here.
             for (int i = 0; i <= 10000; i++)
             {
@@ -25,7 +21,6 @@ internal static class WeightedCurveChecks
                 float value = (float)(v * v * v * 0.2 + 3 * v * v * u * (0.2 + 2 * outWeight * 1.7) +
                     3 * v * u * u * (0.8 + 2 * inWeight * 0.3) + u * u * u * 0.8);
                 Check(Math.Abs(curve.Sample(time) - value) < 0.00005f, "weighted Bezier error bound");
-                Check(Math.Abs(track.Sample(time) - value) < 0.00005f, "exported AnimX preserves weighted curve");
             }
         }
         var singular = new ExpressionCurve { Binding = new("Face", "Smile") };
@@ -40,7 +35,7 @@ internal static class WeightedCurveChecks
         invalid.Keys[0] = invalid.Keys[0] with { OutSlope = float.PositiveInfinity };
         Check(UnityWeightedExpressionCurve.TryBake(invalid, Keys(0.76f, 0.76f)) && invalid.Sample(0.9f) == 0,
             "weighted metadata does not change stepped segments");
-        Console.WriteLine("PASS: weighted Unity curves match parametric Bezier and AnimX samples; invalid weights and holds checked");
+        Console.WriteLine("PASS: weighted Unity curves match parametric Bezier; invalid weights and holds checked");
     }
     private static List<YamlNode> Keys(float output, float input) => UnityScene.Parse(
         "--- !u!74 &1\nAnimationClip:\n  keys:\n  - weightedMode: 2\n    outWeight: " + output.ToString(CultureInfo.InvariantCulture) +
