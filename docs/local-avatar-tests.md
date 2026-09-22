@@ -48,3 +48,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-local-avatar.ps
 
 コミット前に `git check-ignore .local/avatar-tests.json` と `git diff --cached` で、
 パス・ログ・アバター本体がステージされていないことを確認する。
+
+### 利用中の EXE まで修正が反映されているか確認する
+
+専用ディレクトリでの回帰テストが成功しても、通常利用する `publish/ResoPon.exe` は更新されない。
+修正後も同じ症状が報告された場合は、まず実際の変換ログ冒頭の ResoPon バージョンと実行場所を
+確認する。別フォルダーの検証用 EXE だけを生成して完了としない。
+通常利用する publish 出力を更新する場合は、EXE と依存 DLL をまとめて publish し、
+その場所の EXE を使って実入力の変換・生成パッケージの inspect を実行する。
+Windows の GUI EXE を PowerShell から検証するときは `Start-Process -Wait -PassThru` と
+`-WindowStyle Hidden` を使い、プロセスの終了コードとログを確認する。
+表情の修正ではログの割り当て数と保存済みパッケージの再生も確認する。
+アバターと検証結果は引き続き `.tmp_verify/` に置く。
