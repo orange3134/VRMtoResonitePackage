@@ -24,8 +24,10 @@ flowchart LR
     T --> L
     L --> S
     S --> P[64通りのGestureTableから選択]
-    P --> R[終端ポーズを取得・追跡と混合]
-    R --> V[ResultへWrite → BlendShape]
+    P --> R[選択イベントで終端ポーズを保存]
+    R --> V[通常出力はResultへWrite → BlendShape]
+    R --> Q[追跡のある出力だけ専用Driveで合成 → BlendShape]
+    B[瞬き・口パクのBase] --> Q
     Result[Result: DynamicField] -. Value を参照 .-> V
 ```
 
@@ -40,10 +42,10 @@ Expressions/
     Logic/
       Lifecycle/                   初期化、装着状態の変更監視
       Selection/                   対応表からの選択と切り替え
-      Playback/                    終端ポーズの取得・追跡合成・Write
+      Playback/                    終端ポーズの取得・通常出力へのWrite
   Outputs/                         BlendShape ごとのベース入力と最終出力
     各 BlendShape/                 出力定義・Base・Result
-      Changes/                     入力値の変更監視と共有Writerへの通知
+      Tracking/                    既存の追跡がある出力だけ自動合成するDrive
   Drivers/各 Renderer/            DynamicBlendShapeDriver、必要なシェイプのみ登録
   Inputs/
     ContextMenu/                   対応表にある表情のみメニュー表示
@@ -90,23 +92,25 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 呼び出しには対象モジュールだけを宛先とする同期 Dynamic Impulse を使い、
 選択状態をイベント内で確定し、Playback も同期呼び出しして選んだ表情の各トラックの終端値を即時に書き込む。
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → Selection → Playback を同期実行する。
-同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態と出力が確定する。
+同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態・固定ポーズ・通常出力が確定する。
+追跡対象の出力は通常のドライバー更新で反映する。時間補間は行わない。
 表の編集・表情の無効化・Bindings参照の変更は、選択結果の変化を監視して反映する。
 
-Version 14 は再生用の ValueFieldDrive / ReferenceDrive を生成しない。
+Version 15 は通常の表情出力を選択イベント内のWriteで更新する。
 変換時に各トラックの最後のキー値を Catalog/Bindings の Value に保存する。
-Playback は選択時と Bindings 参照の変更時にその値を Outputs の Pose / HasPose へコピーする。
-LocalUpdate は生成しない。各出力の Base・TrackingWeight・BlinkMode・Pose・HasPose を変更監視し、
-変更された出力の Slot を共有 Playback へ送る。その出力だけ固定値と追跡・瞬きを合成し、ResultへWriteする。
-AnimX・AnimationProvider・AssetLoader・トラック検索・サンプラーを生成せず、Result の値が同じなら書かない。
+Playback は選択時と Bindings 参照の変更時にその値を Outputs の Pose / HasPose へコピーし、
+通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
+元から瞬き・口パク等のドライバーがある出力だけTrackingボードを生成し、
+保存済みPoseと追跡BaseをValueFieldDriveで合成する。アニメーションの途中値は評価しない。
+AnimX・AnimationProvider・AssetLoader・トラック検索・サンプラーも生成しない。
 Result は DynamicBlendShapeDriver の Value を参照する DynamicField<float>。
-メッシュ名との接続を維持する標準 DynamicBlendShapeDriver は残し、Flux側の継続Driveを廃止する。
-装着者だけが書き込み、閲覧者は同期された値を受け取る。未装着時はホストだけが Base を反映する。
+通常出力は装着者だけが値をWriteし、未装着時はホストがBaseを適用する。
+追跡対象は各クライアントで同期されたPoseと各自のBaseを合成し、未装着時はBaseを使う。
 切り替え補間は行わず、FadeIn / FadeOut / FadeDuration / FadeWeight / Snapshot は生成しない。
 連続・ループアニメーションも再生しない。Loop / Duration と Core の再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 14 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 15 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -117,10 +121,10 @@ Result は DynamicBlendShapeDriver の Value を参照する DynamicField<float>
 | メニュー表示 | 装着開始、Catalog の項目数、対応表の有効な参照先の変化 |
 | キーボード | 左右それぞれの8キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
-| Playback | 選択イベント内で保存済みValueを即時適用。選択参照・Bindings参照・書き込み権限の変化でも更新。出力変更通知ではその出力だけ合成・Write |
-| Outputs | 各Changesに5つの値変更監視と1つのSlot通知。合成・Writeは共有Playbackだけに置く |
+| Playback | 選択イベント内で保存済みValueを即時適用。選択参照・Bindings参照・書き込み権限の変化でも更新。通常出力へ一括Write |
+| Outputs | 通常出力にはFluxなし。既存の追跡がある出力だけTrackingのDriveで継続合成。変更監視・通知は置かない |
 
-変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
+入力・選択・装着状態の変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
 比較用の前回値はローカルな実行状態で、DynamicVariable や同期・保存対象の変数には追加しない。
 初期値の設定だけでは発火しないため、初回に必要な処理には `OnStart` も使う。
 装着者の確認は各処理の入口に残す。
@@ -217,7 +221,7 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
 
 - 装着開始・初回起動：必要なら初期化し、Selection とメニュー表示更新を同期実行する。
 - 取り外し：初期化済みのクライアントが一度だけ入力・選択状態をクリアし、出力を Base に戻す。初期化済みフラグを解除する。
-- 未装着中：選択更新は停止し、ホストの共有Writeは Base に追従する。未装着で生成したものや閲覧者は共有の選択状態を書き換えない。
+- 未装着中：選択更新は停止する。通常出力は初期化・権限取得時にホストがBaseをWriteし、追跡対象は専用DriveがBaseに追従する。閲覧者は共有の選択状態を書き換えない。
 - 再装着・複製・読み込み：初回に左右値を 0、入力許可を true に戻して再開する。API が先に届いた場合も同じ初期化を行う。
 
 取り外し時に別の装着者が既にいる場合は、終了側は共有値をクリアせずローカルフラグだけを解除する。
@@ -345,7 +349,7 @@ Value に固定値を設定する。変換時は元カーブの最後のキー�
 Value・子レコードを編集した後は、表情を再選択して適用する。
 Bindings の参照自体を変更した場合は、その変更を監視して適用する。
 
-## 外部イベント API（Version 14、Tag・引数は Version 4 と共通）
+## 外部イベント API（Version 15、Tag・引数は Version 4 と共通）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
 左右の通常入力・メニュー入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
@@ -365,7 +369,7 @@ Tag は大文字・小文字を含めて完全一致。範囲外の int、引数
 メニューの送信にも専用の Tag を使うため、通常入力を無効にしてもメニューは操作できる。
 
 左右メニューは bool と片手の値、直接選択メニューは bool と両手の値を同じ Impulse 内で更新する。
-その後、通常と同じ `Selection` を同期実行し、Playback の共有Writeが出力を同期更新する。
+その後、通常と同じ `Selection` を同期実行し、Playback が固定ポーズと通常出力を同期更新する。追跡対象は通常のドライバー更新で反映する。
 bool を false にしただけでは左右値は変えず、表情は対応表から引き続き決定する。
 初期化は入力許可の判定より前に行い、複製・再ロード・再装着時には bool=true、左右=0 に戻す。
 Dynamic Impulse はネットワーク RPC ではなく、装着者以外のクライアントからの実行は無視する。
@@ -419,21 +423,22 @@ AvatarMask、StateMachineBehaviour、Exit や遷移中断も一般には対象�
 
 Playback は選択イベント・表情参照または Bindings 参照の変化時に、全出力の HasPose をfalseにし、
 Bindings の各 Output へ Value をコピーして HasPose=true にする。記録の順序には依存せず、欠落時はBaseを使う。
-以後は出力入力値の変更イベントを受信したときだけ、その出力を合成し、Resultと違う場合だけ書き込む。
-無変化時の全出力巡回はない。表情選択・初期化・権限取得時には全出力を同期更新する。
-装着者または未装着時のホストだけが共有Writerを実行し、閲覧者の通知では書き込まない。
-未装着時は、保存・複製で選択状態が残っていてもホストが Result を Base に戻す。
-表情を操作するときは、入力・Bindings/Value・TrackingWeightなどを変更する。
+続いて通常出力を合成し、Resultと違う場合だけ書き込む。追跡用Driveの対象にはWriteしない。
+無変化時の全出力巡回も出力ごとの変更監視もない。通常出力のBase・TrackingWeight・BlinkMode編集は再選択で適用する。
+Bindings/Valueの編集も再選択で適用する。表情選択・初期化・権限取得で固定ポーズと通常出力を更新する。
+装着者または未装着時のホストだけが共有Writerを実行する。追跡用Driveは全クライアントでローカル評価する。
+未装着時は、保存・複製で選択状態が残っていてもResultはBaseとなる。
 
 既存の瞬き・口パク等のドライバーは Outputs の `Base` に接続し直す。
-表情にトラックがない出力は Base を使い、ある出力はアニメーション値を使う。
+表情にトラックがない出力は Base を使い、ある出力は選択時に保存した固定値を使う。
 出力ごとの `TrackingWeight`（0〜1）で Base の混合率を調整できる。
 瞬きは `BlinkMode` で別に合成する。0は通常の混合、1は表情値と Base の最大値、2は最小値を採用する。
 生成時に既存の `EyeLinearDriver.Eyes[].OpenCloseTarget` を検出した出力だけ、閉じる方向に合わせて1または2に初期化する。
 開いている表情でも瞬きが通り、閉じている表情は瞬きが終わっても開かない。切り替え時も瞬きの振幅を減らさない。
 口パク・視線などの他のドライバーにはこの合成を自動適用しない。
-後から瞬きを設定する場合は、OpenCloseTarget を該当 `Outputs/シェイプキー` の `Base` の Value フィールドへ接続し、
+既存のTrackingボードがある出力で瞬きの接続を変更する場合は、OpenCloseTarget を該当 `Outputs/シェイプキー` の `Base` の Value フィールドへ接続し、
 `BlinkMode=1`（大きいほど閉じる通常の設定）にする。小さいほど閉じる設定では2にする。`TrackingWeight` は0のままでよい。
+Trackingのない出力に後から追跡を加える場合は、追跡元を設定して表情システムを再生成する必要がある。Baseへの接続だけでは自動追従しない。
 元の BlendShape フィールドは DynamicBlendShapeDriver が Drive するため、OpenCloseTarget を直接重ねて接続しない。
 既存パッケージをこの方式にするには再変換が必要。瞬き binding がないアバターは、再変換だけで Eyes の接続先が増えるわけではない。
 複製・再ロード・再装着時には左右状態を0に、AllowExternalInput を true に初期化する。
@@ -444,7 +449,7 @@ DynamicBlendShapeDriver は Expressions/Drivers 以下に SkinnedMeshRenderer �
 Output と Drivers の同名 Slot には連番を付け、診断パスの重複も避ける。binding の Id・Path・Shape は変更しない。
 VRM の binding は数値インデックスの場合があるため、登録名は解決済みメッシュフィールドから実メッシュ名を取得する。
 各 Output の Result は対応する BlendShapes[].Value への DynamicField で、値を二重に保存・コピーしない。
-Playback は ExpressionOutput/Result を読み、値が変わる場合だけWriteする。
+Playback は通常出力の ExpressionOutput/Result を読み、値が変わる場合だけWriteする。追跡対象のResultはTrackingのDriveが駆動する。
 
 ## 検証
 
@@ -780,3 +785,16 @@ CatalogのClip参照をBindingsのSlot参照へ置き換え、アセットのロ
 Resultそのものは監視対象外のため、外部からResultを変更しても入力イベントが来るまで再適用しない。
 回帰では無変化時の出力保持、別出力への波及がないこと、瞬き・設定編集・複製・保存再読込を確認する。
 既存パッケージの更新には再変換が必要。
+
+### Version 15: 表情選択時のWriteと追跡専用Driveを分離
+
+出力ごとの5つのFireOnLocalValueChangeとSlot通知を廃止した。
+通常出力は選択処理で一括Writeし、それ以外では再適用しない。出力数に比例する変更監視はない。
+元からドライバーがある出力だけ、TrackingボードのValueFieldDriveでPoseとBaseを合成する。
+Pose・HasPoseは選択イベントで同期更新し、実際の追跡出力は通常のドライバー更新で反映する。
+瞬きの最大値／最小値、TrackingWeightの0〜1制限、トラック欠落時のBase追従を維持する。
+LifecycleはHasPoseを解除し、通常出力だけBaseをWriteする。追跡のDriveとは競合しない。
+通常出力の設定変更は再選択で適用する。追跡出力のBase・混合設定は自動追従する。
+以前のパッケージを更新するには再変換が必要。公開イベントAPIは維持する。
+回帰では通常出力の同期切り替え・無操作時の非書込、追跡による他出力への波及がないこと、
+実EyeLinearDriverの通常／反転瞬き、口パクとの混合、複製・保存再読込を検証する。

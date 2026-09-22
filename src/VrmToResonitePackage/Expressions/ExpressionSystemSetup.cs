@@ -18,7 +18,6 @@ internal sealed partial class ExpressionSystemSetup
     private readonly ExpressionModel _model;
     private readonly Slot _root, _catalog, _core, _outputs, _table, _api, _inputs;
     private readonly Slot _lifecycle, _selection, _playback;
-    private const string OutputUpdateTag = "ResoPon/Expression/Internal/Output";
     private const string PlaybackTickTag = "ResoPon/Expression/Internal/Playback";
     private const string SelectionTickTag = "ResoPon/Expression/Internal/Selection";
     private const string InitializeTag = "ResoPon/Expression/Internal/Initialize";
@@ -50,7 +49,7 @@ internal sealed partial class ExpressionSystemSetup
         Data(_core, "AllowExternalInput", true);
         Reference<Slot>(_core, "CurrentExpression", null);
         Data(_core, "PairIndex", 0);
-        Data(_root, "Version", 14);
+        Data(_root, "Version", 15);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");

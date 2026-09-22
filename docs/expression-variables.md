@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 14`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 15`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -46,7 +46,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 14 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 15 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | GestureTable/各セル | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
@@ -97,13 +97,13 @@ Lifecycle は OnStart とローカル装着状態の変更時に動き、現在�
 公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、装着状態の変更イベントより早い左右入力も保持する。
 
 初期化時は左右値・PairIndex を 0、AllowExternalInput を true、
-CurrentExpression を null、Outputs の Result を Base に書き戻す。
+CurrentExpression を null、全OutputsのHasPoseをfalseにし、通常出力のResultをBaseに書き戻す。追跡出力は専用DriveがBaseを反映する。
 その後の Selection と Playback の同期Writeで現在の対応表に応じた状態になる。
 
 装着が終了すると、初期化済みのクライアントだけが一度このクリア処理を実行し、フラグを false に戻す。
 既に別のユーザーが装着している場合は共有値をクリアせず、ローカルフラグだけを戻す。
 未装着で生成・複製したインスタンスや閲覧者のクライアントはクリアを書き込まない。
-未装着中は Selection を実行しない。ホストの共有Writeが Base に追従する。
+未装着中は Selection を実行しない。通常出力は初期化・権限取得時にホストがBaseをWriteし、追跡出力は専用DriveがBaseに追従する。
 再装着・複製・読み込み後の最初の処理では再び初期化する。
 
 ## Outputs/各 BlendShape
@@ -119,33 +119,37 @@ CurrentExpression を null、Outputs の Result を Base に書き戻す。
 | `HasPose` | bool | false | 状態。選択した表情に該当トラックがある場合はtrue。falseなら現在のBaseを使用 |
 | `TrackingWeight` | float | 0 | 設定。表情値から Base へ寄せる割合。使用時に 0〜1 に制限。0=表情値、1=Base。自動更新処理はない |
 | `BlinkMode` | int | 通常0、既存の OpenCloseTarget は1または2 | 設定。0=通常の混合、1=max(追跡混合値, Base)、2=min(追跡混合値, Base)。生成時の Eye.ClosedState が OpenState より小さい場合は2。それ以外の瞬きは1 |
-| `Result` | float | 元フィールド値 | 状態。DynamicField<float> が DynamicBlendShapeDriver の該当 BlendShapes[].Value を参照する。共有Playbackがその参照先へ値を書き込む |
+| `Result` | float | 元フィールド値 | 状態。DynamicField<float> が DynamicBlendShapeDriver の該当 BlendShapes[].Value を参照する。通常出力は共有PlaybackがWriteし、既存の追跡がある出力だけTrackingのDriveが駆動する |
 | `Target` | IField&lt;float&gt; | 元の BlendShape フィールド | 定義。出力先の記録。DynamicBlendShapeDriver の Renderer・シェイプ名は生成時に別途設定するため、この参照だけ変更しても送信先は変わらない |
 | `OriginalDriver` | ISyncRef | 元のドライバー | 定義。既存 ActiveLink が ISyncRef の場合だけ作成。Base へ付け替えたドライバーの記録 |
 
 Result 以外の数値レコードは DynamicValueVariable、Result だけは外部フィールドを参照する DynamicField。
 DynamicVariable としてのパスと float 型は同じなので、Read Dynamic Variable で引き続き読み取れる。
-メッシュ以外の単独 IField を使う内部テスト等では、そのフィールドへ直接Writeし Result から参照する。
+メッシュ以外の単独 IField を使う内部テスト等では、そのフィールドをWriteまたは追跡用Driveの対象とし Result から参照する。
 
 表情なし・該当トラックなしの場合は sample の代わりに Base を使う。
-選択時は全出力を同期更新する。以後はBase・TrackingWeight・BlinkMode・Pose・HasPoseの値変更時に、
-該当する出力だけを共有Playbackが更新する。LocalUpdate・アセット検索・サンプリング・切り替え補間は生成しない。
-未装着時は Result=Base とする。装着中は以下の式で評価し、値が異なる場合だけ書き込む。
+選択イベントで全出力のPose・HasPoseを同期更新し、通常出力にはResultをWriteする。
+元から追跡ドライバーがある出力だけTrackingのValueFieldDriveで継続合成する。
+出力ごとのFireOnLocalChange・通知イベント、LocalUpdate・アセット検索・サンプリング・切り替え補間は生成しない。
+未装着時は Result=Base とする。装着中は以下の式で評価する。通常出力のWriteは値が異なる場合だけ行う。
 
 ```text
 sample  = HasPose ? Pose : Base
 desired = lerp(sample, Base, clamp01(TrackingWeight))
 Result  = BlinkMode == 1 ? max(desired, Base) : BlinkMode == 2 ? min(desired, Base) : desired
-Playback → WriteDynamicValueVariable(Result) → DynamicBlendShapeDriver.BlendShapes[].Value → BlendShape
+通常出力: Playback → WriteDynamicValueVariable(Result) → DynamicBlendShapeDriver.BlendShapes[].Value → BlendShape
 Result (DynamicField<float>) ──参照──> 同じ BlendShapes[].Value
 ```
 
-EyeLinearDriver の OpenCloseTarget を後から追加する場合は、該当 Output の Base の Value フィールドへ接続し、
+Trackingボードのある出力で EyeLinearDriver の OpenCloseTarget を変更する場合は、該当 Output の Base の Value フィールドへ接続し、
 BlinkMode を閉じる方向に合わせて1または2にする。TrackingWeight=0でも瞬きが合成される。
 同じ BlendShape を DynamicBlendShapeDriver と EyeLinearDriver の両方から直接 Drive しない。
 BlinkMode は生成時に閉じる方向を設定する。後から OpenState／ClosedState を反転した場合は BlinkMode も変更する。
-表情を即時に切り替えても、Baseの変更イベントによりBlinkModeによる瞬きの合成は継続する。
-各Outputs/Changesは値変更通知だけを行う。Resultは監視せず、無変化時の再適用はしない。
+表情は選択イベントで固定値を保持し、瞬きは追跡用Driveが合成し続ける。
+通常出力のBase・TrackingWeight・BlinkMode・Bindings/Value編集は再選択で反映する。
+追跡対象ではBase・TrackingWeight・BlinkModeの変更が自動反映される。
+Trackingのない出力に追跡を後付けする場合、Baseに接続するだけでは足りず、追跡元を設定してシステムを再生成する。
+OriginalDriverは生成時の経路の記録であり、編集して追跡の有効・無効を切り替える設定ではない。
 
 ## Inputs/Keyboard/Left・Right
 
@@ -246,10 +250,9 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `InitializeTag` | `ResoPon/Expression/Internal/Initialize` | 引数なし。Lifecycle の初期化確認 |
 | `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。選択更新を同期実行 |
 | `PlaybackTickTag` | `ResoPon/Expression/Internal/Playback` | 引数なし。終端ポーズの取得・適用を同期実行 |
-| `OutputUpdateTag` | `ResoPon/Expression/Internal/Output` | Slot。変更された出力を共有Writerへ通知。装着者または未装着時のホストだけが適用 |
 | `MenuRefreshTag` | `ResoPon/Expression/Internal/MenuRefresh` | 引数なし。メニュー表示可否を再計算。メニュー生成時のみ |
 
-Internal の5つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
+Internal の4つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
 選択中の一時候補、逆引き Pair 番号、メニュー表示判定は LocalValue / LocalObject、初期化済みフラグは StoredValue<bool> を使う。
 これらも DynamicVariable の保存変数とは区別する。
 
@@ -262,6 +265,6 @@ Internal の5つは公開操作用ではない。メニューボタンの送信�
 - [ExpressionFlux.cs](../src/VrmToResonitePackage/Expressions/ExpressionFlux.cs)：スコープ、変数・定数ノード、読み書き。
 - [ExpressionApiSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionApiSetup.cs)：入力検証、左右値の更新、モード変更、ID の逆引き。
 - [ExpressionLifecycleSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionLifecycleSetup.cs)：装着状態による初期化・終了処理。
-- [ExpressionPlaybackSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionPlaybackSetup.cs)：選択検証、終端ポーズの取得・追跡入力との合成とWrite。
+- [ExpressionPlaybackSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionPlaybackSetup.cs)：選択検証、終端ポーズの取得・通常出力のWrite・追跡専用Drive。
 - [ExpressionInputSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionInputSetup.cs)：メニュー、キー割当、機種別入力。
 - [ExpressionModel.cs](../src/VrmToResonitePackage/Expressions/ExpressionModel.cs)：変換用の中間カーブと安定した出力 ID。

@@ -196,13 +196,14 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(catalog.FindChild("Animated").GetComponent<ContextMenuItemSource>().Enabled,
             "assigning an unmapped expression exposes its menu item");
         Select("Animated");
-        Check(Math.Abs(field.Value - 1) < 0.001f, "animated clip applies its final key before the next frame");
+        Check(Math.Abs(Get<float>(expressions.FindChild("Outputs").FindChild("Smile"), "Pose") - 1) < 0.001f,
+            "animated clip stores its final key before the next frame");
         await Frames(40);
         Check(Math.Abs(field.Value - 1) < 0.001f, "animated clip remains fixed without playback");
         Set(catalog.FindChild("Animated"), "Enabled", false);
         AllowInput();
-        Check(Reference<Slot>(core, "CurrentExpression") == null && Math.Abs(field.Value - 0.2f) < 0.001f,
-            "invalid selection immediately restores Base without fading");
+        Check(Reference<Slot>(core, "CurrentExpression") == null && !Get<bool>(expressions.FindChild("Outputs").FindChild("Smile"), "HasPose"),
+            "invalid selection immediately clears the tracked pose");
         await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "disabled mapped expression restores base output");
         Set(table, "Pair.2", (Slot)null);
@@ -309,7 +310,10 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Math.Abs(field.Value - 0.4f) < 0.01, "existing tracking driver continues through proxy");
         Set(table, "Pair.2", catalog.FindChild("Angry"));
         Select("Angry");
-        Check(Math.Abs(field.Value - 0.7f) < 0.001f, "selection immediately writes the final pose without interpolation");
+        Check(Math.Abs(Get<float>(expressions.FindChild("Outputs").FindChild("Smile"), "Pose") - 0.7f) < 0.001f,
+            "selection immediately writes the tracked pose");
+        await Frames();
+        Check(Math.Abs(field.Value - 0.7f) < 0.001f, "tracking applies the final pose without interpolation");
         var wearer = avatar.Parent;
         // Departure must clear output directly, even when Neutral maps to a clip.
         Set(table, "Pair.0", catalog.FindChild("Angry"));

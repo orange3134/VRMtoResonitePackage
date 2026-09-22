@@ -22,7 +22,10 @@ internal static class ExpressionGraphChecks
         Slot Board(ProtoFluxNode node) => node.Slot.Parent.Parent;
         var updates = nodes.Where(n => n.GetType().Name == "LocalUpdate").ToArray();
         Check(updates.Length == 0, "expression system contains no LocalUpdate");
-        Check(nodes.All(n => n.GetType().Name is not "ValueFieldDrive`1" and not "ReferenceDrive`1"), "no continuous playback Drive nodes");
+        Check(nodes.All(n => n.GetType().Name != "ReferenceDrive`1"), "no playback reference drives");
+        Check(nodes.Where(n => n.GetType().Name == "ValueFieldDrive`1").All(n =>
+            Board(n).Name == "Tracking" && Board(n).Parent.Parent == expressions.FindChild("Outputs")),
+            "continuous drives are limited to live tracking");
         Check(nodes.Any(n => n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "state transitions use local change detectors");
         Check(expressions.GetComponentsInChildren<DynamicValueVariable<bool>>()
@@ -30,16 +33,17 @@ internal static class ExpressionGraphChecks
             "keyboard edge state is local to its change detector");
         foreach (var output in expressions.FindChild("Outputs").Children)
         {
-            Check(output.FindChild("Logic") == null, "output change monitors do not duplicate the merge logic");
-            var changes = output.FindChild("Changes")?.GetComponentsInChildren<ProtoFluxNode>();
-            Check(changes != null && changes.Count(n => n.GetType().Name == "FireOnLocalValueChange`1") == 5 &&
-                changes.Count(n => n.GetType().Name == "DynamicImpulseTriggerWithObject`1") == 1,
-                "five value change monitors send one output Slot to the shared writer");
-            Check(changes.All(n => !n.GetType().Name.StartsWith("WriteDynamic", StringComparison.Ordinal)),
-                "output monitors do not write or merge values");
+            bool tracked = output.GetComponents<DynamicReferenceVariable<ISyncRef>>()
+                .Any(v => v.VariableName.Value == "ExpressionOutput/OriginalDriver");
+            var outputNodes = output.GetComponentsInChildren<ProtoFluxNode>();
+            Check(outputNodes.All(n => !n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal) &&
+                !n.GetType().Name.StartsWith("DynamicImpulse", StringComparison.Ordinal)),
+                "outputs have no per-shape change monitors or impulses");
+            Check(tracked ? outputNodes.Count(n => n.GetType().Name == "ValueFieldDrive`1") == 1 : outputNodes.Count == 0,
+                "only outputs with original tracking have a live mixing graph");
             var result = output.GetComponents<DynamicField<float>>()
                 .Single(v => v.VariableName.Value == "ExpressionOutput/Result").TargetField.Target;
-            Check(result.ActiveLink == null, "Result is writable, without a Flux drive");
+            Check((result.ActiveLink != null) == tracked, "only tracked Result fields have a drive");
             Check(output.GetComponent<ValueCopy<float>>() == null,
                 "outputs use no ValueCopy: " + output.Name);
             Check(!output.GetComponents<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionOutput/Result"),

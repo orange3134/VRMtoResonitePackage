@@ -44,32 +44,23 @@ internal sealed partial class ExpressionSystemSetup
     {
         var g = new ExpressionFlux(_playback);
         var core = g.Ref(_core);
-        // Selection and per-output change events share this writer. Idle outputs
-        // do not run the merge or write path; no frame update is generated.
+        // Apply static outputs as one selection operation. Tracking outputs have a
+        // separate live driver, without per-shape change detectors or impulses.
         var value = g.Local<float>();
-        var output = g.Local<Slot>();
         var wearer = g.IsOwner(_root);
         var canWrite = g.Or(wearer, g.And(g.IsNull<User>(g.Owner(_root)),
             g.Node("IsLocalUser", null, ("User", g.Node("HostUser")))));
         var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, CoreSpace, "CurrentExpression"), g.Ref<Slot>(null));
         var bindings = g.Read<Slot>(current, ClipSpace, "Bindings");
-        g.BeginSection("Apply fixed pose and live tracking");
-        IWorldElement ApplyOutput()
+        g.BeginSection("Write static outputs on selection");
+        var update = g.Each(g.Ref(_outputs), output =>
         {
-            var baseValue = g.Read<float>(output, OutputSpace, "Base");
-            var desired = g.Choose<float>(g.And(wearer, g.Read<bool>(output, OutputSpace, "HasPose")),
-                g.Read<float>(output, OutputSpace, "Pose"), baseValue);
-            desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(output, OutputSpace, "TrackingWeight")));
-            var blinkMode = g.Read<int>(output, OutputSpace, "BlinkMode");
-            var result = g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(1)), g.Binary<float>("ValueMax", desired, baseValue),
-                g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(2)), g.Binary<float>("ValueMin", desired, baseValue), desired));
-            return g.Sequence(
+            var result = MixOutput(g, output, wearer);
+            return g.If(g.IsNull<ISyncRef>(g.Read<ISyncRef>(output, OutputSpace, "OriginalDriver")), g.Sequence(
                 g.Set<float>(value, result),
                 g.If(g.NotEqual<float>(value, g.Read<float>(output, OutputSpace, "Result")),
-                    g.Write<float>(output, OutputSpace, "Result", value)));
-        }
-        var apply = ApplyOutput();
-        var update = g.Each(g.Ref(_outputs), record => g.Sequence(g.Set<Slot>(output, record), apply));
+                    g.Write<float>(output, OutputSpace, "Result", value))));
+        });
         g.BeginSection("Apply stored pose on selection");
         var bindingOutput = g.Local<Slot>();
         var refresh = g.Sequence(
@@ -83,26 +74,41 @@ internal sealed partial class ExpressionSystemSetup
         // Only the wearer writes a pose. The host follows Base on unworn copies.
         var receiver = g.Receiver(PlaybackTickTag, false);
         Link(receiver, "OnTriggered", g.If(wearer, refresh));
-        var outputReceiver = g.Receiver<Slot>(OutputUpdateTag);
-        Link(outputReceiver, "OnTriggered", g.If(canWrite, g.Sequence(
-            g.Set<Slot>(output, Out(outputReceiver, "Value")), g.If(g.Active(output), apply))));
         g.OnChanged<bool>(canWrite, g.If(canWrite, refresh));
         g.OnChanged<Slot>(current, g.If(canWrite, refresh));
         g.OnChanged<Slot>(bindings, g.If(canWrite, refresh));
         g.OnStart(g.If(canWrite, refresh));
-        foreach (var record in _outputSlots.Values) BuildOutputChangeEvents(record);
+        foreach (var output in _outputSlots.Values)
+        {
+            if (!output.GetComponents<DynamicReferenceVariable<ISyncRef>>().Any(v =>
+                v.VariableName.Value == Path(OutputSpace, "OriginalDriver"))) continue;
+            BuildLiveTracking(output);
+        }
     }
 
-    private void BuildOutputChangeEvents(Slot output)
+    private void BuildLiveTracking(Slot output)
     {
-        var g = new ExpressionFlux(output.AddSlot("Changes"));
-        // Only the changed output is passed to the shared writer. Authorization is
-        // checked there so observers cannot write synchronized expression state.
-        var send = g.Trigger<Slot>(g.Ref(_playback), g.Text(OutputUpdateTag), g.Ref(output));
-        foreach (string name in new[] { "Base", "TrackingWeight", "Pose" })
-            g.OnChanged<float>(g.Read<float>(g.Ref(output), OutputSpace, name), send);
-        g.OnChanged<int>(g.Read<int>(g.Ref(output), OutputSpace, "BlinkMode"), send);
-        g.OnChanged<bool>(g.Read<bool>(g.Ref(output), OutputSpace, "HasPose"), send);
+        // Only shapes already driven by blink/viseme/etc. need continuous mixing.
+        // Pose and HasPose are written by selection; tracking never resamples a clip
+        // and never sends synchronized per-frame Write impulses.
+        var g = new ExpressionFlux(output.AddSlot("Tracking"));
+        var target = output.GetComponents<DynamicField<float>>()
+            .Single(v => v.VariableName.Value == Path(OutputSpace, "Result")).TargetField.Target;
+        var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>)
+            g.Node("ValueFieldDrive", typeof(float), ("Value", MixOutput(g, g.Ref(output),
+                g.Not(g.IsNull<User>(g.Owner(_root))))));
+        driver.GetRootProxy(addIfMissing: true).Drive.Target = target;
+    }
+
+    private static IWorldElement MixOutput(ExpressionFlux g, IWorldElement output, IWorldElement worn)
+    {
+        var baseValue = g.Read<float>(output, OutputSpace, "Base");
+        var desired = g.Choose<float>(g.And(worn, g.Read<bool>(output, OutputSpace, "HasPose")),
+            g.Read<float>(output, OutputSpace, "Pose"), baseValue);
+        desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(output, OutputSpace, "TrackingWeight")));
+        var blinkMode = g.Read<int>(output, OutputSpace, "BlinkMode");
+        return g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(1)), g.Binary<float>("ValueMax", desired, baseValue),
+            g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(2)), g.Binary<float>("ValueMin", desired, baseValue), desired));
     }
 
     private static IWorldElement ValidExpression(ExpressionFlux g, IWorldElement expression) =>
