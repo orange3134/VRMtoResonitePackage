@@ -95,7 +95,14 @@ internal static class ImportedGestureAvatarChecks
                 distinctPoses.Add(string.Join(",", values.Select(v => v.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))));
                 Console.WriteLine($"PASS: saved menu Left {l}, Right {r} -> {mapped.Name}, {values.Count} output fields checked");
             }
-        Check(distinctPoses.Count >= 8, "Gesture menu did not produce eight distinct visible poses");
+        string expectedCount = Environment.GetEnvironmentVariable("RESOPON_TEST_EXPECTED_DISTINCT_POSES");
+        if (expectedCount != null)
+        {
+            Check(int.TryParse(expectedCount, out int expected) && expected is >= 2 and <= 64,
+                "Expected distinct pose count must be between 2 and 64");
+            Check(distinctPoses.Count == expected, $"Expected {expected} distinct visible poses, got {distinctPoses.Count}");
+        }
+        else Check(distinctPoses.Count >= 8, "Gesture menu did not produce eight distinct visible poses");
         var receiverRoot = root.FindChild("API").FindChild("Receivers");
         var mappings = table.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionGestureTable/Pair.", StringComparison.Ordinal))
@@ -114,7 +121,7 @@ internal static class ImportedGestureAvatarChecks
                 Reference<Slot>(core, "CurrentExpression") == expression,
                 "Saved direct menu updates the normal hand pair and locks ordinary input");
         }
-        Check(visible >= 8, "Saved direct menu contains at least eight mapped poses");
+        Check(visible >= distinctPoses.Count, "Saved direct menu exposes every distinct mapped pose");
         int heldLeft = Get<int>(core, "LeftGesture"), heldRight = Get<int>(core, "RightGesture");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.LeftTag, true, (heldLeft + 1) % 8);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.RightTag, true, (heldRight + 1) % 8);

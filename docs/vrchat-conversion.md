@@ -45,6 +45,19 @@ Prefab・FBXの初期ウェイトを収集した後に表情を推定する。
 [表情システムの実装](expression-system.md)、元の設計は
 [表情システム設計](expression-system-design.md)を参照する。Viseme／Blink推定とは別に解析し、共通の出力へ接続する。
 
+表情 Clip の検出は FaceEmo の `ExpressionImporter.GetFaceAnimation` を参考に、他のアニメーション
+トラックの対応可否から分離する。`VrchatExpressionParser.ReadClip` は材質・物体・Transform が混在しても
+有効な `blendShape.*` 曲線を抽出し、除外したトラックを診断する。顔曲線の不正は Clip 全体を拒否し、
+非対応トラックだけの Clip を空の通常表情に置き換えない。元から空の Clip と、既存の入力集合によって
+不存在を確認できた無作用曲線の扱いは保持する。顔の名前やパスから割り当てを推測しない。
+
+`VrchatDefaultGestureRouter` は手だけで選ぶ平坦なレイヤーについて、左右64組と全到達可能状態からの
+収束を検証する。固定の状態数や分岐数に依存しない。同じ Clip・再生指定の顔ポーズと空中継だけの循環は
+静的な顔ポーズとして抽出し、異なるポーズを含む循環・ラッチ・空だけの循環は拒否する。
+追加条件は宣言された既定値に固定して Entry から評価する。Write Defaults による過去の保持値は持ち込まず、
+不足曲線は下位レイヤー／Baseへ戻す。Parameter Driver・Tracking Controlの副作用、遷移時間、再開始は
+再現せず、固定条件と近似内容を Diagnostics に残す。
+
 FBXの初期ブレンドシェイプ値は、同名Rendererをまとめず、配置識別子とモデル内の完全なパスで保持する。
 `UnityFbxBlendShapeDefaults` はFBXの `Connections` をたどり、channel → blendshape → geometry → modelの
 所属を解決する。チャンネル名やAssimpの走査順では割り当てない。同じgeometryを共有するmodelにも値を保持する。
@@ -489,7 +502,27 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
 - Yuzuki: scene instance、material search fallback
 - Nagma PhysBone: YAML継続行
 - Platinum: Unicode GameObject名
-- Pilica / Kumagaya: `DeformPercent` 既定weight
+- Pilica / Kumagaya: `DeformPercent` 既定weight、空中継と単一ポーズ循環の表情抽出
+
+### 熊谷ピリカのハンドサイン表情
+
+PilicaKumagaya 1.0では、左手の空中継状態と表情状態の循環に Tracking Control と Write Defaults off が
+重なり、表情 Clip が読めても左レイヤーが除外されていた。循環内の顔ポーズが一意であることを検証して
+静的に抽出する。`FaceFix=0` の既定条件では右手レイヤーに表情出力がなく、左手の次の6種類を保持する。
+
+| 左手番号 | 主なシェイプの最終値（0〜1） |
+|---|---|
+| 0 / 1 / 2 | 全36項目が0（Default） |
+| 3 | Wink_L=1 |
+| 4 | joy=1 |
+| 5 | Angry=0.5 |
+| 6 | Sorrow=0.5 |
+| 7 | Fun=1 |
+
+各表情で、表にないシェイプの値は0になる。
+
+検証では左右64組を照合し、右手番号を変えても左手の選択が保たれることを確認する。
+同じポーズと空中継だけの循環を許可しても、別ポーズを含む循環や開始状態に依存する選択は許可しない。
 
 ## 未確定事項
 

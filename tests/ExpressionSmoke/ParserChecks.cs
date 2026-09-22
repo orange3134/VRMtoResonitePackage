@@ -5,6 +5,7 @@ internal static class ParserChecks
 {
     public static void Run(string artifacts)
     {
+        MixedExpressionClipChecks.Run(artifacts);
         CompleteHandDispatcherChecks.Run(artifacts);
         NestedGestureRouterChecks.Run(artifacts);
         DefaultGestureRouterChecks.Run(artifacts);

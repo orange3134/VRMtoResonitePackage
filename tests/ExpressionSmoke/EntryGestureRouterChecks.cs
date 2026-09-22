@@ -114,7 +114,19 @@ internal static class EntryGestureRouterChecks
             string path = Path.Combine(root, "Assets", $"Pose{id}.anim");
             File.WriteAllText(path, File.ReadAllText(path).Replace("blendShape.Smile", "blendShape.Other"));
         }
-        Reject(source, "partial nonempty poses remain unsupported");
+        var sparse = Parse(source);
+        Check(sparse.Layers.Count == 2 && sparse.Diagnostics.Any(d => d.Contains("Missing curves use the lower-layer/base stream")),
+            "convergent sparse selectors explicitly project missing curves onto the lower/base stream");
+        var sparseTable = new GesturePairCompiler(sparse, sparse.Clips, _ => 0.23f);
+        for (int l = 0; l < 8; l++) for (int r = 0; r < 8; r++)
+        {
+            var pose = sparse.Clips.Concat(sparseTable.Generated).Single(c => c.Id == sparseTable.Pairs[l * 8 + r]);
+            float smile = r >= 3 ? (40 + r * 5) / 100f : l >= 3 ? l * 5 / 100f : 0.23f;
+            float other = r == 2 ? 0.5f : l == 2 ? 0.1f : 0.23f;
+            Check(Math.Abs(pose.Curves.Single(c => c.Binding.Shape == "Smile").Sample(0) - smile) < 0.0001f &&
+                Math.Abs(pose.Curves.Single(c => c.Binding.Shape == "Other").Sample(0) - other) < 0.0001f,
+                "sparse all64 pairs preserve lower-layer curves and reset unselected shapes to base");
+        }
         Check(Parse(afk).Layers.Count == 2, "Write Defaults on accepts differing binding sets");
         Console.WriteLine("PASS: Entry/Exit selectors, humanoid-only masks, 64 layered poses and unsafe-selector rejection");
     }

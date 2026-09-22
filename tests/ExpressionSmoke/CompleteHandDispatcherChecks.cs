@@ -58,26 +58,34 @@ internal static class CompleteHandDispatcherChecks
         AllPairs(source);
         foreach (string sdkMask in new[] { "b2b8bad9583e56a46a3e21795e96ad92", "7ff0199655202a04eb175de45a6e078a" })
             AllPairs(source.Replace(mask, sdkMask));
-        Check(Parse(source).Layers.Count == 0, "unknown eye identity does not permit rotation omission");
+        Check(Parse(source).Layers.Count == 1, "untracked rotations do not discard valid face curves");
         Check(Parse(source.Replace(mask, Guid(999)), eyes).Layers.Count == 0, "unknown missing mask rejected");
         Check(Parse(source.Replace("fileID: 31900000", "fileID: 31900001"), eyes).Layers.Count == 0, "known mask with wrong local ID rejected");
         Check(Parse(source.Replace("m_EventTreshold: 7", "m_EventTreshold: 6"), eyes).Layers.Count == 0, "incomplete gesture coverage rejected");
-        Check(Parse(source.Replace("m_DstState: {fileID: 307}", "m_DstState: {fileID: 306}"), eyes).Layers.Count == 0, "duplicate destinations rejected");
+        var shared = Parse(source.Replace("m_DstState: {fileID: 307}", "m_DstState: {fileID: 306}"), eyes);
+        Check(shared.Layers.Count == 1, "shared destinations are valid when every previous state reaches the same pose");
+        var sharedTable = new GesturePairCompiler(shared, shared.Clips, _ => 0.23f);
+        for (int left = 0; left < 8; left++) for (int right = 0; right < 8; right++)
+        {
+            var pose = shared.Clips.Concat(sharedTable.Generated).Single(c => c.Id == sharedTable.Pairs[left * 8 + right]);
+            Check(Math.Abs(pose.Curves.Single().Sample(0) - (Math.Min(right, 6) + 1) / 10f) < 0.0001f,
+                "shared destination preserves its authored pose for all64 pairs");
+        }
         Check(Parse(source.Replace("m_ConditionMode: 7", "m_ConditionMode: 6"), eyes).Layers.Count == 0, "latched return predicate rejected");
         Check(Parse(source.Replace("m_DstState: {fileID: 200}", "m_DstState: {fileID: 201}"), eyes).Layers.Count == 0, "return to another state rejected");
         Check(Parse(source.Replace("m_DstState: {fileID: 307}", "m_HasExitTime: 1\n  m_DstState: {fileID: 307}"), eyes).Layers.Count == 0, "timed dispatch rejected");
         Check(Parse(source.Replace("m_DstState: {fileID: 200}", "m_HasExitTime: 1\n  m_DstState: {fileID: 200}"), eyes).Layers.Count == 0, "timed returns rejected");
         Asset("Pose2.anim", Guid(1002), Clip(2) + rotations.Replace(eye, "Armature/Head/OtherEye"));
-        Check(Parse(source, eyes).Layers.Count == 0, "similar bone name is not tracked eye identity");
+        Check(Parse(source, eyes).Layers.Count == 1, "untracked bone rotations are excluded from face extraction");
         Asset("Pose2.anim", Guid(1002), Clip(2) + rotations.Replace("m_RotationCurves", "m_PositionCurves"));
-        Check(Parse(source, eyes).Layers.Count == 0, "eye translation still rejected");
+        Check(Parse(source, eyes).Layers.Count == 1, "eye translation is excluded from face extraction");
         Asset("Pose2.anim", Guid(1002), Clip(2) + rotations.Replace("m_RotationCurves", "m_EulerCurves"));
         AllPairs(source);
         string floatRotation = "  - classID: 4\n    attribute: m_LocalRotation.x\n    path: " + eye + "\n    curve:\n      m_Curve:\n      - time: 0\n        value: 0.1\n";
         Asset("Pose2.anim", Guid(1002), Clip(2) + floatRotation);
         AllPairs(source);
         Asset("Pose2.anim", Guid(1002), Clip(2) + floatRotation.Replace("m_LocalRotation.x", "m_LocalPosition.x"));
-        Check(Parse(source, eyes).Layers.Count == 0, "float eye position still rejected");
+        Check(Parse(source, eyes).Layers.Count == 1, "float eye position is excluded from face extraction");
         Asset("Pose2.anim", Guid(1002), Clip(2) + rotations + "  m_Events:\n  - functionName: Test\n");
         Check(Parse(source, eyes).Layers.Count == 0, "eye exception does not bypass events");
         Asset("Pose2.anim", Guid(1002), Clip(2) + rotations);
@@ -99,9 +107,9 @@ internal static class CompleteHandDispatcherChecks
         Check(Parse(source, eyes, knownShapes).Clips.Single(c => c.Name == "Pose2").Curves.Count == 2,
             "shape present anywhere in source inventory is never assumed absent");
         Asset("Pose2.anim", Guid(1002), Clip(2) + stale.Replace("classID: 137", "classID: 4"));
-        Check(Parse(source, eyes, new HashSet<string> { "Smile" }).Layers.Count == 0,
-            "shape filtering does not bypass unsupported component tracks");
-        Console.WriteLine("PASS: complete hand dispatcher, all64 pairs, SDK masks, tracked-eye mixed clips and unsafe graph/track rejection");
+        Check(Parse(source, eyes, new HashSet<string> { "Smile" }).Layers.Count == 1,
+            "unrelated component tracks do not discard live face curves");
+        Console.WriteLine("PASS: complete hand dispatcher, all64 pairs, SDK masks, mixed face clips and unsafe graph/event rejection");
     }
     private static void Check(bool ok, string message) { if (!ok) throw new InvalidOperationException(message); }
 }

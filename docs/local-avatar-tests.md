@@ -60,3 +60,8 @@ Windows の GUI EXE を PowerShell から検証するときは `Start-Process -W
 `-WindowStyle Hidden` を使い、プロセスの終了コードとログを確認する。
 表情の修正ではログの割り当て数と保存済みパッケージの再生も確認する。
 アバターと検証結果は引き続き `.tmp_verify/` に置く。
+
+単一ファイル publish は、出力先に以前からある `ResoPon.dll` を更新しない。
+DLL を併置して直接実行・参照する環境では、同じ publish ビルドの
+`bin/Release/win-x64/ResoPon.dll` も揃え、古い併置 DLL を検証対象にしない。
+EXE の実変換ログのバージョンと、参照する DLL のバージョン・SHA-256を確認する。

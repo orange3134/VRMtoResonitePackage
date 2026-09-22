@@ -54,7 +54,9 @@ It verifies all 16 saved menu int payloads and their hand Tags, then invokes the
 button triggers without editing their values. Each click must synchronously update
 the current pair and selected expression. It checks all 64 selected poses against
 their AnimX tracks and target output fields,
-and requires at least eight distinct poses. Saved direct-menu visibility, selection of the lowest matching pair, rejection of ordinary input while disabled, and both actual bool mode buttons are also checked. Plum v1.0.1 is the registered local regression case.
+and requires at least eight distinct poses by default. When the authored avatar has fewer poses,
+set `RESOPON_TEST_EXPECTED_DISTINCT_POSES` to its independently verified count (2–64);
+the test then requires exactly that count. PilicaKumagaya 1.0 uses 6. Saved direct-menu visibility, selection of the lowest matching pair, rejection of ordinary input while disabled, and both actual bool mode buttons are also checked. Plum v1.0.1 is the registered local regression case.
 An optional third argument supplies a previous package to compare before the menu test:
 
 ```powershell
@@ -217,3 +219,11 @@ playback without a known position parameter or non-finite speeds.
 DrivenGestureRouterChecks covers MA Absolute/Append discovery, parameter defaults, reversed-order
 zero-weight Set cascades, nested local-user selection, all 64 output values, and rejection
 of unsafe writes, missing poses, foreign destinations, timed routes and animated parameters.
+
+`MixedExpressionClipChecks` verifies extraction of blendshape curves from mixed
+transform/material/object/reference tracks, omission diagnostics, malformed face
+data rejection and existing empty/no-op clip behavior.
+`GesturePoseGraphChecks` covers neutral Any State cycles, multiple empty relays,
+shared-clip states, Entry/Exit and ordered comparison conditions across all 64
+pairs. Distinct-pose cycles, empty cycles, unknown motions/behaviors, hand-mutating
+drivers, timed routes and previous-state latches remain rejected.

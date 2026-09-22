@@ -86,6 +86,7 @@ internal static class DefaultGestureRouterChecks
         Check(Parse(source.Replace("m_DstState: {fileID: 300}", "m_DstState: {fileID: 300}\n  m_HasExitTime: 1")).Layers.Count == 0, "matching timed transition rejected");
         Check(Parse(source.Replace("m_DstState: {fileID: 1001}", "m_DstState: {fileID: 200}")).Layers.Count == 0, "multi-state cycle rejected");
         CheckMissingNeutral(artifacts);
+        GesturePoseGraphChecks.Run(artifacts);
         Console.WriteLine("PASS: authored default banks, descriptor precedence, float guards, multi-step routing, 64 pairs, inactive unsupported clips and unsafe routes");
     }
     private static void CheckMissingNeutral(string artifacts)

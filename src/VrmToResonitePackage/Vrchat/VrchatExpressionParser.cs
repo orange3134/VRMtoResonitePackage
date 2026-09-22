@@ -275,15 +275,19 @@ public static class VrchatExpressionParser
             var clip = new ExpressionClip { Id = key, Name = root["m_Name"]?.AsString() ?? "Expression",
                 Source = asset.LogicalPath, Duration = root["m_AnimationClipSettings"]?["m_StopTime"]?.AsFloat() ?? 0,
                 Loop = root["m_AnimationClipSettings"]?["m_LoopTime"]?.AsBool() == true };
-            bool unsupported = new[] { "m_CompressedRotationCurves", "m_PositionCurves", "m_ScaleCurves", "m_PPtrCurves" }
-                .Any(k => (root[k]?.Seq?.Count ?? 0) != 0);
+            // FaceEmo extracts face curves independently of the other animation bindings.
+            // Keep valid expression curves even when a clip also animates bones, objects or materials.
+            var ignoredTracks = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string kind in new[] { "m_CompressedRotationCurves", "m_PositionCurves", "m_ScaleCurves", "m_PPtrCurves" })
+                foreach (var curve in root[kind]?.Seq ?? new())
+                    ignoredTracks.Add(kind + ": " + (curve["path"]?.AsString() ?? "(unspecified path)"));
             int ignoredEyeRotations = 0;
             bool TrackedEye(string path) => path != null && trackedEyePaths?.Contains(path) == true;
             foreach (string kind in new[] { "m_RotationCurves", "m_EulerCurves" })
                 foreach (var curve in root[kind]?.Seq ?? new())
                     if (TrackedEye(curve["path"]?.AsString())) ignoredEyeRotations++;
-                    else unsupported = true;
-            unsupported |= !float.IsFinite(clip.Duration) || clip.Duration < 0 ||
+                    else ignoredTracks.Add(kind + ": " + (curve["path"]?.AsString() ?? "(unspecified path)"));
+            bool invalid = !float.IsFinite(clip.Duration) || clip.Duration < 0 ||
                 (root["m_AnimationClipSettings"]?["m_StartTime"]?.AsFloat() ?? 0) != 0 || (root["m_Events"]?.Seq?.Count ?? 0) > 0;
             foreach (var c in root["m_FloatCurves"]?.Seq ?? new())
             {
@@ -293,7 +297,7 @@ public static class VrchatExpressionParser
                         "localEulerAnglesRaw.x" or "localEulerAnglesRaw.y" or "localEulerAnglesRaw.z")
                 { ignoredEyeRotations++; continue; }
                 // Missing GameObject activity targets are no-ops in Unity. A conservative superset
-                // of prefab and FBX names proves absence; unknown hierarchy keeps strict rejection.
+                // of prefab and FBX names proves absence. These can remain empty neutral clips.
                 if (c["classID"]?.AsInt() == 1 && attribute == "m_IsActive" && !string.IsNullOrEmpty(path) &&
                     possibleTargetNames != null && path.Split('/').All(part => part.Length > 0 && part is not ("." or "..")) &&
                     !possibleTargetNames.Contains(path[(path.LastIndexOf('/') + 1)..]))
@@ -301,8 +305,14 @@ public static class VrchatExpressionParser
                     Warn(asset.LogicalPath + ": ignored activity curve with absent target: " + path);
                     continue;
                 }
-                if (c["classID"]?.AsInt() != 137 || attribute?.StartsWith("blendShape.", StringComparison.Ordinal) != true || path == null)
-                { unsupported = true; continue; }
+                if (c["classID"]?.AsInt() != 137 || attribute?.StartsWith("blendShape.", StringComparison.Ordinal) != true)
+                {
+                    ignoredTracks.Add("classID=" + (c["classID"]?.AsString() ?? "(missing)") + ": " +
+                        (path ?? "(unspecified path)") + "/" + (attribute ?? "(unspecified attribute)"));
+                    continue;
+                }
+                // A malformed face binding is not an unrelated track that can safely be dropped.
+                if (path == null || attribute.Length == 11) { invalid = true; continue; }
                 // Only a complete source-mesh inventory authorizes dropping an absent shape.
                 // Unresolved live shapes still fail later, so importer/path/driver failures stay visible.
                 if (possibleShapeNames != null && attribute.Length > 11 && !possibleShapeNames.Contains(attribute[11..]))
@@ -318,12 +328,19 @@ public static class VrchatExpressionParser
                         (k["inSlope"]?.AsFloat() ?? 0) / 100, (k["outSlope"]?.AsFloat() ?? 0) / 100));
                 }
                 if (curve.Keys.Count == 0 || curve.Keys.Any(k => !float.IsFinite(k.Time) || !float.IsFinite(k.Value) || float.IsNaN(k.InSlope) || float.IsNaN(k.OutSlope)) ||
-                    curve.Keys.Zip(curve.Keys.Skip(1)).Any(pair => pair.First.Time >= pair.Second.Time)) unsupported = true;
-                else if (!UnityWeightedExpressionCurve.TryBake(curve, c["curve"]["m_Curve"].Seq)) unsupported = true;
+                    curve.Keys.Zip(curve.Keys.Skip(1)).Any(pair => pair.First.Time >= pair.Second.Time)) invalid = true;
+                else if (!UnityWeightedExpressionCurve.TryBake(curve, c["curve"]["m_Curve"].Seq)) invalid = true;
                 else { clip.Duration = Math.Max(clip.Duration, curve.Keys[^1].Time); clip.Curves.Add(curve); }
             }
-            if (clip.Curves.Select(c => c.Binding.Key).Distinct().Count() != clip.Curves.Count) unsupported = true;
-            if (unsupported) { Warn(asset.LogicalPath + ": unsupported or invalid animation tracks; clip omitted"); return null; }
+            if (clip.Curves.Select(c => c.Binding.Key).Distinct().Count() != clip.Curves.Count) invalid = true;
+            if (invalid) { Warn(asset.LogicalPath + ": unsupported or invalid animation tracks; clip omitted"); return null; }
+            if (ignoredTracks.Count > 0)
+            {
+                Warn(asset.LogicalPath + ": non-blendshape tracks omitted: " + string.Join(", ", ignoredTracks.Order(StringComparer.Ordinal)));
+                // An unsupported-only clip is not a neutral pose; it must still invalidate its route.
+                if (clip.Curves.Count == 0)
+                { Warn(asset.LogicalPath + ": no blendshape curves remain after omitting non-blendshape tracks; clip omitted"); return null; }
+            }
             if (ignoredEyeRotations > 0) Warn(asset.LogicalPath + ": imported face shapes; authored eye-bone rotations are omitted to retain native eye tracking.");
             clips[key] = clip;
             return clip;
