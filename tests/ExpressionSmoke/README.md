@@ -189,3 +189,10 @@ an independent parametric Bezier oracle, including overshoot, zero weights,
 unweighted defaults, stepped segments and atomic rejection of invalid or
 unrepresentable curves. Entry selector checks also cover AFK=false specialization,
 non-selection parameter drivers and differing Write Defaults-on binding sets.
+
+`DefaultGestureRouterChecks` covers authored int/bool/float defaults without menus,
+ExpressionParameters precedence, initial-state/dispatcher chains, ordered left/right
+selection over all 64 pairs, inactive unsupported clips and explicit driver-side-effect
+projection. Unknown defaults, hand-mutating drivers, selected unsupported clips,
+timed transitions and cycles are rejected. Entry selector checks ensure an authored
+AFK=true default takes precedence over the legacy AFK=false approximation.

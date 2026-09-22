@@ -99,6 +99,13 @@ internal static class EntryGestureRouterChecks
         Check(afkModel.Layers.Count == 2, "AFK false and independent parameter-driver projection");
         var afkTable = new GesturePairCompiler(afkModel, afkModel.Clips, _ => 0.23f);
         Check(afkTable.Pairs.All(p => p != null), "all AFK-false pairs are assigned");
+        string declaredAfk = afk.Replace("AnimatorController:\n", "AnimatorController:\n  m_AnimatorParameters:\n  - m_Name: AFK\n    m_Type: 4\n    m_DefaultBool: 1\n");
+        var authoredAfk = Parse(declaredAfk);
+        Check(authoredAfk.Layers.Count == 2 && authoredAfk.Diagnostics.Any(d => d.Contains("AFK=1")),
+            "declared AFK default overrides the legacy AFK-false projection");
+        var authoredAfkTable = new GesturePairCompiler(authoredAfk, authoredAfk.Clips, _ => 0.23f);
+        Check(authoredAfkTable.Pairs.All(id => authoredAfk.Clips.Concat(authoredAfkTable.Generated).Single(c => c.Id == id).Curves.Count == 0),
+            "inactive authored default uses empty/base stream instead of forcing an active gesture bank");
         Reject(afk.Replace("name: EyeTrackingDisabled", "name: AFK"), "driver changing AFK rejected");
         Reject(afk.Replace("name: EyeTrackingDisabled", "name: GestureLeft"), "driver changing gesture rejected");
         Reject(afk.Replace("m_ConditionEvent: AFK", "m_ConditionEvent: UnknownGate"), "unknown gate is not fixed by guessing");

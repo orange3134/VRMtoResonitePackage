@@ -88,7 +88,10 @@ internal static class CompilerChecks
         Check(Pose(bank1, 8) == 0.9f, "use authored default rather than hardcoding bank zero");
         model.Menu.Clear();
         var unknown = new GesturePairCompiler(model, model.Clips, _ => 0.2f);
-        Check(unknown.Pairs.All(p => p == null), "non-menu parameters are not silently frozen");
+        Check(Pose(unknown, 8) == 0.9f, "declared non-menu parameters use authored defaults");
+        model.Parameters.Remove("FacialSet");
+        var undeclared = new GesturePairCompiler(model, model.Clips, _ => 0.2f);
+        Check(undeclared.Pairs.All(p => p == null), "undeclared defaults are not guessed");
         // Unity 2022.3: an upper WD-on state with a different binding also preserves the lower stream.
         model.Layers.Clear(); var other = Clip("Other", "OtherShape", 0.8f);
         left = Layer("GestureLeft", "Left"); right = Layer("GestureRight", "Right");

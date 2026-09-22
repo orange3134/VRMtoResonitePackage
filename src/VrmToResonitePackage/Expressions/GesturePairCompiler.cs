@@ -15,17 +15,15 @@ internal sealed class GesturePairCompiler
     {
         _model = model; _clips = available.ToDictionary(c => c.Id); _baseline = baseline;
         string[] gestures = { "GestureLeft", "GestureRight" };
-        // Menu switches select a gesture bank in many stock avatars. Specialize only declared
-        // discrete menu parameters at their authored defaults; do not add runtime parameter state.
-        IEnumerable<string> MenuParameters(IEnumerable<ExpressionMenuControl> controls) => controls.SelectMany(c =>
-            (c.Type == 1 && c.Parameter != null ? new[] { c.Parameter } : Array.Empty<string>()).Concat(MenuParameters(c.Children)));
-        var defaults = MenuParameters(model.Menu).Distinct().Where(p => model.Parameters.TryGetValue(p, out var definition) &&
-            definition.Type is 3 or 4 && float.IsFinite(definition.Default) && !gestures.Contains(p)).ToArray();
+        // Hand selectors use authored defaults for every declared additional condition.
+        // Standalone accessory/menu layers are not turned into gesture layers.
+        var defaults = model.Parameters.Values.Where(p => p.Type is 1 or 3 or 4 &&
+            float.IsFinite(p.Default) && !gestures.Contains(p.Name)).Select(p => p.Name).ToArray();
         var layers = model.Layers.Where(l => Supported(l, Parameters(l).Any(gestures.Contains) ? gestures.Concat(defaults).ToArray() : gestures)).ToArray();
         foreach (var layer in layers)
         {
             var fixedParameters = Parameters(layer).Intersect(defaults).ToArray();
-            if (fixedParameters.Length > 0) Warn(layer.Name + ": gesture table uses menu defaults: " +
+            if (fixedParameters.Length > 0) Warn(layer.Name + ": gesture table uses authored defaults: " +
                 string.Join(", ", fixedParameters.Select(p => p + "=" + model.Parameters[p].Default.ToString(System.Globalization.CultureInfo.InvariantCulture))) +
                 "; runtime gesture-bank switching is not imported.");
             if (layer.States.Any(s => s.TimeParameter != null))

@@ -12,6 +12,7 @@ public static class VrchatExpressionParser
         var model = new ExpressionModel();
         var clips = new Dictionary<string, ExpressionClip>(StringComparer.Ordinal);
         var expressionClips = new HashSet<string>(StringComparer.Ordinal);
+        var projectLayers = new List<Action>();
         foreach (var playable in descriptor?["baseAnimationLayers"]?.Seq ?? new())
         {
             if (playable["isDefault"]?.AsBool() == true || playable["type"]?.AsInt() != 5) continue;
@@ -92,25 +93,39 @@ public static class VrchatExpressionParser
                         clips[s.ClipId].Curves.Select(c => c.Binding.Key).ToHashSet()).ToArray();
                     if (bindingSets.Skip(1).Any(s => !s.SetEquals(bindingSets[0]))) errors.Add("history-dependent unanimated properties");
                 }
-                if (errors.Count == 0) model.Layers.Add(layer);
-                else if (errors.All(e => e is "state behaviour" or "exit or unresolved transition" or
-                    "transition interruption" or "history-dependent unanimated properties") &&
-                    VrchatGestureRouter.TryProject(scene, machine, layer, ReadClip, out var projected))
+                projectLayers.Add(() =>
                 {
-                    model.Layers.Add(projected);
-                    Warn(label + ": gesture router projected using ordered default-state routes; prior-state latching, " +
-                        "external Any State overrides, parameter-driver side effects and transition timing are not imported.");
-                }
-                else if (errors.All(e => e is "AvatarMask" or "state behaviour" or "exit or unresolved transition" or
-                    "history-dependent unanimated properties") &&
-                    VrchatEntryGestureRouter.TryProject(package, scene, machine, layerNode["m_Mask"], layer, ids, ReadClip, out var entryProjected))
-                {
-                    model.Layers.Add(entryProjected);
-                    Warn(label + ": Entry/Exit gesture selector projected; empty motions use the lower-layer/base stream " +
-                        "instead of retaining previous values. Eye/mouth tracking-control overrides and transition timing " +
-                        "are not imported; parameter-driver side effects are omitted and AFK is fixed false. ResoPon blink/viseme cooperation is retained.");
-                }
-                else Warn(label + ": automatic layer omitted (" + string.Join(", ", errors.Distinct()) + "); supported clips remain in Catalog; menu selection requires a GestureTable mapping");
+                    bool ProjectDefaults()
+                    {
+                        if (!VrchatDefaultGestureRouter.TryProject(package, scene, machine, layerNode["m_Mask"], layer,
+                            model.Parameters, ReadClip, out var defaults, out string fixedValues)) return false;
+                        model.Layers.Add(defaults);
+                        Warn(label + ": default-state hand gestures projected with " + fixedValues +
+                            "; evaluated from Entry; parameter-driver side effects, previous-state values and transition timing are not imported. Missing curves use the lower-layer/base stream.");
+                        return true;
+                    }
+                    if (errors.Count == 0) { if (!ProjectDefaults()) model.Layers.Add(layer); }
+                    else if (errors.All(e => e is "AvatarMask" or "state behaviour" or "exit or unresolved transition" or
+                        "history-dependent unanimated properties" or "mixed Write Defaults" || e.StartsWith("unsupported motion in ")) && ProjectDefaults()) { }
+                    else if (errors.All(e => e is "state behaviour" or "exit or unresolved transition" or
+                        "transition interruption" or "history-dependent unanimated properties") &&
+                        VrchatGestureRouter.TryProject(scene, machine, layer, ReadClip, out var projected))
+                    {
+                        model.Layers.Add(projected);
+                        Warn(label + ": gesture router projected using ordered default-state routes; prior-state latching, " +
+                            "external Any State overrides, parameter-driver side effects and transition timing are not imported.");
+                    }
+                    else if (errors.All(e => e is "AvatarMask" or "state behaviour" or "exit or unresolved transition" or
+                        "history-dependent unanimated properties") &&
+                        VrchatEntryGestureRouter.TryProject(package, scene, machine, layerNode["m_Mask"], layer, ids, ReadClip, out var entryProjected))
+                    {
+                        model.Layers.Add(entryProjected);
+                        Warn(label + ": Entry/Exit gesture selector projected; empty motions use the lower-layer/base stream " +
+                            "instead of retaining previous values. Eye/mouth tracking-control overrides and transition timing " +
+                            "are not imported; parameter-driver side effects are omitted and AFK is fixed false. ResoPon blink/viseme cooperation is retained.");
+                    }
+                    else Warn(label + ": automatic layer omitted (" + string.Join(", ", errors.Distinct()) + "); supported clips remain in Catalog; menu selection requires a GestureTable mapping");
+                });
 
                 void Collect(YamlNode stateMachine, HashSet<long> visited)
                 {
@@ -205,6 +220,7 @@ public static class VrchatExpressionParser
             model.Parameters["Gesture" + hand] = new("Gesture" + hand, 3, 0);
             model.Parameters["Gesture" + hand + "Weight"] = new("Gesture" + hand + "Weight", 1, 0);
         }
+        foreach (var project in projectLayers) project();
         ReadMenu(descriptor?["expressionsMenu"]?.Guid, model.Menu, new());
         model.Clips.AddRange(expressionClips.Select(id => clips[id]));
         UniLog.Log($"Expression import: {model.Clips.Count} clips, {model.Layers.Count} layers, {model.Menu.Count} menu controls");
