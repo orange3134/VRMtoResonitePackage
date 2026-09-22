@@ -95,10 +95,10 @@ public static class VrchatExpressionParser
                 }
                 projectLayers.Add(() =>
                 {
-                    bool ProjectDefaults()
+                    bool ProjectDefaults(bool includeHandOnly = false)
                     {
                         if (!VrchatDefaultGestureRouter.TryProject(package, scene, machine, layerNode["m_Mask"], layer,
-                            model.Parameters, ReadClip, out var defaults, out string fixedValues)) return false;
+                            model.Parameters, ReadClip, out var defaults, out string fixedValues, includeHandOnly)) return false;
                         model.Layers.Add(defaults);
                         Warn(label + ": default-state hand gestures projected with " + fixedValues +
                             "; evaluated from Entry; parameter-driver side effects, previous-state values and transition timing are not imported. Missing curves use the lower-layer/base stream.");
@@ -124,6 +124,8 @@ public static class VrchatExpressionParser
                             "instead of retaining previous values. Eye/mouth tracking-control overrides and transition timing " +
                             "are not imported; parameter-driver side effects are omitted and AFK is fixed false. ResoPon blink/viseme cooperation is retained.");
                     }
+                    else if (errors.All(e => e is "AvatarMask" or "state behaviour" or "exit or unresolved transition" or
+                        "history-dependent unanimated properties" or "mixed Write Defaults" || e.StartsWith("unsupported motion in ")) && ProjectDefaults(true)) { }
                     else Warn(label + ": automatic layer omitted (" + string.Join(", ", errors.Distinct()) + "); supported clips remain in Catalog; menu selection requires a GestureTable mapping");
                 });
 

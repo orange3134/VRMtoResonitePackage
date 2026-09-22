@@ -9,7 +9,7 @@ internal static class VrchatDefaultGestureRouter
 {
     internal static bool TryProject(UnityPackage package, UnityScene scene, YamlNode machine, YamlNode mask,
         ExpressionLayer original, IReadOnlyDictionary<string, ExpressionParameter> parameters,
-        Func<YamlNode, ExpressionClip> readClip, out ExpressionLayer result, out string detail)
+        Func<YamlNode, ExpressionClip> readClip, out ExpressionLayer result, out string detail, bool includeHandOnly = false)
     {
         result = null; detail = null;
         if ((machine["m_ChildStateMachines"]?.Seq?.Count ?? 0) != 0 ||
@@ -27,8 +27,11 @@ internal static class VrchatDefaultGestureRouter
         var used = ids.SelectMany(id => Transitions(scene.Doc(id)?.Root, "m_Transitions"))
             .Concat(Transitions(machine, "m_EntryTransitions")).Concat(Transitions(machine, "m_AnyStateTransitions"))
             .SelectMany(t => t?["m_Conditions"]?.Seq ?? new()).Select(c => c["m_ConditionEvent"]?.AsString()).ToHashSet();
-        // Existing hand-only projectors remain authoritative. This path handles additional gates.
-        if (!used.Any(Hand) || !used.Any(p => !Hand(p))) return false;
+        // Existing hand-only projectors run first; the fallback can also specialize flat Any State selectors.
+        if (!used.Any(Hand) || (!includeHandOnly && !used.Any(p => !Hand(p)))) return false;
+        if (!used.Any(p => !Hand(p)) &&
+            (Transitions(machine, "m_EntryTransitions").Any() || !Transitions(machine, "m_AnyStateTransitions").Any() ||
+             ids.Any(id => Transitions(scene.Doc(id)?.Root, "m_Transitions").Any()))) return false;
         var defaults = new Dictionary<string, float>(StringComparer.Ordinal);
         bool failed = false;
         int left = 0, right = 0;
@@ -85,6 +88,7 @@ internal static class VrchatDefaultGestureRouter
         }
         var projected = new ExpressionLayer { Id = original.Id, Name = original.Name, Weight = original.Weight };
         var selectedStates = new Dictionary<long, int>();
+        var missingDefaults = new HashSet<string>(StringComparer.Ordinal);
         for (left = 0; left < 8; left++) for (right = 0; right < 8; right++)
         {
             long Entry()
@@ -111,10 +115,18 @@ internal static class VrchatDefaultGestureRouter
                     if (failed) return false;
                     if (next != id) { id = next; continue; }
                 }
+                var motion = state["m_Motion"]; var clip = readClip(motion);
+                if ((motion?.FileID ?? 0) != 0 && clip == null)
+                {
+                    // A missing neutral/default asset must not discard every valid hand pose.
+                    // Never reinterpret an existing unsupported clip, local motion or active hand pose.
+                    if (id != (machine["m_DefaultState"]?.FileID ?? 0) || motion.Guid == null ||
+                        package.ByGuid(motion.Guid) != null || used.Where(Hand).Any(p => (p == "GestureLeft" ? left : right) != 0))
+                        return false;
+                    missingDefaults.Add(motion.Guid + ":" + motion.FileID);
+                }
                 if (!selectedStates.TryGetValue(id, out int index))
                 {
-                    var motion = state["m_Motion"]; var clip = readClip(motion);
-                    if ((motion?.FileID ?? 0) != 0 && clip == null) return false;
                     if (transition != null && (clip?.Curves.Count ?? 0) == 0) return false;
                     float speed = state["m_Speed"]?.AsFloat(1) ?? 1;
                     string time = state["m_TimeParameterActive"]?.AsBool() == true ? state["m_TimeParameter"]?.AsString() ?? "" : null;
@@ -135,6 +147,9 @@ internal static class VrchatDefaultGestureRouter
         result = projected;
         detail = string.Join(", ", defaults.OrderBy(p => p.Key, StringComparer.Ordinal)
             .Select(p => p.Key + "=" + p.Value.ToString(CultureInfo.InvariantCulture)));
+        if (detail.Length == 0) detail = "hand inputs only";
+        if (missingDefaults.Count > 0) detail += "; missing neutral/default motion(s) use lower-layer/base stream: " +
+            string.Join(", ", missingDefaults.OrderBy(id => id, StringComparer.Ordinal));
         return true;
     }
 }

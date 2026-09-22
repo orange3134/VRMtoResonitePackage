@@ -78,7 +78,69 @@ internal static class DefaultGestureRouterChecks
         Check(Parse(source.Replace("m_DstState: {fileID: 300}", "m_DstState: {fileID: 200}")).Layers.Count == 0, "self loop without a face cannot create assignments");
         Check(Parse(source.Replace("m_DstState: {fileID: 300}", "m_DstState: {fileID: 300}\n  m_HasExitTime: 1")).Layers.Count == 0, "matching timed transition rejected");
         Check(Parse(source.Replace("m_DstState: {fileID: 1001}", "m_DstState: {fileID: 200}")).Layers.Count == 0, "multi-state cycle rejected");
+        CheckMissingNeutral(artifacts);
         Console.WriteLine("PASS: authored default banks, descriptor precedence, float guards, multi-step routing, 64 pairs, inactive unsupported clips and unsafe routes");
+    }
+    private static void CheckMissingNeutral(string artifacts)
+    {
+        string root = Path.Combine(artifacts, "MissingNeutralFixture");
+        Directory.CreateDirectory(Path.Combine(root, "Assets"));
+        Directory.CreateDirectory(Path.Combine(root, "ProjectSettings"));
+        File.Delete(Path.Combine(root, "Assets", "Bad.anim"));
+        File.Delete(Path.Combine(root, "Assets", "Bad.anim.meta"));
+        string Guid(int id) => id.ToString("x32");
+        void Asset(string name, int id, string text)
+        {
+            File.WriteAllText(Path.Combine(root, "Assets", name), text);
+            File.WriteAllText(Path.Combine(root, "Assets", name + ".meta"), "guid: " + Guid(id));
+        }
+        string descriptor = "--- !u!114 &1\nMonoBehaviour:\n  baseAnimationLayers:\n  - type: 5\n    isDefault: 0\n    animatorController: {fileID: 91, guid: " + Guid(2) + "}\n";
+        Asset("Avatar.prefab", 1, descriptor);
+        var yaml = new StringBuilder("--- !u!91 &91\nAnimatorController:\n  m_AnimatorLayers:\n");
+        for (int hand = 0; hand < 2; hand++)
+            yaml.Append($"  - m_Name: Hand{hand}\n    m_StateMachine: {{fileID: {100 + hand}}}\n    m_DefaultWeight: 1\n    m_SyncedLayerIndex: -1\n");
+        for (int hand = 0; hand < 2; hand++)
+        {
+            int start = 1000 + hand * 100;
+            string parameter = hand == 0 ? "GestureLeft" : "GestureRight";
+            yaml.Append($"--- !u!1107 &{100 + hand}\nAnimatorStateMachine:\n  m_DefaultState: {{fileID: {start}}}\n  m_ChildStates:\n");
+            for (int g = 0; g < 8; g++) yaml.Append($"  - m_State: {{fileID: {start + g}}}\n");
+            yaml.Append("  m_AnyStateTransitions:\n");
+            for (int g = 0; g < 8; g++) yaml.Append($"  - {{fileID: {start + 10 + g}}}\n");
+            for (int g = 0; g < 8; g++)
+            {
+                if (g > 0) Asset($"Pose{start + g}.anim", start + g, $"--- !u!74 &7400000\nAnimationClip:\n  m_Name: Pose{start + g}\n  m_FloatCurves:\n  - attribute: blendShape.Smile\n    path: Face\n    classID: 137\n    curve:\n      m_Curve:\n      - time: 0\n        value: {hand * 10 + g * 10}\n");
+                yaml.Append($"--- !u!1102 &{start + g}\nAnimatorState:\n  m_Name: Pose{start + g}\n  m_WriteDefaultValues: 0\n  m_Motion: {{fileID: 7400000, guid: {Guid(g == 0 ? 999 : start + g)}}}\n  m_StateMachineBehaviours:\n  - {{fileID: 900}}\n");
+                yaml.Append($"--- !u!1101 &{start + 10 + g}\nAnimatorStateTransition:\n  m_DstState: {{fileID: {start + g}}}\n  m_CanTransitionToSelf: 0\n  m_Conditions:\n  - m_ConditionEvent: {parameter}\n    m_ConditionMode: 6\n    m_EventTreshold: {g}\n");
+            }
+        }
+        yaml.Append("--- !u!114 &900\nMonoBehaviour:\n  m_Script: {fileID: -646210727, guid: 67cc4cb7839cd3741b63733d5adf0442}\n  trackingEyes: 2\n  trackingMouth: 1\n");
+        string source = yaml.ToString();
+        ExpressionModel Parse(string text)
+        {
+            Asset("Face.controller", 2, text);
+            using var package = UnityPackage.Open(Path.Combine(root, "Assets", "Avatar.prefab"));
+            return VrchatExpressionParser.Parse(package, UnityScene.Parse(descriptor).Doc(1).Root);
+        }
+        var model = Parse(source);
+        Check(model.Layers.Count == 2, "missing neutral does not discard either hand layer");
+        Check(model.Diagnostics.Count(d => d.Contains("missing neutral/default motion(s)")) == 2, "missing reference fallback diagnosed");
+        var table = new GesturePairCompiler(model, model.Clips, _ => 0.23f);
+        for (int left = 0; left < 8; left++) for (int right = 0; right < 8; right++)
+        {
+            var pose = model.Clips.Concat(table.Generated).Single(c => c.Id == table.Pairs[left * 8 + right]);
+            float expected = right > 0 ? (10 + right * 10) / 100f : left > 0 ? left / 10f : 0.23f;
+            Check(Math.Abs(pose.Curves.Single().Sample(0) - expected) < 0.0001f,
+                "right layer priority, neutral passes lower layer, both neutral restore base");
+        }
+        Check(Parse(source.Replace("m_EventTreshold: 7", "m_EventTreshold: 8")).Layers.Count == 0,
+            "missing default cannot stand in for an active hand even after caching neutral");
+        Check(Parse(source.Replace(Guid(1001), Guid(998))).Layers.Count == 1, "missing non-neutral pose rejects only affected layer");
+        Check(Parse(source.Replace("trackingEyes: 2", "trackingHead: 2\n  trackingEyes: 2")).Layers.Count == 0, "body tracking behaviour rejected");
+        Check(Parse(source.Replace("guid: " + Guid(999), "guid: " + Guid(2))).Layers.Count == 0, "existing unsupported asset is not treated as missing");
+        Asset("Bad.anim", 999, "--- !u!74 &7400000\nAnimationClip:\n  m_FloatCurves:\n  - classID: 1\n    attribute: m_IsActive\n    path: Face\n");
+        Check(Parse(source).Layers.Count == 0, "existing invalid neutral clip is not silently cleared");
+        Console.WriteLine("PASS: missing neutral fallback, all64 outputs, right priority and unsupported/missing active motion guards");
     }
     private static void Check(bool ok, string message) { if (!ok) throw new InvalidOperationException(message); }
 }
