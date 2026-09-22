@@ -19,6 +19,7 @@ internal sealed partial class ExpressionSystemSetup
     private readonly ExpressionModel _model;
     private readonly Slot _root, _catalog, _core, _outputs, _table, _api, _inputs;
     private readonly Slot _lifecycle, _selection, _playback;
+    private const string PlaybackTickTag = "ResoPon/Expression/Internal/Playback";
     private const string SelectionTickTag = "ResoPon/Expression/Internal/Selection";
     private const string InitializeTag = "ResoPon/Expression/Internal/Initialize";
     private const string MenuRefreshTag = "ResoPon/Expression/Internal/MenuRefresh";
@@ -48,11 +49,11 @@ internal sealed partial class ExpressionSystemSetup
         }
         Data(_core, "AllowExternalInput", true);
         Reference<Slot>(_core, "CurrentExpression", null);
-        Data(_core, "PlaybackStart", 0f); Data(_core, "FadeDuration", 0.1f);
+        Data(_core, "PlaybackStart", 0f);
         Data(_core, "PairIndex", 0);
-        Data(_core, "PlaybackElapsed", 0f); Data(_core, "FadeWeight", 1f);
+        Data(_core, "PlaybackElapsed", 0f);
         Data(_core, "AnimationTime", 0f);
-        Data(_root, "Version", 10);
+        Data(_root, "Version", 11);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -162,7 +163,6 @@ internal sealed partial class ExpressionSystemSetup
                 var result = output.AttachComponent<DynamicField<float>>();
                 result.VariableName.Value = Path(OutputSpace, "Result");
                 result.TargetField.Target = BuildOutputTarget(field, initialValue);
-                Data(output, "Snapshot", initialValue);
                 _outputSlots[id] = output; fields[field] = output;
             }
             // A partially resolved face must not be presented as a faithfully imported clip.
@@ -171,7 +171,6 @@ internal sealed partial class ExpressionSystemSetup
             Slot entry = Record(_catalog, clip.Name, ClipSpace);
             Data(entry, "Id", clip.Id); Data(entry, "DisplayName", clip.Name); Data(entry, "Enabled", true);
             Data(entry, "Loop", clip.Loop); Data(entry, "Duration", Math.Max(0.001f, clip.Duration));
-            Data(entry, "FadeIn", 0.1f); Data(entry, "FadeOut", 0.1f);
             Data(entry, "Source", clip.Source ?? "");
             var animation = ExpressionAnimationConverter.ConvertClip(clip);
             string temporary = _root.Engine.LocalDB.GetTempFilePath("animx");

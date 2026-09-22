@@ -41,7 +41,7 @@ internal sealed class GesturePairCompiler
         if (unresolved > 0) Warn($"{unresolved} gesture pairs have history-dependent or cyclic selection; their table entries are unassigned.");
         AddMenu(model.Menu);
         if (layers.Length > 0)
-            Warn("Gesture pairs use a shared playback clock and Catalog fades. Animator transition timing, self-restarts and independent layer phases are not reproduced.");
+            Warn("Gesture pairs use a shared playback clock and immediate pose switching. Animator transition timing, self-restarts and independent layer phases are not reproduced.");
 
         void AddMenu(IEnumerable<ExpressionMenuControl> controls)
         {

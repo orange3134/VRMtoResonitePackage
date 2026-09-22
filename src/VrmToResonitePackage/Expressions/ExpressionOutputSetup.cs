@@ -18,7 +18,7 @@ internal sealed partial class ExpressionSystemSetup
     private IField<float> BuildOutputTarget(IField<float> field, float initialValue)
     {
         var renderer = field.FindNearestParent<SkinnedMeshRenderer>();
-        // The generic resolver also supports standalone fields. Drive those directly;
+        // The generic resolver also supports standalone fields. Write those directly;
         // all mesh outputs are grouped by renderer identity, never by slot name.
         if (renderer == null) return field;
         int index = Enumerable.Range(0, renderer.BlendShapeWeights.Count)

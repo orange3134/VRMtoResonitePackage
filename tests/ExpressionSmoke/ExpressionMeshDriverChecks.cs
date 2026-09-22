@@ -89,7 +89,6 @@ internal static class ExpressionMeshDriverChecks
         var baseValue = blink.GetComponents<DynamicValueVariable<float>>().Single(v => v.VariableName.Value == "ExpressionOutput/Base").Value;
         Check(eye.OpenCloseTarget.Target == baseValue && eye.OpenCloseTarget.IsLinkValid, "blink still drives its independent Base");
         var dynamicResult = smile.GetComponents<DynamicField<float>>().Single(v => v.VariableName.Value == "ExpressionOutput/Result");
-        foreach (var clip in catalog.Children) { Set(clip, "FadeIn", 0f); Set(clip, "FadeOut", 0f); }
         Set(table, "Pair.1", catalog.FindChild("First pose")); Set(table, "Pair.2", catalog.FindChild("Second pose"));
         void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             expressions.FindChild("API").FindChild("Receivers"), ExpressionSystemSetup.RightTag, true, index) == 1, "select mesh test pose");
@@ -108,8 +107,7 @@ internal static class ExpressionMeshDriverChecks
         manager.LeftEyeCloseOverride.Value = manager.RightEyeCloseOverride.Value = 0.9f; await Frames();
         Near(first.GetBlendShapeWeight("ActualBlink"), 0.9f, "native mesh driver and eye blink compose");
         Select(1);
-        Near(smile.GetComponents<DynamicValueVariable<float>>().Single(v => v.VariableName.Value == "ExpressionOutput/Snapshot").Value.Value,
-            0.7f, "Selection snapshots the live DynamicField through ProtoFlux");
+        Near(dynamicResult.DynamicValue, 0.2f, "Selection immediately writes the new DynamicField value");
         await Frames();
         Near(first.GetBlendShapeWeight("Untouched"), 0.37f, "unused first-mesh shape retains its weight");
         Near(second.GetBlendShapeWeight("Untouched"), 0.63f, "unused second-mesh shape retains its weight");

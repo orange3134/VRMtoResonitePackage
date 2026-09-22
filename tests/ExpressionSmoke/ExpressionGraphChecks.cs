@@ -21,7 +21,8 @@ internal static class ExpressionGraphChecks
 
         Slot Board(ProtoFluxNode node) => node.Slot.Parent.Parent;
         var updates = nodes.Where(n => n.GetType().Name == "LocalUpdate").ToArray();
-        Check(updates.Length == 0, "expression playback has no LocalUpdate nodes");
+        Check(updates.Length == 1 && Board(updates[0]) == Descendant(expressions, "Core/Logic/Playback"), "one shared playback update");
+        Check(nodes.All(n => n.GetType().Name is not "ValueFieldDrive`1" and not "ReferenceDrive`1"), "no continuous playback Drive nodes");
         Check(nodes.Any(n => n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "state transitions use local change detectors");
         Check(expressions.GetComponentsInChildren<DynamicValueVariable<bool>>()
@@ -29,26 +30,10 @@ internal static class ExpressionGraphChecks
             "keyboard edge state is local to its change detector");
         foreach (var output in expressions.FindChild("Outputs").Children)
         {
-            var logic = output.FindChild("Logic");
-            var sampling = logic?.GetComponentsInChildren<ProtoFluxNode>();
-            Check(sampling != null && sampling.Count(n => n.GetType().Name == "SampleValueAnimationTrack`1") == 1 &&
-                sampling.Count(n => n.GetType().Name == "FindAnimationTrackIndex") == 1,
-                "each output samples its own track: " + output.Name);
-            Check(sampling.All(n => n.GetType().Name is not "WorldTimeFloat" and not "ValueMod`1"),
-                "outputs do not recompute animation time: " + output.Name);
-            var sources = logic.GetComponentsInChildren<global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueSource<float>>();
-            foreach (string name in new[] { "AnimationTime", "FadeWeight" })
-            {
-                var field = expressions.FindChild("Core").GetComponents<DynamicValueVariable<float>>()
-                    .Single(v => v.VariableName.Value == "ExpressionCore/" + name).Value;
-                Check(sources.Count(source => source.RootSourceReference.Target == field) == 1,
-                    "output ValueSource references its own shared " + name + ": " + output.Name);
-            }
+            Check(output.FindChild("Logic") == null, "outputs share playback without individual Flux graphs");
             var result = output.GetComponents<DynamicField<float>>()
                 .Single(v => v.VariableName.Value == "ExpressionOutput/Result").TargetField.Target;
-            var driver = logic.GetComponentsInChildren<global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>>().Single();
-            Check(driver.GetRootProxy(addIfMissing: false)?.Drive.Target == result && result.ActiveLink != null,
-                "each result has its own native driver: " + output.Name);
+            Check(result.ActiveLink == null, "Result is writable, without a Flux drive");
             Check(output.GetComponent<ValueCopy<float>>() == null,
                 "outputs use no ValueCopy: " + output.Name);
             Check(!output.GetComponents<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionOutput/Result"),
@@ -78,8 +63,8 @@ internal static class ExpressionGraphChecks
             Check(meshDriver.BlendShapes.Count == meshOutputs.Count(r => r == meshDriver.Renderer.Target),
                 "mesh driver contains only required shape entries");
         Check(Descendant(expressions, "Core/Logic/Playback").GetComponentsInChildren<ProtoFluxNode>()
-            .All(n => n.GetType().Name is not "ForEachObject`2" and not "SampleValueAnimationTrack`1"),
-            "Core playback drives shared time and diagnostics without an output loop");
+            .Count(n => n.GetType().Name == "SampleValueAnimationTrack`1") == 1,
+            "one sampler serves the shared output loop");
         var boards = nodes.GroupBy(Board).ToArray();
         var keyboard = Descendant(expressions, "Inputs/Keyboard");
         Check(keyboard.Children.All(hand => hand.FindChild("DV").GetComponentsInChildren<ProtoFluxNode>().Count == 0),
@@ -178,11 +163,11 @@ internal static class ExpressionGraphChecks
         Check(core.GetComponents<DynamicReferenceVariable<Slot>>().Select(v => v.VariableName.Value)
             .SequenceEqual(new[] { "ExpressionCore/CurrentExpression" }),
             "Core stores only the current expression, without intermediate diagnostic references");
-        foreach (string name in new[] { "PlaybackElapsed", "FadeWeight", "AnimationTime" })
+        foreach (string name in new[] { "PlaybackElapsed", "AnimationTime" })
         {
             var field = core.GetComponents<DynamicValueVariable<float>>()
                 .Single(v => v.VariableName.Value == "ExpressionCore/" + name).Value;
-            Check(field.ActiveLink != null, "playback diagnostics have native local drivers: " + name);
+            Check(field.ActiveLink == null, "playback diagnostics are written without Drive: " + name);
         }
     }
 

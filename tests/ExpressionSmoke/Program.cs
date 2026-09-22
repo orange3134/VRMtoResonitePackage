@@ -43,7 +43,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await default(NextUpdate);
         await NamedShapeRepairChecks.Run(world.LocalUser.Root.Slot);
         if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage, artifacts, baselinePackage); return; }
-        await ExpressionOutputDriveChecks.Run(world.LocalUser.Root.Slot);
+        await ExpressionOutputWriteChecks.Run(world.LocalUser.Root.Slot);
         await ExpressionBlinkChecks.Run(world.LocalUser.Root.Slot, artifacts);
         await ExpressionMeshDriverChecks.Run(world.LocalUser.Root.Slot, artifacts);
         ExpressionLayoutChecks.CheckFixtures(world.LocalUser.Root.Slot);
@@ -202,16 +202,11 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         float firstElapsed = Get<float>(core, "PlaybackElapsed");
         await Frames(20);
         Check(field.Value > firstSample && field.Value < 1, "real AnimX output advances with playback time");
-        Check(Get<float>(core, "PlaybackElapsed") > firstElapsed && Get<float>(core, "FadeWeight") is >= 0 and <= 1,
-            "playback diagnostics advance and expose a bounded fade weight");
-        Set(catalog.FindChild("Animated"), "FadeOut", 0.25f);
-        float beforeInvalidation = field.Value;
+        Check(Get<float>(core, "PlaybackElapsed") > firstElapsed, "written playback clock advances");
         Set(catalog.FindChild("Animated"), "Enabled", false);
-        AllowInput(); // Synchronously validate the disabled table entry and start its fade-out.
-        Check(Reference<Slot>(core, "CurrentExpression") == null &&
-            Get<float>(core, "FadeDuration") == 0.25f &&
-            Math.Abs(Get<float>(expressions.FindChild("Outputs").Children.Single(), "Snapshot") - beforeInvalidation) < 0.001f,
-            "invalid selection clears CurrentExpression while preserving the previous expression's FadeOut and output snapshot");
+        AllowInput();
+        Check(Reference<Slot>(core, "CurrentExpression") == null && Math.Abs(field.Value - 0.2f) < 0.001f,
+            "invalid selection immediately restores Base without fading");
         await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "disabled mapped expression restores base output");
         Set(table, "Pair.2", (Slot)null);
@@ -319,14 +314,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         tracking.Value.Value = 0.4f; await Frames();
         Check(Math.Abs(field.Value - 0.4f) < 0.01, "existing tracking driver continues through proxy");
         Set(table, "Pair.2", catalog.FindChild("Angry"));
-        Set(catalog.FindChild("Angry"), "FadeIn", 5f);
-        Select("Angry"); await Frames(3);
-        Check(Get<float>(core, "FadeWeight") is > 0 and < 1 && field.Value > 0.4f && field.Value < 0.7f,
-            "crossfade blends from the live tracking output before reaching the expression");
-        AllowInput(); Gesture(0, 0); Gesture(1, 0); await Frames();
-        Set(catalog.FindChild("Angry"), "FadeIn", 0.1f);
-        Select("Angry"); await Frames();
-        Check(Math.Abs(field.Value - 0.7f) < 0.01, "animation drives shared tracking output while selected");
+        Select("Angry");
+        Check(Math.Abs(field.Value - 0.7f) < 0.001f, "selection immediately writes the final pose without interpolation");
         var wearer = avatar.Parent;
         // Departure must clear output directly, even when Neutral maps to a clip.
         Set(table, "Pair.0", catalog.FindChild("Angry"));
@@ -344,16 +333,15 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         AllowInput(); await Frames();
         Check(!Get<bool>(core, "AllowExternalInput"),
             "input-mode requests are ignored without a local wearer");
-        // Sentinel stored state proves private stages did no work. Result and playback
-        // diagnostics are driven values; only Snapshot is writable state.
+        // Sentinel selection state proves wearer-only private stages did no work.
         var outputState = expressions.FindChild("Outputs").Children.Single();
-        Set(core, "PairIndex", -42); Set(outputState, "Snapshot", -42f);
+        Set(core, "PairIndex", -42);
         foreach (var (board, tag) in new[] { ("Selection", "ResoPon/Expression/Internal/Selection"),
             ("Lifecycle", "ResoPon/Expression/Internal/Initialize") })
             Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core.FindChild("Logic").FindChild(board), tag, true) == 1,
                 "private stage receiver remains discoverable: " + board);
         await Frames();
-        Check(Get<int>(core, "PairIndex") == -42 && Get<float>(outputState, "Snapshot") == -42f &&
+        Check(Get<int>(core, "PairIndex") == -42 &&
             Math.Abs(Get<float>(outputState, "Result") - 0.4f) < 0.01f,
             "private stages also reject updates without a local wearer");
         // A loaded/cloned instance with no wearer must not mutate shared state just

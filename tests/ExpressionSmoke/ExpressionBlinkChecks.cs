@@ -56,7 +56,7 @@ internal static class ExpressionBlinkChecks
             await Verify(restored);
         }
         finally { restored?.Destroy(); clone?.Destroy(); avatar.Destroy(); }
-        Console.WriteLine("BLINK: real EyeLinearDriver, closing-side mix, reversed range, fade, manual routing, clone and reload passed");
+        Console.WriteLine("BLINK: real EyeLinearDriver, closing-side mix, reversed range, immediate switching, manual routing, clone and reload passed");
     }
 
     private static async Task Verify(Slot avatar)
@@ -73,12 +73,10 @@ internal static class ExpressionBlinkChecks
             "real eye targets are rerouted to their own Base fields");
         Check(Reference<ISyncRef>(close, "OriginalDriver") == driver.Eyes[0].OpenCloseTarget, "original blink link remaps");
         for (int i = 0; i < 4; i++) Set(table, "Pair." + (i + 1), catalog.FindChild(new[] { "Open", "Half", "Closed", "Sparse" }[i]));
-        foreach (var clip in catalog.Children) { Set(clip, "FadeIn", 0f); Set(clip, "FadeOut", 0f); }
         void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             expressions.FindChild("API").FindChild("Receivers"), ExpressionSystemSetup.RightTag, true, index) == 1, "select blink test expression");
         void Blink(float l, float r) { manager.LeftEyeCloseOverride.Value = l; manager.RightEyeCloseOverride.Value = r; }
         float Result(Slot output) => Reference<IField<float>>(output, "Target").Value;
-        void Time(float elapsed) => Set(core, "PlaybackStart", (float)avatar.World.Time.WorldTime - elapsed);
         Blink(0, 0); Select(1); await Frames();
         Near(Result(close), 0, "open expression opens left eye"); Near(Result(reverse), 1, "open expression opens reversed eye");
         Blink(0.8f, 0.3f); await Frames();
@@ -98,18 +96,18 @@ internal static class ExpressionBlinkChecks
         // A manually connected blink after conversion can opt in without rebuilding the graph.
         Set(mouth, "BlinkMode", 1); await Frames(); Near(Result(mouth), 0.9f, "manual max mode uses routed Base");
         Set(mouth, "BlinkMode", 0); await Frames(); Near(Result(mouth), 0.25f, "manual mode can be disabled");
-        Blink(0, 0); Select(1); await Frames(); Set(catalog.FindChild("Half"), "FadeIn", 100f);
-        Select(2); Time(25); await Frames(); Near(Result(close), 0.15f, "expression fade remains independent");
-        Blink(1, 1); await Frames(); Near(Result(close), 1, "fade does not attenuate full blink"); Near(Result(reverse), 0, "reverse blink bypasses fade attenuation");
-        Blink(0, 0); await Frames(); Near(Result(close), 0.15f, "reopening during a fade reveals its current pose");
-        Time(101); await Frames(); Set(catalog.FindChild("Half"), "FadeOut", 100f); Select(0); Time(25); await Frames();
-        Blink(1, 1); await Frames(); Near(Result(close), 1, "blink works while CurrentExpression is null during fade-out");
-        Blink(0, 0); Time(101); await Frames(); Near(Result(close), 0, "fade-out returns to open base");
+        Blink(0, 0); Select(1); await Frames();
+        Select(2); Near(Get<float>(close, "Result"), 0.6f, "expression changes synchronously without a fade");
+        Blink(1, 1); await Frames(); Near(Result(close), 1, "immediate expression retains full blink"); Near(Result(reverse), 0, "reverse blink remains independent");
+        Blink(0, 0); await Frames(); Near(Result(close), 0.6f, "reopening reveals the selected pose");
+        Select(0); Near(Get<float>(close, "Result"), 0, "clearing expression immediately restores Base");
+        Blink(1, 1); await Frames(); Near(Result(close), 1, "blink works while CurrentExpression is null");
+        Blink(0, 0); await Frames(); Near(Result(close), 0, "blink returns to open base");
         ExpressionGraphChecks.CheckLayout(expressions);
     }
 
     private static IField<float> Field(Slot s, string n) => s.GetComponents<DynamicValueVariable<float>>().Single(v => v.VariableName.Value == VariablePath(s, n)).Value;
-    private static T Get<T>(Slot s, string n) => s.GetComponents<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == VariablePath(s, n)).Value.Value;
+    private static T Get<T>(Slot s, string n) => s.GetComponents<DynamicVariableBase<T>>().Single(v => v.VariableName.Value == VariablePath(s, n)).DynamicValue;
     private static void Set<T>(Slot s, string n, T value) => Check(s.WriteDynamicVariable(VariablePath(s, n), value) == DynamicVariableWriteResult.Success, "write " + n);
     private static async Task Frames(int count = 10) { for (int i = 0; i < count; i++) await default(NextUpdate); }
     private static void Near(float actual, float expected, string message) => Check(Math.Abs(actual - expected) < 0.01f, $"{message}: {actual} ~= {expected}");

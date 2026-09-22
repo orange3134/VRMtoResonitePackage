@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 10`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 11`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -46,7 +46,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 10 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 11 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | GestureTable/各セル | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
@@ -60,8 +60,6 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | `Enabled` | bool | true | 設定。false は選択・メニュー利用対象外 |
 | `Loop` | bool | 元クリップの設定 | 設定。true なら経過秒を Duration で剰余演算してサンプリング |
 | `Duration` | float | 元の長さを最低 0.001 秒に補正 | 設定。ループ周期（秒）。正値を維持する。非ループ時は経過秒をそのまま使う |
-| `FadeIn` | float | 0.1 | 設定。その表情へ切り替える秒数。0 以下は即時切替 |
-| `FadeOut` | float | 0.1 | 設定。その表情から選択なしへ戻る秒数。別の有効表情へ移る場合は移動先の FadeIn を使う |
 | `Source` | string | 元データの説明、または空文字 | 定義。由来の記録。再生判定には使わない |
 | `Clip` | IAssetProvider&lt;Animation&gt; | 同じ Slot の StaticAnimationProvider | 定義。AnimX 供給元。AssetLoader にも参照をコピーする。アセット未ロードなら選択無効 |
 | `MenuAvailable` | bool | false | 状態。メニュー生成時のみ作成。装着開始・対応表や有効状態などの変更時に再計算。Slot が有効・Enabled=true・対応表に参照ありなら true。ロード完了は判定しない |
@@ -81,10 +79,8 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | `PairIndex` | int | 0 | Selection が計算した LeftGesture × 8 + RightGesture（0〜63） |
 | `CurrentExpression` | Slot | null | Slot 有効・Enabled=true・アセット取得済みの候補。それ以外は null |
 | `PlaybackStart` | float | 0 | CurrentExpression の参照が変わった WorldTimeFloat（秒）。同じ表情の再指定では再生を始め直さない |
-| `FadeDuration` | float | 0.1 | 切替時に採用した FadeIn または FadeOut。途中で Catalog を編集してもその切替の値は再取得しない |
-| `PlaybackElapsed` | float | 0 | ローカル駆動の診断値。WorldTimeFloat − PlaybackStart |
-| `AnimationTime` | float | 0 | Playback が駆動する共通サンプリング時刻（秒）。Loop=true なら PlaybackElapsed % Duration、それ以外は PlaybackElapsed |
-| `FadeWeight` | float | 1 | Playback が駆動する共通フェード率。FadeDuration が正なら clamp01(PlaybackElapsed / FadeDuration)、それ以外は 1 |
+| `PlaybackElapsed` | float | 0 | 共有Write更新時の診断値。表情ありなら WorldTimeFloat − PlaybackStart、なしなら0 |
+| `AnimationTime` | float | 0 | Playback が書き込む共通サンプリング時刻（秒）。Loop=true なら PlaybackElapsed % Duration、それ以外は PlaybackElapsed |
 
 Core の DynamicVariable に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取った参照を検証し、
 切替前後の比較・フェード設定後に CurrentExpression へ直接渡す。
@@ -92,7 +88,7 @@ MappedExpression／CandidateExpression の診断用 DynamicVariable は生成し
 対応表の参照先の確認には PairIndex と GestureTable の行を使う。
 
 AllowExternalInput 以外は状態として扱う。SelectionStatus は生成しない。入力モードは AllowExternalInput、再生対象は CurrentExpression で確認する。未割当と無効・未ロードはいずれも CurrentExpression=null となる。
-PlaybackElapsed・AnimationTime・FadeWeight は ValueFieldDrive で各クライアントが駆動し、毎フレームの同期書き込みを行わない。
+PlaybackElapsed・AnimationTime は装着者が共有Writeループで更新する。閲覧者は同期された値を読む。
 再生処理の実行回数を示す値ではない。
 
 Lifecycle は OnStart とローカル装着状態の変更時に動き、現在の装着者がローカルユーザーの場合だけ、初期化確認 → Selection とメニュー表示更新を実行する。
@@ -100,14 +96,14 @@ Lifecycle は OnStart とローカル装着状態の変更時に動き、現在�
 公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、装着状態の変更イベントより早い左右入力も保持する。
 
 初期化時は左右値・PairIndex を 0、AllowExternalInput を true、
-CurrentExpression を null、Outputs の Snapshot を Base に戻す。Result は直接書き込まず各 Output の Drive が更新する。
-その後の Selection と各 Output の Drive で現在の対応表に応じた状態になる。
-PlaybackStart・FadeDuration はここでは変更しないため、時計から算出する PlaybackElapsed・FadeWeight は初期化完了の指標ではない。
+CurrentExpression を null、Outputs の Result を Base に書き戻す。
+その後の Selection と Playback の同期Writeで現在の対応表に応じた状態になる。
+PlaybackStart は選択変更時に設定する。PlaybackElapsed・AnimationTime は初期化完了の指標ではない。
 
 装着が終了すると、初期化済みのクライアントだけが一度このクリア処理を実行し、フラグを false に戻す。
 既に別のユーザーが装着している場合は共有値をクリアせず、ローカルフラグだけを戻す。
 未装着で生成・複製したインスタンスや閲覧者のクライアントはクリアを書き込まない。
-未装着中は Selection を実行しない。各 Output の Drive は Base に追従する。
+未装着中は Selection を実行しない。ホストの共有Writeが Base に追従する。
 再装着・複製・読み込み後の最初の処理では再び初期化する。
 
 ## Outputs/各 BlendShape
@@ -121,26 +117,22 @@ PlaybackStart・FadeDuration はここでは変更しないため、時計から
 | `Base` | float | 元フィールド値 | 状態／基礎入力。既存の瞬き・viseme ドライバーがあれば出力先をここへ移す。表情にトラックがない場合の値でもある |
 | `TrackingWeight` | float | 0 | 設定。表情値から Base へ寄せる割合。使用時に 0〜1 に制限。0=表情値、1=Base。自動更新処理はない |
 | `BlinkMode` | int | 通常0、既存の OpenCloseTarget は1または2 | 設定。0=通常の混合、1=フェード後に max(補間値, Base)、2=min(補間値, Base)。生成時の Eye.ClosedState が OpenState より小さい場合は2。それ以外の瞬きは1 |
-| `Result` | float | 元フィールド値 | 状態。DynamicField<float> が DynamicBlendShapeDriver の該当 BlendShapes[].Value を参照する。各 Output の ValueFieldDrive はその参照先を直接駆動し、Result は読み取りに使う |
-| `Snapshot` | float | 元フィールド値 | 状態。表情が変わる直前の Result。フェードの始点 |
+| `Result` | float | 元フィールド値 | 状態。DynamicField<float> が DynamicBlendShapeDriver の該当 BlendShapes[].Value を参照する。共有Playbackがその参照先へ値を書き込む |
 | `Target` | IField&lt;float&gt; | 元の BlendShape フィールド | 定義。出力先の記録。DynamicBlendShapeDriver の Renderer・シェイプ名は生成時に別途設定するため、この参照だけ変更しても送信先は変わらない |
 | `OriginalDriver` | ISyncRef | 元のドライバー | 定義。既存 ActiveLink が ISyncRef の場合だけ作成。Base へ付け替えたドライバーの記録 |
 
 Result 以外の数値レコードは DynamicValueVariable、Result だけは外部フィールドを参照する DynamicField。
 DynamicVariable としてのパスと float 型は同じなので、Read Dynamic Variable で引き続き読み取れる。
-メッシュ以外の単独 IField を使う内部テスト等では、そのフィールドを直接 Drive し Result から参照する。
+メッシュ以外の単独 IField を使う内部テスト等では、そのフィールドへ直接Writeし Result から参照する。
 
 表情なし・該当トラックなしの場合は sample の代わりに Base を使う。
-各 Output は Playback が計算した AnimationTime と FadeWeight のフィールドを ValueSource で参照する。
-Playback は計算対象の PlaybackStart と CurrentExpression も内部フィールドへ駆動する。
-切替直後にそれらが現在の選択と一致しない場合は、共有時計が更新されるまで表情の補間値を Snapshot に保つ。その後、BlinkMode の瞬き合成を適用する。
-未装着時は補間せず Result=Base とする。装着中で共有時計が現在の選択に対応するときは以下の式で評価する。
+Playback の1つのループが、同じアセットと時刻で全出力を計算する。切り替え補間はしない。
+未装着時は Result=Base とする。装着中は以下の式で評価し、値が異なる場合だけ書き込む。
 
 ```text
 desired = lerp(sample, Base, clamp01(TrackingWeight))
-faded   = lerp(Snapshot, desired, FadeWeight)
-Result  = BlinkMode == 1 ? max(faded, Base) : BlinkMode == 2 ? min(faded, Base) : faded
-Output Logic → ValueFieldDrive → DynamicBlendShapeDriver.BlendShapes[].Value → メッシュの BlendShape
+Result  = BlinkMode == 1 ? max(desired, Base) : BlinkMode == 2 ? min(desired, Base) : desired
+Playback → WriteDynamicValueVariable(Result) → DynamicBlendShapeDriver.BlendShapes[].Value → BlendShape
 Result (DynamicField<float>) ──参照──> 同じ BlendShapes[].Value
 ```
 
@@ -148,8 +140,7 @@ EyeLinearDriver の OpenCloseTarget を後から追加する場合は、該当 O
 BlinkMode を閉じる方向に合わせて1または2にする。TrackingWeight=0でも瞬きが合成される。
 同じ BlendShape を DynamicBlendShapeDriver と EyeLinearDriver の両方から直接 Drive しない。
 BlinkMode は生成時に閉じる方向を設定する。後から OpenState／ClosedState を反転した場合は BlinkMode も変更する。
-フェード前の値に max/min をかけるだけでは瞬きまで FadeWeight で弱くなるため、合成はフェード後に行う。
-Snapshot は従来どおり切替前の最終 Result を保存するため、瞬き中の切替ではその閉じた値もフェードの始点に含まれる。
+表情を即時に切り替えても、BlinkModeによる瞬きの合成は継続する。
 
 ## Inputs/Keyboard/Left・Right
 
@@ -265,6 +256,6 @@ Internal の4つは公開操作用ではない。メニューボタンの送信�
 - [ExpressionFlux.cs](../src/VrmToResonitePackage/Expressions/ExpressionFlux.cs)：スコープ、変数・定数ノード、読み書き。
 - [ExpressionApiSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionApiSetup.cs)：入力検証、左右値の更新、モード変更、ID の逆引き。
 - [ExpressionLifecycleSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionLifecycleSetup.cs)：装着状態による初期化・終了処理。
-- [ExpressionPlaybackSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionPlaybackSetup.cs)：選択検証、各 Output のサンプリング・フェード・追跡入力との合成と Drive。
+- [ExpressionPlaybackSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionPlaybackSetup.cs)：選択検証、共有サンプリング・追跡入力との合成とWrite。
 - [ExpressionInputSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionInputSetup.cs)：メニュー、キー割当、機種別入力。
 - [ExpressionAnimationConverter.cs](../src/VrmToResonitePackage/Expressions/ExpressionAnimationConverter.cs)：出力 ID と AnimX トラック。

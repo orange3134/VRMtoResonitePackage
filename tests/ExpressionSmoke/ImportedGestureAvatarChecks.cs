@@ -39,11 +39,6 @@ internal static class ImportedGestureAvatarChecks
         var core = root.FindChild("Core"); var table = root.FindChild("GestureTable");
         var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
         var left = menu.FindChild("Left hand").FindChild("Items"); var right = menu.FindChild("Right hand").FindChild("Items");
-        foreach (var entry in root.FindChild("Catalog").Children)
-        {
-            entry.WriteDynamicVariable("ExpressionClip/FadeIn", 0f); entry.WriteDynamicVariable("ExpressionClip/FadeOut", 0f);
-        }
-
         for (int hand = 0; hand < 2; hand++)
             for (int gesture = 0; gesture < 8; gesture++)
             {
