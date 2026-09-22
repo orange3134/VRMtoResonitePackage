@@ -6,8 +6,14 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 左右それぞれの現在のジェスチャーを 0〜7 の整数で保持し、
 `LeftGesture * 8 + RightGesture` で64通りの対応表を引く。
 対応表の参照先が変わったときだけアニメーションを切り替える。
-VRChat の Animator 条件とレイヤーは変換時に評価し、アバター内には状態機械を生成しない。
+VRChat のカスタム FX Animator から、対応する条件とレイヤーを変換時に評価する。
+左右64通りへ静的に変換する方式であり、Animator 全体や汎用パラメーターの状態機械は生成しない。
 標準コンポーネントと ProtoFlux で動作し、利用側に ResoPon の DLL は不要。
+
+Clip の読み込み先である `Catalog` と、選択先を決める `GestureTable` は別である。
+対応表に割り当てられない Clip は Catalog に残っていても直接選択メニューでは選べない。
+自動割り当てが0/64なら、すべての入力で `CurrentExpression` が null になる。
+その場合は `Expressions/Diagnostics` と変換ログのレイヤー・Clip の除外理由を確認する。
 
 ```mermaid
 flowchart LR
@@ -389,9 +395,16 @@ Exit Time、再生オフセット、上記の固定化で扱えないパラメ�
 履歴に依存する Write Defaults、解決できない出力は自動割り当ての対象外。
 ループや長さが異なる動画の同時合成、合成できないキー配置も診断する。
 対応する独立クリップは Catalog に残し、手動で割り当てられる。
-パーサー側の制限も継続する。BlendTree、ネスト、AvatarMask、加算レイヤー、StateMachineBehaviour、
-遷移中断、Puppet、Sub-Menu の開閉パラメーターは自動再現しない。
-材質・物体・Transform のトラック、weighted tangent、イベントを含む Clip も対象外。
+パーサー側では BlendTree、ネスト、加算レイヤー、Puppet、Sub-Menu の開閉パラメーターを自動再現しない。
+AvatarMask、StateMachineBehaviour、Exit や遷移中断も一般には対象外だが、空の振り分けステートと
+完全な顔ポーズ、または平坦な Entry/Exit 選択器は、経路を検証できる場合に限り対応表へ投影する。
+後者では Transform を含まないマスクと既知の眼・口 Tracking Control、選択条件を書き換えない
+既知の Parameter Driver を許容する。AFK は false へ固定し、履歴保持や Behaviour の副作用、
+追跡切り替え、元の遷移時間は再現しない。詳細と検証条件は後述の回帰事例を参照。
+材質・物体・Transform のトラックやイベントを含む Clip は対象外。
+重み付き接線は検証して、正規化したシェイプ値の誤差1e-5以内の折れ線へ変換する。
+表現できないカーブや、解決できない出力を含む Clip は全体を除外するため、
+その Clip を参照するレイヤーも自動割り当てから外れる場合がある。
 
 実行時は選ばれた表情を1つの時計で再生する。元 Animator の遷移時間、自己遷移による再開始、
 レイヤーごとの独立した再生位相は再現しない。表情を切り替えると直前の出力からフェードする。
@@ -632,3 +645,12 @@ Write Defaults が全状態で有効なら異なる binding 集合を許容し�
 実 Fyuett_All_Hina の変換・inspect と、保存後の全64組の CurrentExpression・685出力の再生を確認した。
 直接選択メニュー15件と入力モード切替も動作する。LuciferDevil の再変換・保存後再生・
 Catalog/全AnimX/出力binding/対応表の変更前比較も一致した。
+
+### NoraMiaree の未割り当て調査
+
+NoraMiaree v1.0.0 の既存ログでは37 Clip・207出力が生成される一方、対応表は0/64だった。
+Face / Face Negative レイヤーは `Face_Emote` / `Face_Negative` で制御され、
+初期 State → Empty の振り分け → 顔ポーズ → `Face_Changing` の中継状態という経路を持つ。
+Parameter Driver が `Face_Changing=1` を設定するため、現在の単純な振り分け・Entry/Exit
+投影の対象にはならない。Clip の読み込みと選択条件の移植が別であることを示す未対応事例であり、
+このログは NoraMiaree の自動表情選択が動作した検証結果ではない。

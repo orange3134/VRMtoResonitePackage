@@ -110,7 +110,7 @@ public static class VrchatExpressionParser
                         "instead of retaining previous values. Eye/mouth tracking-control overrides and transition timing " +
                         "are not imported; parameter-driver side effects are omitted and AFK is fixed false. ResoPon blink/viseme cooperation is retained.");
                 }
-                else Warn(label + ": automatic layer omitted (" + string.Join(", ", errors.Distinct()) + "); supported clips remain directly selectable");
+                else Warn(label + ": automatic layer omitted (" + string.Join(", ", errors.Distinct()) + "); supported clips remain in Catalog; menu selection requires a GestureTable mapping");
 
                 void Collect(YamlNode stateMachine, HashSet<long> visited)
                 {
