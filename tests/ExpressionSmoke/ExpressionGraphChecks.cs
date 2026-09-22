@@ -21,7 +21,7 @@ internal static class ExpressionGraphChecks
 
         Slot Board(ProtoFluxNode node) => node.Slot.Parent.Parent;
         var updates = nodes.Where(n => n.GetType().Name == "LocalUpdate").ToArray();
-        Check(updates.Length == 1 && Board(updates[0]) == Descendant(expressions, "Core/Logic/Playback"), "one shared playback update");
+        Check(updates.Length == 0, "expression system contains no LocalUpdate");
         Check(nodes.All(n => n.GetType().Name is not "ValueFieldDrive`1" and not "ReferenceDrive`1"), "no continuous playback Drive nodes");
         Check(nodes.Any(n => n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "state transitions use local change detectors");
@@ -30,7 +30,13 @@ internal static class ExpressionGraphChecks
             "keyboard edge state is local to its change detector");
         foreach (var output in expressions.FindChild("Outputs").Children)
         {
-            Check(output.FindChild("Logic") == null, "outputs share playback without individual Flux graphs");
+            Check(output.FindChild("Logic") == null, "output change monitors do not duplicate the merge logic");
+            var changes = output.FindChild("Changes")?.GetComponentsInChildren<ProtoFluxNode>();
+            Check(changes != null && changes.Count(n => n.GetType().Name == "FireOnLocalValueChange`1") == 5 &&
+                changes.Count(n => n.GetType().Name == "DynamicImpulseTriggerWithObject`1") == 1,
+                "five value change monitors send one output Slot to the shared writer");
+            Check(changes.All(n => !n.GetType().Name.StartsWith("WriteDynamic", StringComparison.Ordinal)),
+                "output monitors do not write or merge values");
             var result = output.GetComponents<DynamicField<float>>()
                 .Single(v => v.VariableName.Value == "ExpressionOutput/Result").TargetField.Target;
             Check(result.ActiveLink == null, "Result is writable, without a Flux drive");

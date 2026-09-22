@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 13`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 14`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -46,7 +46,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 13 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 14 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | GestureTable/各セル | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
@@ -128,7 +128,8 @@ DynamicVariable としてのパスと float 型は同じなので、Read Dynamic
 メッシュ以外の単独 IField を使う内部テスト等では、そのフィールドへ直接Writeし Result から参照する。
 
 表情なし・該当トラックなしの場合は sample の代わりに Base を使う。
-選択時に取得した Pose / HasPose を共有ループが読む。アセット検索・サンプリングはせず、切り替え補間もしない。
+選択時は全出力を同期更新する。以後はBase・TrackingWeight・BlinkMode・Pose・HasPoseの値変更時に、
+該当する出力だけを共有Playbackが更新する。LocalUpdate・アセット検索・サンプリング・切り替え補間は生成しない。
 未装着時は Result=Base とする。装着中は以下の式で評価し、値が異なる場合だけ書き込む。
 
 ```text
@@ -143,7 +144,8 @@ EyeLinearDriver の OpenCloseTarget を後から追加する場合は、該当 O
 BlinkMode を閉じる方向に合わせて1または2にする。TrackingWeight=0でも瞬きが合成される。
 同じ BlendShape を DynamicBlendShapeDriver と EyeLinearDriver の両方から直接 Drive しない。
 BlinkMode は生成時に閉じる方向を設定する。後から OpenState／ClosedState を反転した場合は BlinkMode も変更する。
-表情を即時に切り替えても、BlinkModeによる瞬きの合成は継続する。
+表情を即時に切り替えても、Baseの変更イベントによりBlinkModeによる瞬きの合成は継続する。
+各Outputs/Changesは値変更通知だけを行う。Resultは監視せず、無変化時の再適用はしない。
 
 ## Inputs/Keyboard/Left・Right
 
@@ -244,9 +246,10 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `InitializeTag` | `ResoPon/Expression/Internal/Initialize` | 引数なし。Lifecycle の初期化確認 |
 | `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。選択更新を同期実行 |
 | `PlaybackTickTag` | `ResoPon/Expression/Internal/Playback` | 引数なし。終端ポーズの取得・適用を同期実行 |
+| `OutputUpdateTag` | `ResoPon/Expression/Internal/Output` | Slot。変更された出力を共有Writerへ通知。装着者または未装着時のホストだけが適用 |
 | `MenuRefreshTag` | `ResoPon/Expression/Internal/MenuRefresh` | 引数なし。メニュー表示可否を再計算。メニュー生成時のみ |
 
-Internal の4つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
+Internal の5つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
 選択中の一時候補、逆引き Pair 番号、メニュー表示判定は LocalValue / LocalObject、初期化済みフラグは StoredValue<bool> を使う。
 これらも DynamicVariable の保存変数とは区別する。
 

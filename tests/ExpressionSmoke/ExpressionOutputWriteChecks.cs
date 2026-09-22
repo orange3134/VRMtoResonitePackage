@@ -56,6 +56,24 @@ internal static class ExpressionOutputWriteChecks
             Set(outputA, "TrackingWeight", -1f); await Frames(); Near(a.Value, 0.7f, "tracking weight is clamped at zero");
             Set(outputA, "TrackingWeight", 0f);
 
+            // A sentinel exposes accidental frame polling or whole-output sweeps.
+            // Changing A must not reapply unrelated B while its inputs stay unchanged.
+            Select(3); await Frames();
+            b.Value = 0.123f;
+            await Frames(30);
+            Near(b.Value, 0.123f, "idle output is not rewritten without an input change");
+            tracking.Value = 0.6f;
+            Set(outputA, "TrackingWeight", 1f);
+            await Frames();
+            Near(a.Value, 0.6f, "changed tracking input updates its own output");
+            Near(b.Value, 0.123f, "changing A does not sweep or rewrite B");
+            Set(outputB, "Base", 0.45f);
+            await Frames();
+            Near(b.Value, 0.45f, "B updates when its own Base changes");
+            Set(outputB, "Base", 0.3f);
+            tracking.Value = 0.4f;
+            Set(outputA, "TrackingWeight", 0f);
+            await Frames();
             Select(4);
             Near(a.Value, 1, "looping ramp immediately applies its final key");
             Near(b.Value, 0, "all ramp tracks immediately apply their endpoints");
@@ -93,8 +111,8 @@ internal static class ExpressionOutputWriteChecks
             Near(Get<float>(unwornOutput, "Result"), 0.8f, "unworn clone writes Base despite retained selection");
             Near(a.Value, 1, "unworn clone does not change the original result");
             unworn.Destroy();
-            Check(expressions.GetComponentsInChildren<ProtoFluxNode>().Count(n => n.GetType().Name == "LocalUpdate") == 1,
-                "one shared update for all output fields");
+            Check(expressions.GetComponentsInChildren<ProtoFluxNode>().Count(n => n.GetType().Name == "LocalUpdate") == 0,
+                "output updates are event driven without LocalUpdate");
         }
         finally { avatar.Destroy(); }
         Console.WriteLine("OUTPUT WRITES: immediate final poses, no loop playback, live tracking, missing/reordered tracks and unworn copies passed");

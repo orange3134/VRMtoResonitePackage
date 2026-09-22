@@ -44,16 +44,17 @@ internal sealed partial class ExpressionSystemSetup
     {
         var g = new ExpressionFlux(_playback);
         var core = g.Ref(_core);
-        // Pose records contain only final values. Frame updates merge these cached
-        // values with live tracking and blink inputs; no animation assets are used.
+        // Selection and per-output change events share this writer. Idle outputs
+        // do not run the merge or write path; no frame update is generated.
         var value = g.Local<float>();
+        var output = g.Local<Slot>();
         var wearer = g.IsOwner(_root);
         var canWrite = g.Or(wearer, g.And(g.IsNull<User>(g.Owner(_root)),
             g.Node("IsLocalUser", null, ("User", g.Node("HostUser")))));
         var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, CoreSpace, "CurrentExpression"), g.Ref<Slot>(null));
         var bindings = g.Read<Slot>(current, ClipSpace, "Bindings");
         g.BeginSection("Apply fixed pose and live tracking");
-        var update = g.Each(g.Ref(_outputs), output =>
+        IWorldElement ApplyOutput()
         {
             var baseValue = g.Read<float>(output, OutputSpace, "Base");
             var desired = g.Choose<float>(g.And(wearer, g.Read<bool>(output, OutputSpace, "HasPose")),
@@ -66,7 +67,9 @@ internal sealed partial class ExpressionSystemSetup
                 g.Set<float>(value, result),
                 g.If(g.NotEqual<float>(value, g.Read<float>(output, OutputSpace, "Result")),
                     g.Write<float>(output, OutputSpace, "Result", value)));
-        });
+        }
+        var apply = ApplyOutput();
+        var update = g.Each(g.Ref(_outputs), record => g.Sequence(g.Set<Slot>(output, record), apply));
         g.BeginSection("Apply stored pose on selection");
         var bindingOutput = g.Local<Slot>();
         var refresh = g.Sequence(
@@ -78,12 +81,28 @@ internal sealed partial class ExpressionSystemSetup
                     g.Write<bool>(bindingOutput, OutputSpace, "HasPose", g.Constant(true)))))),
             update);
         // Only the wearer writes a pose. The host follows Base on unworn copies.
-        g.Node("LocalUpdate", null, ("OnUpdate", g.If(canWrite, update)));
         var receiver = g.Receiver(PlaybackTickTag, false);
         Link(receiver, "OnTriggered", g.If(wearer, refresh));
+        var outputReceiver = g.Receiver<Slot>(OutputUpdateTag);
+        Link(outputReceiver, "OnTriggered", g.If(canWrite, g.Sequence(
+            g.Set<Slot>(output, Out(outputReceiver, "Value")), g.If(g.Active(output), apply))));
+        g.OnChanged<bool>(canWrite, g.If(canWrite, refresh));
         g.OnChanged<Slot>(current, g.If(canWrite, refresh));
         g.OnChanged<Slot>(bindings, g.If(canWrite, refresh));
         g.OnStart(g.If(canWrite, refresh));
+        foreach (var record in _outputSlots.Values) BuildOutputChangeEvents(record);
+    }
+
+    private void BuildOutputChangeEvents(Slot output)
+    {
+        var g = new ExpressionFlux(output.AddSlot("Changes"));
+        // Only the changed output is passed to the shared writer. Authorization is
+        // checked there so observers cannot write synchronized expression state.
+        var send = g.Trigger<Slot>(g.Ref(_playback), g.Text(OutputUpdateTag), g.Ref(output));
+        foreach (string name in new[] { "Base", "TrackingWeight", "Pose" })
+            g.OnChanged<float>(g.Read<float>(g.Ref(output), OutputSpace, name), send);
+        g.OnChanged<int>(g.Read<int>(g.Ref(output), OutputSpace, "BlinkMode"), send);
+        g.OnChanged<bool>(g.Read<bool>(g.Ref(output), OutputSpace, "HasPose"), send);
     }
 
     private static IWorldElement ValidExpression(ExpressionFlux g, IWorldElement expression) =>
