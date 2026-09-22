@@ -143,22 +143,20 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<int>(core, "PairIndex") == 8 &&
             Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"),
             "validated table entry is the current expression");
-        float start = Get<float>(core, "PlaybackStart");
         Gesture(0, 1);
-        Check(Get<float>(core, "PlaybackStart") == start && Get<int>(core, "LeftGesture") == 1,
+        Check(Get<int>(core, "LeftGesture") == 1,
             "same gesture preserves the hand value without restarting playback");
         await Frames();
-        Check(Get<float>(core, "PlaybackStart") == start, "same expression does not restart playback");
+        Check(Math.Abs(field.Value - 1) < 0.01, "same expression retains its fixed pose");
         Gesture(1, 1); await Frames();
         Check(Math.Abs(field.Value - 0.7f) < 0.01, "both-hand table entry selects Angry");
-        start = Get<float>(core, "PlaybackStart");
         foreach (int malformed in new[] { int.MinValue, -1, 8, 255, int.MaxValue })
         {
             Gesture(0, malformed);
             Gesture(1, malformed);
             Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
                 Get<int>(core, "PairIndex") == 9 && Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry") &&
-                Get<bool>(core, "AllowExternalInput") && Get<float>(core, "PlaybackStart") == start,
+                Get<bool>(core, "AllowExternalInput"),
                 "malformed gesture leaves hand state and playback unchanged: " + malformed);
         }
         await Frames();
@@ -197,12 +195,10 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Set(table, "Pair.2", catalog.FindChild("Animated")); await Frames();
         Check(catalog.FindChild("Animated").GetComponent<ContextMenuItemSource>().Enabled,
             "assigning an unmapped expression exposes its menu item");
-        Select("Animated"); await Frames(20);
-        float firstSample = field.Value;
-        float firstElapsed = Get<float>(core, "PlaybackElapsed");
-        await Frames(20);
-        Check(field.Value > firstSample && field.Value < 1, "real AnimX output advances with playback time");
-        Check(Get<float>(core, "PlaybackElapsed") > firstElapsed, "written playback clock advances");
+        Select("Animated");
+        Check(Math.Abs(field.Value - 1) < 0.001f, "animated clip applies its final key before the next frame");
+        await Frames(40);
+        Check(Math.Abs(field.Value - 1) < 0.001f, "animated clip remains fixed without playback");
         Set(catalog.FindChild("Animated"), "Enabled", false);
         AllowInput();
         Check(Reference<Slot>(core, "CurrentExpression") == null && Math.Abs(field.Value - 0.2f) < 0.001f,
@@ -216,20 +212,18 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Set(table, "Pair.9", catalog.FindChild("Smile"));
         await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "editing table reference takes effect");
-        start = Get<float>(core, "PlaybackStart");
         Gesture(1, 0); await Frames();
-        Check(Get<float>(core, "PlaybackStart") == start, "different pair sharing the same clip does not restart");
+        Check(Math.Abs(field.Value - 1) < 0.01, "different pair sharing the same clip retains its pose");
         table.Children.First(s => s.Name.StartsWith("08 ")).Destroy(); await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "deleted table row falls back to base");
         Gesture(1, 1); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "deleting row 8 does not shift row 9");
 
         var touch = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules").FindChild("Touch");
-        start = Get<float>(core, "PlaybackStart");
 
         await Frames();
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
-            Get<float>(core, "PlaybackStart") == start && Math.Abs(field.Value - 1) < 0.01,
+            Math.Abs(field.Value - 1) < 0.01,
             "inactive controllers retain the last accepted hand values and expression without restarting playback");
 
         Gesture(0, 2); await Frames();
@@ -365,7 +359,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         AllowInput(); Gesture(0, 0); Gesture(1, 0);
         await Frames();
         Check(Get<bool>(core, "AllowExternalInput") &&
-            Get<int>(core, "PairIndex") == 0 && Get<float>(core, "PlaybackElapsed") >= 0 && Math.Abs(field.Value - 0.4f) < 0.01,
+            Get<int>(core, "PairIndex") == 0 && Math.Abs(field.Value - 0.4f) < 0.01,
             "reattaching initializes hand state, selection, diagnostics and tracking");
         Select("Angry"); await Frames();
         var graph = avatar.SaveObject(DependencyHandling.CollectAssets);
@@ -394,7 +388,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
             "reloaded receiver evaluates the pair before the next frame");
         for (int i = 0; i < 60; i++) await default(NextUpdate);
-        Check(Math.Abs(restored.GetComponent<ValueField<float>>().Value.Value - 0.7f) < 0.01, "reloaded stock ProtoFlux plays animation without converter callbacks");
+        Check(Math.Abs(restored.GetComponent<ValueField<float>>().Value.Value - 0.7f) < 0.01, "reloaded stock ProtoFlux applies a fixed pose without converter callbacks");
         // Curves with equal endpoints may still have a tangent excursion.
         var testCurve = new ExpressionCurve { Binding = new("Face", "Curve") };
         testCurve.Keys.Add(new(0, 0, 0, 4)); testCurve.Keys.Add(new(1, 0, -4, 0));

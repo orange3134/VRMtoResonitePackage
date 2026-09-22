@@ -26,8 +26,7 @@ internal static class ExpressionPackageSnapshot
             data.SaveToFile(animationPath);
             clips.Add(id, new
             {
-                Name = Value<string>(entry, "DisplayName"), Duration = Value<float>(entry, "Duration"),
-                Loop = Value<bool>(entry, "Loop"), Enabled = Value<bool>(entry, "Enabled"),
+                Name = Value<string>(entry, "DisplayName"), Enabled = Value<bool>(entry, "Enabled"),
                 AnimationSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(animationPath))),
                 Bindings = entry.FindChild("Bindings").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
                     .Where(v => v.VariableName.Value == ExpressionTestFields.VariablePath(v.Slot, "Output"))

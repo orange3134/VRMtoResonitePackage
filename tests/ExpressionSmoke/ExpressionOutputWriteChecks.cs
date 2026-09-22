@@ -25,13 +25,13 @@ internal static class ExpressionOutputWriteChecks
             }
             void Clip(string name, float duration, params ExpressionCurve[] curves)
             {
-                var clip = new ExpressionClip { Id = name, Name = name, Duration = duration };
+                var clip = new ExpressionClip { Id = name, Name = name, Duration = duration, Loop = name == "Ramp" };
                 clip.Curves.AddRange(curves); model.Clips.Add(clip);
             }
             Clip("Short", 0.001f, Curve("A", 1, 1, 0.001f), Curve("B", 0.8f, 0.8f, 0.001f));
             Clip("Reordered", 1, Curve("B", 0.6f, 0.6f, 1), Curve("A", 0.2f, 0.2f, 1));
             Clip("Sparse", 1, Curve("A", 0.7f, 0.7f, 1));
-            Clip("Ramp", 100, Curve("A", 0, 1, 100), Curve("B", 1, 0, 100));
+            Clip("Ramp", 100, Curve("A", 0, 1, 100), Curve("B", 1, 0, 1));
             Clip("Hold", 1, Curve("A", 0.2f, 0.8f, 1, hold: true));
             var expressions = await ExpressionSystemSetup.BuildAsync(avatar, model, binding => binding.Shape == "A" ? a : b, menu: false);
             await Frames(90);
@@ -46,7 +46,6 @@ internal static class ExpressionOutputWriteChecks
             }
             void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
                 ExpressionSystemSetup.RightTag, true, index) == 1, "int receiver selects test clip " + index);
-            void Time(float elapsed) => Set(core, "PlaybackStart", (float)avatar.World.Time.WorldTime - elapsed);
 
             Select(1); await Frames(); Near(a.Value, 1, "short clip reaches its final pose");
             Select(2); await Frames(); Near(a.Value, 0.2f, "track order can change for A"); Near(b.Value, 0.6f, "track order can change for B");
@@ -57,14 +56,27 @@ internal static class ExpressionOutputWriteChecks
             Set(outputA, "TrackingWeight", -1f); await Frames(); Near(a.Value, 0.7f, "tracking weight is clamped at zero");
             Set(outputA, "TrackingWeight", 0f);
 
-            Select(4); await Frames(); Time(25); await Frames();
-            Near(a.Value, 0.25f, "non-looping animation advances"); Near(b.Value, 0.75f, "outputs share the same playback time");
-            Time(150); await Frames(); Near(a.Value, 1, "non-looping animation holds its endpoint");
-            Set(catalog.FindChild("Ramp"), "Loop", true); Time(125); await Frames(); Near(a.Value, 0.25f, "loop wraps by Duration");
-            Set(catalog.FindChild("Ramp"), "Duration", 40f); Time(95); await Frames(); Near(a.Value, 0.15f, "edited Duration changes the loop period without stretching keys");
-            Set(catalog.FindChild("Ramp"), "Loop", false); Time(25); await Frames(); Near(a.Value, 0.25f, "disabling Loop restores unwrapped time");
+            Select(4);
+            Near(a.Value, 1, "looping ramp immediately applies its final key");
+            Near(b.Value, 0, "all ramp tracks immediately apply their endpoints");
+            await Frames(90);
+            Near(a.Value, 1, "looping ramp stays at its final pose");
+            Near(b.Value, 0, "time does not restart or advance the fixed pose");
+            var ramp = catalog.FindChild("Ramp");
+            var originalProvider = ramp.GetComponent<StaticAnimationProvider>();
+            Set<IAssetProvider<Animation>>(ramp, "Clip", catalog.FindChild("Sparse").GetComponent<StaticAnimationProvider>());
+            await Frames();
+            Near(a.Value, 0.7f, "changing the loaded asset refreshes the same selected slot");
+            Near(b.Value, 0.3f, "replacement asset clears cached tracks absent from the new pose");
+            Set<IAssetProvider<Animation>>(ramp, "Clip", null);
+            await Frames();
+            Near(a.Value, 0.4f, "missing asset clears the cached pose");
+            Set<IAssetProvider<Animation>>(ramp, "Clip", originalProvider);
+            await Frames();
+            Near(a.Value, 1, "restored asset applies its endpoint without a new gesture");
+            Near(b.Value, 0, "tracks with different lengths each hold their own final key");
             Select(1); Near(a.Value, 1, "new pose is written synchronously"); Near(b.Value, 0.8f, "all outputs switch together");
-            Select(5); Time(2); await Frames(); Near(a.Value, 0.8f, "Hold reaches its final key");
+            Select(5); Near(a.Value, 0.8f, "non-looping Hold immediately reaches its final key");
             Select(3); Near(a.Value, 0.7f, "sparse pose switches immediately"); Near(b.Value, 0.3f, "missing track immediately restores Base");
             Select(2); Near(a.Value, 0.2f, "rapid selection has no previous-pose interpolation");
             Select(0); Near(a.Value, 0.4f, "cleared selection immediately restores tracking");
@@ -81,7 +93,7 @@ internal static class ExpressionOutputWriteChecks
                 "one shared update for all output fields");
         }
         finally { avatar.Destroy(); }
-        Console.WriteLine("OUTPUT WRITES: synchronous switching, sampling, tracking, loop time, missing/reordered tracks and unworn copies passed");
+        Console.WriteLine("OUTPUT WRITES: immediate final poses, no loop playback, live tracking, missing/reordered tracks and unworn copies passed");
     }
 
     private static async Task Frames(int count = 8) { for (int i = 0; i < count; i++) await default(NextUpdate); }

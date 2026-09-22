@@ -28,8 +28,8 @@ internal sealed partial class ExpressionSystemSetup
         actions.Add(g.Write<int>(core, CoreSpace, "PairIndex", index));
 
         g.BeginSection("Switch immediately when changed");
-        actions.Add(g.If(g.NotEqual<Slot>(selected, current), g.Sequence(
-            g.Write<float>(core, CoreSpace, "PlaybackStart", g.Now), g.Write<Slot>(core, CoreSpace, "CurrentExpression", selected))));
+        actions.Add(g.If(g.NotEqual<Slot>(selected, current),
+            g.Write<Slot>(core, CoreSpace, "CurrentExpression", selected)));
         actions.Add(g.Trigger(g.Ref(_playback), PlaybackTickTag));
         var select = g.Sequence(actions.ToArray());
         ReceiveUpdate(g, SelectionTickTag, select);
@@ -44,50 +44,51 @@ internal sealed partial class ExpressionSystemSetup
     {
         var g = new ExpressionFlux(_playback);
         var core = g.Ref(_core);
-        // One execution graph serves every output. Locals snapshot the selected asset and
-        // clock once per update; Result is written only when its value actually changes.
-        var current = g.Local<Slot>();
+        // Sample only on selection/asset changes. Frame updates merge the cached fixed
+        // pose with live tracking and blink inputs; there is no playback clock.
         var asset = g.Local<Animation>();
-        var elapsed = g.Local<float>();
-        var time = g.Local<float>();
         var index = g.Local<int>();
         var value = g.Local<float>();
         var wearer = g.IsOwner(_root);
         var canWrite = g.Or(wearer, g.And(g.IsNull<User>(g.Owner(_root)),
             g.Node("IsLocalUser", null, ("User", g.Node("HostUser")))));
-        g.BeginSection("Capture shared playback state");
-        var update = g.Sequence(
-            g.Set<Slot>(current, g.Choose<Slot>(wearer, g.Read<Slot>(core, CoreSpace, "CurrentExpression"), g.Ref<Slot>(null))),
-            g.Set<Animation>(asset, ClipAsset(g, current)),
-            g.Set<float>(elapsed, g.Choose<float>(g.Active(current), g.Sub(g.Now, g.Read<float>(core, CoreSpace, "PlaybackStart")), g.Constant(0f))),
-            g.Set<float>(time, SampleTime(g, current, elapsed)),
-            g.Write<float>(core, CoreSpace, "PlaybackElapsed", elapsed),
-            g.Write<float>(core, CoreSpace, "AnimationTime", time),
-            g.Each(g.Ref(_outputs), output =>
-            {
-                g.BeginSection("Sample and write outputs");
-                var baseValue = g.Read<float>(output, OutputSpace, "Base");
-                var sample = g.Node("SampleValueAnimationTrack", typeof(float),
-                    ("Animation", asset), ("TrackIndex", index), ("Time", time));
-                var desired = g.Choose<float>(g.And(g.Active(current),
-                    g.Binary<int>("ValueGreaterOrEqual", index, g.Constant(0))), sample, baseValue);
-                desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(output, OutputSpace, "TrackingWeight")));
-                var blinkMode = g.Read<int>(output, OutputSpace, "BlinkMode");
-                var result = g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(1)), g.Binary<float>("ValueMax", desired, baseValue),
-                    g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(2)), g.Binary<float>("ValueMin", desired, baseValue), desired));
-                return g.Sequence(
-                    g.Set<int>(index, g.Node("FindAnimationTrackIndex", null, ("Animation", asset),
-                        ("Node", g.Text("Expression")), ("Property", g.Read<string>(output, OutputSpace, "Id")))),
-                    g.Set<float>(value, result),
-                    g.If(g.NotEqual<float>(value, g.Read<float>(output, OutputSpace, "Result")),
-                        g.Write<float>(output, OutputSpace, "Result", value)));
-            }));
-        // The wearer writes animated values; observers consume the synchronized fields.
-        // Only the host follows Base on unworn copies, avoiding competing writers.
+        var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, CoreSpace, "CurrentExpression"), g.Ref<Slot>(null));
+        var selectedAsset = ClipAsset(g, current);
+        g.BeginSection("Apply fixed pose and live tracking");
+        var update = g.Each(g.Ref(_outputs), output =>
+        {
+            var baseValue = g.Read<float>(output, OutputSpace, "Base");
+            var desired = g.Choose<float>(g.And(wearer, g.Read<bool>(output, OutputSpace, "HasPose")),
+                g.Read<float>(output, OutputSpace, "Pose"), baseValue);
+            desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(output, OutputSpace, "TrackingWeight")));
+            var blinkMode = g.Read<int>(output, OutputSpace, "BlinkMode");
+            var result = g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(1)), g.Binary<float>("ValueMax", desired, baseValue),
+                g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(2)), g.Binary<float>("ValueMin", desired, baseValue), desired));
+            return g.Sequence(
+                g.Set<float>(value, result),
+                g.If(g.NotEqual<float>(value, g.Read<float>(output, OutputSpace, "Result")),
+                    g.Write<float>(output, OutputSpace, "Result", value)));
+        });
+        g.BeginSection("Capture final pose on selection");
+        var refresh = g.Sequence(
+            g.Set<Animation>(asset, selectedAsset),
+            g.Each(g.Ref(_outputs), output => g.Sequence(
+                g.Set<int>(index, g.Node("FindAnimationTrackIndex", null, ("Animation", asset),
+                    ("Node", g.Text("Expression")), ("Property", g.Read<string>(output, OutputSpace, "Id")))),
+                g.Write<bool>(output, OutputSpace, "HasPose", g.And(g.Active(current),
+                    g.Binary<int>("ValueGreaterOrEqual", index, g.Constant(0)))),
+                g.Write<float>(output, OutputSpace, "Pose", g.Choose<float>(
+                    g.Read<bool>(output, OutputSpace, "HasPose"),
+                    g.Node("SampleValueAnimationTrack", typeof(float), ("Animation", asset),
+                        ("TrackIndex", index), ("Time", g.Constant(float.MaxValue))), g.Constant(0f))))),
+            update);
+        // Only the wearer writes a pose. The host follows Base on unworn copies.
         g.Node("LocalUpdate", null, ("OnUpdate", g.If(canWrite, update)));
         var receiver = g.Receiver(PlaybackTickTag, false);
-        Link(receiver, "OnTriggered", g.If(wearer, update));
-        g.OnStart(g.If(canWrite, update));
+        Link(receiver, "OnTriggered", g.If(wearer, refresh));
+        g.OnChanged<Slot>(current, g.If(canWrite, refresh));
+        g.OnChanged<Animation>(selectedAsset, g.If(canWrite, refresh));
+        g.OnStart(g.If(canWrite, refresh));
     }
 
     private static IWorldElement ClipAsset(ExpressionFlux g, IWorldElement expression) => g.Node("GetAsset", typeof(Animation),
@@ -95,6 +96,4 @@ internal sealed partial class ExpressionSystemSetup
     private static IWorldElement ValidExpression(ExpressionFlux g, IWorldElement expression) =>
         g.And(g.Active(expression), g.Read<bool>(expression, ClipSpace, "Enabled"),
             g.Node("NotNull", typeof(Animation), ("Instance", ClipAsset(g, expression))));
-    private static IWorldElement SampleTime(ExpressionFlux g, IWorldElement expression, IWorldElement elapsed) => g.Choose<float>(
-        g.Read<bool>(expression, ClipSpace, "Loop"), g.Binary<float>("ValueMod", elapsed, g.Read<float>(expression, ClipSpace, "Duration")), elapsed);
 }

@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 11`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 12`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -46,7 +46,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 11 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 12 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | GestureTable/各セル | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
@@ -58,14 +58,12 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | `Id` | string | 元・生成表情の ID | 定義。Select API の検索キー。直接選択メニューの送信値も追従する。Pair は ID ではなく Slot を参照 |
 | `DisplayName` | string | 表情名 | 設定。直接選択メニューの表示名 |
 | `Enabled` | bool | true | 設定。false は選択・メニュー利用対象外 |
-| `Loop` | bool | 元クリップの設定 | 設定。true なら経過秒を Duration で剰余演算してサンプリング |
-| `Duration` | float | 元の長さを最低 0.001 秒に補正 | 設定。ループ周期（秒）。正値を維持する。非ループ時は経過秒をそのまま使う |
 | `Source` | string | 元データの説明、または空文字 | 定義。由来の記録。再生判定には使わない |
 | `Clip` | IAssetProvider&lt;Animation&gt; | 同じ Slot の StaticAnimationProvider | 定義。AnimX 供給元。AssetLoader にも参照をコピーする。アセット未ロードなら選択無効 |
 | `MenuAvailable` | bool | false | 状態。メニュー生成時のみ作成。装着開始・対応表や有効状態などの変更時に再計算。Slot が有効・Enabled=true・対応表に参照ありなら true。ロード完了は判定しない |
 
 `Bindings/各項目` の `Output`（Slot）は対応する Outputs レコードへの定義参照。
-各 Output の Logic は Bindings を走査せず、その Output の Id で AnimX トラックを検索する。
+共有 Playback は選択時に Output の Id で AnimX トラックを検索し、最後のキーを取得する。Bindings は走査しない。
 
 `API/Templates/Expression (copy into Catalog)` は最初の表情の複製で、Id を空文字、Enabled を false に変更する。
 コピー後は一意の ID、Clip、必要な定義を整え、有効にして Pair へ割り当てる。表にない ID は Select API で選べない。
@@ -78,18 +76,14 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の 0〜7。メニューも同じ値を更新 |
 | `PairIndex` | int | 0 | Selection が計算した LeftGesture × 8 + RightGesture（0〜63） |
 | `CurrentExpression` | Slot | null | Slot 有効・Enabled=true・アセット取得済みの候補。それ以外は null |
-| `PlaybackStart` | float | 0 | CurrentExpression の参照が変わった WorldTimeFloat（秒）。同じ表情の再指定では再生を始め直さない |
-| `PlaybackElapsed` | float | 0 | 共有Write更新時の診断値。表情ありなら WorldTimeFloat − PlaybackStart、なしなら0 |
-| `AnimationTime` | float | 0 | Playback が書き込む共通サンプリング時刻（秒）。Loop=true なら PlaybackElapsed % Duration、それ以外は PlaybackElapsed |
 
 Core の DynamicVariable に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取った参照を検証し、
-切替前後の比較・フェード設定後に CurrentExpression へ直接渡す。
+切替前後の比較後に CurrentExpression へ直接渡す。
 MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
 対応表の参照先の確認には PairIndex と GestureTable の行を使う。
 
 AllowExternalInput 以外は状態として扱う。SelectionStatus は生成しない。入力モードは AllowExternalInput、再生対象は CurrentExpression で確認する。未割当と無効・未ロードはいずれも CurrentExpression=null となる。
-PlaybackElapsed・AnimationTime は装着者が共有Writeループで更新する。閲覧者は同期された値を読む。
-再生処理の実行回数を示す値ではない。
+PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の時間再生は行わない。
 
 Lifecycle は OnStart とローカル装着状態の変更時に動き、現在の装着者がローカルユーザーの場合だけ、初期化確認 → Selection とメニュー表示更新を実行する。
 初期化済みかは保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。
@@ -98,7 +92,6 @@ Lifecycle は OnStart とローカル装着状態の変更時に動き、現在�
 初期化時は左右値・PairIndex を 0、AllowExternalInput を true、
 CurrentExpression を null、Outputs の Result を Base に書き戻す。
 その後の Selection と Playback の同期Writeで現在の対応表に応じた状態になる。
-PlaybackStart は選択変更時に設定する。PlaybackElapsed・AnimationTime は初期化完了の指標ではない。
 
 装着が終了すると、初期化済みのクライアントだけが一度このクリア処理を実行し、フラグを false に戻す。
 既に別のユーザーが装着している場合は共有値をクリアせず、ローカルフラグだけを戻す。
@@ -115,8 +108,10 @@ PlaybackStart は選択変更時に設定する。PlaybackElapsed・AnimationTim
 | `Shape` | string | BlendShape 名 | 定義。出力の由来・識別情報 |
 | `Baseline` | float | initialWeight があればその値、なければ元フィールド値 | 定義。生成時の基準値の記録。Playback は読まない。編集しても生成済み Neutral の AnimX は変わらない |
 | `Base` | float | 元フィールド値 | 状態／基礎入力。既存の瞬き・viseme ドライバーがあれば出力先をここへ移す。表情にトラックがない場合の値でもある |
+| `Pose` | float | 0 | 状態。選択時に取得したトラック終端値。時間で変化しない |
+| `HasPose` | bool | false | 状態。選択した表情に該当トラックがある場合はtrue。falseなら現在のBaseを使用 |
 | `TrackingWeight` | float | 0 | 設定。表情値から Base へ寄せる割合。使用時に 0〜1 に制限。0=表情値、1=Base。自動更新処理はない |
-| `BlinkMode` | int | 通常0、既存の OpenCloseTarget は1または2 | 設定。0=通常の混合、1=フェード後に max(補間値, Base)、2=min(補間値, Base)。生成時の Eye.ClosedState が OpenState より小さい場合は2。それ以外の瞬きは1 |
+| `BlinkMode` | int | 通常0、既存の OpenCloseTarget は1または2 | 設定。0=通常の混合、1=max(追跡混合値, Base)、2=min(追跡混合値, Base)。生成時の Eye.ClosedState が OpenState より小さい場合は2。それ以外の瞬きは1 |
 | `Result` | float | 元フィールド値 | 状態。DynamicField<float> が DynamicBlendShapeDriver の該当 BlendShapes[].Value を参照する。共有Playbackがその参照先へ値を書き込む |
 | `Target` | IField&lt;float&gt; | 元の BlendShape フィールド | 定義。出力先の記録。DynamicBlendShapeDriver の Renderer・シェイプ名は生成時に別途設定するため、この参照だけ変更しても送信先は変わらない |
 | `OriginalDriver` | ISyncRef | 元のドライバー | 定義。既存 ActiveLink が ISyncRef の場合だけ作成。Base へ付け替えたドライバーの記録 |
@@ -126,10 +121,11 @@ DynamicVariable としてのパスと float 型は同じなので、Read Dynamic
 メッシュ以外の単独 IField を使う内部テスト等では、そのフィールドへ直接Writeし Result から参照する。
 
 表情なし・該当トラックなしの場合は sample の代わりに Base を使う。
-Playback の1つのループが、同じアセットと時刻で全出力を計算する。切り替え補間はしない。
+選択時に取得した Pose / HasPose を共有ループが読む。毎フレームのアセット検索・サンプリングはせず、切り替え補間もしない。
 未装着時は Result=Base とする。装着中は以下の式で評価し、値が異なる場合だけ書き込む。
 
 ```text
+sample  = HasPose ? Pose : Base
 desired = lerp(sample, Base, clamp01(TrackingWeight))
 Result  = BlinkMode == 1 ? max(desired, Base) : BlinkMode == 2 ? min(desired, Base) : desired
 Playback → WriteDynamicValueVariable(Result) → DynamicBlendShapeDriver.BlendShapes[].Value → BlendShape
@@ -227,9 +223,10 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | 0〜7 | 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp |
 | 8 / 64 | 片手の状態数／左右の組合せ数。Pair の計算・逆引き・API 範囲検査に使用 |
 | -1 | 手の未確定、Select の一致する Pair が未発見 |
-| 0 / 1（float） | フェード・混合率の端点。フェード秒数が正でなければ混合率 1 |
+| 0 / 1（float） | 追跡混合率の端点 |
 | null | 未選択 Slot、未記録 User など参照なし |
 | `Expression` | AnimX の固定トラック Node 名 |
+| float.MaxValue | 選択時に各トラックの最後のキーを取得する固定サンプリング位置 |
 
 公開イベント Tag は変数名とは別の仕組みで、Receiver へ値を送る。
 
@@ -241,6 +238,7 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `InputEnabledTag` | `ResoPon/Expression/AllowExternalInput` | bool。通常入力の許可・停止。左右値は維持 |
 | `InitializeTag` | `ResoPon/Expression/Internal/Initialize` | 引数なし。Lifecycle の初期化確認 |
 | `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。選択更新を同期実行 |
+| `PlaybackTickTag` | `ResoPon/Expression/Internal/Playback` | 引数なし。終端ポーズの取得・適用を同期実行 |
 | `MenuRefreshTag` | `ResoPon/Expression/Internal/MenuRefresh` | 引数なし。メニュー表示可否を再計算。メニュー生成時のみ |
 
 Internal の4つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
@@ -256,6 +254,6 @@ Internal の4つは公開操作用ではない。メニューボタンの送信�
 - [ExpressionFlux.cs](../src/VrmToResonitePackage/Expressions/ExpressionFlux.cs)：スコープ、変数・定数ノード、読み書き。
 - [ExpressionApiSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionApiSetup.cs)：入力検証、左右値の更新、モード変更、ID の逆引き。
 - [ExpressionLifecycleSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionLifecycleSetup.cs)：装着状態による初期化・終了処理。
-- [ExpressionPlaybackSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionPlaybackSetup.cs)：選択検証、共有サンプリング・追跡入力との合成とWrite。
+- [ExpressionPlaybackSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionPlaybackSetup.cs)：選択検証、終端ポーズの取得・追跡入力との合成とWrite。
 - [ExpressionInputSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionInputSetup.cs)：メニュー、キー割当、機種別入力。
 - [ExpressionAnimationConverter.cs](../src/VrmToResonitePackage/Expressions/ExpressionAnimationConverter.cs)：出力 ID と AnimX トラック。

@@ -5,7 +5,7 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 
 左右それぞれの現在のジェスチャーを 0〜7 の整数で保持し、
 `LeftGesture * 8 + RightGesture` で64通りの対応表を引く。
-対応表の参照先が変わったときだけアニメーションを切り替える。
+対応表で選んだ表情の各トラックの終端値へ即座に切り替え、固定ポーズとして保持する。
 VRChat のカスタム FX Animator から、対応する条件とレイヤーを変換時に評価する。
 左右64通りへ静的に変換する方式であり、Animator 全体や汎用パラメーターの状態機械は生成しない。
 標準コンポーネントと ProtoFlux で動作し、利用側に ResoPon の DLL は不要。
@@ -24,7 +24,7 @@ flowchart LR
     T --> L
     L --> S
     S --> P[64通りのGestureTableから選択]
-    P --> R[共有ループでサンプリング・混合]
+    P --> R[終端ポーズを取得・追跡と混合]
     R --> V[ResultへWrite → BlendShape]
     Result[Result: DynamicField] -. Value を参照 .-> V
 ```
@@ -36,11 +36,11 @@ Expressions/
   Catalog/                         表情ごとの定義と AnimX
   GestureTable/                    64個の Catalog 参照
     Logic/                         メニュー表示に必要な参照・有効状態の変更監視
-  Core/                            左右の状態、現在の表情、再生開始時刻
+  Core/                            左右の状態、現在の表情
     Logic/
       Lifecycle/                   初期化、装着状態の変更監視
       Selection/                   対応表からの選択と切り替え
-      Playback/                    共通時計・サンプリング・Write
+      Playback/                    終端ポーズの取得・追跡合成・Write
   Outputs/                         BlendShape ごとのベース入力と最終出力
     各 BlendShape/                 出力定義・Base・Result（個別の再生グラフなし）
   Drivers/各 Renderer/            DynamicBlendShapeDriver、必要なシェイプのみ登録
@@ -82,27 +82,28 @@ Flux は1スロット1ノードで、名前付きの節を保持しながらモ�
 不一致判定は `ValueNotEquals`／`ObjectNotEquals`、null 判定は `IsNull` を使い、Equal と Not や null 定数の組み合わせを避ける。
 循環する接続は同じ階層にまとめ、モジュール間には実際の幅に応じた余白を設ける。
 ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュールを個別に Unpack する。
-モジュール間では ProtoFlux ノードを直接接続しない。共通の再生時計はフィールド経由で参照し、所有者・定数の取得は各モジュール内で完結するため、
+モジュール間では ProtoFlux ノードを直接接続しない。共有値はフィールド経由で参照し、所有者・定数の取得は各モジュール内で完結するため、
 1つの入力や再生処理を開くだけで全機種・APIまでつながった巨大なグラフにはならない。
 
 初回起動・装着開始時は `Lifecycle` → `Selection` の順で状態を確定する。
 呼び出しには対象モジュールだけを宛先とする同期 Dynamic Impulse を使い、
-選択状態をイベント内で確定し、Playback も同期呼び出しして選んだ表情の先頭値を即時に書き込む。
+選択状態をイベント内で確定し、Playback も同期呼び出しして選んだ表情の各トラックの終端値を即時に書き込む。
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → Selection → Playback を同期実行する。
 同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態と出力が確定する。
 表の編集・表情の無効化・アセットのロード完了は、選択結果の変化を監視して反映する。
 
-Version 11 は再生用の ValueFieldDrive / ReferenceDrive を生成しない。
-Playback の1つの LocalUpdate が全 Output を巡回し、同じアセットと時刻でサンプリングし、
-追跡・瞬きと合成した値を WriteDynamicValueVariable で Result へ書き込む。値が同じなら書かない。
+Version 12 は再生用の ValueFieldDrive / ReferenceDrive を生成しない。
+Playback は選択時と選択アセットの変更時だけ各トラックの終端値を取得し、Outputs の Pose / HasPose に保持する。
+1つの LocalUpdate はその固定値と追跡・瞬きを合成し、WriteDynamicValueVariable で Result へ書き込む。
+毎フレームのトラック検索・サンプリングは行わず、Result の値が同じなら書かない。
 Result は DynamicBlendShapeDriver の Value を参照する DynamicField<float>。
 メッシュ名との接続を維持する標準 DynamicBlendShapeDriver は残し、Flux側の継続Driveを廃止する。
 装着者だけが書き込み、閲覧者は同期された値を受け取る。未装着時はホストだけが Base を反映する。
 切り替え補間は行わず、FadeIn / FadeOut / FadeDuration / FadeWeight / Snapshot は生成しない。
-クリップ内のカーブ補間と連続・ループアニメーションは維持する。
+連続・ループアニメーションも再生しない。Loop / Duration と Core の再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の再生方式は本資料の Version 11 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 12 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -113,7 +114,7 @@ Result は DynamicBlendShapeDriver の Value を参照する DynamicField<float>
 | メニュー表示 | 装着開始、Catalog の項目数、対応表の有効な参照先の変化 |
 | キーボード | 左右それぞれの8キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
-| Playback | 選択イベント内で即時実行し、1つの LocalUpdate でアニメーションと追跡の更新を継続 |
+| Playback | 選択イベント内で終端値を即時取得。選択参照・ロード済みアセットの変化でも再取得。LocalUpdate は固定値と追跡入力の合成のみ |
 | Outputs | 個別の再生Logicを持たず、共有ループから変更された Result だけを書き込む |
 
 変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
@@ -134,7 +135,7 @@ Result は DynamicBlendShapeDriver の Value を参照する DynamicField<float>
 
 - 各手の Candidate・Stable・Since・GripHeld・TriggerHeld：`ExpressionGestureHand`。
 - 機種ごとの Grip/Trigger しきい値・StabilitySeconds：親モジュールの `ExpressionGestureSettings`。
-- Selection の左右値と、Playback の開始時刻・フェード秒数：`ExpressionCore`。
+- Selection の左右値：`ExpressionCore`。
 - Selection の CurrentExpression：`ExpressionCore` の Object Input。
 - 各 Output の Id・Base・TrackingWeight・Result：`ExpressionOutput`。
 
@@ -167,8 +168,6 @@ Inspector 上の Core の変数名には `ExpressionCore/` が付く。他のレ
 | `PairIndex` | 左×8＋右で求めた対応表の番号 |
 | AllowExternalInput | true=通常入力も許可、false=コンテキストメニューのみ（編集可能） |
 | `CurrentExpression` | Selection の検証を通過した再生対象。無効・未割当なら null |
-| `PlaybackStart` / `PlaybackElapsed` | 再生開始時刻と経過秒数 |
-| `AnimationTime` | 全 Output が参照するサンプリング時刻。Loop 時だけ Duration で折り返す |
 
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
 2. 番号が正しく表情が違う場合は、`PairIndex` に対応する `GestureTable` の参照と `AllowExternalInput` を確認し、`Selection` を調べる。
@@ -178,7 +177,7 @@ Inspector 上の Core の変数名には `ExpressionCore/` が付く。他のレ
 `AllowExternalInput` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
 変換時の警告は引き続き `Diagnostics` に残る。
 `Diagnostics/Graph modules` の各レコードには `ExpressionGraphModule/Path` と `ExpressionGraphModule/NodeCount` があり、モジュールの場所と規模を確認できる。
-`PlaybackElapsed`・`AnimationTime` は共有Write更新時の診断値。各出力は同じ更新内のローカルな時計を使う。
+Outputs の `Pose` は取得した終端値、`HasPose` は対応するトラックがあるかを示す。再生時計は持たない。
 反映が止まっている場合は、アバターの装着状態、該当モジュールの有効状態と `Outputs/Result`・`Target` を確認する。
 
 
@@ -201,8 +200,8 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
 Core に保存する表情参照は `CurrentExpression` だけ。`MappedExpression` と `CandidateExpression` は生成しない。
 Selection は `GestureTable/Pair.N` を読み、Slot 有効・Enabled=true・アセット取得済みを確認する。
 通過した参照（無効なら null）をその更新中のローカル値として確定し、CurrentExpression と比較する。
-異なる場合は再生開始時刻と CurrentExpression を設定して、新しい表情を即時にWriteする。
-同じ参照なら再生を継続する。解除・無効化も補間せず Base へ戻す。
+異なる場合は CurrentExpression を設定する。Playback を同期呼び出しし、終端値を即時にWriteする。
+同じ参照なら同じ固定ポーズになる。解除・無効化も補間せず Base へ戻す。
 未検証の対応表の参照を調べたい場合は、PairIndex に対応する行を直接見る。
 SelectionStatus は生成・計算しない。入力モードは AllowExternalInput、再生対象は CurrentExpression で確認する。
 未割当と無効・未ロードはどちらも CurrentExpression=null となり、理由は対応表と参照先を調べる。
@@ -332,7 +331,7 @@ N は左×8＋右。例えば左1・右2は `Pair.10`。
 表の参照を編集すると次の更新で反映される。異なる行でも同じ表情を指す場合は再生を継続する。
 
 表情の追加は `API/Templates` または既存の Catalog エントリーを Catalog へ複製し、
-`Enabled` を有効にして `Id`、`DisplayName`、`Clip`、`Duration`、`Loop` を設定する。
+`Enabled` を有効にして `Id`、`DisplayName`、`Clip` を設定する。各トラックの最後のキーを固定ポーズとして使う。
 `Id` は空でない一意の文字列にする。外部からの直接選択にはこの ID を使う。
 直接選択メニューに表示するには、GestureTable の少なくとも1組へ参照を割り当てる。対応表の編集はメニュー表示にも次の更新で反映する。切り替えは即時に反映する。削除は表情スロットごと行える。
 テンプレートから複製したメニューの表示名・有効状態・送信する ID は複製先の変数に追従する。
@@ -342,7 +341,7 @@ AnimX のトラックは Node=`Expression`、Property=出力の `Id` を使う�
 新しい BlendShape を操作する場合は Outputs の出力レコードとフィールド接続も必要になる。
 `Bindings` は編集時の参照情報であり、AnimX のトラックを自動で書き換えるものではない。
 
-## 外部イベント API（Version 11、Tag・引数は Version 4 と共通）
+## 外部イベント API（Version 12、Tag・引数は Version 4 と共通）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
 左右の通常入力・メニュー入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
@@ -409,13 +408,14 @@ AvatarMask、StateMachineBehaviour、Exit や遷移中断も一般には対象�
 表現できないカーブや、解決できない出力を含む Clip は全体を除外するため、
 その Clip を参照するレイヤーも自動割り当てから外れる場合がある。
 
-実行時は選ばれた表情を1つの時計で再生する。元 Animator の遷移時間、自己遷移による再開始、
-レイヤーごとの独立した再生位相は再現しない。切り替えは補間せず即時に反映する。
-未ループのアニメーションは終端を保持し、Loop 時は Duration で時計を折り返す。
+実行時は各トラックの最後のキーを固定ポーズとして使う。元 Animator の遷移時間、
+自己遷移による再開始、連続再生、ループ、再生位相は再現しない。
+最後に開始姿勢へ戻るループ素材は、その戻った姿勢を採用する。途中の最大値や任意フレームは推測しない。
+AnimX は元カーブの保存・差し替え用に残すが、実行中の時間再生には使わない。
 
-Playback はアセットと時刻を更新ごとのローカル値に保持し、共有ループで全 Output を処理する。
-Idでトラックを検索するため、表情ごとに順序が違っても対応でき、欠落トラックは Base を使う。
-サンプリング・追跡混合・瞬き合成後の値を一度計算し、Result と違う場合だけ書き込む。
+Playback は選択イベント・参照またはアセットの変化時に、Idでトラックを検索し、
+float.MaxValue でサンプルして終端値を Pose へ保持する。トラックの順序には依存せず、欠落時は HasPose=false とする。
+以後の共有更新は固定ポーズと追跡・瞬きの合成だけを行い、Result と違う場合だけ書き込む。
 未装着時は、保存・複製で選択状態が残っていてもホストが Result を Base に戻す。
 表情を操作するときは、入力・Clip・TrackingWeightなどを変更する。
 
@@ -739,3 +739,16 @@ Ricorine_03_Albiflora（375出力）ではFluxノードが18,253→1,804、再�
 2巡して行った。各区間は90更新のウォームアップ後に240更新のWorld.LastUpdateTimeを記録する。
 有効時の中央値2回の平均は新版が旧版より約64%小さかった。これは単一クライアントでのエンジン更新時間の
 比較であり、GPU描画FPSや多人数接続時の通信負荷を測った結果ではない。ノード数だけでFPS改善を断定しない。
+
+### Version 12: アニメーション再生を廃止して終端ポーズを即時適用
+
+2026-09-22: 各トラックの最後のキーを選択イベント内で取得し、Pose / HasPose に保持する。
+再生時計、Loop / Duration の生成、毎フレームの検索とサンプリングを廃止した。
+ループ素材も非ループ素材も同じ規則で固定し、欠落トラックは現在の Base に戻す。
+追跡・瞬きの合成用の共有 LocalUpdate は残る。表情値の時間変化は発生しない。
+アセットを差し替えた場合はロード完了・参照変更を監視してポーズを更新する。
+既存の Version 11 パッケージには再変換・再インポートが必要。
+ExpressionSmoke で即時終端値、ループ素材の固定、長さが違うトラック、欠落トラック、
+アセット差し替え・無効化・復帰、追跡混合、瞬き、未装着コピーを検証する。
+Ricorine の実変換・inspect・保存後適用では64通りの対応表と375出力、47種類のポーズを確認した。
+AnimX の全キー・接線、出力binding、対応表は Version 11 から維持し、廃止した再生設定だけを比較から除外する。

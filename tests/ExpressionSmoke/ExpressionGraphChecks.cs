@@ -64,7 +64,7 @@ internal static class ExpressionGraphChecks
                 "mesh driver contains only required shape entries");
         Check(Descendant(expressions, "Core/Logic/Playback").GetComponentsInChildren<ProtoFluxNode>()
             .Count(n => n.GetType().Name == "SampleValueAnimationTrack`1") == 1,
-            "one sampler serves the shared output loop");
+            "one sampler captures all tracks when selection changes");
         var boards = nodes.GroupBy(Board).ToArray();
         var keyboard = Descendant(expressions, "Inputs/Keyboard");
         Check(keyboard.Children.All(hand => hand.FindChild("DV").GetComponentsInChildren<ProtoFluxNode>().Count == 0),
@@ -163,12 +163,14 @@ internal static class ExpressionGraphChecks
         Check(core.GetComponents<DynamicReferenceVariable<Slot>>().Select(v => v.VariableName.Value)
             .SequenceEqual(new[] { "ExpressionCore/CurrentExpression" }),
             "Core stores only the current expression, without intermediate diagnostic references");
-        foreach (string name in new[] { "PlaybackElapsed", "AnimationTime" })
-        {
-            var field = core.GetComponents<DynamicValueVariable<float>>()
-                .Single(v => v.VariableName.Value == "ExpressionCore/" + name).Value;
-            Check(field.ActiveLink == null, "playback diagnostics are written without Drive: " + name);
-        }
+        Check(!core.GetComponents<DynamicValueVariable<float>>().Any(),
+            "Core has no playback clocks");
+        var playback = Descendant(expressions, "Core/Logic/Playback").GetComponentsInChildren<ProtoFluxNode>();
+        Check(playback.All(n => n.GetType().Name is not "WorldTimeFloat" and not "ValueMod"), "pose application has no time or loop evaluation");
+        foreach (var entry in expressions.FindChild("Catalog").Children)
+            Check(!entry.GetComponents<DynamicValueVariable<bool>>().Any(v => v.VariableName.Value == "ExpressionClip/Loop") &&
+                !entry.GetComponents<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionClip/Duration"),
+                "Catalog has no playback settings");
     }
 
     public static void Report(Slot expressions)

@@ -49,11 +49,8 @@ internal sealed partial class ExpressionSystemSetup
         }
         Data(_core, "AllowExternalInput", true);
         Reference<Slot>(_core, "CurrentExpression", null);
-        Data(_core, "PlaybackStart", 0f);
         Data(_core, "PairIndex", 0);
-        Data(_core, "PlaybackElapsed", 0f);
-        Data(_core, "AnimationTime", 0f);
-        Data(_root, "Version", 11);
+        Data(_root, "Version", 12);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -145,6 +142,8 @@ internal sealed partial class ExpressionSystemSetup
                 Data(output, "Id", id); Data(output, "Path", curve.Binding.Path); Data(output, "Shape", curve.Binding.Shape);
                 Data(output, "Baseline", initialWeight?.Invoke(field) ?? field.Value);
                 Data(output, "TrackingWeight", 0f);
+                Data(output, "HasPose", false);
+                Data(output, "Pose", 0f);
                 // Only eyelid openness uses a closing-side union. Other tracking drivers
                 // (visemes, gaze, etc.) retain their existing TrackingWeight behavior.
                 var eye = field.ActiveLink?.Parent as EyeLinearDriver.Eye;
@@ -170,7 +169,6 @@ internal sealed partial class ExpressionSystemSetup
             { UniLog.Warning($"Expression '{clip.Name}' omitted: one or more output bindings were not resolved"); continue; }
             Slot entry = Record(_catalog, clip.Name, ClipSpace);
             Data(entry, "Id", clip.Id); Data(entry, "DisplayName", clip.Name); Data(entry, "Enabled", true);
-            Data(entry, "Loop", clip.Loop); Data(entry, "Duration", Math.Max(0.001f, clip.Duration));
             Data(entry, "Source", clip.Source ?? "");
             var animation = ExpressionAnimationConverter.ConvertClip(clip);
             string temporary = _root.Engine.LocalDB.GetTempFilePath("animx");

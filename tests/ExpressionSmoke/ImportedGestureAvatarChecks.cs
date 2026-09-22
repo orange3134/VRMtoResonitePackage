@@ -66,7 +66,7 @@ internal static class ImportedGestureAvatarChecks
                 for (int i = 0; i < 6; i++) await default(NextUpdate);
                 var data = mapped.GetComponent<StaticAnimationProvider>().Asset?.Data;
                 Check(data != null, "Pose animation asset did not load");
-                float animationTime = Get<float>(core, "AnimationTime");
+                float animationTime = float.MaxValue;
                 var values = new List<float>();
                 foreach (var output in root.FindChild("Outputs").Children)
                 {
