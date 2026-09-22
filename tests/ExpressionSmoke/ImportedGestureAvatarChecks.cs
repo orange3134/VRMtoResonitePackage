@@ -19,6 +19,20 @@ internal static class ImportedGestureAvatarChecks
         for (int i = 0; i < 7200 && renderers.Any(renderer => renderer.MeshBlendshapeCount == 0); i++)
             await default(NextUpdate);
         Check(renderers.All(renderer => renderer.MeshBlendshapeCount > 0), "Expression driver meshes finished loading");
+        // Keep the exported mixer enabled, but freeze external tracking inputs for
+        // this fixed-pose oracle. User/eye updates can otherwise race the sampled
+        // Base and Result in the headless frame. ExpressionBlinkChecks separately
+        // exercises live native tracking, including cloned and reloaded packages.
+        foreach (var output in root.FindChild("Outputs").Children)
+        {
+            var original = output.GetComponents<DynamicReferenceVariable<ISyncRef>>()
+                .SingleOrDefault(v => v.VariableName.Value == "ExpressionOutput/OriginalDriver")?.Reference.Target;
+            if (original == null) continue;
+            original.Target = null;
+            Check(output.WriteDynamicVariable("ExpressionOutput/Base", Get<float>(output, "Baseline")) == DynamicVariableWriteResult.Success,
+                "can stabilize tracking Base for fixed-pose comparison");
+        }
+        for (int i = 0; i < 6; i++) await default(NextUpdate);
         ExpressionGraphChecks.CheckLayout(root);
         if (baselinePackage != null)
         {
@@ -67,7 +81,13 @@ internal static class ImportedGestureAvatarChecks
                 var values = new List<float>();
                 foreach (var output in root.FindChild("Outputs").Children)
                 {
-                    float expected = pose.TryGetValue(Get<string>(output, "Id"), out float fixedValue) ? fixedValue : Get<float>(output, "Base");
+                    float baseValue = Get<float>(output, "Base");
+                    float expected = pose.TryGetValue(Get<string>(output, "Id"), out float fixedValue) ? fixedValue : baseValue;
+                    expected += (baseValue - expected) * Math.Clamp(Get<float>(output, "TrackingWeight"), 0, 1);
+                    expected = Get<int>(output, "BlinkMode") switch
+                    {
+                        1 => Math.Max(expected, baseValue), 2 => Math.Min(expected, baseValue), _ => expected
+                    };
                     float actual = Reference<IField<float>>(output, "Target").Value;
                     Check(Math.Abs(expected - actual) < 0.001f, $"Pair {l},{r}: output {Get<string>(output, "Shape")} expected {expected}, got {actual}");
                     values.Add(actual);

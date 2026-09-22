@@ -104,7 +104,16 @@ public static class VrchatExpressionParser
                             "; evaluated from Entry; parameter-driver side effects, previous-state values and transition timing are not imported. Missing curves use the lower-layer/base stream.");
                         return true;
                     }
-                    if (errors.Count == 0) { if (!ProjectDefaults()) model.Layers.Add(layer); }
+                    if (errors.All(e => e is "nested state machine" or "state machine destination" or "missing default state" or
+                        "exit or unresolved transition" or "history-dependent unanimated properties" or "mixed Write Defaults") &&
+                        VrchatIndirectGestureRouter.TryProject(scene, controller, machine, layer, model.Parameters, ReadClip,
+                            out var indirect, out string inputDetail))
+                    {
+                        model.Layers.Add(indirect);
+                        Warn(label + ": indirect hand parameter selector projected via " + inputDetail +
+                            "; input Set drivers are compiled, not executed at runtime. Previous-hand history and transition timing are not imported.");
+                    }
+                    else if (errors.Count == 0) { if (!ProjectDefaults()) model.Layers.Add(layer); }
                     else if (errors.All(e => e is "AvatarMask" or "state behaviour" or "exit or unresolved transition" or
                         "history-dependent unanimated properties" or "mixed Write Defaults" || e.StartsWith("unsupported motion in ")) && ProjectDefaults()) { }
                     else if (errors.All(e => e is "state behaviour" or "exit or unresolved transition" or

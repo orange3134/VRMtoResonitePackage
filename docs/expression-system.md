@@ -798,3 +798,33 @@ LifecycleはHasPoseを解除し、通常出力だけBaseをWriteする。追跡�
 以前のパッケージを更新するには再変換が必要。公開イベントAPIは維持する。
 回帰では通常出力の同期切り替え・無操作時の非書込、追跡による他出力への波及がないこと、
 実EyeLinearDriverの通常／反転瞬き、口パクとの混合、複製・保存再読込を検証する。
+
+### 間接的なハンド入力: 重み0のSetドライバーと入れ子Entry
+
+Legnia 4Pでは、重み0のInput LeftHand／Input RightHandレイヤーのStateMachineBehaviourが
+FaceMorphへ定数をSetし、重み1のFace Morphレイヤーが入れ子のEntryで表情を選ぶ。
+従来は入力レイヤーを重み0として読み飛ばし、表情側もnested state machineとして除外したため、
+Catalogに22件あってもGestureTableが0/64となり、CurrentExpressionを選択できなかった。
+
+VrchatIndirectGestureRouterはモデル名やFaceMorphという名前に依存せず、次の範囲を静的に変換する。
+
+- 各入力レイヤーは片手の0〜7からEntryで8状態を選び、モーションは空。状態の出口は固定入力で成立しないExitのみ。
+- 各状態のBehaviourは既知のVRCAvatarParameterDriverが1つで、宣言済みfloat/intへの定数Setが1件。
+  Add・Random・Copy・手パラメーターの書換え・別の不明な書込元がある経路は対象外。
+- 消費側はEntryから所有する子ステートマシンを再帰的に選び、固定入力で遷移しない表情状態へ到達する。
+  Any State・Behaviour・循環・階層外への参照・成立するExitや時間依存遷移はこの経路では扱わない。
+- その他の条件はExpressionParameters優先の初期値で固定する。GestureLeftWeight／GestureRightWeightは
+  既存のフルウェイト評価を使う。未選択分岐のモーションまで推測して補完しない。
+
+左右64組に対する固定の規則として、非Neutralの手をNeutralより優先し、両手が非Neutralなら
+コントローラー内で後に並ぶ入力レイヤーを優先する。Legniaでは右手が優先される。
+共通パラメーターを最後に書き込んだ手に依存する実行履歴は再現しない。この制約は変換ログにも出す。
+変換後にパラメータードライバーやAnimatorを実行する処理は追加しない。
+表情の最終値Writeと瞬き・口パクの追従方式はVersion 15のまま。
+
+回帰テストはゼロウェイト入力、記述と異なるExpressionParametersの初期値、入れ子Entry、左右64組、
+上記の不正・未対応経路の拒否を確認する。実Legniaコントローラーでも64組の選択状態を元の割り当てと照合する。
+
+Legnia 4Pの実変換では23件のCatalog・139出力・64/64割り当てを確認した。保存済みパッケージを
+読み戻したメニュー操作でも全64組のCurrentExpressionと出力値、8種類のポーズを検証した。
+表情値の比較時は外部追跡入力だけを固定し、ライブ瞬き・口パクは別の合成テストで検証する。

@@ -196,3 +196,15 @@ selection over all 64 pairs, inactive unsupported clips and explicit driver-side
 projection. Unknown defaults, hand-mutating drivers, selected unsupported clips,
 timed transitions and cycles are rejected. Entry selector checks ensure an authored
 AFK=true default takes precedence over the legacy AFK=false approximation.
+
+IndirectGestureRouterChecks covers zero-weight hand input layers that Set a shared
+face parameter, nested consumer Entry selectors, ExpressionParameters defaults,
+all 64 canonical hand pairs, and rejection of non-Set writers, extra writers,
+animated inputs, unknown clocks, unsafe hierarchy references and active/timed routes.
+Active hands take precedence over neutral; later controller layers win simultaneous
+active hands. Last-changed-hand history is deliberately not preserved.
+
+The imported-package pose check temporarily freezes OriginalDriver inputs at the authored
+Baseline while keeping the exported tracking mixer enabled. Expected output includes
+TrackingWeight and BlinkMode; automatic blink timing must not cause a false pose mismatch.
+Live native blink/viseme behavior remains covered by the separate synthetic tracking checks.
