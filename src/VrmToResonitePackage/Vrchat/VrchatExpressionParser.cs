@@ -93,6 +93,14 @@ public static class VrchatExpressionParser
                     if (bindingSets.Skip(1).Any(s => !s.SetEquals(bindingSets[0]))) errors.Add("history-dependent unanimated properties");
                 }
                 if (errors.Count == 0) model.Layers.Add(layer);
+                else if (errors.All(e => e is "state behaviour" or "exit or unresolved transition" or
+                    "transition interruption" or "history-dependent unanimated properties") &&
+                    VrchatGestureRouter.TryProject(scene, machine, layer, ReadClip, out var projected))
+                {
+                    model.Layers.Add(projected);
+                    Warn(label + ": gesture router projected using ordered default-state routes; prior-state latching, " +
+                        "external Any State overrides, parameter-driver side effects and transition timing are not imported.");
+                }
                 else Warn(label + ": automatic layer omitted (" + string.Join(", ", errors.Distinct()) + "); supported clips remain directly selectable");
 
                 void Collect(YamlNode stateMachine, HashSet<long> visited)

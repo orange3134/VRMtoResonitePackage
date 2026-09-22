@@ -6,13 +6,13 @@ namespace VrmToResonitePackage.Vrchat;
 
 /// <summary>
 /// Restores blendshapes removed by Resonite ModelImporter.StripEmptyBlendshapes so Unity-authored
-/// numeric blendshape indices still refer to the same entries after FBX import.
+/// numeric indices and named expression bindings remain usable after FBX import.
 /// </summary>
 internal static class VrchatBlendShapeRepair
 {
     public static async Task<int> Apply(Slot root, VrchatAvatar avatar,
         IReadOnlyDictionary<Slot, string> sources, IReadOnlyDictionary<string, Slot> authoredObjects,
-        IReadOnlyDictionary<Slot, string> importedPaths = null)
+        IReadOnlyDictionary<Slot, string> importedPaths = null, Slot expressionRoot = null)
     {
         int repaired = await NormalizeRepeatedBlendShapeNames(root);
         if (repaired > 0)
@@ -28,6 +28,19 @@ internal static class VrchatBlendShapeRepair
             return repaired;
         }
 
+        // Resolve authored animation paths before later hierarchy changes; ambiguous paths stay unresolved.
+        var expressionShapes = avatar.Expressions.Clips.SelectMany(c => c.Curves).GroupBy(c => c.Binding.Path)
+            .ToDictionary(g => g.Key, g => g.Select(c => c.Binding.Shape).ToHashSet(StringComparer.Ordinal));
+        expressionRoot ??= root;
+        string RelativePath(Slot slot)
+        {
+            var parts = new Stack<string>();
+            for (; slot != null && slot != expressionRoot; slot = slot.Parent) parts.Push(slot.Name);
+            return slot == expressionRoot ? string.Join("/", parts) : null;
+        }
+        var uniqueRenderers = expressionRoot.GetComponentsInChildren<SkinnedMeshRenderer>()
+            .GroupBy(r => RelativePath(r.Slot)).Where(g => g.Key != null && g.Count() == 1)
+            .ToDictionary(g => g.Single(), g => g.Key);
         foreach (SkinnedMeshRenderer renderer in root.GetComponentsInChildren<SkinnedMeshRenderer>())
         {
             string objectKey = authoredObjects.FirstOrDefault(entry => entry.Value == renderer.Slot).Key;
@@ -39,16 +52,14 @@ internal static class VrchatBlendShapeRepair
                 continue;
             }
             int maxReferencedIndex = MaxReferencedBlendShapeIndex(avatar, renderer.Slot.Name);
-            if (maxReferencedIndex < 0)
-            {
-                continue;
-            }
+            var requestedNames = uniqueRenderers.TryGetValue(renderer, out string expressionPath) &&
+                expressionShapes.TryGetValue(expressionPath, out var names) ? names : new HashSet<string>();
             int requiredCount = Math.Min(expected.Count, maxReferencedIndex + 1);
-            if (requiredCount == 0)
+            if (requiredCount == 0 && !expected.Any(name => requestedNames.Contains(name) && !renderer.Mesh.Asset.Data.HasBlendShape(name)))
             {
                 continue;
             }
-            UniLog.Log($"Checking indexed blendshapes on {renderer.Slot.Name}: " +
+            UniLog.Log($"Checking referenced blendshapes on {renderer.Slot.Name}: " +
                        $"required through {requiredCount - 1}, FBX={expected.Count}, " +
                        $"imported={renderer.MeshBlendshapeCount}.");
 
@@ -84,6 +95,7 @@ internal static class VrchatBlendShapeRepair
                 await default(ToWorld);
                 continue;
             }
+            inserted += InsertMissingNamedBlendShapes(mesh, expected, requestedNames);
             if (inserted == 0)
             {
                 await default(ToWorld);
@@ -259,6 +271,18 @@ internal static class VrchatBlendShapeRepair
         }
         UniLog.Warning($"Could not restore stripped blendshapes on {rendererName}: " +
                        $"FBX={expected.Count}, imported={current.Count}, matched={importedIndex}.");
+    }
+
+    internal static int InsertMissingNamedBlendShapes(MeshX mesh, IReadOnlyList<string> expected, IReadOnlySet<string> requested)
+    {
+        int inserted = 0;
+        foreach (string name in expected.Distinct(StringComparer.Ordinal))
+        {
+            if (!requested.Contains(name) || mesh.HasBlendShape(name)) continue;
+            mesh.AddBlendShape(name).AddFrame(1f);
+            inserted++;
+        }
+        return inserted;
     }
 
     private static int InsertMissingBlendShapes(

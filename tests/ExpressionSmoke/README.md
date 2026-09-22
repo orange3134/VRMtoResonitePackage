@@ -44,7 +44,7 @@ updates without a wearer, first events after reattachment, and independent clone
 int gesture receivers are checked as runtime behavior.
 
 An optional second argument imports a locally converted avatar instead of the synthetic
-runtime fixture. This mode requires a fully assigned table of static gesture poses:
+runtime fixture. This mode requires a fully assigned gesture table; animated clips are sampled at Core AnimationTime:
 
 ```powershell
 dotnet run --project tests/ExpressionSmoke -c Release -- .tmp_verify/imported-gestures path/to/avatar.resonitepackage
@@ -169,3 +169,9 @@ Every classifier must use bit packing, a finger-pose table and a separate button
 table, without chained OR/conditional nodes. Layout checks require their inputs to
 follow port order in the adjacent column, including in saved/reloaded real-mesh fixtures
 and imported avatars.
+
+`GestureRouterChecks` covers an empty default dispatcher, ordered hand conditions,
+exit-only complete poses, all 64 pairs and rejected unsafe router structures.
+`NamedShapeRepairChecks` restores only source-FBX shapes requested by an exact,
+unique expression renderer path; it checks retained weights, same-named siblings,
+ambiguous paths, missing source names, empty restored frames and idempotence.

@@ -549,3 +549,33 @@ Plum の再変換・inspect と保存パッケージの左右64通り・102出�
 機種固有の接触入力、B/A の優先順位、パッドクリックと Grip の組み合わせ、アナログ／bool の Grip の違いは維持する。
 ExpressionSmoke は左右合計576通りの入力と各機種の安定待ち・ヒステリシス・再接続・入力制限・手動入力保持を検証した。
 全機種の入力配置と複製・保存再読込の検証、Plum の再変換・inspect も成功した。
+
+### 空の振り分けステートを使うジェスチャー表情
+
+Kipfel 1.2.0 の Face レイヤーは、空 Clip の初期ステートから条件順に表情へ進み、
+各表情から Exit へ戻る。表情ステートは Write Defaults が無効だが、同じ292個の
+顔 BlendShape をすべて書く。空の振り分けステートまで通常のポーズとして比較すると、
+未設定値の履歴依存と判定され、Parameter Driver・Exit と合わせてレイヤー全体が除外されていた。
+
+`VrchatGestureRouter` は通常の解析で除外されたレイヤーに対し、次を検証して対応表へ投影する。
+
+- 初期ステートは有効な空 Clip、経路は左右 Gesture の条件のみで、64通りすべてを覆う。
+- 各遷移先は同じ BlendShape 集合を持つ完全な表情で、戻り先は時間待ちのない Exit のみ。
+- マスク・ネスト・混在 Write Defaults・未対応の再生設定などは従来どおり拒否する。
+- 既知の VRC Parameter Driver だけを許容し、当該レイヤーの選択条件を書き換える場合は拒否する。
+- Any State が Gesture を参照する場合は拒否する。接触など外部入力の割り込みは投影対象外。
+
+対応表は毎回初期ステートの遷移順から選ぶ。VRChat で先に入った表情を維持する履歴依存の
+挙動、接触反応、耳・尻尾などへの Parameter Driver の副作用、遷移割り込みの時間経過は再現しない。
+この近似は変換ログと Expressions/Diagnostics に明示する。名前による表情の推測や、
+未対応レイヤー全般の検証緩和は行わない。合成テストは全64通り、条件順、欠けた経路、
+部分的なポーズ、選択を書き換える Driver、未知 Behaviour、Gesture の Any State を検証する。
+
+Kipfel ではさらに `eye_highlight_main_small`、`mouth_tooth_gizagiza`、
+`eye_highlight_uruuru_big` が元FBXに存在する一方、ModelImporter に除去される。
+名前参照だけの表情には従来の番号参照向け補修が適用されず、3つの参照が未解決となって
+表情 Clip 全体が除外されていた。`VrchatBlendShapeRepair` は Descriptor ルートからの
+一意な Renderer パスと、その Renderer の元FBXシェイプ一覧を照合し、表情から参照される
+欠落シェイプだけを空 Frame として末尾へ復元する。番号参照が必要な場合は先に既存の
+順序補修を行う。既存シェイプの値は名前ごとに保持し、元FBXにない名前、未参照の空シェイプ、
+別パスの同名 Renderer、曖昧なパスは補修しない。

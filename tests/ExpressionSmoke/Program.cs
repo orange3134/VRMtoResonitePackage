@@ -41,6 +41,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         for (int i = 0; i < 30; i++) await default(NextUpdate);
         world.LocalUser.Root ??= world.AddSlot("Wearer").AttachComponent<UserRoot>();
         await default(NextUpdate);
+        await NamedShapeRepairChecks.Run(world.LocalUser.Root.Slot);
         if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage, artifacts, baselinePackage); return; }
         await ExpressionOutputDriveChecks.Run(world.LocalUser.Root.Slot);
         await ExpressionBlinkChecks.Run(world.LocalUser.Root.Slot, artifacts);

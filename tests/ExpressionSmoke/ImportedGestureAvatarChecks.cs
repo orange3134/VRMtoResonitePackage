@@ -3,7 +3,7 @@ using FrooxEngine;
 using FrooxEngine.ProtoFlux;
 using VrmToResonitePackage.Expressions;
 
-// Optional integration check for a converted avatar with 64 assigned, static gesture poses.
+// Optional integration check for a converted avatar with 64 assigned gesture poses (including animated clips).
 // Input packages and their paths are supplied locally and are never part of the fixture.
 internal static class ImportedGestureAvatarChecks
 {
@@ -71,11 +71,12 @@ internal static class ImportedGestureAvatarChecks
                 for (int i = 0; i < 6; i++) await default(NextUpdate);
                 var data = mapped.GetComponent<StaticAnimationProvider>().Asset?.Data;
                 Check(data != null, "Pose animation asset did not load");
+                float animationTime = Get<float>(core, "AnimationTime");
                 var values = new List<float>();
                 foreach (var output in root.FindChild("Outputs").Children)
                 {
                     int index = data.FindTrackIndex("Expression", Get<string>(output, "Id"));
-                    float expected = index >= 0 ? ((IAnimationTrack<float>)data[index]).Sample(0) : Get<float>(output, "Base");
+                    float expected = index >= 0 ? ((IAnimationTrack<float>)data[index]).Sample(animationTime) : Get<float>(output, "Base");
                     float actual = Reference<IField<float>>(output, "Target").Value;
                     Check(Math.Abs(expected - actual) < 0.001f, $"Pair {l},{r}: output {Get<string>(output, "Shape")} expected {expected}, got {actual}");
                     values.Add(actual);

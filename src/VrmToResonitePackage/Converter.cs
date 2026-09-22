@@ -463,7 +463,7 @@ internal static class Converter
                 await WaitForAssets(assetsSlot);
 
                 int repairedBlendshapeMeshes = await Vrchat.VrchatBlendShapeRepair.Apply(root, avatar,
-                    importedMeshSources, authoredObjects, importedNodePaths);
+                    importedMeshSources, authoredObjects, importedNodePaths, descriptorRoot);
                 if (repairedBlendshapeMeshes > 0)
                 {
                     await WaitForAssets(assetsSlot);
