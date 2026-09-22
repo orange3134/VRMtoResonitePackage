@@ -7,6 +7,7 @@ internal static class ParserChecks
     {
         DefaultGestureRouterChecks.Run(artifacts);
         IndirectGestureRouterChecks.Run(artifacts);
+        DrivenGestureRouterChecks.Run(artifacts);
         WeightedCurveChecks.Run();
         GestureRouterChecks.Run(artifacts);
         EntryGestureRouterChecks.Run(artifacts);

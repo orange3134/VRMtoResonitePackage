@@ -207,8 +207,17 @@ public static class VrchatAvatarParser
         foreach (string excluded in avatar.EditorOnlyFbxGuids)
             UniLog.Log($"Skipping EditorOnly model before import: {package.ByGuid(excluded)?.LogicalPath} (fbx={excluded})");
         ApplyFbxDefaultBlendShapeWeights(avatar);
-        VrchatAnimatorFaceParser.Apply(package, effectiveDescriptor.Root, avatar);
-        avatar.Expressions = VrchatExpressionParser.Parse(package, effectiveDescriptor.Root, ExpressionTargetNames(package, avatar));
+        var expressionComponents = new List<YamlNode>();
+        foreach (var entry in package.PrefabGraph.Scenes)
+        {
+            var included = IncludedPrefabObjects(package, entry.Guid, entry.Scene, avatar,
+                new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase));
+            expressionComponents.AddRange(entry.Scene.MonoBehaviours.Where(c =>
+                included.Contains(c.Root?["m_GameObject"]?.FileID ?? 0)).Select(c => c.Root));
+        }
+        var expressionDescriptor = VrchatModularExpressionInputs.Create(effectiveDescriptor.Root, expressionComponents);
+        VrchatAnimatorFaceParser.Apply(package, expressionDescriptor, avatar);
+        avatar.Expressions = VrchatExpressionParser.Parse(package, expressionDescriptor, ExpressionTargetNames(package, avatar), expressionComponents);
         ParsePhysics(package, selected.Source.Guid, avatar);
         ParseModularAvatarComponents(package, selected.Source.Guid, avatar);
         return avatar;

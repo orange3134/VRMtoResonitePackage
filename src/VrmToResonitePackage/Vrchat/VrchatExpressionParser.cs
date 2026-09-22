@@ -7,7 +7,7 @@ namespace VrmToResonitePackage.Vrchat;
 /// <summary>Imports explicit face curves and a validated Animator subset; never guesses poses by name.</summary>
 public static class VrchatExpressionParser
 {
-    public static ExpressionModel Parse(UnityPackage package, YamlNode descriptor, IReadOnlySet<string> possibleTargetNames = null)
+    public static ExpressionModel Parse(UnityPackage package, YamlNode descriptor, IReadOnlySet<string> possibleTargetNames = null, IEnumerable<YamlNode> modularComponents = null)
     {
         var model = new ExpressionModel();
         var clips = new Dictionary<string, ExpressionClip>(StringComparer.Ordinal);
@@ -112,6 +112,15 @@ public static class VrchatExpressionParser
                         model.Layers.Add(indirect);
                         Warn(label + ": indirect hand parameter selector projected via " + inputDetail +
                             "; input Set drivers are compiled, not executed at runtime. Previous-hand history and transition timing are not imported.");
+                    }
+                    else if (errors.All(e => e is "nested state machine" or "state machine destination" or "missing default state" or
+                        "state behaviour" or "exit or unresolved transition" or "history-dependent unanimated properties" or "mixed Write Defaults" ||
+                        e.StartsWith("unsupported motion in ")) &&
+                        VrchatDrivenGestureRouter.TryProject(package, scene, controller, machine, layer, model.Parameters, ReadClip, out var driven))
+                    {
+                        model.Layers.Add(driven);
+                        expressionClips.UnionWith(driven.States.Where(s => s.ClipId != null).Select(s => s.ClipId));
+                        Warn(label + ": cascaded Set hand selectors projected at authored defaults, IsLocal=1 and AFK=0; tracking side effects, locks, animation playback and transition timing are not imported.");
                     }
                     else if (errors.Count == 0) { if (!ProjectDefaults()) model.Layers.Add(layer); }
                     else if (errors.All(e => e is "AvatarMask" or "state behaviour" or "exit or unresolved transition" or
@@ -226,6 +235,7 @@ public static class VrchatExpressionParser
                 model.Parameters[name] = new(name, type, p["defaultValue"]?.AsFloat() ?? 0, p["saved"]?.AsBool() == true);
             }
         }
+        VrchatModularExpressionInputs.ApplyDefaults(model, modularComponents);
         foreach (string hand in new[] { "Left", "Right" })
         {
             model.Parameters["Gesture" + hand] = new("Gesture" + hand, 3, 0);

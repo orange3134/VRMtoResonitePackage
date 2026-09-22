@@ -213,3 +213,7 @@ Live native blink/viseme behavior remains covered by the separate synthetic trac
 DefaultGestureRouterChecks and CompilerChecks cover zero-speed gesture-weight motion time
 (Eku), both hand clocks, final values of changing curves, and rejection of stopped
 playback without a known position parameter or non-finite speeds.
+
+DrivenGestureRouterChecks covers MA Absolute/Append discovery, parameter defaults, reversed-order
+zero-weight Set cascades, nested local-user selection, all 64 output values, and rejection
+of unsafe writes, missing poses, foreign destinations, timed routes and animated parameters.

@@ -850,3 +850,35 @@ NaN・無限大、未知の時間パラメーター、位置指定のない停�
 
 Eku_Anotherの実変換・inspectと、保存パッケージのメニュー操作による全64組・367出力の
 照合を確認した。左手単独でもIdleを含む8種類の姿勢を選択でき、公開用EXEでも再検査が成功した。
+
+### yuzuki / FaceEmo: MA追加コントローラーと多段Set選択
+
+yuzuki 2.1.1はDescriptorのFXが空で、選択アバター配下のFaceEmoPrefabにある
+MA Merge Animatorから表情コントローラーを追加する。Descriptorだけを読むと表情が0件になる。
+`VrchatModularExpressionInputs` は選択・展開・削除反映後のPrefabGraphから、EditorOnlyを除いた
+Merge AnimatorのFX / Absolute / Appendを読み、layerPriority順に表情解析へ渡す。
+元Descriptorやパッケージ内の無関係なアバターは変更しない。Relative・Replaceは診断して除外する。
+通常のMA Parametersは、明示指定または非ゼロの初期値を条件評価へ反映する。
+未指定の0はAnimatorの値を上書きしない。internal・prefix・remapによる名前変更は未対応で診断する。
+
+FaceEmoは0ウェイトのInput Converter → Emote Control → Emote Set Controlが
+定数Setを連鎖させ、最終的な番号からFace Emote Playerの表情を選ぶ。
+`VrchatDrivenGestureRouter` は各手の0〜7について、他条件を初期値、IsLocal=1、AFK=0に固定し、
+Entryから入れ子・Any State・通常遷移を評価する。異なるパラメーターを生成する0ウェイト層を
+反復評価し、32回以内に値と解決状態が収束した場合だけ、最終的な表情クリップへ割り当てる。
+消費側の安定状態が使わない分岐の副作用は実行しない。各手の優先順位・表情セットは
+モデル名から推測せず、元の条件とSet値から取得する。yuzukiの既定セットは左手優先。
+
+適用範囲は定数Setで、複数層の同一パラメーターへの書き込み、手入力の書き換え、Add・Random・Copy、
+未解決の入力、非収束、成立するExit・時間待ち、途中状態のSet、選択条件へ戻る副作用を拒否する。
+0ウェイトのモーションはメッシュへ影響しないが、Animatorパラメーター曲線とイベントは拒否する。
+パッケージに存在しない0ウェイト用ダミーモーションは空として扱う。表情側の不足クリップは補完しない。
+消費側のTrackingControlは目・口のみ許可し、変換後の追従は既存の瞬き・口パク方式を使う。
+ロック・接触・履歴・遷移時間・動的な表情セット変更は再現しない。
+
+実yuzukiでは、初回の修正変換で38クリップ・64出力・64/64割り当てを確認した。
+保存済みパッケージを読み戻したメニュー操作でも全64組のCurrentExpressionと出力値、
+15種類の表情、15件の直接選択メニューを検証した。実クライアントでの目視確認は別途必要。
+最終コードでも実変換・inspect・保存パッケージの全64組の再検証に成功した。
+初回修正出力とのCatalog・最終値・参照・割り当ての一致も確認した。
+更新した通常のpublish EXEは実変換EXEと同一DLLで、通常EXEからのinspectも成功した。
