@@ -12,14 +12,8 @@ internal static class VrchatEntryGestureRouter
     {
         result = null;
         // A humanoid-only mask cannot filter these non-transform blendshape curves.
-        // Transform masks and missing mask assets remain unsupported.
-        if ((mask?.FileID ?? 0) != 0)
-        {
-            var asset = package.ByGuid(mask.Guid);
-            if (asset?.HasContent != true) return false;
-            var document = package.ReadScene(asset).Doc(mask.FileID.Value);
-            if (document?.ClassId != 319 || document.Root["m_Elements"]?.Seq is not { Count: 0 }) return false;
-        }
+        // Transform masks and unknown missing masks remain unsupported.
+        if (!VrchatExpressionMask.IsBlendShapeCompatible(package, mask, out _)) return false;
         if (original.Entry.Count == 0 || original.States.Count != ids.Count ||
             (machine["m_AnyStateTransitions"]?.Seq?.Count ?? 0) != 0) return false;
         bool Hand(string name) => name is "GestureLeft" or "GestureRight" or "AFK";

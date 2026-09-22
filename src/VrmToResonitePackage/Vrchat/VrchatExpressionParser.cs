@@ -7,7 +7,8 @@ namespace VrmToResonitePackage.Vrchat;
 /// <summary>Imports explicit face curves and a validated Animator subset; never guesses poses by name.</summary>
 public static class VrchatExpressionParser
 {
-    public static ExpressionModel Parse(UnityPackage package, YamlNode descriptor, IReadOnlySet<string> possibleTargetNames = null, IEnumerable<YamlNode> modularComponents = null)
+    public static ExpressionModel Parse(UnityPackage package, YamlNode descriptor, IReadOnlySet<string> possibleTargetNames = null,
+        IEnumerable<YamlNode> modularComponents = null, IReadOnlySet<string> trackedEyePaths = null, IReadOnlySet<string> possibleShapeNames = null)
     {
         var model = new ExpressionModel();
         var clips = new Dictionary<string, ExpressionClip>(StringComparer.Ordinal);
@@ -42,7 +43,8 @@ public static class VrchatExpressionParser
                 if (layer.Weight == 0) continue;
                 if (!float.IsFinite(layer.Weight) || layer.Weight < 0 || layer.Weight > 1) errors.Add("invalid layer weight");
                 if (layerNode["m_BlendingMode"]?.AsInt() == 1) errors.Add("additive layer");
-                if ((layerNode["m_Mask"]?.FileID ?? 0) != 0) errors.Add("AvatarMask");
+                if (!VrchatExpressionMask.IsBlendShapeCompatible(package, layerNode["m_Mask"], out string sdkMask)) errors.Add("AvatarMask");
+                else if (sdkMask != null) Warn(label + ": missing SDK " + sdkMask + " recognized as a humanoid-only mask; blendshape curves are unaffected.");
                 if ((layerNode["m_SyncedLayerIndex"]?.AsInt(-1) ?? -1) >= 0) errors.Add("synced layer");
                 var machine = scene.Doc(layerNode["m_StateMachine"]?.FileID ?? 0)?.Root;
                 if (machine == null) { Warn(label + ": missing state machine"); continue; }
@@ -262,13 +264,23 @@ public static class VrchatExpressionParser
             var clip = new ExpressionClip { Id = key, Name = root["m_Name"]?.AsString() ?? "Expression",
                 Source = asset.LogicalPath, Duration = root["m_AnimationClipSettings"]?["m_StopTime"]?.AsFloat() ?? 0,
                 Loop = root["m_AnimationClipSettings"]?["m_LoopTime"]?.AsBool() == true };
-            bool unsupported = new[] { "m_RotationCurves", "m_CompressedRotationCurves", "m_EulerCurves", "m_PositionCurves", "m_ScaleCurves", "m_PPtrCurves" }
+            bool unsupported = new[] { "m_CompressedRotationCurves", "m_PositionCurves", "m_ScaleCurves", "m_PPtrCurves" }
                 .Any(k => (root[k]?.Seq?.Count ?? 0) != 0);
+            int ignoredEyeRotations = 0;
+            bool TrackedEye(string path) => path != null && trackedEyePaths?.Contains(path) == true;
+            foreach (string kind in new[] { "m_RotationCurves", "m_EulerCurves" })
+                foreach (var curve in root[kind]?.Seq ?? new())
+                    if (TrackedEye(curve["path"]?.AsString())) ignoredEyeRotations++;
+                    else unsupported = true;
             unsupported |= !float.IsFinite(clip.Duration) || clip.Duration < 0 ||
                 (root["m_AnimationClipSettings"]?["m_StartTime"]?.AsFloat() ?? 0) != 0 || (root["m_Events"]?.Seq?.Count ?? 0) > 0;
             foreach (var c in root["m_FloatCurves"]?.Seq ?? new())
             {
                 string attribute = c["attribute"]?.AsString(), path = c["path"]?.AsString();
+                if (c["classID"]?.AsInt() == 4 && TrackedEye(path) &&
+                    attribute is "m_LocalRotation.x" or "m_LocalRotation.y" or "m_LocalRotation.z" or "m_LocalRotation.w" or
+                        "localEulerAnglesRaw.x" or "localEulerAnglesRaw.y" or "localEulerAnglesRaw.z")
+                { ignoredEyeRotations++; continue; }
                 // Missing GameObject activity targets are no-ops in Unity. A conservative superset
                 // of prefab and FBX names proves absence; unknown hierarchy keeps strict rejection.
                 if (c["classID"]?.AsInt() == 1 && attribute == "m_IsActive" && !string.IsNullOrEmpty(path) &&
@@ -280,6 +292,13 @@ public static class VrchatExpressionParser
                 }
                 if (c["classID"]?.AsInt() != 137 || attribute?.StartsWith("blendShape.", StringComparison.Ordinal) != true || path == null)
                 { unsupported = true; continue; }
+                // Only a complete source-mesh inventory authorizes dropping an absent shape.
+                // Unresolved live shapes still fail later, so importer/path/driver failures stay visible.
+                if (possibleShapeNames != null && attribute.Length > 11 && !possibleShapeNames.Contains(attribute[11..]))
+                {
+                    Warn(asset.LogicalPath + ": ignored blendshape curve absent from all source meshes: " + path + "/" + attribute[11..]);
+                    continue;
+                }
                 var curve = new ExpressionCurve { Binding = new(path, attribute[11..]) };
                 foreach (var k in c["curve"]?["m_Curve"]?.Seq ?? new())
                 {
@@ -294,6 +313,7 @@ public static class VrchatExpressionParser
             }
             if (clip.Curves.Select(c => c.Binding.Key).Distinct().Count() != clip.Curves.Count) unsupported = true;
             if (unsupported) { Warn(asset.LogicalPath + ": unsupported or invalid animation tracks; clip omitted"); return null; }
+            if (ignoredEyeRotations > 0) Warn(asset.LogicalPath + ": imported face shapes; authored eye-bone rotations are omitted to retain native eye tracking.");
             clips[key] = clip;
             return clip;
         }

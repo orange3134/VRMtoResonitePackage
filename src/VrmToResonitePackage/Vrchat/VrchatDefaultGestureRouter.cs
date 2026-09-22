@@ -14,12 +14,7 @@ internal static class VrchatDefaultGestureRouter
         result = null; detail = null;
         if ((machine["m_ChildStateMachines"]?.Seq?.Count ?? 0) != 0 ||
             (machine["m_StateMachineBehaviours"]?.Seq?.Count ?? 0) != 0) return false;
-        if ((mask?.FileID ?? 0) != 0)
-        {
-            var asset = package.ByGuid(mask.Guid);
-            if (asset?.HasContent != true || package.ReadScene(asset).Doc(mask.FileID.Value) is not { ClassId: 319 } doc ||
-                doc.Root["m_Elements"]?.Seq is not { Count: 0 }) return false;
-        }
+        if (!VrchatExpressionMask.IsBlendShapeCompatible(package, mask, out _)) return false;
         bool Hand(string name) => name is "GestureLeft" or "GestureRight";
         var ids = (machine["m_ChildStates"]?.Seq ?? new()).Select(s => s["m_State"]?.FileID ?? 0).ToHashSet();
         IEnumerable<YamlNode> Transitions(YamlNode owner, string key) =>
@@ -29,7 +24,7 @@ internal static class VrchatDefaultGestureRouter
             .SelectMany(t => t?["m_Conditions"]?.Seq ?? new()).Select(c => c["m_ConditionEvent"]?.AsString()).ToHashSet();
         // Existing hand-only projectors run first; the fallback can also specialize flat Any State selectors.
         if (!used.Any(Hand) || (!includeHandOnly && !used.Any(p => !Hand(p)))) return false;
-        if (!used.Any(p => !Hand(p)) &&
+        if (!used.Any(p => !Hand(p)) && !CompleteHandDispatcher() &&
             (Transitions(machine, "m_EntryTransitions").Any() || !Transitions(machine, "m_AnyStateTransitions").Any() ||
              ids.SelectMany(id => Transitions(scene.Doc(id)?.Root, "m_Transitions")).Any(t =>
                  t?["m_IsExit"]?.AsBool() != true || (t["m_DstState"]?.FileID ?? 0) != 0 ||
@@ -64,6 +59,44 @@ internal static class VrchatDefaultGestureRouter
             t["m_HasExitTime"]?.AsBool() != true && (t["m_TransitionOffset"]?.AsFloat() ?? 0) == 0 &&
             (t["m_InterruptionSource"]?.AsInt() ?? 0) == 0 &&
             float.IsFinite(t["m_TransitionDuration"]?.AsFloat() ?? 0);
+        bool CompleteHandDispatcher()
+        {
+            // A complete hub-and-spoke selector can always settle from Entry or a previous pose.
+            // Partial state-to-state graphs can latch an old pose and must remain unsupported.
+            if (used.Count != 1 || !used.All(Hand) || ids.Count != 9 ||
+                Transitions(machine, "m_EntryTransitions").Any() ||
+                Transitions(machine, "m_AnyStateTransitions").Any()) return false;
+            long hub = machine["m_DefaultState"]?.FileID ?? 0;
+            if (!ids.Contains(hub)) return false;
+            var routes = Transitions(scene.Doc(hub)?.Root, "m_Transitions").ToArray();
+            if (routes.Length != 8) return false;
+            var gestures = new HashSet<int>();
+            var destinations = new HashSet<long>();
+            foreach (var route in routes)
+            {
+                if (!ValidTransition(route) || route["m_IsExit"]?.AsBool() == true ||
+                    route["m_Conditions"]?.Seq is not { Count: 1 } conditions) return false;
+                var condition = conditions[0];
+                float gesture = condition["m_EventTreshold"]?.AsFloat(float.NaN) ?? float.NaN;
+                if (condition["m_ConditionMode"]?.AsInt() != 6 ||
+                    condition["m_ConditionEvent"]?.AsString() != used.Single() ||
+                    !float.IsFinite(gesture) || gesture < 0 || gesture > 7 || gesture != MathF.Truncate(gesture) ||
+                    !gestures.Add((int)gesture)) return false;
+                long destination = route["m_DstState"]?.FileID ?? 0;
+                if (destination == hub || !ids.Contains(destination) || !destinations.Add(destination)) return false;
+                var returns = Transitions(scene.Doc(destination)?.Root, "m_Transitions").ToArray();
+                if (returns.Length != 1) return false;
+                var back = returns[0];
+                if (!ValidTransition(back) || back["m_IsExit"]?.AsBool() == true ||
+                    (back["m_DstState"]?.FileID ?? 0) != hub ||
+                    back["m_Conditions"]?.Seq is not { Count: 1 } exitConditions) return false;
+                var exit = exitConditions[0];
+                if (exit["m_ConditionMode"]?.AsInt() != 7 ||
+                    exit["m_ConditionEvent"]?.AsString() != used.Single() ||
+                    exit["m_EventTreshold"]?.AsFloat(float.NaN) != gesture) return false;
+            }
+            return true;
+        }
         bool SafeBehaviours(YamlNode state)
         {
             foreach (var r in state["m_StateMachineBehaviours"]?.Seq ?? new())
