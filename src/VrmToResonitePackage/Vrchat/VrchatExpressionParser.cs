@@ -7,7 +7,7 @@ namespace VrmToResonitePackage.Vrchat;
 /// <summary>Imports explicit face curves and a validated Animator subset; never guesses poses by name.</summary>
 public static class VrchatExpressionParser
 {
-    public static ExpressionModel Parse(UnityPackage package, YamlNode descriptor)
+    public static ExpressionModel Parse(UnityPackage package, YamlNode descriptor, IReadOnlySet<string> possibleTargetNames = null)
     {
         var model = new ExpressionModel();
         var clips = new Dictionary<string, ExpressionClip>(StringComparer.Ordinal);
@@ -250,6 +250,15 @@ public static class VrchatExpressionParser
             foreach (var c in root["m_FloatCurves"]?.Seq ?? new())
             {
                 string attribute = c["attribute"]?.AsString(), path = c["path"]?.AsString();
+                // Missing GameObject activity targets are no-ops in Unity. A conservative superset
+                // of prefab and FBX names proves absence; unknown hierarchy keeps strict rejection.
+                if (c["classID"]?.AsInt() == 1 && attribute == "m_IsActive" && !string.IsNullOrEmpty(path) &&
+                    possibleTargetNames != null && path.Split('/').All(part => part.Length > 0 && part is not ("." or "..")) &&
+                    !possibleTargetNames.Contains(path[(path.LastIndexOf('/') + 1)..]))
+                {
+                    Warn(asset.LogicalPath + ": ignored activity curve with absent target: " + path);
+                    continue;
+                }
                 if (c["classID"]?.AsInt() != 137 || attribute?.StartsWith("blendShape.", StringComparison.Ordinal) != true || path == null)
                 { unsupported = true; continue; }
                 var curve = new ExpressionCurve { Binding = new(path, attribute[11..]) };

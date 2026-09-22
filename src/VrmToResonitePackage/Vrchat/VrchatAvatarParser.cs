@@ -208,10 +208,42 @@ public static class VrchatAvatarParser
             UniLog.Log($"Skipping EditorOnly model before import: {package.ByGuid(excluded)?.LogicalPath} (fbx={excluded})");
         ApplyFbxDefaultBlendShapeWeights(avatar);
         VrchatAnimatorFaceParser.Apply(package, effectiveDescriptor.Root, avatar);
-        avatar.Expressions = VrchatExpressionParser.Parse(package, effectiveDescriptor.Root);
+        avatar.Expressions = VrchatExpressionParser.Parse(package, effectiveDescriptor.Root, ExpressionTargetNames(package, avatar));
         ParsePhysics(package, selected.Source.Guid, avatar);
         ParseModularAvatarComponents(package, selected.Source.Guid, avatar);
         return avatar;
+    }
+
+    private static IReadOnlySet<string> ExpressionTargetNames(UnityPackage package, VrchatAvatar avatar)
+    {
+        if (package.PrefabGraph == null) return null;
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var models = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { avatar.FbxGuid };
+        models.UnionWith(avatar.AdditionalFbxs.Select(f => f.Guid));
+        foreach (var entry in package.PrefabGraph.Scenes)
+        {
+            foreach (var go in entry.Scene.GameObjects)
+                if (go.Root?["m_Name"]?.AsString() is string name) names.Add(name);
+            foreach (var instance in entry.Scene.Documents.Values.Where(d => d.ClassId == 1001))
+            {
+                var asset = package.ByGuid(instance.Root?["m_SourcePrefab"]?.Guid);
+                if (asset?.HasContent != true) return null; // Incomplete hierarchy cannot prove absence.
+                if (asset.Extension == ".fbx") models.Add(asset.Guid);
+                else if (asset.Extension is not (".prefab" or ".unity")) return null;
+            }
+        }
+        // Include rename overrides even when the target still lives inside an FBX.
+        foreach (var modification in package.PrefabGraph.Modifications)
+            if (modification.Value["propertyPath"]?.AsString() == "m_Name" &&
+                modification.Value["value"]?.AsString() is string name) names.Add(name);
+        foreach (string guid in models)
+        {
+            if (package.ByGuid(guid)?.HasContent != true) return null;
+            var modelNames = package.ModelFileIds(guid).NodeNamesUnder(0).ToArray();
+            if (modelNames.Length == 0) return null;
+            names.UnionWith(modelNames);
+        }
+        return names;
     }
 
     private static void ParseFbxBlendShapeNames(UnityPackage package, VrchatAvatar avatar)

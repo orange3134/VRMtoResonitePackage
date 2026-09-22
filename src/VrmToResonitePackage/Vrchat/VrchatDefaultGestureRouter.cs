@@ -31,7 +31,9 @@ internal static class VrchatDefaultGestureRouter
         if (!used.Any(Hand) || (!includeHandOnly && !used.Any(p => !Hand(p)))) return false;
         if (!used.Any(p => !Hand(p)) &&
             (Transitions(machine, "m_EntryTransitions").Any() || !Transitions(machine, "m_AnyStateTransitions").Any() ||
-             ids.Any(id => Transitions(scene.Doc(id)?.Root, "m_Transitions").Any()))) return false;
+             ids.SelectMany(id => Transitions(scene.Doc(id)?.Root, "m_Transitions")).Any(t =>
+                 t?["m_IsExit"]?.AsBool() != true || (t["m_DstState"]?.FileID ?? 0) != 0 ||
+                 (t["m_DstStateMachine"]?.FileID ?? 0) != 0))) return false;
         var defaults = new Dictionary<string, float>(StringComparer.Ordinal);
         bool failed = false;
         int left = 0, right = 0;

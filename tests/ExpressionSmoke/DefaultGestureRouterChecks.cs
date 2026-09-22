@@ -116,11 +116,11 @@ internal static class DefaultGestureRouterChecks
         }
         yaml.Append("--- !u!114 &900\nMonoBehaviour:\n  m_Script: {fileID: -646210727, guid: 67cc4cb7839cd3741b63733d5adf0442}\n  trackingEyes: 2\n  trackingMouth: 1\n");
         string source = yaml.ToString();
-        ExpressionModel Parse(string text)
+        ExpressionModel Parse(string text, IReadOnlySet<string> names = null)
         {
             Asset("Face.controller", 2, text);
             using var package = UnityPackage.Open(Path.Combine(root, "Assets", "Avatar.prefab"));
-            return VrchatExpressionParser.Parse(package, UnityScene.Parse(descriptor).Doc(1).Root);
+            return VrchatExpressionParser.Parse(package, UnityScene.Parse(descriptor).Doc(1).Root, names);
         }
         var model = Parse(source);
         Check(model.Layers.Count == 2, "missing neutral does not discard either hand layer");
@@ -140,7 +140,41 @@ internal static class DefaultGestureRouterChecks
         Check(Parse(source.Replace("guid: " + Guid(999), "guid: " + Guid(2))).Layers.Count == 0, "existing unsupported asset is not treated as missing");
         Asset("Bad.anim", 999, "--- !u!74 &7400000\nAnimationClip:\n  m_FloatCurves:\n  - classID: 1\n    attribute: m_IsActive\n    path: Face\n");
         Check(Parse(source).Layers.Count == 0, "existing invalid neutral clip is not silently cleared");
-        Console.WriteLine("PASS: missing neutral fallback, all64 outputs, right priority and unsupported/missing active motion guards");
+        var knownNames = new HashSet<string>(StringComparer.Ordinal) { "Face" };
+        string activity = "--- !u!74 &7400000\nAnimationClip:\n  m_FloatCurves:\n  - classID: 1\n    attribute: m_IsActive\n    path: Dummy\n    curve:\n      m_Curve:\n      - time: 0\n        value: 1\n";
+        Asset("Bad.anim", 999, activity);
+        Check(Parse(source).Layers.Count == 0, "unknown target hierarchy does not authorize dropping tracks");
+        Check(Parse(source, new HashSet<string> { "Dummy" }).Layers.Count == 0, "existing activity target still rejected");
+        Check(Parse(source, knownNames).Layers.Count == 2, "proven absent target becomes empty motion");
+        Asset("Bad.anim", 999, activity.Replace("path: Dummy", "path: Face"));
+        Check(Parse(source, knownNames).Layers.Count == 0, "live activity curve not ignored");
+        Asset("Bad.anim", 999, activity.Replace("classID: 1", "classID: 137"));
+        Check(Parse(source, knownNames).Layers.Count == 0, "unsupported component curve not ignored");
+        Asset("Bad.anim", 999, activity + "  m_Events:\n  - functionName: Test\n");
+        Check(Parse(source, knownNames).Layers.Count == 0, "animation events still reject empty placeholder");
+        Asset("Bad.anim", 999, activity);
+        string both = source.Replace("--- !u!1107 &100\n", "  - m_Name: Both\n    m_StateMachine: {fileID: 102}\n    m_DefaultWeight: 1\n    m_SyncedLayerIndex: -1\n--- !u!1107 &100\n") +
+            "--- !u!1107 &102\nAnimatorStateMachine:\n  m_DefaultState: {fileID: 2000}\n  m_ChildStates:\n  - m_State: {fileID: 2000}\n  - m_State: {fileID: 2001}\n  m_AnyStateTransitions:\n  - {fileID: 3000}\n" +
+            "--- !u!1102 &2000\nAnimatorState:\n  m_Name: BothNeutral\n  m_Motion: {fileID: 7400000, guid: " + Guid(999) + "}\n" +
+            "--- !u!1102 &2001\nAnimatorState:\n  m_Name: BothPeace\n  m_Motion: {fileID: 7400000, guid: " + Guid(1007) + "}\n  m_Transitions:\n  - {fileID: 3001}\n  - {fileID: 3002}\n" +
+            "--- !u!1101 &3000\nAnimatorStateTransition:\n  m_DstState: {fileID: 2001}\n  m_Conditions:\n  - m_ConditionEvent: GestureLeft\n    m_ConditionMode: 6\n    m_EventTreshold: 4\n  - m_ConditionEvent: GestureRight\n    m_ConditionMode: 6\n    m_EventTreshold: 4\n";
+        foreach (var (hand, id) in new[] { ("Left", 3001), ("Right", 3002) })
+            both += $"--- !u!1101 &{id}\nAnimatorStateTransition:\n  m_IsExit: 1\n  m_Conditions:\n  - m_ConditionEvent: Gesture{hand}\n    m_ConditionMode: 7\n    m_EventTreshold: 4\n";
+        // Open hand is deliberately empty even though it is not the default state.
+        both = both.Replace("guid: " + Guid(1002), "guid: " + Guid(999)).Replace("guid: " + Guid(1102), "guid: " + Guid(999));
+        var bothModel = Parse(both, knownNames);
+        Check(bothModel.Layers.Count == 3, "paired Any State selector with Exit routes imported");
+        var bothTable = new GesturePairCompiler(bothModel, bothModel.Clips, _ => 0.23f);
+        for (int left = 0; left < 8; left++) for (int right = 0; right < 8; right++)
+        {
+            var pose = bothModel.Clips.Concat(bothTable.Generated).Single(c => c.Id == bothTable.Pairs[left * 8 + right]);
+            float expected = left == 4 && right == 4 ? 0.7f : right is not (0 or 2) ? (10 + right * 10) / 100f :
+                left is not (0 or 2) ? left / 10f : 0.23f;
+            Check(Math.Abs(pose.Curves.Single().Sample(0) - expected) < 0.0001f, "all64 paired overrides and open-hand pass-through");
+        }
+        Check(Parse(both.Replace("m_IsExit: 1", "m_DstState: {fileID: 2001}"), knownNames).Layers.Count == 2,
+            "state-to-state latch is not accepted as paired Exit selector");
+        Console.WriteLine("PASS: absent activity targets, real-target rejection, both-hand overrides and empty open poses");        Console.WriteLine("PASS: missing neutral fallback, all64 outputs, right priority and unsupported/missing active motion guards");
     }
     private static void Check(bool ok, string message) { if (!ok) throw new InvalidOperationException(message); }
 }
