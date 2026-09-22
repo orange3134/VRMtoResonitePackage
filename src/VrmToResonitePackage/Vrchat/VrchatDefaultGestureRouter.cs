@@ -9,7 +9,7 @@ internal static class VrchatDefaultGestureRouter
 {
     internal static bool TryProject(UnityPackage package, UnityScene scene, YamlNode machine, YamlNode mask,
         ExpressionLayer original, IReadOnlyDictionary<string, ExpressionParameter> parameters,
-        Func<YamlNode, ExpressionClip> readClip, out ExpressionLayer result, out string detail, bool includeHandOnly = false)
+        Func<YamlNode, ExpressionClip> readClip, out ExpressionLayer result, out string detail, bool includeHandOnly = false, bool allowEmptyTimedFallback = false)
     {
         result = null; detail = null;
         if ((machine["m_ChildStateMachines"]?.Seq?.Count ?? 0) != 0 ||
@@ -55,8 +55,8 @@ internal static class VrchatDefaultGestureRouter
             }
             return matches;
         }
-        bool ValidTransition(YamlNode t) => (t["m_DstStateMachine"]?.FileID ?? 0) == 0 &&
-            t["m_HasExitTime"]?.AsBool() != true && (t["m_TransitionOffset"]?.AsFloat() ?? 0) == 0 &&
+        bool ValidTransition(YamlNode t, bool allowTime = false) => (t["m_DstStateMachine"]?.FileID ?? 0) == 0 &&
+            (allowTime || t["m_HasExitTime"]?.AsBool() != true) && (t["m_TransitionOffset"]?.AsFloat() ?? 0) == 0 &&
             (t["m_InterruptionSource"]?.AsInt() ?? 0) == 0 &&
             float.IsFinite(t["m_TransitionDuration"]?.AsFloat() ?? 0);
         bool CompleteHandDispatcher()
@@ -134,21 +134,45 @@ internal static class VrchatDefaultGestureRouter
                 return entry["m_DstState"]?.FileID ?? 0;
             }
             long id = Entry();
+            long neutralFallback = 0;
             var visited = new HashSet<long>();
             while (!failed)
             {
                 if (!ids.Contains(id) || !visited.Add(id) || scene.Doc(id)?.Root is not { } state || !SafeBehaviours(state))
                     return false;
+                // Nested bank dispatchers can have a delayed, unconditional neutral fallback.
+                // Immediate hand routes win before that delay; only an empty default state's
+                // fallback is collapsed. Timed pose transitions and animation loops remain rejected.
+                var outgoing = Transitions(state, "m_Transitions").ToArray();
+                var timed = allowEmptyTimedFallback ? outgoing.Where(t => t?["m_HasExitTime"]?.AsBool() == true && Matches(t)).ToArray() : [];
+                if (timed.Length > 0)
+                {
+                    var empty = readClip(state["m_Motion"]);
+                    if (id != (machine["m_DefaultState"]?.FileID ?? 0) || empty == null || empty.Curves.Count != 0 || timed.Length != 1 ||
+                        timed.Any(t => !ValidTransition(t, true) || t["m_IsExit"]?.AsBool() == true ||
+                            (t["m_Conditions"]?.Seq?.Count ?? 0) != 0 ||
+                            !ids.Contains(t["m_DstState"]?.FileID ?? 0) || t["m_DstState"]?.FileID == id ||
+                            !float.IsFinite(t["m_ExitTime"]?.AsFloat(float.NaN) ?? 0) || (t["m_ExitTime"]?.AsFloat(float.NaN) ?? 0) < 0)) return false;
+                }
                 var transition = Transitions(machine, "m_AnyStateTransitions")
                     .FirstOrDefault(t => Matches(t) && ((t["m_DstState"]?.FileID ?? 0) != id || t["m_CanTransitionToSelf"]?.AsBool() == true))
-                    ?? Transitions(state, "m_Transitions").FirstOrDefault(Matches);
+                    ?? outgoing.FirstOrDefault(t => (!allowEmptyTimedFallback || t?["m_HasExitTime"]?.AsBool() != true) && Matches(t)) ?? timed.FirstOrDefault();
                 if (failed) return false;
                 if (transition != null)
                 {
-                    if (!ValidTransition(transition)) return false;
+                    if (!ValidTransition(transition, timed.Contains(transition))) return false;
                     long next = transition["m_IsExit"]?.AsBool() == true ? Entry() : transition["m_DstState"]?.FileID ?? 0;
                     if (failed) return false;
-                    if (next != id) { id = next; continue; }
+                    if (timed.Contains(transition)) neutralFallback = next;
+                    // At frozen hand-weight defaults a neutral pose may immediately Exit back
+                    // to the empty dispatcher. Keep this one-shot neutral endpoint, not its loop.
+                    if (allowEmptyTimedFallback && id == neutralFallback && transition["m_IsExit"]?.AsBool() == true &&
+                        next == (machine["m_DefaultState"]?.FileID ?? 0))
+                    {
+                        if (readClip(state["m_Motion"])?.Curves.Count is not > 0) return false;
+                        transition = null;
+                    }
+                    else if (next != id) { id = next; continue; }
                 }
                 var motion = state["m_Motion"]; var clip = readClip(motion);
                 if ((motion?.FileID ?? 0) != 0 && clip == null)

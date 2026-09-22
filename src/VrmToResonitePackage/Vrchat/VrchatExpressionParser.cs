@@ -124,6 +124,17 @@ public static class VrchatExpressionParser
                         expressionClips.UnionWith(driven.States.Where(s => s.ClipId != null).Select(s => s.ClipId));
                         Warn(label + ": cascaded Set hand selectors projected at authored defaults, IsLocal=1 and AFK=0; tracking side effects, locks, animation playback and transition timing are not imported.");
                     }
+                    else if (errors.Contains("nested state machine") && errors.All(e => e is "nested state machine" or
+                        "state machine destination" or "missing default state" or "state behaviour" or "exit or unresolved transition" or
+                        "history-dependent unanimated properties" or "mixed Write Defaults" || e.StartsWith("unsupported motion in ")) &&
+                        VrchatNestedGestureRouter.TryProject(package, scene, machine, layerNode["m_Mask"], layer, model.Parameters, ReadClip,
+                            out var nested, out string bankDefaults))
+                    {
+                        model.Layers.Add(nested);
+                        expressionClips.UnionWith(nested.States.Where(s => s.ClipId != null).Select(s => s.ClipId));
+                        Warn(label + ": nested hand bank projected with " + bankDefaults +
+                            "; immediate hand routes precede the empty dispatcher's delayed neutral fallback. Parameter side effects, prior-state history and transition timing are not imported.");
+                    }
                     else if (errors.Count == 0) { if (!ProjectDefaults()) model.Layers.Add(layer); }
                     else if (errors.All(e => e is "AvatarMask" or "state behaviour" or "exit or unresolved transition" or
                         "history-dependent unanimated properties" or "mixed Write Defaults" || e.StartsWith("unsupported motion in ")) && ProjectDefaults()) { }
