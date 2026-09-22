@@ -1,4 +1,4 @@
-﻿using VrmToResonitePackage.Expressions;
+using VrmToResonitePackage.Expressions;
 using VrmToResonitePackage.Unity;
 
 namespace VrmToResonitePackage.Vrchat;
@@ -22,7 +22,7 @@ internal static class VrchatEntryGestureRouter
         }
         if (original.Entry.Count == 0 || original.States.Count != ids.Count ||
             (machine["m_AnyStateTransitions"]?.Seq?.Count ?? 0) != 0) return false;
-        bool Hand(string name) => name is "GestureLeft" or "GestureRight";
+        bool Hand(string name) => name is "GestureLeft" or "GestureRight" or "AFK";
         var entries = original.Entry;
         if (entries.Any(t => t.HasExitTime || t.Offset != 0 || t.Conditions.Count == 0 ||
             t.Conditions.Any(c => !Hand(c.Parameter)))) return false;
@@ -37,7 +37,7 @@ internal static class VrchatEntryGestureRouter
             if (clip?.Curves.Count > 0)
             {
                 var set = clip.Curves.Select(c => c.Binding).ToHashSet();
-                if (bindings != null && !bindings.SetEquals(set)) return false;
+                if (original.States.Any(s => !s.WriteDefaults) && bindings != null && !bindings.SetEquals(set)) return false;
                 bindings = set;
             }
             foreach (var reference in state?["m_StateMachineBehaviours"]?.Seq ?? new())
@@ -46,6 +46,12 @@ internal static class VrchatEntryGestureRouter
                 var script = behaviour?["m_Script"];
                 // Only recognized eye/mouth tracking controls are projected away. They do not
                 // change selection; the exported system retains its own blink/viseme cooperation.
+                if (script?.Guid == VrchatConstants.AvatarDescriptorScriptGuid && script.FileID == -706344726)
+                {
+                    if (behaviour["parameters"]?.Seq == null || behaviour["parameters"].Seq.Any(p =>
+                        string.IsNullOrEmpty(p["name"]?.AsString()) || Hand(p["name"].AsString()))) return false;
+                    continue;
+                }
                 if (script?.Guid != VrchatConstants.AvatarDescriptorScriptGuid || script.FileID != -646210727)
                     return false;
                 foreach (string key in new[] { "trackingHead", "trackingLeftHand", "trackingRightHand", "trackingHip",
@@ -81,7 +87,7 @@ internal static class VrchatEntryGestureRouter
         for (int left = 0; left < 8; left++)
             for (int right = 0; right < 8; right++)
             {
-                bool Matches(ExpressionTransition t) => t.Conditions.All(c => c.Matches(c.Parameter == "GestureLeft" ? left : right));
+                bool Matches(ExpressionTransition t) => t.Conditions.All(c => c.Matches(c.Parameter == "AFK" ? 0 : c.Parameter == "GestureLeft" ? left : right));
                 int selected = entries.FirstOrDefault(Matches)?.Destination ?? original.DefaultState;
                 if (selected < 0 || selected >= ids.Count) return false;
                 // Every prior state must exit towards Entry unless it is the selected stable state.

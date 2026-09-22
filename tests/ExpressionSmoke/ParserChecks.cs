@@ -5,6 +5,7 @@ internal static class ParserChecks
 {
     public static void Run(string artifacts)
     {
+        WeightedCurveChecks.Run();
         GestureRouterChecks.Run(artifacts);
         EntryGestureRouterChecks.Run(artifacts);
         string root = Path.Combine(artifacts, "ParserFixture");

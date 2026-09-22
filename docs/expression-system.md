@@ -610,3 +610,25 @@ Geometry 名が `blink` / `v_aa` と異なる。複数マテリアル時の
 回帰検証は合成 FBX の接続順・共有 Geometry・同名 Renderer、全64組の Entry/Exit 選択、
 危険な遷移の拒否、名前復元時の形状と値の保持を含む。実 LuciferDevil の変換・inspect と
 保存パッケージの64組・226出力・13ポーズ再生を確認した。
+### Fyuett の CurrentExpression 未選択
+
+Fyuett_All_Hina の Face_Right / Face_Left (Priority) は AFK 条件付き Entry/Exit 選択器で、
+左手が0以外なら右手側を Idle に戻す。さらに R Gun / L Thumbsup の Clip が重み付き接線を
+含むため、従来はレイヤー全体を除外し、CurrentExpression が参照する対応表が0/64だった。
+Entry/Exit の検証では AFK=false の通常状態を明示的に投影する。Gesture/AFK を変更しない
+既知の Parameter Driver だけを許容し、その副作用は取り込まないことを Diagnostics に残す。
+未知の条件パラメーター、選択を変更する Driver、循環・ラッチ・時間待ちは引き続き拒否する。
+Write Defaults が全状態で有効なら異なる binding 集合を許容し、未指定の曲線は従来の
+下位レイヤー/Base 合成を使う。無効な場合は空状態以外の完全な binding 集合を要求する。
+
+重み付き接線は [Unity Keyframe](https://docs.unity.com/en-us/engine/6000.3/script-reference/unityengine/keyframe)
+の Bezier 補間として読む。無効側の重みは1/3、有効側は0〜1の有限値だけを許容する。
+`UnityWeightedExpressionCurve` は de Casteljau 分割と制御点の垂直誤差によって、正規化した
+シェイプ値で誤差1e-5以内の折れ線へ変換し、既存の Hermite/AnimX 経路へ渡す。
+重みなし区間とステップ区間はそのまま保持する。分割上限やfloat時刻の精度で表現できない
+特異なカーブは、元データを変更せず拒否する。独立したパラメトリック Bezier の数万点と
+中間モデル・AnimX の両方を比較する回帰テストを設ける。
+
+実 Fyuett_All_Hina の変換・inspect と、保存後の全64組の CurrentExpression・685出力の再生を確認した。
+直接選択メニュー15件と入力モード切替も動作する。LuciferDevil の再変換・保存後再生・
+Catalog/全AnimX/出力binding/対応表の変更前比較も一致した。

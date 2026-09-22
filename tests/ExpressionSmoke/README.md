@@ -184,3 +184,8 @@ cycles, timed exits, partial poses, unresolved assets and unsupported behaviours
 vertex deltas and weights, stays within the source renderer path, and rejects name
 collisions atomically. PrefabInputSmoke covers binary FBX Shape-to-Channel links,
 shared geometry, connection ordering, scoped defaults and ambiguous aliases.
+`WeightedCurveChecks` compares weighted Unity segments and exported AnimX against
+an independent parametric Bezier oracle, including overshoot, zero weights,
+unweighted defaults, stepped segments and atomic rejection of invalid or
+unrepresentable curves. Entry selector checks also cover AFK=false specialization,
+non-selection parameter drivers and differing Write Defaults-on binding sets.

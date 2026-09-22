@@ -108,7 +108,7 @@ public static class VrchatExpressionParser
                     model.Layers.Add(entryProjected);
                     Warn(label + ": Entry/Exit gesture selector projected; empty motions use the lower-layer/base stream " +
                         "instead of retaining previous values. Eye/mouth tracking-control overrides and transition timing " +
-                        "are not imported; ResoPon blink/viseme cooperation is retained.");
+                        "are not imported; parameter-driver side effects are omitted and AFK is fixed false. ResoPon blink/viseme cooperation is retained.");
                 }
                 else Warn(label + ": automatic layer omitted (" + string.Join(", ", errors.Distinct()) + "); supported clips remain directly selectable");
 
@@ -237,12 +237,13 @@ public static class VrchatExpressionParser
                 var curve = new ExpressionCurve { Binding = new(path, attribute[11..]) };
                 foreach (var k in c["curve"]?["m_Curve"]?.Seq ?? new())
                 {
-                    if ((k["weightedMode"]?.AsInt() ?? 0) != 0) unsupported = true;
+                    // Weighted segments are validated and baked after reading the keys.
                     curve.Keys.Add(new(k["time"]?.AsFloat() ?? 0, (k["value"]?.AsFloat() ?? 0) / 100,
                         (k["inSlope"]?.AsFloat() ?? 0) / 100, (k["outSlope"]?.AsFloat() ?? 0) / 100));
                 }
                 if (curve.Keys.Count == 0 || curve.Keys.Any(k => !float.IsFinite(k.Time) || !float.IsFinite(k.Value) || float.IsNaN(k.InSlope) || float.IsNaN(k.OutSlope)) ||
                     curve.Keys.Zip(curve.Keys.Skip(1)).Any(pair => pair.First.Time >= pair.Second.Time)) unsupported = true;
+                else if (!UnityWeightedExpressionCurve.TryBake(curve, c["curve"]["m_Curve"].Seq)) unsupported = true;
                 else { clip.Duration = Math.Max(clip.Duration, curve.Keys[^1].Time); clip.Curves.Add(curve); }
             }
             if (clip.Curves.Select(c => c.Binding.Key).Distinct().Count() != clip.Curves.Count) unsupported = true;

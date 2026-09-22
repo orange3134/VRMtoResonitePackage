@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using VrmToResonitePackage.Expressions;
 using VrmToResonitePackage.Unity;
 using VrmToResonitePackage.Vrchat;
@@ -91,12 +91,24 @@ internal static class EntryGestureRouterChecks
         Reject(source, "wrong mask asset type rejected");
         Asset("Hands.mask", mask, maskYaml);
         Reject(source.Replace(mask, GuidFor(888)), "missing mask rejected");
+        string afk = source.Replace("m_Conditions:\n", "m_Conditions:\n  - m_ConditionEvent: AFK\n    m_ConditionMode: 2\n    m_EventTreshold: 0\n")
+            .Replace("m_WriteDefaultValues: 0", "m_WriteDefaultValues: 1")
+            .Replace("fileID: -646210727", "fileID: -706344726")
+            .Replace("trackingHead: 0", "parameters:\n  - name: EyeTrackingDisabled\n    type: 0\n    value: 1");
+        var afkModel = Parse(afk);
+        Check(afkModel.Layers.Count == 2, "AFK false and independent parameter-driver projection");
+        var afkTable = new GesturePairCompiler(afkModel, afkModel.Clips, _ => 0.23f);
+        Check(afkTable.Pairs.All(p => p != null), "all AFK-false pairs are assigned");
+        Reject(afk.Replace("name: EyeTrackingDisabled", "name: AFK"), "driver changing AFK rejected");
+        Reject(afk.Replace("name: EyeTrackingDisabled", "name: GestureLeft"), "driver changing gesture rejected");
+        Reject(afk.Replace("m_ConditionEvent: AFK", "m_ConditionEvent: UnknownGate"), "unknown gate is not fixed by guessing");
         foreach (int id in new[] { 1002, 1102 })
         {
             string path = Path.Combine(root, "Assets", $"Pose{id}.anim");
             File.WriteAllText(path, File.ReadAllText(path).Replace("blendShape.Smile", "blendShape.Other"));
         }
         Reject(source, "partial nonempty poses remain unsupported");
+        Check(Parse(afk).Layers.Count == 2, "Write Defaults on accepts differing binding sets");
         Console.WriteLine("PASS: Entry/Exit selectors, humanoid-only masks, 64 layered poses and unsafe-selector rejection");
     }
     private static void Check(bool value, string message)
