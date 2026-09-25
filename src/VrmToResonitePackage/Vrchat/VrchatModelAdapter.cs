@@ -74,6 +74,11 @@ public static class VrchatModelAdapter
             return meshIndex;
         }
 
+        if (avatar.ExpressionFaceTarget != null || avatar.ExpressionFacePath != null)
+            model.ExpressionFaceMeshIndex = MeshFor(avatar.ExpressionFaceTarget?.Name,
+                avatar.ExpressionFacePath, avatar.ExpressionFaceTarget);
+        model.ExpressionVisemeNames.UnionWith(avatar.ExpressionVisemeNames);
+
         // Visemes (resolved by blendshape name on the viseme mesh).
         foreach (VrchatViseme viseme in avatar.Visemes)
         {

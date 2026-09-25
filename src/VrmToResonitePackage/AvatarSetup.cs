@@ -1377,6 +1377,25 @@ internal sealed class BlendshapeResolver
         return matches.Length == 1 ? matches[0].TryGetBlendShape(binding.Shape) : null;
     }
 
+    internal IReadOnlyDictionary<Expressions.ExpressionBinding, float> ExpressionFaceValues(
+        IEnumerable<Expressions.ExpressionBinding> bindings)
+    {
+        var result = new Dictionary<Expressions.ExpressionBinding, float>();
+        if (_vrm.ExpressionFaceMeshIndex < 0) return result;
+        var faces = EnumerateCandidates(new VrmExpressionBind { MeshIndex = _vrm.ExpressionFaceMeshIndex })
+            .Distinct().ToArray();
+        if (faces.Length != 1) return result;
+        var fields = Enumerable.Range(0, faces[0].BlendShapeWeights.Count).Select(i => (IField<float>)faces[0].BlendShapeWeights.GetElement(i)).ToHashSet();
+        foreach (var binding in bindings.Distinct())
+        {
+            if (_vrm.ExpressionVisemeNames.Contains(binding.Shape) || Vrchat.VrchatExpressionDetection.IsViseme(binding.Shape)) continue;
+            var field = ResolveExpression(binding);
+            if (field != null && fields.Contains(field) && _initialWeights.TryGetValue(field, out float baseline))
+                result[binding] = baseline;
+        }
+        return result;
+    }
+
     public float? InitialWeight(IField<float> field) => field != null && _initialWeights.TryGetValue(field, out float value) ? value : null;
 
     public (SkinnedMeshRenderer skin, IField<float> field) ResolveWithRenderer(VrmExpressionBind bind)

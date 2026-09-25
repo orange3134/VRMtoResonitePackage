@@ -377,6 +377,44 @@ Dynamic Impulse はネットワーク RPC ではなく、装着者以外のク�
 旧 `ResoPon/Expression/v3/Select` と `v3/Automatic` は生成しない。
 旧 Select 送信側は Menu/Select へ変更し、通常入力を再開する操作は AllowExternalInput に true を送る。
 
+## FaceEmo に合わせた表情候補の検出
+
+`VrchatExpressionDetection` は、Animator の自動割り当ての可否とは独立して候補を収集する。
+FX の全レイヤー（ウェイト0を含む）の Default、Entry、Any State、各 State の遷移先を調べ、
+子 StateMachine も辿る。遷移で参照されない非Defaultの State は候補にしない。
+MA Absolute/Append から追加されたFXも既存の入力合成経路を通して対象になる。
+
+`GestureLeft` / `GestureRight` の Equals 条件がない分岐では、bool条件だけのトグル、
+Contact Receiver のパラメーター条件、PhysBone の条件・Motion Time を候補から除く。
+通常の BlendTree は最後の子を辿り、Fist の Motion Time では最初の子も候補として残す。
+補間・握り込みの連続動作は再現しない。専用CAC形式の14個単位の再配置や、FaceEmo設定の
+AdditionalSkinnedMeshes／ExcludedBlendShapesの取り込みは行わない。
+
+顔メッシュは Descriptor の VisemeBlendShape用メッシュ、Blendshapesのまぶた用メッシュ、
+ルート直下の `Body` の順で選ぶ。これはFaceEmoの既定の自動選択に合わせた規則。
+Descriptor参照を解決できない場合、別の同名メッシュへは割り当てない。
+選択結果は既存のPrefab／FBXのオブジェクト参照として保持し、インポート後の
+`BlendshapeResolver.ExpressionFaceValues` で実Rendererと曲線のパスを照合する。
+そのため静的な `--vrchat-dump` の候補数は、実メッシュとの照合後の確定数とは異なる。
+
+選択された顔メッシュの曲線に限定し、DescriptorのViseme名（選択顔と同じ参照の場合）と
+`vrc.v_aa` など既知のViseme名を含むシェイプを除外する。まばたきは候補に含める。
+Prefab／FBXの初期ウェイト適用後、AvatarSetupの追跡ドライバー設定前に保存した値と
+各キーを比較し、初期値と同じ曲線を候補から省く。差分がないクリップは独立候補にしない。
+確定数は変換ログの `Face expression detection:` に出力する。
+
+`ExpressionModel.Clips` はAnimatorを検証・合成するための入力、`DetectedExpressions` は
+独立した表情候補。顔以外の曲線は両方から取り除くが、元レイヤーの明示的な初期値への
+リセット曲線は `Clips` に残す。これを候補と同じように省くと、上位レイヤーのリセットが
+下位レイヤーの表情を通してしまうためである。
+Catalogには検出候補・検証済みのジェスチャー対応表が参照するポーズ・基準姿勢を出力する。
+未割当候補は初期値との差分だけを持ち、対応表が使うポーズはリセット値も保持する。
+候補を検出しただけではハンドジェスチャーへ割り当てず、以下の既存検証を通す。
+
+`ExpressionSmoke` の `FaceExpressionDetectionChecks` は条件なし／子StateMachine／ウェイト0、
+イベント由来の除外、BlendTreeの末尾、初期値差分、同名の顔以外のシェイプ、Catalogと
+64通りの割り当てを検証する。`NamedShapeRepairChecks` は実メッシュによる参照の一致、
+初期ウェイト、Viseme除外、曖昧な同名Rendererの拒否も検証する。
 ## 変換時の判定と制限
 
 `GesturePairCompiler` は左右64通りについて、すべての開始状態から遷移をたどる。

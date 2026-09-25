@@ -227,3 +227,8 @@ data rejection and existing empty/no-op clip behavior.
 shared-clip states, Entry/Exit and ordered comparison conditions across all 64
 pairs. Distinct-pose cycles, empty cycles, unknown motions/behaviors, hand-mutating
 drivers, timed routes and previous-state latches remain rejected.
+
+FaceEmo-style detection checks cover conditionless, nested and zero-weight layer candidates,
+Contact/PhysBone/bool-toggle exclusions, BlendTree endpoints, exact face renderer identity,
+authored baseline differences, viseme exclusion, and catalog filtering without dropping
+reset curves required by validated gesture mappings.

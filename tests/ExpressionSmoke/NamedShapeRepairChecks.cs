@@ -35,6 +35,19 @@ internal static class NamedShapeRepairChecks
             for (int i = 0; i < 7200 && renderers.Any(r => r.MeshBlendshapeCount != 1 || r.BlendShapeWeights.Count != 1); i++) await default(NextUpdate);
             Check(renderers.All(r => r.MeshBlendshapeCount == 1 && r.BlendShapeWeights.Count == 1), "fixture meshes loaded");
             face.GetBlendShape("Existing").Value = 0.37f;
+            var faceModel = new VrmToResonitePackage.Vrm.VrmModel { ExpressionFaceMeshIndex = 0, MeshBindingRootPath = "Descriptor" };
+            faceModel.MeshBindingPaths[0] = "Face";
+            var faceResolver = new VrmToResonitePackage.BlendshapeResolver(root, faceModel);
+            var bindings = new[] { new ExpressionBinding("Face", "Existing"), new ExpressionBinding("Other/Face", "Existing"),
+                new ExpressionBinding("Ambiguous", "Existing"), new ExpressionBinding("Missing/Face", "Existing") };
+            var faceValues = faceResolver.ExpressionFaceValues(bindings);
+            Check(faceValues.Count == 1 && Math.Abs(faceValues[bindings[0]] - 0.37f) < 0.0001f,
+                "expression detection selects the exact face and its authored baseline, excluding same-named siblings");
+            faceModel.ExpressionVisemeNames.Add("Existing");
+            Check(faceResolver.ExpressionFaceValues(bindings).Count == 0, "descriptor visemes excluded by exact shape name");
+            faceModel.ExpressionVisemeNames.Clear();
+            faceModel.MeshBindingPaths[0] = "Ambiguous";
+            Check(faceResolver.ExpressionFaceValues(bindings).Count == 0, "ambiguous face mesh does not fall back to a namesake");
             var avatar = new VrchatAvatar();
             string[] expected = { "Existing", "Stripped", "Unreferenced" };
             avatar.FbxBlendShapeNames["Face"] = expected;

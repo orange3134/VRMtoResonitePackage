@@ -1862,6 +1862,19 @@ public static class VrchatAvatarParser
         // FBX GUID/fileID so the imported renderer name is preserved.
         string visemeMesh = ResolveReferenceGameObjectName(package, scene, d?["VisemeSkinnedMesh"], modelResolvers);
         var visemeTarget = ResolveDescriptorMeshTarget(package, descriptorGuid, d?["VisemeSkinnedMesh"], avatar.FbxGuid);
+        // FaceEmo selects one face mesh: visemes, eyelids, then the direct Body child.
+        var faceReference = lipSync == 3 && (d?["VisemeSkinnedMesh"]?.FileID ?? 0) != 0
+            ? d["VisemeSkinnedMesh"]
+            : d?["customEyeLookSettings"]?["eyelidType"]?.AsInt() == 2 &&
+              (d["customEyeLookSettings"]["eyelidsSkinnedMesh"]?.FileID ?? 0) != 0
+                ? d["customEyeLookSettings"]["eyelidsSkinnedMesh"] : null;
+        avatar.ExpressionFaceTarget = faceReference == null ? null :
+            ResolveDescriptorMeshTarget(package, descriptorGuid, faceReference, avatar.FbxGuid);
+        avatar.ExpressionFacePath = faceReference == null ? "Body" : null;
+        if (faceReference != null && ResolveObjectIdentity(package, faceReference.Guid ?? descriptorGuid, faceReference.FileID ?? 0) ==
+            ResolveObjectIdentity(package, d["VisemeSkinnedMesh"]?.Guid ?? descriptorGuid, d["VisemeSkinnedMesh"]?.FileID ?? 0))
+            foreach (var shape in visemeShapes?.Seq ?? new())
+                if (!string.IsNullOrEmpty(shape.AsString())) avatar.ExpressionVisemeNames.Add(shape.AsString());
         // Explicit null is authored intent, not a failed lookup eligible for global fallback.
         if (lipSync == 3 && visemeShapes?.Seq != null && d?["VisemeSkinnedMesh"]?.FileID != 0)
         {

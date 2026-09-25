@@ -520,8 +520,12 @@ internal static class Converter
                 Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
 
                 if (!options.NoAvatar)
+                {
+                    Vrchat.VrchatExpressionDetection.FilterFaceCurves(avatar.Expressions,
+                        faceResolver.ExpressionFaceValues(avatar.Expressions.Clips.SelectMany(c => c.Curves).Select(c => c.Binding)));
                     await Expressions.ExpressionSystemSetup.BuildAsync(root, avatar.Expressions, faceResolver.ResolveExpression,
                         !options.NoExpressionMenu, faceResolver.InitialWeight);
+                }
 
                 Vrchat.VrchatSceneSetup.RemoveEmptyMeshTemplates(root, replacedTemplateSlots,
                     prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values)

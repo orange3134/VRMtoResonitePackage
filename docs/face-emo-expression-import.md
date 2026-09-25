@@ -96,3 +96,7 @@ ResoPon に適用する場合も、候補抽出と元 Animator の挙動再現�
 
 今回の調査では Unity EditMode テストは実行していない。上記件数は実行結果ではなく、
 既存テストに書かれた期待値である。
+
+## ResoPonへの適用
+
+検出処理の実装とFaceEmoとの違いは [表情システムの実装](expression-system.md#faceemo-に合わせた表情候補の検出) を参照。

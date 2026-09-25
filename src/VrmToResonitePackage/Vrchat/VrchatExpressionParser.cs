@@ -10,7 +10,9 @@ public static class VrchatExpressionParser
     public static ExpressionModel Parse(UnityPackage package, YamlNode descriptor, IReadOnlySet<string> possibleTargetNames = null,
         IEnumerable<YamlNode> modularComponents = null, IReadOnlySet<string> trackedEyePaths = null, IReadOnlySet<string> possibleShapeNames = null)
     {
-        var model = new ExpressionModel();
+        var model = new ExpressionModel { DetectedExpressions = new() };
+        var candidateIds = new HashSet<string>(StringComparer.Ordinal);
+        var detection = new VrchatExpressionDetection(modularComponents);
         var clips = new Dictionary<string, ExpressionClip>(StringComparer.Ordinal);
         var expressionClips = new HashSet<string>(StringComparer.Ordinal);
         var projectLayers = new List<Action>();
@@ -22,6 +24,8 @@ public static class VrchatExpressionParser
             if (asset.Extension != ".controller") { Warn($"{asset.LogicalPath}: unsupported controller type"); continue; }
             var scene = package.ReadScene(asset);
             var controller = scene.Documents.Values.FirstOrDefault(d => d.ClassId == 91)?.Root;
+            foreach (var candidate in detection.Collect(scene, controller, ReadClip))
+                candidateIds.Add(candidate.Id);
             foreach (var p in controller?["m_AnimatorParameters"]?.Seq ?? new())
             {
                 string name = p["m_Name"]?.AsString();
@@ -256,7 +260,9 @@ public static class VrchatExpressionParser
         }
         foreach (var project in projectLayers) project();
         ReadMenu(descriptor?["expressionsMenu"]?.Guid, model.Menu, new());
+        expressionClips.UnionWith(candidateIds);
         model.Clips.AddRange(expressionClips.Select(id => clips[id]));
+        model.DetectedExpressions.AddRange(candidateIds.Select(id => clips[id]));
         UniLog.Log($"Expression import: {model.Clips.Count} clips, {model.Layers.Count} layers, {model.Menu.Count} menu controls");
         return model;
 

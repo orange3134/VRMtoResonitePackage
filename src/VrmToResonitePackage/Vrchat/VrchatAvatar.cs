@@ -11,6 +11,9 @@ namespace VrmToResonitePackage.Vrchat;
 public sealed class VrchatAvatar
 {
     public Expressions.ExpressionModel Expressions { get; set; } = new();
+    public VrchatBoneTarget ExpressionFaceTarget { get; set; }
+    public string ExpressionFacePath { get; set; }
+    public HashSet<string> ExpressionVisemeNames { get; } = new(StringComparer.Ordinal);
     public List<VrchatPhysicsPlacement> PhysicsPlacements { get; } = new();
     /// <summary>Root prefab GameObject name (also the avatar/display name).</summary>
     public string Name { get; set; }

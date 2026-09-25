@@ -58,7 +58,7 @@ internal sealed partial class ExpressionSystemSetup
     public static Task<Slot> BuildAsync(Slot avatar, ExpressionModel model, Func<ExpressionBinding, IField<float>> resolve,
         bool menu = true, Func<IField<float>, float?> initialWeight = null)
     {
-        if (model.Clips.Count == 0) return Task.FromResult<Slot>(null);
+        if (model.Clips.Count == 0 || model.DetectedExpressions != null && model.Clips.All(c => c.Curves.Count == 0)) return Task.FromResult<Slot>(null);
         AvatarSetup.ImportAvatarRootIdentification(avatar);
         var setup = new ExpressionSystemSetup(avatar, model);
         setup.BuildCatalog(resolve, initialWeight);
@@ -120,7 +120,14 @@ internal sealed partial class ExpressionSystemSetup
         });
         foreach (string message in _model.Diagnostics.Skip(previousDiagnostics)) UniLog.Warning("Expressions: " + message);
         definitions.AddRange(_compiled.Generated);
-        foreach (var clip in definitions)
+        // Retain complete poses required by validated mappings (including reset curves).
+        // Unmapped candidates use FaceEmo-style differences from the authored baseline.
+        var mapped = _compiled.Pairs.Where(id => id != null).ToHashSet();
+        var catalog = _model.DetectedExpressions == null ? definitions : definitions
+            .Where(c => mapped.Contains(c.Id) || c.Id == neutral.Id)
+            .Concat(_model.DetectedExpressions.Where(c => definitions.Any(d => d.Id == c.Id)))
+            .Where(c => c.Curves.Count > 0).DistinctBy(c => c.Id).ToList();
+        foreach (var clip in catalog)
         {
             foreach (var curve in clip.Curves)
             {
