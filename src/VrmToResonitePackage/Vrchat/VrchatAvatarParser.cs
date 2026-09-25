@@ -1319,6 +1319,7 @@ public static class VrchatAvatarParser
             int byGuid = 0, bySignature = 0, strippedOwner = 0;
             foreach (YamlDocument mono in scene.MonoBehaviours)
             {
+                if (!IsAvatarDescriptor(mono)) continue;
                 if (mono.Root?["m_Script"]?.Guid == VrchatConstants.AvatarDescriptorScriptGuid)
                 {
                     byGuid++;
@@ -1396,12 +1397,15 @@ public static class VrchatAvatarParser
     }
 
     /// <summary>
-    /// True if a MonoBehaviour is a VRCAvatarDescriptor — either by its known script GUID or, so that
+    /// True if a MonoBehaviour is a VRCAvatarDescriptor — either by its known script GUID/type or, so that
     /// SDK-version GUID differences still work, by its characteristic serialized field signature.
     /// </summary>
     private static bool IsAvatarDescriptor(YamlDocument mono)
     {
-        if (mono.Root?["m_Script"]?.Guid == VrchatConstants.AvatarDescriptorScriptGuid)
+        // The SDK DLL GUID is shared with audio components; the fileID identifies the type.
+        // 11500000 also supports standalone MonoScript assets.
+        if (mono.Root?["m_Script"]?.Guid == VrchatConstants.AvatarDescriptorScriptGuid &&
+            mono.Root["m_Script"].FileID is 542108242 or 11500000)
         {
             return true;
         }

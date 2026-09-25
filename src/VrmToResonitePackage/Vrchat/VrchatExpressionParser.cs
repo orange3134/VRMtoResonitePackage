@@ -24,6 +24,12 @@ public static class VrchatExpressionParser
             if (asset.Extension != ".controller") { Warn($"{asset.LogicalPath}: unsupported controller type"); continue; }
             var scene = package.ReadScene(asset);
             var controller = scene.Documents.Values.FirstOrDefault(d => d.ClassId == 91)?.Root;
+            if (model.ImportedGestureSets != null) continue;
+            if (VrchatCacExpressionImporter.TryRead(scene, controller, asset.Guid, ReadClip, out var sets))
+            {
+                model.ImportedGestureSets = sets;
+                continue;
+            }
             foreach (var candidate in detection.Collect(scene, controller, ReadClip))
                 candidateIds.Add(candidate.Id);
             foreach (var p in controller?["m_AnimatorParameters"]?.Seq ?? new())
@@ -258,11 +264,21 @@ public static class VrchatExpressionParser
             model.Parameters["Gesture" + hand] = new("Gesture" + hand, 3, 0);
             model.Parameters["Gesture" + hand + "Weight"] = new("Gesture" + hand + "Weight", 1, 0);
         }
-        foreach (var project in projectLayers) project();
-        ReadMenu(descriptor?["expressionsMenu"]?.Guid, model.Menu, new());
-        expressionClips.UnionWith(candidateIds);
-        model.Clips.AddRange(expressionClips.Select(id => clips[id]));
-        model.DetectedExpressions.AddRange(candidateIds.Select(id => clips[id]));
+        if (model.ImportedGestureSets != null)
+        {
+            var ids = model.ImportedGestureSets.SelectMany(s => s.States).Select(s => s.ClipId)
+                .Where(id => id != null).Distinct();
+            model.Clips.AddRange(ids.Select(id => clips[id]));
+            VrchatCacExpressionImporter.SelectFirstSet(model, pruneClips: false);
+        }
+        else
+        {
+            foreach (var project in projectLayers) project();
+            ReadMenu(descriptor?["expressionsMenu"]?.Guid, model.Menu, new());
+            expressionClips.UnionWith(candidateIds);
+            model.Clips.AddRange(expressionClips.Select(id => clips[id]));
+            model.DetectedExpressions.AddRange(candidateIds.Select(id => clips[id]));
+        }
         UniLog.Log($"Expression import: {model.Clips.Count} clips, {model.Layers.Count} layers, {model.Menu.Count} menu controls");
         return model;
 

@@ -12,6 +12,9 @@ public sealed class ExpressionModel
     // from clips needed to validate and compile the original Animator routes.
     public List<ExpressionClip> DetectedExpressions { get; set; }
     public List<ExpressionLayer> Layers { get; } = new();
+    // Ordered authored sets; null uses ordinary Animator import. Face binding resolution
+    // selects the first nonempty set before exporting, so later sets cannot leak into Catalog.
+    public List<ExpressionLayer> ImportedGestureSets { get; set; }
     public List<ExpressionMenuControl> Menu { get; } = new();
     public List<string> Diagnostics { get; } = new();
 }

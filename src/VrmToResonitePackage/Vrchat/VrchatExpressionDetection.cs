@@ -97,11 +97,12 @@ internal sealed class VrchatExpressionDetection
     public static void FilterFaceCurves(ExpressionModel model, IReadOnlyDictionary<ExpressionBinding, float> values)
     {
         if (model.DetectedExpressions == null) return;
+        foreach (var clip in model.Clips) clip.Curves.RemoveAll(c => !values.ContainsKey(c.Binding));
+        if (model.ImportedGestureSets != null) VrchatCacExpressionImporter.SelectFirstSet(model, pruneClips: true);
         var candidates = model.DetectedExpressions.Select(c => c.Id).ToHashSet();
         model.DetectedExpressions.Clear();
         foreach (var clip in model.Clips)
         {
-            clip.Curves.RemoveAll(c => !values.ContainsKey(c.Binding));
             if (!candidates.Contains(clip.Id)) continue;
             var difference = new ExpressionClip { Id = clip.Id, Name = clip.Name, Source = clip.Source,
                 Duration = clip.Duration, Loop = clip.Loop };

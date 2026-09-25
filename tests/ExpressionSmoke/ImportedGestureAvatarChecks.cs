@@ -34,9 +34,9 @@ internal static class ImportedGestureAvatarChecks
         }
         for (int i = 0; i < 6; i++) await default(NextUpdate);
         ExpressionGraphChecks.CheckLayout(root);
+        string current = ExpressionPackageSnapshot.Capture(root, Path.Combine(artifacts, "current-expressions"));
         if (baselinePackage != null)
         {
-            string current = ExpressionPackageSnapshot.Capture(root, Path.Combine(artifacts, "current-expressions"));
             var baseline = world.LocalUser.Root.Slot.AddSlot("Baseline gesture avatar");
             await PackageImporter.ImportPackage(baselinePackage, baseline);
             await default(ToWorld);

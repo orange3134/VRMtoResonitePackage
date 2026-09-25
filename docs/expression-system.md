@@ -387,7 +387,7 @@ MA Absolute/Append から追加されたFXも既存の入力合成経路を通�
 `GestureLeft` / `GestureRight` の Equals 条件がない分岐では、bool条件だけのトグル、
 Contact Receiver のパラメーター条件、PhysBone の条件・Motion Time を候補から除く。
 通常の BlendTree は最後の子を辿り、Fist の Motion Time では最初の子も候補として残す。
-補間・握り込みの連続動作は再現しない。専用CAC形式の14個単位の再配置や、FaceEmo設定の
+補間・握り込みの連続動作は再現しない。FaceEmo設定の
 AdditionalSkinnedMeshes／ExcludedBlendShapesの取り込みは行わない。
 
 顔メッシュは Descriptor の VisemeBlendShape用メッシュ、Blendshapesのまぶた用メッシュ、
@@ -415,6 +415,37 @@ Catalogには検出候補・検証済みのジェスチャー対応表が参照�
 イベント由来の除外、BlendTreeの末尾、初期値差分、同名の顔以外のシェイプ、Catalogと
 64通りの割り当てを検証する。`NamedShapeRepairChecks` は実メッシュによる参照の一致、
 初期ウェイト、Viseme除外、曖昧な同名Rendererの拒否も検証する。
+
+### CAC形式の最初の表情セット
+
+`VrchatCacExpressionImporter` はFaceEmoの `GetCacLayer` / `ImportCac` に合わせ、
+子StateMachineのEntry遷移が `SYNC_EM_EMOTE` を参照する最初のFXレイヤーを優先する。
+ミュートされていない単一条件の直接State遷移を番号順に並べ、`(番号 - 1) / 14` ごとに
+セットを作る。入力の健全性確認としてEqualsと正の整数番号を要求する。
+顔Rendererとの照合後、顔カーブを含む最初のセットだけをResoPonへ出力する。
+後続セットのクリップ・別レイヤー・Expression Menuからの候補をCatalogへ追加しない。
+最初のセットの欠番は後続セットで補完しない。
+
+各セット内の1〜7を右手、8〜14を左手のFist〜ThumbsUpに対応させる。
+FaceEmoの分岐順と同様、両手が一致する場合は右手を優先し、該当分岐がなければ左手、
+どちらにも一致しなければアバターの初期姿勢を使う。FistのMotion Timeは握り切った
+終端値を使う。通常のBlendTreeは末尾の子を辿る。元のWrite Defaults、Input Converter、
+ロック、Parameter Driverの副作用は、この専用取り込みでは評価しない。
+連続的な握り込み・動的なセット変更・表情ごとの追跡制御は再現せず、既存の追跡方式を使う。
+採用したセットと分岐数は `FaceEmo CAC:` の診断に残す。
+
+Sanatia 1.11はこの形式で、従来の汎用Animator解析では入れ子・State Behaviour等により
+表情PLAYER層が除外され、割り当てが0/64だった。専用取り込みにより最初の14分岐を選び、
+初期姿勢を含む64/64を割り当てる。`CacExpressionChecks` は逆順に格納した2セットを使い、
+番号順・左右の優先順位・終端値・非顔カーブ／ミュートの除外・後続セットの分離を検証する。
+実Sanatiaの変換・inspect・保存後の全64組の再生を確認し、31出力×64組（1,984項目）が
+元の第1セットの末尾値と初期姿勢に一致した。左右7種は同じ姿勢なので、初期姿勢を含めた
+見た目の種類は8。Catalogの元クリップは第1セットの14件だけで、後続セットは含まれない。
+
+SanatiaにはDescriptorと同じVRCSDK3A.dllのGUIDを持つ音声コンポーネントも含まれる。
+アバター候補判定はGUIDだけでなくScriptのfileIDも確認する。DLL内Descriptorは542108242、
+単独MonoScriptは11500000を認め、SDK差異用のDescriptor固有フィールド判定も維持する。
+
 ## 変換時の判定と制限
 
 `GesturePairCompiler` は左右64通りについて、すべての開始状態から遷移をたどる。
