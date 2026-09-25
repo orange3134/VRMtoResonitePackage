@@ -413,6 +413,7 @@ AvatarMask、StateMachineBehaviour、Exit や遷移中断も一般には対象�
 既知の Parameter Driver を許容する。AFK は false へ固定し、履歴保持や Behaviour の副作用、
 追跡切り替え、元の遷移時間は再現しない。詳細と検証条件は後述の回帰事例を参照。
 FaceEmo の `ExpressionImporter.GetFaceAnimation` を参考に、表情カーブの検出を他のトラックの対応可否から分離する。
+参照元の検出手順と制約は [FaceEmo の既存表情検出](face-emo-expression-import.md) に記録している。
 材質・物体・Transform・参照値のトラックが混在していても、有効な `blendShape.*` 曲線は保持し、
 除外したトラックの種類・対象を Diagnostics へ記録する。顔曲線が残らない非対応トラックだけの Clip は
 通常表情として扱わない。元から空の Clip、完全な入力集合で不存在と確認できた対象への無作用曲線、
