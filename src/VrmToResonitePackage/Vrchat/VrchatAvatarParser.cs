@@ -217,83 +217,10 @@ public static class VrchatAvatarParser
         }
         var expressionDescriptor = VrchatModularExpressionInputs.Create(effectiveDescriptor.Root, expressionComponents);
         VrchatAnimatorFaceParser.Apply(package, expressionDescriptor, avatar);
-        var trackedEyePaths = new[] { avatar.LeftEyeBoneTarget?.Path, avatar.RightEyeBoneTarget?.Path }
-            .Where(path => !string.IsNullOrEmpty(path)).ToHashSet(StringComparer.Ordinal);
-        avatar.Expressions = VrchatExpressionParser.Parse(package, expressionDescriptor, ExpressionTargetNames(package, avatar), expressionComponents, trackedEyePaths, ExpressionPossibleShapes(package, avatar));
+        avatar.Expressions = VrchatExpressionParser.Parse(package, expressionDescriptor, expressionComponents);
         ParsePhysics(package, selected.Source.Guid, avatar);
         ParseModularAvatarComponents(package, selected.Source.Guid, avatar);
         return avatar;
-    }
-
-    private static IReadOnlySet<string> ExpressionPossibleShapes(UnityPackage package, VrchatAvatar avatar)
-    {
-        if (package.PrefabGraph == null) return null;
-        var models = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { avatar.FbxGuid };
-        models.UnionWith(avatar.AdditionalFbxs.Select(f => f.Guid));
-        bool IncludeMesh(YamlNode reference)
-        {
-            if ((reference?.FileID ?? 0) == 0) return true;
-            var asset = package.ByGuid(reference.Guid);
-            if (asset?.HasContent != true || asset.Extension != ".fbx") return false;
-            models.Add(asset.Guid);
-            return true;
-        }
-        foreach (var entry in package.PrefabGraph.Scenes)
-        {
-            // Native/embedded meshes and incomplete prefab graphs cannot prove absence.
-            if (entry.Scene.Documents.Values.Any(d => d.ClassId == 43)) return null;
-            foreach (var renderer in entry.Scene.MeshRenderers)
-                if (!IncludeMesh(entry.Scene.RendererMesh(renderer))) return null;
-            foreach (var instance in entry.Scene.Documents.Values.Where(d => d.ClassId == 1001))
-            {
-                var source = package.ByGuid(instance.Root?["m_SourcePrefab"]?.Guid);
-                if (source?.HasContent != true) return null;
-                if (source.Extension == ".fbx") models.Add(source.Guid);
-                else if (source.Extension is not (".prefab" or ".unity")) return null;
-            }
-        }
-        foreach (var modification in package.PrefabGraph.Modifications)
-            if (modification.Value["propertyPath"]?.AsString() == "m_Mesh" &&
-                !IncludeMesh(modification.Value["objectReference"])) return null;
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (string guid in models)
-        {
-            if (package.ByGuid(guid)?.HasContent != true || package.ByGuid(guid).Extension != ".fbx" ||
-                package.ModelFileIds(guid).PossibleBlendShapeNames is not { } modelNames) return null;
-            names.UnionWith(modelNames);
-        }
-        return names;
-    }
-    private static IReadOnlySet<string> ExpressionTargetNames(UnityPackage package, VrchatAvatar avatar)
-    {
-        if (package.PrefabGraph == null) return null;
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        var models = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { avatar.FbxGuid };
-        models.UnionWith(avatar.AdditionalFbxs.Select(f => f.Guid));
-        foreach (var entry in package.PrefabGraph.Scenes)
-        {
-            foreach (var go in entry.Scene.GameObjects)
-                if (go.Root?["m_Name"]?.AsString() is string name) names.Add(name);
-            foreach (var instance in entry.Scene.Documents.Values.Where(d => d.ClassId == 1001))
-            {
-                var asset = package.ByGuid(instance.Root?["m_SourcePrefab"]?.Guid);
-                if (asset?.HasContent != true) return null; // Incomplete hierarchy cannot prove absence.
-                if (asset.Extension == ".fbx") models.Add(asset.Guid);
-                else if (asset.Extension is not (".prefab" or ".unity")) return null;
-            }
-        }
-        // Include rename overrides even when the target still lives inside an FBX.
-        foreach (var modification in package.PrefabGraph.Modifications)
-            if (modification.Value["propertyPath"]?.AsString() == "m_Name" &&
-                modification.Value["value"]?.AsString() is string name) names.Add(name);
-        foreach (string guid in models)
-        {
-            if (package.ByGuid(guid)?.HasContent != true) return null;
-            var modelNames = package.ModelFileIds(guid).NodeNamesUnder(0).ToArray();
-            if (modelNames.Length == 0) return null;
-            names.UnionWith(modelNames);
-        }
-        return names;
     }
 
     private static void ParseFbxBlendShapeNames(UnityPackage package, VrchatAvatar avatar)

@@ -38,31 +38,4 @@ internal static class VrchatModularExpressionInputs
         UniLog.Log($"Expressions: imported {merged.Count} MA Merge Animator FX controller(s) from the selected avatar.");
         return result;
     }
-    internal static void ApplyDefaults(ExpressionModel model, IEnumerable<YamlNode> components)
-    {
-        var assigned = new Dictionary<string, float>();
-        foreach (var component in components ?? Enumerable.Empty<YamlNode>())
-        {
-            if (component["m_Script"]?.Guid != "71a96d4ea0c344f39e277d82035bf9bd" || component["m_Enabled"]?.AsBool() == false) continue;
-            foreach (var config in component["parameters"]?.Seq ?? new())
-            {
-                string name = config["nameOrPrefix"]?.AsString();
-                if (string.IsNullOrEmpty(name)) continue;
-                if (config["isPrefix"]?.AsBool() == true || config["internalParameter"]?.AsBool() == true ||
-                    !string.IsNullOrEmpty(config["remapTo"]?.AsString()))
-                {
-                    UniLog.Warning("Expressions: scoped/remapped MA parameter default is not imported: " + name);
-                    continue;
-                }
-                float value = config["defaultValue"]?.AsFloat(float.NaN) ?? 0;
-                if (!float.IsFinite(value) || config["hasExplicitDefaultValue"]?.AsBool() != true && Math.Abs(value) <= 0.000001f) continue;
-                if (assigned.TryGetValue(name, out float previous) && Math.Abs(previous - value) > 0.000001f)
-                    throw new InvalidDataException("Conflicting MA expression parameter defaults: " + name);
-                assigned[name] = value;
-                int type = config["syncType"]?.AsInt() switch { 1 => 3, 2 => 1, 3 => 4, _ => 0 };
-                if (model.Parameters.TryGetValue(name, out var parameter)) model.Parameters[name] = parameter with { Default = value };
-                else if (type != 0) model.Parameters[name] = new(name, type, value);
-            }
-        }
-    }
 }

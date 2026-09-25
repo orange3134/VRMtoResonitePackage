@@ -172,63 +172,26 @@ table, without chained OR/conditional nodes. Layout checks require their inputs 
 follow port order in the adjacent column, including in saved/reloaded real-mesh fixtures
 and imported avatars.
 
-`GestureRouterChecks` covers an empty default dispatcher, ordered hand conditions,
-exit-only complete poses, all 64 pairs and rejected unsafe router structures.
-`NamedShapeRepairChecks` restores only source-FBX shapes requested by an exact,
-unique expression renderer path; it checks retained weights, same-named siblings,
-ambiguous paths, missing source names, empty restored frames and idempotence.
+`NormalExpressionPatternChecks` verifies FaceEmo's first normal pattern against an
+independent all-64 pose oracle: reverse FX layer priority, stable hand/gesture sorting,
+shadowed branches moved to later patterns, neutral constraints, manual candidates,
+exact face/baseline filtering before pattern selection, event exclusions and BlendTree endpoints.
+It replaces the old router-specific checks. Entry/Exit, nested machines, Write Defaults,
+parameter defaults, Set/non-Set drivers, playback speed and transition timing are now
+explicitly tested as irrelevant to FaceEmo extraction instead of grounds for rejecting a layer.
+MA Absolute/Append continues to supply FX to the same importer.
 
-`EntryGestureRouterChecks` validates two flat Entry/Exit hand selectors over all 64
-pairs, right-layer priority, empty-motion base/lower-layer fallback, humanoid-only
-masks and recognized eye/mouth tracking controls. Negative cases reject latches,
-cycles, timed exits, partial poses, unresolved assets and unsupported behaviours.
-`NamedShapeRepairChecks` also verifies FBX channel-name restoration preserves real
-vertex deltas and weights, stays within the source renderer path, and rejects name
-collisions atomically. PrefabInputSmoke covers binary FBX Shape-to-Channel links,
-shared geometry, connection ordering, scoped defaults and ambiguous aliases.
-`WeightedCurveChecks` compares weighted Unity segments and exported AnimX against
-an independent parametric Bezier oracle, including overshoot, zero weights,
-unweighted defaults, stepped segments and atomic rejection of invalid or
-unrepresentable curves. Entry selector checks also cover AFK=false specialization,
-non-selection parameter drivers and differing Write Defaults-on binding sets.
+`CacExpressionChecks` verifies the first numbered 14-entry CAC set, all 64 pairs,
+right-hand priority, grip endpoint, muted/missing/non-face branches and later-set isolation.
+`FaceExpressionDetectionChecks` covers conditionless/nested/zero-weight candidates,
+Contact/PhysBone/bool-toggle exclusions, baseline differences and Catalog reset values.
+`MixedExpressionClipChecks` covers mixed tracks, ignored events/playback settings and
+malformed face data. `WeightedCurveChecks` retains its independent Bezier oracle.
+`NamedShapeRepairChecks` verifies exact renderer identity, source-FBX channel names,
+retained weights, aliases, missing names, ambiguous paths and idempotence.
 
-`DefaultGestureRouterChecks` covers authored int/bool/float defaults without menus,
-ExpressionParameters precedence, initial-state/dispatcher chains, ordered left/right
-selection over all 64 pairs, inactive unsupported clips and explicit driver-side-effect
-projection. Unknown defaults, hand-mutating drivers, selected unsupported clips,
-timed transitions and cycles are rejected. Entry selector checks ensure an authored
-AFK=true default takes precedence over the legacy AFK=false approximation.
-
-IndirectGestureRouterChecks covers zero-weight hand input layers that Set a shared
-face parameter, nested consumer Entry selectors, ExpressionParameters defaults,
-all 64 canonical hand pairs, and rejection of non-Set writers, extra writers,
-animated inputs, unknown clocks, unsafe hierarchy references and active/timed routes.
-Active hands take precedence over neutral; later controller layers win simultaneous
-active hands. Last-changed-hand history is deliberately not preserved.
-
-The imported-package pose check temporarily freezes OriginalDriver inputs at the authored
-Baseline while keeping the exported tracking mixer enabled. Expected output includes
-TrackingWeight and BlinkMode; automatic blink timing must not cause a false pose mismatch.
-Live native blink/viseme behavior remains covered by the separate synthetic tracking checks.
-
-
-DefaultGestureRouterChecks and CompilerChecks cover zero-speed gesture-weight motion time
-(Eku), both hand clocks, final values of changing curves, and rejection of stopped
-playback without a known position parameter or non-finite speeds.
-
-DrivenGestureRouterChecks covers MA Absolute/Append discovery, parameter defaults, reversed-order
-zero-weight Set cascades, nested local-user selection, all 64 output values, and rejection
-of unsafe writes, missing poses, foreign destinations, timed routes and animated parameters.
-
-`MixedExpressionClipChecks` verifies extraction of blendshape curves from mixed
-transform/material/object/reference tracks, omission diagnostics, malformed face
-data rejection and existing empty/no-op clip behavior.
-`GesturePoseGraphChecks` covers neutral Any State cycles, multiple empty relays,
-shared-clip states, Entry/Exit and ordered comparison conditions across all 64
-pairs. Distinct-pose cycles, empty cycles, unknown motions/behaviors, hand-mutating
-drivers, timed routes and previous-state latches remain rejected.
-
-FaceEmo-style detection checks cover conditionless, nested and zero-weight layer candidates,
-Contact/PhysBone/bool-toggle exclusions, BlendTree endpoints, exact face renderer identity,
-authored baseline differences, viseme exclusion, and catalog filtering without dropping
-reset curves required by validated gesture mappings.
+For real avatars, the optional imported-package check saves `current-expressions/expressions.json`
+and replays all 64 menu pairs against actual mesh output fields. OriginalDriver inputs are
+stabilized at the authored Baseline while the exported tracking mixer stays enabled.
+Independent source-clip checks can use the snapshot without assuming runtime slot IDs.
+Native blink/viseme behavior is covered separately by synthetic tracking tests.

@@ -6,7 +6,7 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 左右それぞれの現在のジェスチャーを 0〜7 の整数で保持し、
 `LeftGesture * 8 + RightGesture` で64通りの対応表を引く。
 対応表で選んだ表情の各トラックの終端値へ即座に切り替え、固定ポーズとして保持する。
-VRChat のカスタム FX Animator から、対応する条件とレイヤーを変換時に評価する。
+VRChatのカスタムFXからFaceEmo基準で最初の表情パターンを読み取り、対応表へ変換する。
 左右64通りへ静的に変換する方式であり、Animator 全体や汎用パラメーターの状態機械は生成しない。
 標準コンポーネントと ProtoFlux で動作し、利用側に ResoPon の DLL は不要。
 
@@ -269,7 +269,7 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
   Grip/Trigger の押し込み・解放しきい値と安定待ち時間を機種ごとに編集できる。
   指を個別に取得できない機種の Victory/Rock はボタン操作から判定する。
 
-直接表情を選ぶ `Select expression` と Imported menu は、対応表に存在する有効な表情だけを表示する。
+直接表情を選ぶ `Select expression` は、対応表に存在する有効な表情だけを表示する。
 選択すると、現在の対応表を逆引きして該当する左右値を両方更新し、`ExpressionCore/AllowExternalInput=false` にする。
 同じ表情に複数の組がある場合は `PairIndex` が最小の組を使う。
 Catalog の Slot を固定用に保持する Override 変数は生成しない。
@@ -278,7 +278,7 @@ Catalog の Slot を固定用に保持する Override 変数は生成しない�
 モードだけの変更では左右値を変えない。初期値は true。
 メニューから表情を選ぶと再び false になるため、通常入力へ戻すには許可をオンにする。
 コンテキストメニューの左右項目・直接選択は bool が false でも使える。
-元の ExpressionMenu の Button/Toggle は、このメニュー専用選択へ変換する。
+元のExpression MenuのButton/Toggleは読み込まない。
 
 ### コントローラーのハンドサイン判定
 
@@ -379,118 +379,75 @@ Dynamic Impulse はネットワーク RPC ではなく、装着者以外のク�
 
 ## FaceEmo に合わせた表情候補の検出
 
-`VrchatExpressionDetection` は、Animator の自動割り当ての可否とは独立して候補を収集する。
-FX の全レイヤー（ウェイト0を含む）の Default、Entry、Any State、各 State の遷移先を調べ、
-子 StateMachine も辿る。遷移で参照されない非Defaultの State は候補にしない。
-MA Absolute/Append から追加されたFXも既存の入力合成経路を通して対象になる。
+VRChatの表情読み込みは `VrchatFaceEmoExpressionImporter` に一本化している。
+`VrchatExpressionParser` は顔カーブを読むだけで、従来のAnimator遷移評価、Entry/Exit投影、
+既定パラメーター固定、間接ハンド入力、Setドライバー連鎖、入れ子バンクの専用ルーターは削除した。
+Expression Menu、Expression Parameters、MA Parametersから表情セットを選ぶ処理もない。
+MA Absolute/Appendは入力FXを順番に並べるためだけに使い、追加FXも同じFaceEmo基準で読む。
+VRMの規格上の表情定義と、変換後のResonite側の入力・出力グラフは別の責務として維持する。
+参照したFaceEmoの実装は [既存表情検出の調査](face-emo-expression-import.md) を参照。
 
-`GestureLeft` / `GestureRight` の Equals 条件がない分岐では、bool条件だけのトグル、
-Contact Receiver のパラメーター条件、PhysBone の条件・Motion Time を候補から除く。
-通常の BlendTree は最後の子を辿り、Fist の Motion Time では最初の子も候補として残す。
-補間・握り込みの連続動作は再現しない。FaceEmo設定の
-AdditionalSkinnedMeshes／ExcludedBlendShapesの取り込みは行わない。
+顔はDescriptorのViseme用メッシュ、Blendshapesのまぶた用メッシュ、ルート直下の `Body` の
+順に選ぶ。追加顔メッシュ・FaceEmo設定のExcludedBlendShapesは未対応。
+`BlendshapeResolver.ExpressionFaceValues` が実Rendererの同一性と曲線のパスを照合する。
+DescriptorのViseme名と既知の `vrc.v_*` 名を除外し、まばたきは含める。
+アバターに設定された初期ウェイトは追跡ドライバーの設定前に保存する。
+メッシュ照合前の `--vrchat-dump` は仮の結果で、最初のセットの確定と後続クリップの削除は
+`VrchatExpressionDetection.FilterFaceCurves` で行う。比較にはUnityのApproximately相当を使う。
 
-顔メッシュは Descriptor の VisemeBlendShape用メッシュ、Blendshapesのまぶた用メッシュ、
-ルート直下の `Body` の順で選ぶ。これはFaceEmoの既定の自動選択に合わせた規則。
-Descriptor参照を解決できない場合、別の同名メッシュへは割り当てない。
-選択結果は既存のPrefab／FBXのオブジェクト参照として保持し、インポート後の
-`BlendshapeResolver.ExpressionFaceValues` で実Rendererと曲線のパスを照合する。
-そのため静的な `--vrchat-dump` の候補数は、実メッシュとの照合後の確定数とは異なる。
+### 通常形式の最初の表情セット
 
-選択された顔メッシュの曲線に限定し、DescriptorのViseme名（選択顔と同じ参照の場合）と
-`vrc.v_aa` など既知のViseme名を含むシェイプを除外する。まばたきは候補に含める。
-Prefab／FBXの初期ウェイト適用後、AvatarSetupの追跡ドライバー設定前に保存した値と
-各キーを比較し、初期値と同じ曲線を候補から省く。差分がないクリップは独立候補にしない。
-確定数は変換ログの `Face expression detection:` に出力する。
+FaceEmoの `ImportNormal` / `GetBranches` / `GetBranch` / `DivideMode` に合わせて読む。
 
-`ExpressionModel.Clips` はAnimatorを検証・合成するための入力、`DetectedExpressions` は
-独立した表情候補。顔以外の曲線は両方から取り除くが、元レイヤーの明示的な初期値への
-リセット曲線は `Clips` に残す。これを候補と同じように省くと、上位レイヤーのリセットが
-下位レイヤーの表情を通してしまうためである。
-Catalogには検出候補・検証済みのジェスチャー対応表が参照するポーズ・基準姿勢を出力する。
-未割当候補は初期値との差分だけを持ち、対応表が使うポーズはリセット値も保持する。
-候補を検出しただけではハンドジェスチャーへ割り当てず、以下の既存検証を通す。
+- 各FXレイヤーのDefault、Entry、Any State、各Stateの遷移先と子StateMachineを調べる。
+  muteされた遷移、直接Stateを指さない遷移、顔Motionを持たない分岐は除く。
+- 条件は左右GestureのEqualsだけを残す。片手Neutral条件には反対の手のNeutralも加える。
+  ジェスチャー条件がなければbool条件だけのトグル、Contact、PhysBone由来の分岐を除く。
+- レイヤー内では最初の条件の手（左→右）とジェスチャー番号で安定ソートし、
+  レイヤー間では後ろのFXを優先する。元のウェイト・マスク・Write Defaultsは評価しない。
+- 顔の初期値との差分がない通常分岐は除外する。各左右組合せで最初に一致する分岐を選び、
+  全組合せで隠れる条件付き分岐は後続パターンに相当するため出力しない。
+- 条件なしの表情はFaceEmoと同様、アニメーションの同一性で重複を除いて第1パターンの
+  Catalog候補に残す。条件なし分岐はハンドサインのフォールバックにはならない。
 
-`ExpressionSmoke` の `FaceExpressionDetectionChecks` は条件なし／子StateMachine／ウェイト0、
-イベント由来の除外、BlendTreeの末尾、初期値差分、同名の顔以外のシェイプ、Catalogと
-64通りの割り当てを検証する。`NamedShapeRepairChecks` は実メッシュによる参照の一致、
-初期ウェイト、Viseme除外、曖昧な同名Rendererの拒否も検証する。
+最初のパターンだけをResoPonの表情セットにする。通常形式の分岐数は必ずしも14ではない。
+未一致のジェスチャーはアバターの初期姿勢に戻す。元クリップの名前を使うので、
+PlumとSanatiaでCatalogの項目名が同じになるわけではない。
 
 ### CAC形式の最初の表情セット
 
-`VrchatCacExpressionImporter` はFaceEmoの `GetCacLayer` / `ImportCac` に合わせ、
-子StateMachineのEntry遷移が `SYNC_EM_EMOTE` を参照する最初のFXレイヤーを優先する。
-ミュートされていない単一条件の直接State遷移を番号順に並べ、`(番号 - 1) / 14` ごとに
-セットを作る。入力の健全性確認としてEqualsと正の整数番号を要求する。
-顔Rendererとの照合後、顔カーブを含む最初のセットだけをResoPonへ出力する。
-後続セットのクリップ・別レイヤー・Expression Menuからの候補をCatalogへ追加しない。
-最初のセットの欠番は後続セットで補完しない。
+FaceEmoの `GetCacLayer` と同じく、子StateMachineのEntry条件が `SYNC_EM_EMOTE` を参照する
+最初のレイヤーを見つけたら通常形式の収集を置き換える。
+単一条件・直接State・未muteの遷移を番号順に並べ、`(番号 - 1) / 14` ごとにセットを作る。
+入力の健全性確認としてEqualsと正の整数番号を要求する。顔Motionを含む最初のセットだけを使い、
+1〜7を右手、8〜14を左手のFist〜ThumbsUpへ割り当てる。右手が優先で、欠番は後続セットで補わない。
+CACではFaceEmo同様、顔Motionがあるが初期値との差分がない分岐も初期姿勢として有効にする。
+Sanatia 1.11はこの形式で、第1セットの左右7種類は同じ姿勢、初期姿勢を含めた見た目は8種類。
 
-各セット内の1〜7を右手、8〜14を左手のFist〜ThumbsUpに対応させる。
-FaceEmoの分岐順と同様、両手が一致する場合は右手を優先し、該当分岐がなければ左手、
-どちらにも一致しなければアバターの初期姿勢を使う。FistのMotion Timeは握り切った
-終端値を使う。通常のBlendTreeは末尾の子を辿る。元のWrite Defaults、Input Converter、
-ロック、Parameter Driverの副作用は、この専用取り込みでは評価しない。
-連続的な握り込み・動的なセット変更・表情ごとの追跡制御は再現せず、既存の追跡方式を使う。
-採用したセットと分岐数は `FaceEmo CAC:` の診断に残す。
-
-Sanatia 1.11はこの形式で、従来の汎用Animator解析では入れ子・State Behaviour等により
-表情PLAYER層が除外され、割り当てが0/64だった。専用取り込みにより最初の14分岐を選び、
-初期姿勢を含む64/64を割り当てる。`CacExpressionChecks` は逆順に格納した2セットを使い、
-番号順・左右の優先順位・終端値・非顔カーブ／ミュートの除外・後続セットの分離を検証する。
-実Sanatiaの変換・inspect・保存後の全64組の再生を確認し、31出力×64組（1,984項目）が
-元の第1セットの末尾値と初期姿勢に一致した。左右7種は同じ姿勢なので、初期姿勢を含めた
-見た目の種類は8。Catalogの元クリップは第1セットの14件だけで、後続セットは含まれない。
+両形式とも、後続セットと無関係なFX・メニュー由来のクリップはCatalogに混ぜない。
+採用したセット・ジェスチャー分岐数・手動候補数は `FaceEmo normal:` / `FaceEmo CAC:` に残す。
+元クリップとコンパイルした固定ポーズが両方Catalogに存在することはある。
+対応表に割り当てた表情だけをメニューへ表示する既存ルールは維持する。
 
 SanatiaにはDescriptorと同じVRCSDK3A.dllのGUIDを持つ音声コンポーネントも含まれる。
-アバター候補判定はGUIDだけでなくScriptのfileIDも確認する。DLL内Descriptorは542108242、
-単独MonoScriptは11500000を認め、SDK差異用のDescriptor固有フィールド判定も維持する。
+アバター候補はGUIDとScriptのfileIDを確認する。DLL内Descriptorは542108242、単独MonoScriptは
+11500000を認め、SDK差異用のDescriptor固有フィールド判定も維持する。
 
 ## 変換時の判定と制限
 
-`GesturePairCompiler` は左右64通りについて、すべての開始状態から遷移をたどる。
-元の遷移順序を使い、行き着く状態が一意になる組み合わせだけを割り当てる。
-履歴により結果が変わる、または循環する組み合わせは未設定として診断する。
-パーサーの既定条件ルーターが検証した単一ポーズと空中継の循環は、後述の静的抽出で先に解消する。
+選ばれたFaceEmo分岐を、順序付き条件と初期姿勢だけを持つ単一レイヤーへ正規化する。
+`GesturePairCompiler` はこのレイヤーから64通りの固定ポーズを作る。同じ結果は再利用する。
+これは元Animatorのグラフ・履歴・ドライバー副作用・既定値を再現する処理ではない。
 
-元のレイヤー順と重み、Write Defaults による既定値を使い、選ばれたクリップを変換時に合成する。
-同じ結果は再利用する。単一の動画、定数ポーズとの合成、時間・キー配置・補間が一致する動画の合成では
-Hermite 曲線を保持する。固定の正の再生速度もキー時刻と接線へ反映する。
-ベース値は変換時のアバターの値を用いる。
-上位レイヤーの空 Motion や、その状態でアニメーションされない出力は下位レイヤーの値を引き継ぐ。
-右手が Neutral のときに、左手の表情を既定値で上書きしない。
+FaceEmoのIsFaceMotionに合わせ、BlendTreeの候補判定は直下の最初と最後のAnimationClipを使う。
+採用する通常ポーズは末尾の子を辿る。FistかつMotion Time有効の分岐では先頭と末尾も調べ、
+離散ハンドサイン用の姿勢には握り切った末尾値を使う。Motion Timeのパラメーター名は限定しない。
+連続的な握り込み、動的セット変更、表情ごとの追跡制御は再現せず、既存のResonite追跡方式を使う。
 
-ハンドサイン選択に追加条件がある場合は、宣言された int/bool/float パラメーターの初期値へ固定して
-デフォルトモードの対応表を生成する。メニューへの掲載は条件にしない。
-コントローラーの初期値を読み、VRC Expression Parameters の指定を優先する。例えば Plum の
-`FacialSet=0`、NoraMiaree の `Face_Emote=1` / `Face_Negative=0` がそのまま選ばれる。
-使用した固定値は Diagnostics と変換ログへ記録し、実行時の表情セット切り替えは生成しない。
-未宣言、非有限値、Trigger の初期値は推測しない。ハンドサインを参照しない衣装などのレイヤーを
-この規則だけでハンドサインへ追加することもない。
-`GestureLeftWeight` / `GestureRightWeight` が Motion Time に使われる場合は、
-8種類の離散入力向けに最大値1の位置を固定ポーズとして取り込む。握り込みの連続変化は再現しない。
-元クリップに対応する固定ポーズは Catalog に残す。対応表へ割り当てた表情だけをメニューから選択できる。
-
-Exit Time、再生オフセット、上記の固定化で扱えないパラメーター・GestureWeight 条件が必要なレイヤー、
-履歴に依存する Write Defaults、解決できない出力は自動割り当ての対象外。
-ループや長さが異なる動画の同時合成、合成できないキー配置も診断する。
-対応する独立クリップは Catalog に残し、手動で割り当てられる。
-パーサー側では BlendTree、ネスト、加算レイヤー、Puppet、Sub-Menu の開閉パラメーターを自動再現しない。
-AvatarMask、StateMachineBehaviour、Exit や遷移中断も一般には対象外だが、空の振り分けステートと
-完全な顔ポーズ、または平坦な Entry/Exit 選択器は、経路を検証できる場合に限り対応表へ投影する。
-後者では Transform を含まないマスクと既知の眼・口 Tracking Control、選択条件を書き換えない
-既知の Parameter Driver を許容する。AFK は false へ固定し、履歴保持や Behaviour の副作用、
-追跡切り替え、元の遷移時間は再現しない。詳細と検証条件は後述の回帰事例を参照。
-FaceEmo の `ExpressionImporter.GetFaceAnimation` を参考に、表情カーブの検出を他のトラックの対応可否から分離する。
-参照元の検出手順と制約は [FaceEmo の既存表情検出](face-emo-expression-import.md) に記録している。
-材質・物体・Transform・参照値のトラックが混在していても、有効な `blendShape.*` 曲線は保持し、
-除外したトラックの種類・対象を Diagnostics へ記録する。顔曲線が残らない非対応トラックだけの Clip は
-通常表情として扱わない。元から空の Clip、完全な入力集合で不存在と確認できた対象への無作用曲線、
-指定された目ボーンの回転だけを除いた従来の空 Clip は保持する。対象の名前やパスは新たに推測しない。
-イベント、非ゼロの開始時刻、不正な顔 binding・キー・重複 binding は引き続き Clip 全体を除外する。
-重み付き接線は検証して、正規化したシェイプ値の誤差1e-5以内の折れ線へ変換する。
-表現できないカーブや、解決できない出力を含む Clip は全体を除外するため、
-その Clip を参照するレイヤーも自動割り当てから外れる場合がある。
+材質・物体・Transform・参照値・イベント・再生設定が混在していても有効な顔カーブを取り込む。
+顔以外の処理は実行しない。空Motionや顔のないMotionを表情と推測しない。
+不正な顔binding・非有限キー値・重複bindingは除外する。重み付き接線は既存の検証・正規化を通す。
+顔の初期値と同じカーブは独立候補から省くが、固定ポーズのリセット用には保持する。
 
 実行時は各トラックの最後のキーを固定ポーズとして使う。元 Animator の遷移時間、
 自己遷移による再開始、連続再生、ループ、再生位相は再現しない。
@@ -530,9 +487,16 @@ Playback は通常出力の ExpressionOutput/Result を読み、値が変わる�
 ## 検証
 
 `dotnet run --project tests/ExpressionSmoke -c Release` で、パーサー、64通りの合成、
-履歴依存の除外、実 ProtoFlux の入力・再生・編集・モジュール削除・追跡との接続・
+FaceEmoの第1パターン選択、実ProtoFluxの入力・再生・編集・モジュール削除・追跡との接続・
 複製とパッケージ再読み込みを検証する。
 既知の実アバターは `scripts/test-local-avatar.ps1` で変換と inspect を確認する。
+2026-09-26の統一時にはPlum 1.0.1とSanatia 1.11で変換・inspect・保存後の64組再生が成功した。
+Plumは元FXの順序と元Clip終端値による独立照合で154出力×64組（9,856項目）が一致した。
+第1セットの割り当てはF_blink、F_smile_1、F_doya_2、F_joy_1、F_guruguru_1、
+F_marushiro_1、F_shiitake_1の7ポーズと初期姿勢。条件なしのviseme_resetもFaceEmoの候補として残る。
+Sanatiaは31出力×64組の再生が成功し、統一前の第1セットとCatalog・値・対応表が一致した。
+旧ルーター専用の期待値は `NormalExpressionPatternChecks` に置き換え、同じ入力上の
+既定値・Behaviour・Entry/Exit・入れ子・再生指定をFaceEmoが評価しないことを検証する。
 物理コントローラー、デスクトップのキーフォーカス、メニュー操作、複数クライアントの動作確認は
 Resonite クライアント上で別途必要。
 
@@ -647,6 +611,14 @@ Plum の再変換・inspect と保存パッケージの左右64通り・102出�
 機種固有の接触入力、B/A の優先順位、パッドクリックと Grip の組み合わせ、アナログ／bool の Grip の違いは維持する。
 ExpressionSmoke は左右合計576通りの入力と各機種の安定待ち・ヒステリシス・再接続・入力制限・手動入力保持を検証した。
 全機種の入力配置と複製・保存再読込の検証、Plum の再変換・inspect も成功した。
+
+### 旧Animator読み込みの調査記録
+
+以下のモデル固有のルーター調査・当時の検証結果は履歴として残す。
+`Vrchat*GestureRouter` と `VrchatExpressionMask` はFaceEmo統一時に削除済みであり、
+下記の既定値固定・履歴評価・経路拒否条件は現在の仕様ではない。
+現在の表情検出・セット選択には上記FaceEmo基準だけを使う。
+FBX名修復、出力グラフ、保存形式についての記録は各実装を参照する。
 
 ### 空の振り分けステートを使うジェスチャー表情
 

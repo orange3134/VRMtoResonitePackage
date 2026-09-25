@@ -9,12 +9,11 @@ public sealed class ExpressionModel
     public Dictionary<string, ExpressionParameter> Parameters { get; } = new(StringComparer.Ordinal);
     public List<ExpressionClip> Clips { get; } = new();
     // Null preserves the VRM/manual-model catalog. VRChat separates detected candidates
-    // from clips needed to validate and compile the original Animator routes.
+    // from complete face curves needed to compile fixed poses and their baseline resets.
     public List<ExpressionClip> DetectedExpressions { get; set; }
     public List<ExpressionLayer> Layers { get; } = new();
-    // Ordered authored sets; null uses ordinary Animator import. Face binding resolution
-    // selects the first nonempty set before exporting, so later sets cannot leak into Catalog.
-    public List<ExpressionLayer> ImportedGestureSets { get; set; }
+    // Deferred until the selected face renderer and its authored weights are resolved.
+    internal Vrchat.FaceEmoPatterns ImportedPatterns { get; set; }
     public List<ExpressionMenuControl> Menu { get; } = new();
     public List<string> Diagnostics { get; } = new();
 }

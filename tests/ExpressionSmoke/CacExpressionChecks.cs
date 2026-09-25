@@ -49,7 +49,7 @@ internal static class CacExpressionChecks
             var model = Parse(text); VrchatExpressionDetection.FilterFaceCurves(model, baseline); return model;
         }
         var parsed = Parse(original);
-        Check(parsed.ImportedGestureSets.Count == 2 && parsed.Layers.Single().Name.EndsWith(" 1"), "first numerically ordered CAC set is selected despite authored parameter default and storage order");
+        Check(parsed.ImportedPatterns.Patterns.Count == 2 && parsed.Layers.Single().Name.EndsWith(" 1"), "first numerically ordered CAC set is selected despite authored parameter default and storage order");
         var model = Filter(original);
         Check(model.Clips.Count == 14 && model.DetectedExpressions.Count == 14 && model.Layers.Single().States.Count == 15,
             "only first fourteen clips and baseline are retained for output");

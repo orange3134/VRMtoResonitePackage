@@ -41,22 +41,16 @@ Animatorの表情推定と他レイヤーとの競合判定は `VrchatAnimatorGr
 未接続のstateに競合するclipがあるだけでは表情を除外しない。到達可能な競合は保守的に除外する。
 Prefab・FBXの初期ウェイトを収集した後に表情を推定する。
 
-ハンドジェスチャー・ExpressionMenu・外部イベントによる表情切り替えの使い方と対応範囲は
+ハンドジェスチャー・Resoniteのコンテキストメニュー・外部イベントによる表情切り替えの使い方と対応範囲は
 [表情システムの実装](expression-system.md)、元の設計は
 [表情システム設計](expression-system-design.md)を参照する。Viseme／Blink推定とは別に解析し、共通の出力へ接続する。
 
-表情 Clip の検出は FaceEmo の `ExpressionImporter.GetFaceAnimation` を参考に、他のアニメーション
-トラックの対応可否から分離する。`VrchatExpressionParser.ReadClip` は材質・物体・Transform が混在しても
-有効な `blendShape.*` 曲線を抽出し、除外したトラックを診断する。顔曲線の不正は Clip 全体を拒否し、
-非対応トラックだけの Clip を空の通常表情に置き換えない。元から空の Clip と、既存の入力集合によって
-不存在を確認できた無作用曲線の扱いは保持する。顔の名前やパスから割り当てを推測しない。
-
-`VrchatDefaultGestureRouter` は手だけで選ぶ平坦なレイヤーについて、左右64組と全到達可能状態からの
-収束を検証する。固定の状態数や分岐数に依存しない。同じ Clip・再生指定の顔ポーズと空中継だけの循環は
-静的な顔ポーズとして抽出し、異なるポーズを含む循環・ラッチ・空だけの循環は拒否する。
-追加条件は宣言された既定値に固定して Entry から評価する。Write Defaults による過去の保持値は持ち込まず、
-不足曲線は下位レイヤー／Baseへ戻す。Parameter Driver・Tracking Controlの副作用、遷移時間、再開始は
-再現せず、固定条件と近似内容を Diagnostics に残す。
+表情はFaceEmoの通常形式／CAC形式を `VrchatFaceEmoExpressionImporter` で読み、最初のパターンだけを
+Catalogと左右64通りへ変換する。通常形式は後ろのFXレイヤーを優先して条件付き分岐を選び、
+CACは番号順の14表情セットの最初を選ぶ。詳細は [表情システム](expression-system.md#faceemo-に合わせた表情候補の検出) を参照。
+従来のAnimator経路投影・既定値固定・Parameter Driver評価ルーターは削除した。
+材質・Transform・イベント等の混在は顔カーブ抽出を妨げず、顔以外の効果は実行しない。
+顔のパスと実Rendererの一致、初期ウェイトとの差分を確認してからセットを確定する。
 
 FBXの初期ブレンドシェイプ値は、同名Rendererをまとめず、配置識別子とモデル内の完全なパスで保持する。
 `UnityFbxBlendShapeDefaults` はFBXの `Connections` をたどり、channel → blendshape → geometry → modelの

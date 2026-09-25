@@ -47,7 +47,7 @@ internal static class FaceExpressionDetectionChecks
             UnityYaml.ParseFlatDocument("m_Script: {fileID: 1661641543, guid: 2a2c05204084d904aa4945ccff20d8e5}\nparameter: Hair\n") };
         using var package = UnityPackage.Open(Path.Combine(root, "Assets", "Avatar.prefab"));
         var model = VrchatExpressionParser.Parse(package, UnityScene.Parse(descriptor).Doc(1).Root, modularComponents: components);
-        var candidates = model.DetectedExpressions.Select(c => c.Name).ToHashSet();
+        var candidates = model.Clips.Select(c => c.Name).ToHashSet();
         Check(candidates.SetEquals(new[] { "Clip3", "Clip4", "Clip5", "Clip11", "Clip12" }),
             "default/nested/zero-weight candidates included; toggles, contacts, physics, mute, visemes and disconnected states excluded");
         var values = new Dictionary<ExpressionBinding, float> { [new("Body", "Smile")] = 0.25f, [new("Body", "Rest")] = 0.3f };
@@ -58,7 +58,7 @@ internal static class FaceExpressionDetectionChecks
             "baseline curves omitted from candidate poses");
         Check(model.Clips.Single(c => c.Name == "Clip5").Curves.Count == 2,
             "complete reset curves remain available for validated layer composition");
-        Check(model.Clips.Single(c => c.Name == "Clip11").Curves.Count == 0,
+        Check(model.Clips.All(c => c.Name != "Clip11"),
             "non-face curves never reach automatic gesture outputs");
         Check(VrchatExpressionDetection.IsViseme("Prefix.VRC.V_AA") && !VrchatExpressionDetection.IsViseme("Smile"),
             "FaceEmo case-insensitive viseme name exclusion");
@@ -69,15 +69,6 @@ internal static class FaceExpressionDetectionChecks
         var standalone = new ExpressionModel { DetectedExpressions = new() { animated } }; standalone.Clips.Add(animated);
         VrchatExpressionDetection.FilterFaceCurves(standalone, values);
         Check(standalone.DetectedExpressions.Single().Curves.Single().Keys.Count == 2, "animated differences preserve all keys");
-        var treeScene = UnityScene.Parse("--- !u!91 &91\nAnimatorController:\n  m_AnimatorLayers:\n  - m_StateMachine: {fileID: 100}\n" +
-            "--- !u!1107 &100\nAnimatorStateMachine:\n  m_DefaultState: {fileID: 200}\n" +
-            "--- !u!1102 &200\nAnimatorState:\n  m_Motion: {fileID: 206}\n" +
-            "--- !u!206 &206\nBlendTree:\n  m_Childs:\n  - m_Motion: {fileID: 7400000, guid: " + Guid(3) + "}\n" +
-            "  - m_Motion: {fileID: 7400000, guid: " + Guid(4) + "}\n" +
-            "  - m_Motion: {fileID: 7400000, guid: " + Guid(5) + "}\n");
-        var treeClips = new VrchatExpressionDetection(null).Collect(treeScene, treeScene.Doc(91).Root,
-            reference => model.Clips.Single(c => c.Id == reference.Guid + ":7400000")).ToArray();
-        Check(treeClips.Length == 1 && treeClips[0].Name == "Clip5", "ordinary BlendTree candidate uses the last child, not intermediate poses");
         Console.WriteLine("PASS: FaceEmo candidate discovery, event exclusions, exact face bindings and authored-baseline differences");
     }
     public static async Task RunCatalog(FrooxEngine.Slot parent)
