@@ -204,7 +204,6 @@ internal sealed partial class ExpressionSystemSetup
         var indexCurled = g.Greater(trigger, g.Choose<float>(g.Read<bool>(handRef, GestureHandSpace, "TriggerHeld"),
             g.Read<float>(modRef, GestureSettingsSpace, "TriggerReleaseThreshold"), g.Read<float>(modRef, GestureSettingsSpace, "TriggerThreshold")));
         var gesture = BuildControllerGesture(g, controller, device, grip, indexCurled);
-        g.BeginSection("Stability and dispatch");
         var changed = g.NotEqual<int>(gesture, g.Read<int>(handRef, GestureHandSpace, "Candidate"));
         var stable = g.Not(g.Greater(g.Add(g.Read<float>(handRef, GestureHandSpace, "Since"), g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds")), g.Now));
         var send = g.Sequence(SendGesture(g, g.Text(GestureTag(kind)), gesture),

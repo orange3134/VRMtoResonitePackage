@@ -16,10 +16,10 @@ internal static class ExpressionGraphChecks
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
         Check(nodes.Count > 0 && nodes.GroupBy(n => n.Slot).All(g => g.Count() == 1), "one Flux node per slot");
         Check(nodes.All(n => n.Group?.IsValid == true), "all expression Flux groups are valid");
-        Check(nodes.All(n => n.Slot.Parent.GetComponents<ProtoFluxNode>().Count == 0), "Flux nodes belong to sections, not other nodes");
+        Check(nodes.All(n => n.Slot.Parent.GetComponents<ProtoFluxNode>().Count == 0), "Flux nodes belong to logic boards, not other nodes");
         Check(nodes.Select(n => n.Slot.GlobalPosition).Distinct().Count() == nodes.Count, "Flux node positions do not overlap across logic boards");
 
-        Slot Board(ProtoFluxNode node) => node.Slot.Parent.Parent;
+        Slot Board(ProtoFluxNode node) => node.Slot.Parent;
         var updates = nodes.Where(n => n.GetType().Name == "LocalUpdate").ToArray();
         Check(updates.Length == 0, "expression system contains no LocalUpdate");
         Check(nodes.All(n => n.GetType().Name != "ReferenceDrive`1"), "no playback reference drives");
@@ -135,6 +135,8 @@ internal static class ExpressionGraphChecks
         foreach (var board in boards.OrderBy(b => RelativePath(expressions, b.Key), StringComparer.Ordinal))
         {
             string path = RelativePath(expressions, board.Key);
+            Check(board.Key.Children.All(child => child.GetComponents<ProtoFluxNode>().Count == 1),
+                "logic boards contain node slots directly without section slots: " + path);
             Check(board.Count() <= MaximumBoardNodes, $"board node budget ({MaximumBoardNodes}): {path} has {board.Count()}");
             var diagnostics = Descendant(expressions, "Diagnostics/Graph modules");
             var record = diagnostics?.Children.SingleOrDefault(s => Value<string>(s, "Path") == path);
@@ -155,7 +157,7 @@ internal static class ExpressionGraphChecks
         Check(publicReceivers.Length == 6, "exactly six public API receivers");
         foreach (string hand in new[] { "Left", "Right" })
         {
-            var receiver = publicReceivers.Single(node => node.Slot.Parent.Parent.Name == hand);
+            var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == hand);
             Check(receiver.GetType().Name == "DynamicImpulseReceiverWithValue`1" &&
                 receiver.GetType().GetGenericArguments().SequenceEqual(new[] { typeof(int) }),
                 hand + " receives int directly");
@@ -164,14 +166,14 @@ internal static class ExpressionGraphChecks
         }
         foreach (string hand in new[] { "Left", "Right" })
         {
-            var receiver = publicReceivers.Single(node => node.Slot.Parent.Parent.Name == "Menu" + hand);
+            var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == "Menu" + hand);
             Check(receiver.GetType().GetGenericArguments().Single() == typeof(int) &&
                 receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/Menu/" + hand,
                 "menu has a separate int path while ordinary input is disabled: " + hand);
         }
-        Check(publicReceivers.Single(node => node.Slot.Parent.Parent.Name == "Select").GetType().GetGenericArguments().Single() == typeof(string),
+        Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Select").GetType().GetGenericArguments().Single() == typeof(string),
             "mapped expression selection receives an ID");
-        Check(publicReceivers.Single(node => node.Slot.Parent.Parent.Name == "AllowExternalInput").GetType().GetGenericArguments().Single() == typeof(bool),
+        Check(publicReceivers.Single(node => node.Slot.Parent.Name == "AllowExternalInput").GetType().GetGenericArguments().Single() == typeof(bool),
             "input permission receives a bool");
         Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value != "ExpressionCore/Override"),
             "no Override Slot state is generated");
@@ -199,7 +201,7 @@ internal static class ExpressionGraphChecks
     public static void Report(Slot expressions)
     {
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
-        var boards = nodes.GroupBy(n => n.Slot.Parent.Parent).ToArray();
+        var boards = nodes.GroupBy(n => n.Slot.Parent).ToArray();
         var groups = nodes.GroupBy(n => n.Group).ToArray();
         foreach (var board in boards.OrderBy(b => RelativePath(expressions, b.Key), StringComparer.Ordinal))
             Console.WriteLine($"BOARD: {RelativePath(expressions, board.Key)}: {board.Count()} nodes, " +
@@ -210,7 +212,7 @@ internal static class ExpressionGraphChecks
             $"ReadDynamicValueVariable={Count("ReadDynamicValueVariable")}, ReadDynamicObjectVariable={Count("ReadDynamicObjectVariable")}, " +
             $"Children={Count("Children")}, ForEachObject={Count("ForEachObject")}, For={Count("For")}, GetChild={Count("GetChild")}, " +
             $"GetActiveUserSelf={Count("GetActiveUserSelf")}, GetActiveUser={Count("GetActiveUser")}");
-        int crossed = groups.Count(g => g.Select(n => n.Slot.Parent.Parent).Distinct().Count() > 1);
+        int crossed = groups.Count(g => g.Select(n => n.Slot.Parent).Distinct().Count() > 1);
         Console.WriteLine($"GRAPH: {nodes.Count} nodes, {groups.Length} groups, {boards.Length} boards, " +
             $"largest board {boards.Select(b => b.Count()).DefaultIfEmpty().Max()} nodes, " +
             $"largest group {groups.Select(g => g.Count()).DefaultIfEmpty().Max()} nodes, {crossed} groups crossing boards");

@@ -74,12 +74,13 @@ Core に入力元の一覧・優先順位・有効期限・汎用 Animator パ�
 入力内容は `ResoPon/Expression/Gesture/Left`／`ResoPon/Expression/Gesture/Right` タグと int 引数で渡す。Core は入力元の Slot 参照を保持しない。
 各手は最後に受理した入力値を保持し、コントローラーが切断されても変更しない。更新番号は保持しない。
 
-Flux は1スロット1ノードで、名前付きの節を保持しながらモジュール全体の接続関係で整列する。
+Flux は1スロット1ノードで、各モジュール直下にノードを置き、モジュール全体の接続関係で整列する。
+可読性のための番号付きセクションスロットは生成しない。
 データの供給元を左、入力を使うノードを右に置く。Impulse も発火元から呼び出し先へ左から右に配置する。
 複数入力はポート順に左側の上から下へ並べ、同じ接続先の入力群の間に別の入力群を挟まない。
 入力を使う最初のノードの直前まで列を寄せ、入力側の枝は列ごとの占有範囲を使って詰める。
 これにより8キーのような大きな入力群があっても、Tag・送信先などの小さな入力を接続先の近くへ置ける。
-ノード固有の幅とポート数から間隔を取り、名前付きの節は階層として保ちつつ配置座標を共有する。
+ノード固有の幅とポート数から間隔を取る。定数と変数入力はモジュール単位で共有する。
 共有入力は最初の接続先を基準に配置する。離れた用途で共有する必要のない定数は独立させる
 （キーボードの Match=true と送信の ExcludeDisabled=true）。状態を持つノードは複製しない。
 3条件以上をまとめて判定する AND は `AND_Multi_Bool`（AndMulti）1ノードに入力を列挙し、2入力 AND の連結を避ける。
@@ -293,13 +294,13 @@ Catalog の Slot を固定用に保持する Override 変数は生成しない�
 
 `Inputs/HandGestures/Modules/<機種>/Left|Right/Logic` は全機種共通で次の順に読む。
 
-1. `Shared inputs`: 機種別 Controller と、Grip・Trigger の押下／解放判定。Vive・WindowsMR の Grip は bool を直接使用する。
-2. `<機種> input bits`: Touch・Index は親指の3つの接触を1つの `OR_Multi_Bool` にまとめ、Vive・WindowsMR は TouchpadTouch を使う。
+1. 入力: 機種別 Controller と、Grip・Trigger の押下／解放判定。Vive・WindowsMR の Grip は bool を直接使用する。
+2. 入力ビット: Touch・Index は親指の3つの接触を1つの `OR_Multi_Bool` にまとめ、Vive・WindowsMR は TouchpadTouch を使う。
    名前付き Relay の `Bit0=GripHeld`、`Bit1=TriggerHeld`、`Bit2=親指接触` を `ComposeBits_byte` へ接続する。
-3. `<機種> gesture table`: ビット値を添字にして `ValueMultiplex<int>` の8行から指の形を選ぶ。
-4. `<機種> button priority`: `IndexOfFirstValueMatch<bool>` で下表の優先1、優先2、常時 true の順に判定し、
+3. ジェスチャー表: ビット値を添字にして `ValueMultiplex<int>` の8行から指の形を選ぶ。
+4. ボタン優先順位: `IndexOfFirstValueMatch<bool>` で下表の優先1、優先2、常時 true の順に判定し、
    `ValueMultiplex<int>` の RockNRoll、Victory、指の形から選ぶ。
-5. `Stability and dispatch`: 従来どおり安定待ちと入力制限を適用し、変化した手の値だけを送信する。
+5. 安定判定と送信: 従来どおり安定待ちと入力制限を適用し、変化した手の値だけを送信する。
 
 | 添字 | Thumb / Trigger / Grip | ボタンを押していない場合の結果 |
 |---|---|---|

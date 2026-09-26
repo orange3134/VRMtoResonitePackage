@@ -196,7 +196,7 @@ internal sealed partial class ExpressionSystemSetup
     private void DescribeGraphs()
     {
         var modules = _root.FindChild("Diagnostics").AddSlot("Graph modules");
-        var boards = _root.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent.Parent).ToArray();
+        var boards = _root.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent).ToArray();
         foreach (var board in boards)
         {
             var names = new Stack<string>();

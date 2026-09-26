@@ -12,9 +12,7 @@ internal sealed partial class ExpressionSystemSetup
     {
         // AvatarAddonSystem / Touch V1.4.3 separates input bit packing from pose matching.
         // Keep our existing thresholds and button priority; only adopt that graph structure.
-        string module = device.Replace("Controller", "");
         bool wand = device is "ViveController" or "WindowsMRController";
-        g.BeginSection(module + " input bits");
         IWorldElement thumb;
         if (wand) thumb = Out(controller, "TouchpadTouch");
         else
@@ -37,7 +35,6 @@ internal sealed partial class ExpressionSystemSetup
             Link(bits, "Bit" + bit, input);
         }
 
-        g.BeginSection(module + " gesture table");
         // Index bits (low to high): Grip, Trigger, Thumb. An open grip always means HandOpen.
         int[] gestures = { 2, 6, 2, 7, 2, 3, 2, 1 }; // Open, Gun, Open, ThumbsUp, Open, Point, Open, Fist
         var index = g.Node("Cast_byte_To_int", null, ("Input", bits));
@@ -50,7 +47,6 @@ internal sealed partial class ExpressionSystemSetup
             table.Inputs.Add((INodeValueOutput<int>)value);
         }
 
-        g.BeginSection(module + " button priority");
         // First matching row wins: RockNRoll, Victory, then the finger pose.
         // Vive/WindowsMR use the pad-click/grip chord; Touch/Index use B then A.
         string rockName, victoryName;

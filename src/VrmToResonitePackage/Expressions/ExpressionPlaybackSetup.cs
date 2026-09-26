@@ -13,7 +13,6 @@ internal sealed partial class ExpressionSystemSetup
         var core = g.Ref(_core);
         var actions = new List<IWorldElement>();
 
-        g.BeginSection("Resolve gesture pair");
         var index = g.Binary<int>("ValueAdd", g.Binary<int>("ValueMul", g.Read<int>(core, CoreSpace, "LeftGesture"), g.Constant(8)),
             g.Read<int>(core, CoreSpace, "RightGesture"));
         var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(TableSpace, "Pair."))),
@@ -27,7 +26,6 @@ internal sealed partial class ExpressionSystemSetup
         actions.Add(g.Set<Slot>(selected, resolved));
         actions.Add(g.Write<int>(core, CoreSpace, "PairIndex", index));
 
-        g.BeginSection("Switch immediately when changed");
         actions.Add(g.If(g.NotEqual<Slot>(selected, current),
             g.Write<Slot>(core, CoreSpace, "CurrentExpression", selected)));
         actions.Add(g.Trigger(g.Ref(_playback), PlaybackTickTag));
@@ -52,7 +50,6 @@ internal sealed partial class ExpressionSystemSetup
             g.Node("IsLocalUser", null, ("User", g.Node("HostUser")))));
         var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, CoreSpace, "CurrentExpression"), g.Ref<Slot>(null));
         var bindings = g.Read<Slot>(current, ClipSpace, "Bindings");
-        g.BeginSection("Write static outputs on selection");
         var update = g.Each(g.Ref(_outputs), output =>
         {
             var result = MixOutput(g, output, wearer);
@@ -61,7 +58,6 @@ internal sealed partial class ExpressionSystemSetup
                 g.If(g.NotEqual<float>(value, g.Read<float>(output, OutputSpace, "Result")),
                     g.Write<float>(output, OutputSpace, "Result", value))));
         });
-        g.BeginSection("Apply stored pose on selection");
         var bindingOutput = g.Local<Slot>();
         var refresh = g.Sequence(
             g.Each(g.Ref(_outputs), record => g.Write<bool>(record, OutputSpace, "HasPose", g.Constant(false))),

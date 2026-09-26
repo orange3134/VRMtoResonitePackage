@@ -11,8 +11,7 @@ namespace VrmToResonitePackage.Expressions;
 internal sealed class ExpressionFlux
 {
     private readonly Slot _root;
-    private Slot _section;
-    private int _sectionIndex, _nodeIndex;
+    private int _nodeIndex;
     private readonly Dictionary<(Type, object), IWorldElement> _constants = new();
     private readonly Dictionary<(Type, IWorldElement, IWorldElement), IWorldElement> _reads = new();
     private readonly Dictionary<(Type, string), IWorldElement> _dynamicInputs = new();
@@ -24,17 +23,6 @@ internal sealed class ExpressionFlux
     public ExpressionFlux(Slot root)
     {
         _root = root;
-        BeginSection("Shared inputs");
-    }
-
-    public void BeginSection(string name)
-    {
-        _section = _root.AddSlot($"{_sectionIndex++:D2} {name}");
-        _nodeIndex = 0;
-        // Keep constants near their consumers instead of wiring every section back to the first one.
-        _constants.Clear();
-        _reads.Clear();
-        _dynamicInputs.Clear();
     }
 
     private Slot NodeSlot(Type type, string detail = null)
@@ -42,7 +30,7 @@ internal sealed class ExpressionFlux
         string name = type.Name.Split('`')[0];
         if (type.IsGenericType) name += "<" + string.Join(", ", type.GetGenericArguments().Select(t => t.Name)) + ">";
         if (!string.IsNullOrEmpty(detail)) name += " : " + detail.Replace('\n', ' ').Replace('\r', ' ');
-        return _section.AddSlot($"{_nodeIndex++:D3} {name}");
+        return _root.AddSlot($"{_nodeIndex++:D3} {name}");
     }
 
     /// <summary>Lay out each logic board without changing its functional parent hierarchy.</summary>
@@ -56,14 +44,10 @@ internal sealed class ExpressionFlux
         foreach (var unused in allNodes.OfType<Nodes.RefObjectInput<Slot>>().Where(node => !usedSources.Contains(node)).ToArray())
             unused.Slot.Destroy();
         float boardOffset = 0;
-        foreach (var board in expressions.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent.Parent))
+        foreach (var board in expressions.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent))
         {
             var positions = ExpressionFluxLayout.Arrange(board.ToArray());
             board.Key.GlobalPosition = expressions.LocalPointToGlobal(new float3(boardOffset, 0, 0));
-            // Sections retain their names and hierarchy, but share the board's coordinate
-            // system so an input in another section can stay near its consumer.
-            foreach (var section in board.Select(n => n.Slot.Parent).Distinct())
-                section.LocalPosition = float3.Zero;
             foreach (var node in board)
                 node.Slot.LocalPosition = new float3(positions[node].x, positions[node].y, 0);
             boardOffset += board.Max(n => positions[n].x + ExpressionFluxLayout.Width(n) / 2) + 0.6f;
@@ -143,7 +127,7 @@ internal sealed class ExpressionFlux
         // Dynamic Inputs bind from their own Slot, not from a runtime Source input.
         // Match the requested namespace through ancestors, even across other schema spaces.
         if (source is Nodes.RefObjectInput<Slot> reference && reference.Target.Target is Slot slot &&
-            NamedSpace(slot, spaceName) is { } space && space == NamedSpace(_section, spaceName))
+            NamedSpace(slot, spaceName) is { } space && space == NamedSpace(_root, spaceName))
         {
             return DynamicInput<T>(spaceName, key);
         }

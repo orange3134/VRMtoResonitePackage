@@ -7,7 +7,7 @@ internal static class ExpressionLayoutChecks
     public static void CheckDirection(Slot expressions)
     {
         int dataLinks = 0, impulseLinks = 0, feedbackLinks = 0;
-        foreach (var board in expressions.GetComponentsInChildren<ProtoFluxNode>().GroupBy(node => node.Slot.Parent.Parent))
+        foreach (var board in expressions.GetComponentsInChildren<ProtoFluxNode>().GroupBy(node => node.Slot.Parent))
         {
             var nodes = board.ToHashSet();
             var edges = new HashSet<(ProtoFluxNode Source, ProtoFluxNode Target)>();
@@ -24,7 +24,7 @@ internal static class ExpressionLayoutChecks
             }
 
             // Reachability independently identifies feedback paths. Every other connection
-            // must point strictly right, including connections crossing visual sections.
+            // must point strictly right.
             var outgoing = nodes.ToDictionary(node => node, node => edges.Where(edge => edge.Source == node).Select(edge => edge.Target).ToArray());
             var reachable = new Dictionary<ProtoFluxNode, HashSet<ProtoFluxNode>>();
             foreach (var node in nodes)
@@ -59,17 +59,14 @@ internal static class ExpressionLayoutChecks
         {
             var board = hand.FindChild("Logic");
             var nodes = board.GetComponentsInChildren<ProtoFluxNode>();
-            var classifier = nodes.Where(n => n.Slot.Parent.Name.Contains(module.Name + " ", StringComparison.Ordinal)).ToArray();
-            Check(classifier.Count(n => n.GetType().Name == "ComposeBits_byte") == 1 &&
-                classifier.Count(n => n.GetType().Name == "ValueMultiplex`1") == 2 &&
-                classifier.Count(n => n.GetType().Name == "IndexOfFirstValueMatch`1") == 1 &&
-                classifier.Count(n => n.GetType().Name == "OR_Multi_Bool") == (module.Name is "Touch" or "Index" ? 1 : 0),
+            Check(nodes.Count(n => n.GetType().Name == "ComposeBits_byte") == 1 &&
+                nodes.Count(n => n.GetType().Name == "ValueMultiplex`1") == 2 &&
+                nodes.Count(n => n.GetType().Name == "IndexOfFirstValueMatch`1") == 1 &&
+                nodes.Count(n => n.GetType().Name == "OR_Multi_Bool") == (module.Name is "Touch" or "Index" ? 1 : 0),
                 module.Name + " separates bit packing, finger table and button priority");
-            Check(classifier.All(n => n.GetType().Name is not "ValueConditional`1" and not "OR_Bool"),
-                module.Name + " classifier contains no chained conditionals or binary OR nodes");
             float X(ProtoFluxNode n) => board.GlobalPointToLocal(n.Slot.GlobalPosition).x;
             float Y(ProtoFluxNode n) => board.GlobalPointToLocal(n.Slot.GlobalPosition).y;
-            foreach (var target in classifier.Where(n => n.GetType().Name is "ComposeBits_byte" or "ValueMultiplex`1" or "IndexOfFirstValueMatch`1"))
+            foreach (var target in nodes.Where(n => n.GetType().Name is "ComposeBits_byte" or "ValueMultiplex`1" or "IndexOfFirstValueMatch`1"))
             {
                 var inputs = target.AllInputs.Select(p => Owner(p.Target)).Where(n => n != null).Distinct().ToArray();
                 for (int i = 1; i < inputs.Length; i++)
@@ -78,8 +75,8 @@ internal static class ExpressionLayoutChecks
                     Check(X(target) - X(input) is > 0 and < 0.65f,
                         module.Name + "/" + hand.Name + ": controller inputs stay in the adjacent column");
             }
-            var fingerTable = classifier.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueMultiplex<int>>()
-                .Single(n => n.Slot.Parent.Name.Contains("gesture table", StringComparison.Ordinal));
+            var fingerTable = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueMultiplex<int>>()
+                .Single(n => Owner(n.Index.Target)?.GetType().Name == "Cast_byte_To_int");
             Check(fingerTable.Inputs.Count == 8 && fingerTable.Inputs.Distinct().Count() == 8,
                 "eight separately labelled finger poses remain easy to inspect");
         }
@@ -137,7 +134,6 @@ internal static class ExpressionLayoutChecks
             var second = g.Constant(20);
             var first = g.Constant(10);
             var sum = g.Binary<int>("ValueAdd", first, second);
-            g.BeginSection("Consumer");
             var local = g.Constant(3);
             var result = g.Binary<int>("ValueMul", sum, local);
             var cycleA = g.Node("NOT_Bool");
@@ -149,7 +145,7 @@ internal static class ExpressionLayoutChecks
             Check(Position(local).x > Position(first).x && Position(result).x - Position(local).x < 0.65f,
                 "a shallow input moves next to its deep consumer");
             Check(Math.Abs(Position(sum).y - Position(result).y) < 0.65f,
-                "section boundaries do not separate a node from its consumer");
+                "connected operations stay near each other");
             Check(Math.Abs(Position(cycleA).x - Position(cycleB).x) < 0.001f,
                 "feedback cycles remain in one column");
             var nodes = root.GetComponentsInChildren<ProtoFluxNode>();
@@ -159,7 +155,7 @@ internal static class ExpressionLayoutChecks
                 "arranging a graph twice keeps the same positions");
         }
         finally { root.Destroy(); }
-        Console.WriteLine("LAYOUT: shuffled inputs, shallow dependencies, cross-section links, cycles and repeatability verified");
+        Console.WriteLine("LAYOUT: shuffled inputs, shallow dependencies, cycles and repeatability verified");
     }
 
     public static void SaveKeyboardLayout(Slot expressions, string path)
