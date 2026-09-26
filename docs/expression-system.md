@@ -612,6 +612,39 @@ Plum の再変換・inspect と保存パッケージの左右64通り・102出�
 ExpressionSmoke は左右合計576通りの入力と各機種の安定待ち・ヒステリシス・再接続・入力制限・手動入力保持を検証した。
 全機種の入力配置と複製・保存再読込の検証、Plum の再変換・inspect も成功した。
 
+### Legnia 1.21: 検出済みの条件なし候補を選択できない
+
+FaceEmo統一後のcommit `550f18e` でLegnia 4Pを実変換し、inspectと保存後の実エンジンで調査した。
+候補検出は成功しており、Catalogには17表情とNeutral、Outputsには138シェイプがある。
+一方、GestureTableは0/64で、直接選択メニューに表示される表情も0件だった。
+18件すべての直接Selectイベントと左右64組を実行してもCurrentExpressionはnullのままで、
+138出力×64組（8,832項目）が初期値のままになることを確認した。
+これは現行の制限の再現結果であり、この調査では変換実装を修正していない。
+
+元FXは `GestureLeft/Right` → Parameter Driverで `FaceMorph` をSet → 入れ子の
+`Face Set 1-8` / `9-16` / `17-24` / `25-32` のEntry条件でClipを選ぶ構造。
+同梱の通常・2P・着せ替え・Side Dの7種類のFXにもFaceMorph条件があり、
+CAC用の `SYNC_EM_EMOTE` はない。状態名のLeft/Rightや番号を根拠にCAC扱いしてはいけない。
+
+FaceEmoの通常インポートは直接のGesture Equalsだけを条件として残すため、FaceMorph条件の
+表情は条件なし候補になる。`ExpressionImporter.ImportNormal` はこれらをunusedBranchesから
+第1パターンへ追加する。`Branch.IsMatched` は条件なし分岐をハンドサインに一致させないが、
+`FxGenerator.GenerateEmoteSelectMenuRecursive` は全Branchesを列挙してEmote Selectへ追加する。
+UIの `BranchListView_NotReachableBranchWithNoConditions` にも、条件なし表情はEmote Select用で、
+ジェスチャーで使いたい場合は条件を追加する旨が明示されている。
+したがって、FaceEmoで「表情を認識する」ことは、元の間接ハンド入力まで自動復元することを意味しない。
+
+ResoPonも条件なし候補をCatalogへ残すが、出力側には旧方式の制約が残っている。
+
+- `ExpressionInputSetup.BuildMenuAvailability` はGestureTable内で参照される表情だけを表示する。
+- `ExpressionApiSetup.BuildSelectReceiver` は表情IDからPair.0〜63を逆引きし、見つかった場合だけ
+  左右の入力を更新する。Catalogの表情を直接再生する経路はなく、ボタンを表示するだけでは直らない。
+
+前の間接入力ルーターはFaceMorphまで追って左右の対応を補っていたが、FaceEmoのみの読み込みへ
+統一した際に削除済み。FaceEmo基準を維持してこの差を埋めるには、候補抽出を戻すのではなく、
+未割り当てのCatalog表情も選べる独立した手動選択経路が必要になる。
+ハンドジェスチャーへの追加割り当ては、手動選択とは別に条件編集として扱う。
+
 ### 旧Animator読み込みの調査記録
 
 以下のモデル固有のルーター調査・当時の検証結果は履歴として残す。
