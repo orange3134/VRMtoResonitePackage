@@ -70,6 +70,25 @@ internal static class CacExpressionChecks
         var mutedTable = new GesturePairCompiler(muted, muted.Clips, _ => 0.17f);
         var mutedPose = muted.Clips.Concat(mutedTable.Generated).Single(c => c.Id == mutedTable.Pairs[2 * 8 + 1]);
         Check(Math.Abs(mutedPose.Curves.Single().Keys[^1].Value - 0.27f) < 0.00001f, "missing right branch allows the left branch to win");
+        // A generated FaceEmo controller can expose only slots 2..7: an empty
+        // first motion and no left-hand entries. Keep the authored slot numbers.
+        string sparse = original.Replace($"m_Motion: {{fileID: 7400000, guid: {Guid(1001)}}}", "m_Motion: {fileID: 990}");
+        sparse += "--- !u!206 &990\nBlendTree:\n  m_Childs: []\n";
+        for (int i = 8; i <= 14; i++) sparse = sparse.Replace($"  - {{fileID: {300 + i}}}\n", "");
+        var sparseModel = Filter(sparse);
+        Check(sparseModel.Clips.Count == 6 && sparseModel.DetectedExpressions.Count == 6,
+            "sparse first set retains six face clips without filling missing slots from set two");
+        var sparseTable = new GesturePairCompiler(sparseModel, sparseModel.Clips, _ => 0.17f);
+        var sparsePoses = new HashSet<float>();
+        for (int left = 0; left < 8; left++) for (int right = 0; right < 8; right++)
+        {
+            float expected = right >= 2 ? right * 0.03f : 0.17f;
+            var pose = sparseModel.Clips.Concat(sparseTable.Generated).Single(c => c.Id == sparseTable.Pairs[left * 8 + right]);
+            float actual = pose.Curves.Single().Keys[^1].Value;
+            Check(Math.Abs(actual - expected) < 0.00001f, $"Sparse CAC right slot {right} with left {left}");
+            sparsePoses.Add(actual);
+        }
+        Check(sparsePoses.Count == 7, "six right-hand expressions plus authored neutral, without mirrored left assignments");
         Asset("Emote1.anim", 1001, Clip(1, "Clothes"));
         var nonFace = Filter(original);
         Check(nonFace.Clips.Count == 13 && nonFace.Layers.Single().States.All(s => s.Name != "Emote1"), "non-face branch does not shadow another hand after real binding resolution");
