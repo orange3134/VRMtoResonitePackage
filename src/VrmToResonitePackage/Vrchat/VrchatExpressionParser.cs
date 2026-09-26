@@ -12,6 +12,7 @@ public static class VrchatExpressionParser
         var model = new ExpressionModel { DetectedExpressions = new(), ImportedPatterns = new() };
         var clips = new Dictionary<string, ExpressionClip>(StringComparer.Ordinal);
         var importer = new VrchatFaceEmoExpressionImporter(modularComponents, ReadClip);
+        var controllers = new List<(UnityScene Scene, string Id)>();
         foreach (var playable in descriptor?["baseAnimationLayers"]?.Seq ?? new())
         {
             if (playable["isDefault"]?.AsBool() == true || playable["type"]?.AsInt() != 5) continue;
@@ -19,7 +20,12 @@ public static class VrchatExpressionParser
             if (asset?.HasContent != true) continue;
             if (asset.Extension != ".controller") { Warn(asset.LogicalPath + ": unsupported controller type"); continue; }
             var scene = package.ReadScene(asset);
-            importer.Read(model.ImportedPatterns, scene, scene.Documents.Values.FirstOrDefault(d => d.ClassId == 91)?.Root, asset.Guid);
+            controllers.Add((scene, asset.Guid));
+        }
+        foreach (var (scene, id) in controllers)
+        {
+            importer.Read(model.ImportedPatterns, scene, scene.Documents.Values.FirstOrDefault(d => d.ClassId == 91)?.Root,
+                id, EmptyMotion, controllers.Select(c => c.Scene));
             if (model.ImportedPatterns.Cac) break;
         }
         foreach (string hand in new[] { "Left", "Right" })
@@ -33,6 +39,15 @@ public static class VrchatExpressionParser
         return model;
 
         void Warn(string message) { model.Diagnostics.Add(message); UniLog.Warning("Expressions: " + message); }
+        bool EmptyMotion(YamlNode reference)
+        {
+            var asset = package.ByGuid(reference?.Guid);
+            if (asset?.HasContent != true || asset.Extension != ".anim" ||
+                package.ReadScene(asset).Doc(reference.FileID ?? 0) is not { ClassId: 74 } doc) return false;
+            var root = doc.Root;
+            return root["m_Compressed"]?.AsBool() != true && (root["m_Events"]?.Seq?.Count ?? 0) == 0 &&
+                root.Map.All(kv => !kv.Key.EndsWith("Curves", StringComparison.Ordinal) || (kv.Value.Seq?.Count ?? 0) == 0);
+        }
         ExpressionClip ReadClip(YamlNode reference)
         {
             string guid = reference?.Guid;

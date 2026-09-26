@@ -195,3 +195,10 @@ and replays all 64 menu pairs against actual mesh output fields. OriginalDriver 
 stabilized at the authored Baseline while the exported tracking mixer stays enabled.
 Independent source-clip checks can use the snapshot without assuming runtime slot IDs.
 Native blink/viseme behavior is covered separately by synthetic tracking tests.
+
+`IndirectFaceEmoChecks` verifies the constant Parameter Driver extension to the unified
+FaceEmo importer. It generates nested selectors with noncanonical numeric values, checks
+all 64 pairs against an independent expected table, reverses source-layer priority, and
+checks both-hand Fist timing. Unknown parent gates, Add/Random/Copy, inconsistent neutral,
+stalled inputs, animated input clips, consumer behaviours and writers in appended FX must
+retain manual candidates without inventing hand assignments. No avatar assets are stored.

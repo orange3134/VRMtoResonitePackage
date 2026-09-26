@@ -381,8 +381,9 @@ Dynamic Impulse はネットワーク RPC ではなく、装着者以外のク�
 
 VRChatの表情読み込みは `VrchatFaceEmoExpressionImporter` に一本化している。
 `VrchatExpressionParser` は顔カーブを読むだけで、従来のAnimator遷移評価、Entry/Exit投影、
-既定パラメーター固定、間接ハンド入力、Setドライバー連鎖、入れ子バンクの専用ルーターは削除した。
+既定パラメーター固定、Setドライバー連鎖、入れ子バンクの専用ルーターは削除した。
 Expression Menu、Expression Parameters、MA Parametersから表情セットを選ぶ処理もない。
+定数Parameter Driverを介したハンド割り当てだけは、後述の条件補完として同じ検出経路に追加している。
 MA Absolute/Appendは入力FXを順番に並べるためだけに使い、追加FXも同じFaceEmo基準で読む。
 VRMの規格上の表情定義と、変換後のResonite側の入力・出力グラフは別の責務として維持する。
 参照したFaceEmoの実装は [既存表情検出の調査](face-emo-expression-import.md) を参照。
@@ -413,6 +414,29 @@ FaceEmoの `ImportNormal` / `GetBranches` / `GetBranch` / `DivideMode` に合わ
 最初のパターンだけをResoPonの表情セットにする。通常形式の分岐数は必ずしも14ではない。
 未一致のジェスチャーはアバターの初期姿勢に戻す。元クリップの名前を使うので、
 PlumとSanatiaでCatalogの項目名が同じになるわけではない。
+
+### Parameter Driverを介するハンド条件の補完
+
+FaceEmo本体は、Gesture条件が中間パラメーターに置き換わった表情を条件なし候補として扱う。
+ResoPonでは `FaceEmoGestureConditions` で次の構造を確定できる場合に限り、同じ候補へ左右の条件を補う。
+別の表情読み込み経路やAnimatorの実行器ではなく、顔判定・端点抽出・初期値との差分・最初のセット選択は
+引き続き `VrchatFaceEmoExpressionImporter` を通す。既存の直接Gesture条件は同一レイヤーの補完条件より先に評価する。
+
+- 入力レイヤーは片手の0〜7をEntryとDefaultで8状態へ選び分ける。各状態に、同じfloat/intパラメーターへ
+  有限の定数をSetするVRC Avatar Parameter Driverが1個だけある。状態は現在値では留まり、他の7入力ではExitする。
+  Motionは未設定またはカーブ・イベントのない空Clip。ウェイト0の入力レイヤーも調べる。
+- Add/Random/Copy、未宣言パラメーター、重複した手の入力源、異なるNeutral値、同期レイヤーは補完しない。
+  追加FXを含め、同じパラメーターへの別のParameter Driver書き込みがあれば、そのパラメーターの補完を止める。
+- 消費レイヤーはEntryとDefaultを辿り、入れ子の親の条件も評価する。使用できる条件値は左右Gestureと、上で求めた
+  定数パラメーターだけ。既定値で未知のトグル条件を埋めない。全64組で所有関係の正しいStateを選べ、
+  そのStateに留まれることを要求する。Any State・Behaviour・有効な離脱などがある場合は補完しない。
+- 64組の固定表では非Neutralの手を採用し、両手が非Neutralなら後ろの入力レイヤーを優先する。
+  VRChatの「最後に状態へ入った手」という履歴は再現しない。パラメーター名・状態名・表情番号は推測に使わない。
+- 補完したFistのMotion Timeは、実際の `GestureLeftWeight` / `GestureRightWeight` と該当する手を照合する。
+  両手Fist時に反対の手のWeightを選ばず、固定ポーズは従来どおり全握りの端点で生成する。
+
+解析できない場合も通常のFaceEmo候補収集を続け、条件なし候補を削除しない。
+一般のSet連鎖や任意のAnimator経路には対応しない。補完した分岐数はFaceEmoの検出ログに残す。
 
 ### CAC形式の最初の表情セット
 
@@ -612,45 +636,41 @@ Plum の再変換・inspect と保存パッケージの左右64通り・102出�
 ExpressionSmoke は左右合計576通りの入力と各機種の安定待ち・ヒステリシス・再接続・入力制限・手動入力保持を検証した。
 全機種の入力配置と複製・保存再読込の検証、Plum の再変換・inspect も成功した。
 
-### Legnia 1.21: 検出済みの条件なし候補を選択できない
+### Legnia 1.21: FaceMorphからハンド割り当てを復元する
 
-FaceEmo統一後のcommit `550f18e` でLegnia 4Pを実変換し、inspectと保存後の実エンジンで調査した。
-候補検出は成功しており、Catalogには17表情とNeutral、Outputsには138シェイプがある。
-一方、GestureTableは0/64で、直接選択メニューに表示される表情も0件だった。
-18件すべての直接Selectイベントと左右64組を実行してもCurrentExpressionはnullのままで、
-138出力×64組（8,832項目）が初期値のままになることを確認した。
-これは現行の制限の再現結果であり、この調査では変換実装を修正していない。
+FaceEmo統一直後のcommit `550f18e` では、Legnia 4Pの候補検出は成功するがハンド割り当ては0/64だった。
+Catalogは17表情とNeutral、Outputsは138シェイプ。保存後の18件のSelectと64組の入力でも出力は初期値のままだった。
+ユーザーによるUnity上の確認でも、FaceEmoは表情を認識するが各ハンドジェスチャーへ割り当てられていなかった。
 
 元FXは `GestureLeft/Right` → Parameter Driverで `FaceMorph` をSet → 入れ子の
 `Face Set 1-8` / `9-16` / `17-24` / `25-32` のEntry条件でClipを選ぶ構造。
-同梱の通常・2P・着せ替え・Side Dの7種類のFXにもFaceMorph条件があり、
-CAC用の `SYNC_EM_EMOTE` はない。状態名のLeft/Rightや番号を根拠にCAC扱いしてはいけない。
+左は0〜7、右はNeutralが0で他は9〜15を書き込む。同梱の通常・2P・着せ替え・Side Dの7種類のFXにも
+FaceMorph条件があり、CAC用の `SYNC_EM_EMOTE` はない。状態名のLeft/Rightや番号からCAC扱いしてはいけない。
 
-FaceEmoの通常インポートは直接のGesture Equalsだけを条件として残すため、FaceMorph条件の
-表情は条件なし候補になる。`ExpressionImporter.ImportNormal` はこれらをunusedBranchesから
-第1パターンへ追加する。`Branch.IsMatched` は条件なし分岐をハンドサインに一致させないが、
-`FxGenerator.GenerateEmoteSelectMenuRecursive` は全Branchesを列挙してEmote Selectへ追加する。
-UIの `BranchListView_NotReachableBranchWithNoConditions` にも、条件なし表情はEmote Select用で、
-ジェスチャーで使いたい場合は条件を追加する旨が明示されている。
-したがって、FaceEmoで「表情を認識する」ことは、元の間接ハンド入力まで自動復元することを意味しない。
+FaceEmoの `ImportNormal` は直接Gesture Equals以外を条件なし候補にする。
+`Branch.IsMatched` はそれをハンドサインに一致させないが、`FxGenerator.GenerateEmoteSelectMenuRecursive`
+は全BranchesをEmote Selectへ追加する。表情の検出とハンド割り当ては異なる処理である。
 
-ResoPonも条件なし候補をCatalogへ残すが、出力側には旧方式の制約が残っている。
+2026-09-26: 上記の定数Parameter Driver条件補完を追加し、Legniaの間接ハンド割り当てを復元した。
+Legniaでは後ろの右手入力レイヤーが優先され、右がNeutralのとき左を使い、両手Neutralは初期姿勢に戻る。
+最初のセットを採用するルール、顔カーブの選別、追加の手動候補は維持している。
+実アバターの変換・inspect・保存後の全64組と8種類の姿勢の実再生が成功。
+元FXのDriver値・入れ子Entry・元Clipの最終キーを独立に読んだ照合でも、138出力×64組（8,832項目）が一致した。
+PlumとSanatiaも再変換・inspect・保存後64組の実再生に成功し、変更前のCatalog・固定ポーズ値・出力binding・対応表と一致した。
+合成テストでは番号やパラメーター名の変更、入力レイヤー順序、両手Fist、未知の親条件、別FXの書き込み、
+Add/Random/Copy、動かない入力状態、顔以外のカーブを持つ入力Motionについても確認する。
 
-- `ExpressionInputSetup.BuildMenuAvailability` はGestureTable内で参照される表情だけを表示する。
-- `ExpressionApiSetup.BuildSelectReceiver` は表情IDからPair.0〜63を逆引きし、見つかった場合だけ
-  左右の入力を更新する。Catalogの表情を直接再生する経路はなく、ボタンを表示するだけでは直らない。
-
-前の間接入力ルーターはFaceMorphまで追って左右の対応を補っていたが、FaceEmoのみの読み込みへ
-統一した際に削除済み。FaceEmo基準を維持してこの差を埋めるには、候補抽出を戻すのではなく、
-未割り当てのCatalog表情も選べる独立した手動選択経路が必要になる。
-ハンドジェスチャーへの追加割り当ては、手動選択とは別に条件編集として扱う。
+条件を補完できない手動候補の選択制限は別件として残る。
+`ExpressionInputSetup.BuildMenuAvailability` はGestureTable内で参照される表情だけを表示し、
+`ExpressionApiSetup.BuildSelectReceiver` は表情IDからPair.0〜63を逆引きして入力を更新する。
+今回の変更はハンド割り当ての復元であり、未割り当ての全Catalog候補を直接再生するUI/APIは追加していない。
 
 ### 旧Animator読み込みの調査記録
 
 以下のモデル固有のルーター調査・当時の検証結果は履歴として残す。
 `Vrchat*GestureRouter` と `VrchatExpressionMask` はFaceEmo統一時に削除済みであり、
 下記の既定値固定・履歴評価・経路拒否条件は現在の仕様ではない。
-現在の表情検出・セット選択には上記FaceEmo基準だけを使う。
+現在の表情検出・セット選択は上記FaceEmo基準と、その検出候補への限定的なハンド条件補完を使う。
 FBX名修復、出力グラフ、保存形式についての記録は各実装を参照する。
 
 ### 空の振り分けステートを使うジェスチャー表情

@@ -49,6 +49,8 @@ Prefab・FBXの初期ウェイトを収集した後に表情を推定する。
 Catalogと左右64通りへ変換する。通常形式は後ろのFXレイヤーを優先して条件付き分岐を選び、
 CACは番号順の14表情セットの最初を選ぶ。詳細は [表情システム](expression-system.md#faceemo-に合わせた表情候補の検出) を参照。
 従来のAnimator経路投影・既定値固定・Parameter Driver評価ルーターは削除した。
+定数Parameter Driverを介するハンド割り当ては `FaceEmoGestureConditions` で確定できる場合だけ
+同じFaceEmo候補へ条件を補完する。未知の条件を既定値で埋めず、一般のAnimator実行は再現しない。
 材質・Transform・イベント等の混在は顔カーブ抽出を妨げず、顔以外の効果は実行しない。
 顔のパスと実Rendererの一致、初期ウェイトとの差分を確認してからセットを確定する。
 

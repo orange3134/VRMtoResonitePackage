@@ -20,7 +20,8 @@ internal sealed class FaceEmoBranch
 {
     public string Name;
     public ExpressionClip Motion, BaseMotion;
-    public bool Grip, BaseAtEnd;
+    public bool Grip, BaseAtEnd, Inferred;
+    public string GripHand;
     public List<ExpressionClip> FaceMotions = new();
     public List<ExpressionCondition> Conditions = new();
 }
@@ -44,7 +45,8 @@ internal sealed class VrchatFaceEmoExpressionImporter
         }
     }
 
-    public void Read(FaceEmoPatterns result, UnityScene scene, YamlNode controller, string id)
+    public void Read(FaceEmoPatterns result, UnityScene scene, YamlNode controller, string id,
+        Func<YamlNode, bool> emptyMotion = null, IEnumerable<UnityScene> controllers = null)
     {
         if (result.Cac) return;
         var layers = controller?["m_AnimatorLayers"]?.Seq ?? new();
@@ -75,10 +77,18 @@ internal sealed class VrchatFaceEmoExpressionImporter
                     Branches = group.Select(b => b.Branch).ToList() });
             return;
         }
+        var gestureConditions = new FaceEmoGestureConditions(scene, controller, emptyMotion, controllers);
         int indexLayer = 0;
         foreach (var layer in layers)
         {
             var branches = Machine(layer["m_StateMachine"]?.FileID ?? 0, new());
+            // Same candidate/face/endpoint reader and first-set selection; only supplement hand conditions.
+            foreach (var assignment in gestureConditions.ForLayer(layer))
+            {
+                var branch = State(scene, assignment.State, new() {
+                    new("GestureLeft", 6, assignment.Left), new("GestureRight", 6, assignment.Right) }, inferred: true);
+                if (branch != null) branches.Add(branch);
+            }
             result.Patterns.Add(new() { Id = id + ":" + indexLayer++, Name = layer["m_Name"]?.AsString(), Branches = branches });
         }
 
@@ -119,7 +129,7 @@ internal sealed class VrchatFaceEmoExpressionImporter
         }
     }
 
-    private FaceEmoBranch State(UnityScene scene, long id, List<ExpressionCondition> conditions)
+    private FaceEmoBranch State(UnityScene scene, long id, List<ExpressionCondition> conditions, bool inferred = false)
     {
         if (scene.Doc(id) is not { ClassId: 1102 } state) return null;
         if (conditions.Count == 0 && state.Root["m_TimeParameterActive"]?.AsBool() == true &&
@@ -135,11 +145,13 @@ internal sealed class VrchatFaceEmoExpressionImporter
         }
         if (candidates.Count == 0) return null;
         var last = EndMotion(motion, false, new());
-        bool grip = state.Root["m_TimeParameterActive"]?.AsBool() == true && conditions.Any(c => c.Threshold == 1);
+        var fist = conditions.FirstOrDefault(c => c.Threshold == 1 &&
+            (!inferred || c.Parameter + "Weight" == state.Root["m_TimeParameter"]?.AsString()));
+        bool grip = state.Root["m_TimeParameterActive"]?.AsBool() == true && fist != null;
         var first = grip ? EndMotion(motion, true, new()) : last;
         return new() { Name = state.Root["m_Name"]?.AsString() ?? last?.Name ?? first?.Name ?? "Expression",
             Motion = last, BaseMotion = first, Grip = grip, BaseAtEnd = motion?.Guid == null,
-            Conditions = conditions, FaceMotions = candidates };
+            Conditions = conditions, FaceMotions = candidates, GripHand = grip ? fist.Parameter : null, Inferred = inferred };
 
         void AddFace(YamlNode reference)
         {
@@ -204,7 +216,7 @@ internal sealed class VrchatFaceEmoExpressionImporter
             {
                 var transition = new ExpressionTransition { Destination = layer.States.Count, CanTransitionToSelf = true };
                 transition.Conditions.AddRange(branch.Conditions); layer.Transitions.Add(transition);
-                string time = branch.Grip ? branch.Conditions.First(c => c.Threshold == 1).Parameter + "Weight" : null;
+                string time = branch.Grip ? branch.GripHand + "Weight" : null;
                 layer.States.Add(new(branch.Name, motions[branch].Id, 1, true, time));
             }
             layer.Transitions.Add(new() { Destination = 0, CanTransitionToSelf = true }); model.Layers.Add(layer);
@@ -215,7 +227,8 @@ internal sealed class VrchatFaceEmoExpressionImporter
             model.Clips.Clear(); model.Clips.AddRange(retained);
             string message = $"FaceEmo {(imported.Cac ? "CAC" : "normal")}: selected first set ({name}), " +
                 $"{selected.Count(b => b.Conditions.Count > 0)} gesture branches, {selected.Count(b => b.Conditions.Count == 0)} manual candidates. " +
-                "Later patterns, Animator routing, parameter defaults/drivers and Expression Menu are not imported.";
+                $"{selected.Count(b => b.Inferred)} branches have recovered hand conditions from constant Parameter Driver selectors. " +
+                "Later patterns, general Animator execution, parameter defaults and Expression Menu are not imported.";
             model.Diagnostics.Add(message); UniLog.Log(message);
         }
 

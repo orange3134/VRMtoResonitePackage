@@ -4,6 +4,7 @@ internal static class ParserChecks
     {
         CacExpressionChecks.Run(artifacts);
         NormalExpressionPatternChecks.Run(artifacts);
+        IndirectFaceEmoChecks.Run(artifacts);
         FaceExpressionDetectionChecks.Run(artifacts);
         MixedExpressionClipChecks.Run(artifacts);
         WeightedCurveChecks.Run();
