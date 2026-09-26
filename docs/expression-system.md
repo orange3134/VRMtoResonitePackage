@@ -47,6 +47,7 @@ Expressions/
     各 BlendShape/                 出力定義・Base・Result
       Tracking/                    既存の追跡がある出力だけ自動合成するDrive
   Drivers/各 Renderer/            DynamicBlendShapeDriver、必要なシェイプのみ登録
+    各シェイプ/                   SmoothValue<float>、TargetValue → BlendShapes[].Value
   Inputs/
     ContextMenu/                   対応表にある表情のみメニュー表示
     Keyboard/
@@ -92,25 +93,26 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 呼び出しには対象モジュールだけを宛先とする同期 Dynamic Impulse を使い、
 選択状態をイベント内で確定し、Playback も同期呼び出しして選んだ表情の各トラックの終端値を即時に書き込む。
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → Selection → Playback を同期実行する。
-同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態・固定ポーズ・通常出力が確定する。
-追跡対象の出力は通常のドライバー更新で反映する。時間補間は行わない。
+同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態・固定ポーズ・出力目標が確定する。
+追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
 表の編集・表情の無効化・Bindings参照の変更は、選択結果の変化を監視して反映する。
 
-Version 15 は通常の表情出力を選択イベント内のWriteで更新する。
+Version 16 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を Catalog/Bindings の Value に保存する。
 Playback は選択時と Bindings 参照の変更時にその値を Outputs の Pose / HasPose へコピーし、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
 元から瞬き・口パク等のドライバーがある出力だけTrackingボードを生成し、
 保存済みPoseと追跡BaseをValueFieldDriveで合成する。アニメーションの途中値は評価しない。
 AnimX・AnimationProvider・AssetLoader・トラック検索・サンプラーも生成しない。
-Result は DynamicBlendShapeDriver の Value を参照する DynamicField<float>。
+メッシュ出力のResultはSmoothValue<float>.TargetValueを参照するDynamicField<float>。
+SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、標準ドライバーが実メッシュへ反映する。
 通常出力は装着者だけが値をWriteし、未装着時はホストがBaseを適用する。
 追跡対象は各クライアントで同期されたPoseと各自のBaseを合成し、未装着時はBaseを使う。
-切り替え補間は行わず、FadeIn / FadeOut / FadeDuration / FadeWeight / Snapshot は生成しない。
+切り替え補間はSmoothValueに任せ、FadeIn / FadeOut / FadeDuration / FadeWeight / Snapshot は生成しない。
 連続・ループアニメーションも再生しない。Loop / Duration と Core の再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 15 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 16 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -356,7 +358,7 @@ Value に固定値を設定する。変換時は元カーブの最後のキー�
 Value・子レコードを編集した後は、表情を再選択して適用する。
 Bindings の参照自体を変更した場合は、その変更を監視して適用する。
 
-## 外部イベント API（Version 15、Tag・引数は Version 4 と共通）
+## 外部イベント API（Version 16、Tag・引数は Version 4 と共通）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
 左右の通常入力・メニュー入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
@@ -524,8 +526,19 @@ DynamicBlendShapeDriver は Expressions/Drivers 以下に SkinnedMeshRenderer �
 表情で使用するシェイプだけを登録する。同名 renderer は名前ではなく Component の同一性で区別する。
 Output と Drivers の同名 Slot には連番を付け、診断パスの重複も避ける。binding の Id・Path・Shape は変更しない。
 VRM の binding は数値インデックスの場合があるため、登録名は解決済みメッシュフィールドから実メッシュ名を取得する。
-各 Output の Result は対応する BlendShapes[].Value への DynamicField で、値を二重に保存・コピーしない。
+各OutputのResultは対応するSmoothValue.TargetValueへのDynamicFieldで、目標値を重複保存しない。
+SmoothValueは各Rendererの子にシェイプ名で1つずつ生成する。初期目標とBlendShapes[].Valueは解決済みフィールドの現在値で初期化し、
+Speed=20、WriteBack=falseでValueをBlendShapes[].ValueへTryLinkする。補間途中の値をTargetValueへ書き戻さない。
+Speedは秒数ではなく追従速度。小さくするとゆっくり、大きくすると速くなる。各SmoothValueのInspectorで調整できる。
+連続して表情を変えた場合は現在の補間値から新しい目標へ追従する。未装着・未割り当て時のBase復帰にも同じ補間を使う。
+瞬き・口パクの混合は従来どおりTargetValueを追従更新し、その結果にも同じスムージングがかかる。
+非メッシュの汎用フィールド出力は直接書き込む。
 Playback は通常出力の ExpressionOutput/Result を読み、値が変わる場合だけWriteする。追跡対象のResultはTrackingのDriveが駆動する。
+
+2026-09-27: Version 16の実メッシュ検証では、選択直後のTargetValue更新、実ウェイトの中間値、
+遷移途中の再選択、瞬き合成、複製・保存再読込を確認した。Legniaの実変換・inspectでは138個の
+SmoothValueを確認し、保存後の全64組・138出力が変更前と同じ最終値へ収束した。
+Catalog・固定ポーズ値・出力binding・ジェスチャー対応表はVersion 15と一致する。
 
 ## 検証
 
@@ -1077,7 +1090,7 @@ humanoidフラグのみで `m_Elements: []` のため、非Transformの表情シ
 `CompleteHandDispatcherChecks` は64組の選択、3種類のSDKマスクと同GUIDの上書き、
 回転混在、不存在シェイプと不明な集合の違い、不正な分岐・イベントの拒否を検証する。
 混在トラックの抽出と不正な顔曲線・空 Clip の扱いは `MixedExpressionClipChecks` で検証する。
-表情システムの実行方式はVersion 15の最終値Writeと、独立した瞬き・口パク追従を維持する。
+表情システムの実行方式は最終値Writeと独立した瞬き・口パク追従を維持し、Version 16でメッシュ出力にSmoothValueを追加した。
 
 実変換では65件のCatalog・95出力・64/64割り当てを確認した。保存パッケージの全64組で
 CurrentExpressionと出力値を照合し、48種類の表情を検証した。片手単独では右8種類・左6種類となり、

@@ -41,7 +41,7 @@ internal sealed class GesturePairCompiler
         if (unresolved > 0) Warn($"{unresolved} gesture pairs have history-dependent or cyclic selection; their table entries are unassigned.");
         AddMenu(model.Menu);
         if (layers.Length > 0)
-            Warn("Gesture pairs switch immediately to the final pose of each track. Animation playback, loops and Animator transition timing are not reproduced.");
+            Warn("Gesture pairs select the final pose of each track; mesh outputs approach it through SmoothValue. Source animation playback, loops and Animator transition timing are not reproduced.");
 
         void AddMenu(IEnumerable<ExpressionMenuControl> controls)
         {

@@ -97,11 +97,29 @@ internal static class ExpressionMeshDriverChecks
         Near(first.GetBlendShapeWeight("ActualSmile"), 0.2f, "first renderer drives its shape");
         Near(second.GetBlendShapeWeight("ActualSmile"), 0.8f, "same shape and slot names on second renderer remain independent");
         Near(first.GetBlendShapeWeight("ActualBlink"), 0.1f, "missing animation track follows blink Base");
+        var smoother = (SmoothValue<float>)dynamicResult.TargetField.Target.Parent;
+        float before = first.GetBlendShapeWeight("ActualSmile");
+        Select(2);
+        Near(smoother.TargetValue.Value, 0.7f, "selection immediately writes SmoothValue target");
+        Near(first.GetBlendShapeWeight("ActualSmile"), before, "selection does not jump the actual mesh weight");
+        bool intermediate = false;
+        for (int i = 0; i < 90; i++)
+        {
+            await default(NextUpdate);
+            float value = first.GetBlendShapeWeight("ActualSmile");
+            if (value > before + 0.00001f && value < 0.7f - 0.00001f) { intermediate = true; break; }
+        }
+        Check(intermediate, "mesh traverses intermediate weights");
+        before = first.GetBlendShapeWeight("ActualSmile");
+        Select(1);
+        Near(smoother.TargetValue.Value, 0.2f, "rapid selection replaces target mid-transition");
+        Near(first.GetBlendShapeWeight("ActualSmile"), before, "retarget does not restart with a discontinuity");
+        await Frames(); Near(first.GetBlendShapeWeight("ActualSmile"), 0.2f, "retarget reaches latest pose");
         Select(2); await Frames();
         Near(first.GetBlendShapeWeight("ActualSmile"), 0.7f, "mesh receives changed animation");
         Near(second.GetBlendShapeWeight("ActualSmile"), 0.4f, "second mesh receives changed animation");
         Near(first.GetBlendShapeWeight("ActualBlink"), 0.3f, "entry appended after asset await is linked");
-        Near(dynamicResult.DynamicValue, 0.7f, "DynamicField Result exposes the driver value");
+        Near(dynamicResult.DynamicValue, 0.7f, "DynamicField Result exposes the smoothing target");
         Check(smile.GetComponent<DynamicVariableSpace>().TryReadValue<float>("Result", out var read), "Result is readable through the dynamic variable space");
         Near(read, 0.7f, "dynamic variable reads remain current after Drive");
         manager.LeftEyeCloseOverride.Value = manager.RightEyeCloseOverride.Value = 0.9f; await Frames();
@@ -116,7 +134,7 @@ internal static class ExpressionMeshDriverChecks
     }
 
     private static void Set<T>(Slot slot, string name, T value) => Check(slot.WriteDynamicVariable(VariablePath(slot, name), value) == DynamicVariableWriteResult.Success, "write " + name);
-    private static async Task Frames(int count = 12) { for (int i = 0; i < count; i++) await default(NextUpdate); }
+    private static async Task Frames(int count = 90) { for (int i = 0; i < count; i++) await default(NextUpdate); }
     private static void Near(float actual, float expected, string message) => Check(Math.Abs(actual - expected) < 0.005f, $"{message}: {actual} ~= {expected}");
     private static void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 }

@@ -80,6 +80,14 @@ internal static class ImportedGestureAvatarChecks
                     "Imported pair or input mode disagrees with the selected gesture pair");
                 for (int i = 0; i < 6; i++) await default(NextUpdate);
                 var pose = ExpressionPackageSnapshot.Pose(mapped);
+                var smoothing = root.GetComponentsInChildren<SmoothValue<float>>();
+                for (int frame = 0; frame < 600 && smoothing.Any(s => !s.Value.IsLinkValid ||
+                    Math.Abs(s.Value.Target.Value - s.TargetValue.Value) > 0.00001f); frame++)
+                    await default(NextUpdate);
+                Check(smoothing.All(s => s.Value.IsLinkValid && Math.Abs(s.Value.Target.Value - s.TargetValue.Value) <= 0.00001f),
+                    "SmoothValue outputs converge to their current targets");
+                // The named mesh driver applies the newly settled value on its own update.
+                for (int i = 0; i < 2; i++) await default(NextUpdate);
                 var values = new List<float>();
                 foreach (var output in root.FindChild("Outputs").Children)
                 {

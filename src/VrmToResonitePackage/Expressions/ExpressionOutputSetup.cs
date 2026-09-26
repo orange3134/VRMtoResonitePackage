@@ -40,6 +40,14 @@ internal sealed partial class ExpressionSystemSetup
         // Link each entry explicitly, including entries added after an asset await.
         if (!shape._drive.TryLink(field))
             throw new InvalidOperationException($"Cannot drive blendshape: {renderer.Slot.Name}/{name}");
-        return shape.Value;
+        var smooth = driver.Slot.AddSlot(UniqueChildName(driver.Slot, name)).AttachComponent<SmoothValue<float>>();
+        smooth.Speed.Value = 20f;
+        smooth.WriteBack.Value = false;
+        smooth.TargetValue.Value = initialValue;
+        if (!smooth.Value.TryLink(shape.Value))
+            throw new InvalidOperationException($"Cannot smooth blendshape: {renderer.Slot.Name}/{name}");
+        // Selection writes only the destination. SmoothValue owns interpolation,
+        // including retargeting mid-transition; the native driver keeps name binding.
+        return smooth.TargetValue;
     }
 }

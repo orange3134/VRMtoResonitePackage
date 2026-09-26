@@ -215,3 +215,11 @@ shortcuts through the actual keyboard Flux, mocking only KeyHeld sensors.
 For imported packages, `RESOPON_TEST_KEYBOARD_PRIMARY_HAND=0` asserts Left uses Shift;
 `1` asserts Right uses Shift. The other hand must require Shift+Ctrl. These checks
 also run after package import; Ctrl alone and no modifiers must trigger neither hand.
+Version 16 inserts a SmoothValue<float> per named mesh-driver entry. Result now
+views TargetValue; selection updates the destination synchronously while Value
+drives the DynamicBlendShapeDriver entry. Real-mesh tests require intermediate
+weights, continuous retargeting during a transition, convergence, blink composition,
+independent same-name renderers, clone and package reload. Graph checks require
+exactly one smoother per mesh output and verify both links. Imported-avatar checks
+wait for smoothing to converge before comparing all 64 final poses with the baseline.
+Speed defaults to 20 and WriteBack is disabled. Generic standalone fields remain direct.

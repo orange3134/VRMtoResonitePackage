@@ -52,14 +52,14 @@ internal static class ExpressionGraphChecks
             var renderer = target.FindNearestParent<SkinnedMeshRenderer>();
             if (renderer != null)
             {
-                var meshDriver = result.FindNearestParent<DynamicBlendShapeDriver>();
-                var entry = result.Parent as DynamicBlendShapeDriver.BlendShape;
-                Check(meshDriver != null && entry != null && meshDriver.Renderer.Target == renderer && entry.Value == result &&
-                    entry._drive.Target == target && entry._drive.IsLinkValid && renderer.TryGetBlendShape(entry.BlendShapeName.Value) == target,
-                    $"Result references the correct renderer's named blendshape entry: {output.Name}; " +
-                    $"renderer={meshDriver?.Renderer.Target == renderer}, value={entry?.Value == result}, " +
-                    $"target={entry?._drive.Target == target}, linked={entry?._drive.IsLinkValid}, " +
-                    $"name={entry?.BlendShapeName.Value}, shapes={renderer.MeshBlendshapeCount}");
+                var smooth = result.Parent as SmoothValue<float>;
+                var entry = smooth?.Value.Target?.Parent as DynamicBlendShapeDriver.BlendShape;
+                var meshDriver = entry?.FindNearestParent<DynamicBlendShapeDriver>();
+                Check(smooth != null && result == smooth.TargetValue && smooth.Value.IsLinkValid &&
+                    !smooth.WriteBack.Value && smooth.Speed.Value > 0 && entry != null && entry.Value == smooth.Value.Target &&
+                    meshDriver?.Renderer.Target == renderer && entry._drive.Target == target && entry._drive.IsLinkValid &&
+                    renderer.TryGetBlendShape(entry.BlendShapeName.Value) == target,
+                    $"Result targets SmoothValue, which drives the correct renderer's named blendshape: {output.Name}");
             }
             else Check(result == target, "standalone field outputs are driven directly");
         }
@@ -69,6 +69,8 @@ internal static class ExpressionGraphChecks
             .Where(r => r != null).ToArray();
         Check(meshDrivers.Select(d => d.Renderer.Target).Distinct().Count() == meshDrivers.Count &&
             meshDrivers.Count == meshOutputs.Distinct().Count(), "exactly one driver per output renderer");
+        Check(expressions.GetComponentsInChildren<SmoothValue<float>>().Count == meshOutputs.Length,
+            "exactly one SmoothValue per mesh output");
         foreach (var meshDriver in meshDrivers)
             Check(meshDriver.BlendShapes.Count == meshOutputs.Count(r => r == meshDriver.Renderer.Target),
                 "mesh driver contains only required shape entries");
