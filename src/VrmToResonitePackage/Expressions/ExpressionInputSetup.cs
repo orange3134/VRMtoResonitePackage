@@ -134,13 +134,14 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildKeyboard()
     {
         var root = _inputs.AddSlot("Keyboard");
+        _model.Diagnostics.Add($"Keyboard: Shift + keypad uses {(_keyboardPrimaryHand == 0 ? "Left" : "Right")}; Shift + Ctrl + keypad uses the other hand. Priority is inferred from exported gesture poses; ties prefer Left.");
         for (int hand = 0; hand < 2; hand++)
         {
             var settings = Record(root, hand == 0 ? "Left" : "Right", KeyboardSpace);
             var data = settings.AddSlot("DV");
             Data(data.AddSlot("Tag"), "Tag", GestureTag(hand));
             Data(data.AddSlot("Shift"), "Shift", true);
-            Data(data.AddSlot("Control"), "Control", hand == 1);
+            Data(data.AddSlot("Control"), "Control", hand != _keyboardPrimaryHand);
             for (int gesture = 0; gesture < 8; gesture++)
                 Data(data.AddSlot("Key." + gesture), "Key." + gesture, (InputKey)((int)InputKey.Keypad0 + gesture));
             BuildKeyboardHand(settings.AddSlot("Logic"), settings);

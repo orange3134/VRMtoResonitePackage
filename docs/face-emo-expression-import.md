@@ -78,6 +78,22 @@ ObjectReference curve や AnimationEvent を明示的に削除する処理はこ
   Blink はレイヤー名の単語 `blink`、ループ、顔 binding、3キー以上かつ値10以上を含む
   blendShape 曲線を条件にする。通常の表情候補判定とは別処理。
 
+## 左右の優先順位と生成FX
+
+FaceEmo自体に常時右優先・左優先の固定ルールはない。`Runtime/Domain/Mode.cs` の
+`UpdateTable` は左右64組ごとにBranchesを先頭から調べ、`Branch.IsMatched` が最初に成立した
+分岐で打ち切る。`ChangeBranchOrder` は並べ替え後にこの対応表を更新する。
+
+- 通常インポートはFXレイヤーを逆順にし、レイヤー内では最初の条件のHand、HandGestureでソートする。
+  `Hand.Left=0`、`Right=1` のため、同一レイヤーでは左条件が先になる。
+- CACインポートは表情番号の昇順で右7種・左7種を登録するため、競合すれば先の右条件が採用される。
+- `FxGenerator.GenerateFaceEmoteSetControlLayer` は `GetBranchIndex` で既に計算された対応表を参照し、
+  `GetEmoteIndex` で分岐番号から表情番号を生成する。生成時には表情番号と左右の固定対応はない。
+
+従って、FaceEmo生成FXの `SYNC_EM_EMOTE` が小さい番号であることを根拠に、元の条件が右手だったとは判断できない。
+12Bの同梱設定と生成FXでは左手で表情を選ぶが、CAC形式として再インポートすると右側へ再割り当てされる。
+元アバターの挙動を維持する場合は、候補の検出・先頭セットの選択と、元FXからの左右割り当ての復元を区別する。
+
 ## 再利用時の判断
 
 顔 binding による候補検出と、ハンドジェスチャーへの割り当てを分離する設計が参考になる。

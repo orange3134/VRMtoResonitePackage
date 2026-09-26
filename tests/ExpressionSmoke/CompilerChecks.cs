@@ -4,6 +4,7 @@ internal static class CompilerChecks
 {
     public static void Run()
     {
+        HandPriorityChecks.Run();
         var model = new ExpressionModel();
         ExpressionClip Clip(string id, string shape, float value)
         {

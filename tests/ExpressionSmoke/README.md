@@ -207,3 +207,11 @@ parent-before-child behaviours, Set-Copy-Add chains, cross-FX writers, repeated 
 cycles, transition priority/Mute/Solo, discrete 1D BlendTree children and fallback priority. Every supported fixture checks
 all 64 input pairs against authored expected values. Unseen clips and later FaceEmo patterns
 must never enter the Catalog through graph evaluation.
+
+Keyboard defaults follow the exported gesture table's hand priority. Pure checks
+cover both winners, identical clips with different IDs, sparse and unresolved tables,
+combined poses, mixed priorities and ties. Runtime checks exercise all 16 keypad
+shortcuts through the actual keyboard Flux, mocking only KeyHeld sensors.
+For imported packages, `RESOPON_TEST_KEYBOARD_PRIMARY_HAND=0` asserts Left uses Shift;
+`1` asserts Right uses Shift. The other hand must require Shift+Ctrl. These checks
+also run after package import; Ctrl alone and no modifiers must trigger neither hand.

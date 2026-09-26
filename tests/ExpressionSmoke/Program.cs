@@ -88,6 +88,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         ExpressionLayoutChecks.SaveKeyboardLayout(expressions, Path.Combine(artifacts, "keyboard-layout.json"));
         ExpressionGraphChecks.CheckLayout(expressions);
         await ExpressionDynamicInputChecks.CheckEdits(expressions);
+        await KeyboardPriorityChecks.Run(expressions, 0);
         await ExpressionInputEventChecks.Run(expressions);
         var core = expressions.FindChild("Core"); var api = expressions.FindChild("API").FindChild("Receivers");
         var catalog = expressions.FindChild("Catalog"); var table = expressions.FindChild("GestureTable");

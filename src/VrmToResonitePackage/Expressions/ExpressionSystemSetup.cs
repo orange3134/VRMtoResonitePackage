@@ -24,6 +24,7 @@ internal sealed partial class ExpressionSystemSetup
     private const string MenuRefreshTag = "ResoPon/Expression/Internal/MenuRefresh";
     private Slot _menuAvailability;
     private GesturePairCompiler _compiled;
+    private int _keyboardPrimaryHand;
     private readonly Dictionary<string, Slot> _clips = new();
     private readonly Dictionary<string, Slot> _outputSlots = new();
 
@@ -187,6 +188,9 @@ internal sealed partial class ExpressionSystemSetup
             }
             _clips[clip.Id] = entry;
         }
+        var exported = definitions.Where(c => _clips.ContainsKey(c.Id)).ToDictionary(c => c.Id);
+        _keyboardPrimaryHand = ExpressionHandPriority.PreferredHand(
+            _compiled.Pairs.Select(id => id == null ? null : exported.GetValueOrDefault(id)).ToArray(), neutral);
     }
 
     private void DescribeGraphs()
