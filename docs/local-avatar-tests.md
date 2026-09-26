@@ -49,6 +49,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-local-avatar.ps
 コミット前に `git check-ignore .local/avatar-tests.json` と `git diff --cached` で、
 パス・ログ・アバター本体がステージされていないことを確認する。
 
+`-SkipBuild` で同じDLLを使う複数の変換を同秒に起動すると、DLL横の `Logs/convert_yyyyMMdd_HHmmss.log`
+が衝突する。並行検証には既定の実行別ビルドを使う。また、実行中のDLLへビルド出力を上書きしない。
+
 ### 利用中の EXE まで修正が反映されているか確認する
 
 専用ディレクトリでの回帰テストが成功しても、通常利用する `publish/ResoPon.exe` は更新されない。

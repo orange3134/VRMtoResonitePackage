@@ -48,7 +48,7 @@ internal static class IndirectFaceEmoChecks
         yaml.Append("--- !u!1107 &102\nAnimatorStateMachine:\n  m_DefaultState: {fileID: 600}\n  m_ChildStates:\n  - m_State: {fileID: 600}\n  m_ChildStateMachines:\n  - m_StateMachine: {fileID: 103}\n  - m_StateMachine: {fileID: 104}\n  - m_StateMachine: {fileID: 105}\n  m_EntryTransitions:\n  - {fileID: 700}\n  - {fileID: 701}\n");
         yaml.Append("--- !u!1109 &700\nAnimatorTransition:\n  m_DstStateMachine: {fileID: 103}\n  m_Conditions:\n" + Condition("Selector", 3, 0) + Condition("Selector", 4, 100));
         yaml.Append("--- !u!1109 &701\nAnimatorTransition:\n  m_DstStateMachine: {fileID: 104}\n  m_Conditions:\n" + Condition("Selector", 3, 100));
-        yaml.Append("--- !u!1102 &600\nAnimatorState:\n  m_Name: Neutral\n  m_Motion: {fileID: 0}\n");
+        yaml.Append("--- !u!1102 &600\nAnimatorState:\n  m_Name: Neutral\n  m_Motion: {fileID: 0}\n  m_Transitions:\n  - {fileID: 799}\n--- !u!1101 &799\nAnimatorStateTransition:\n  m_IsExit: 1\n  m_Conditions:\n  - m_ConditionEvent: Selector\n    m_ConditionMode: 7\n    m_EventTreshold: 0\n");
         for (int hand = 0; hand < 2; hand++)
         {
             yaml.Append($"--- !u!1107 &{103 + hand}\nAnimatorStateMachine:\n  m_DefaultState: {{fileID: {601 + hand * 7}}}\n  m_ChildStates:\n");
@@ -77,12 +77,12 @@ internal static class IndirectFaceEmoChecks
             VrchatExpressionDetection.FilterFaceCurves(model, new Dictionary<ExpressionBinding, float> { [binding] = 0.12f });
             return model;
         }
-        void Table(ExpressionModel model, bool leftWins = false)
+        void Table(ExpressionModel model, bool leftWins = false, bool stalledLeft = false)
         {
             var compiler = new GesturePairCompiler(model, model.Clips, _ => 0.12f);
             for (int l = 0; l < 8; l++) for (int r = 0; r < 8; r++)
             {
-                int expected = leftWins && l > 0 ? l : r > 0 ? r + 7 : l;
+                int expected = leftWins && l > 0 ? l : r > 0 ? r + 7 : stalledLeft ? 0 : l;
                 var pose = model.Clips.Concat(compiler.Generated).Single(c => c.Id == compiler.Pairs[l * 8 + r]);
                 Check(Math.Abs(pose.Curves.Single().Keys[^1].Value - (expected * 0.05f + 0.12f)) < 0.00001f, $"indirect pair {l},{r} -> {expected}");
             }
@@ -104,11 +104,22 @@ internal static class IndirectFaceEmoChecks
             (source.Replace("    type: 0", "    type: 2"), "Random"),
             (source.Replace("    type: 0", "    type: 3"), "Copy"),
             (source + Driver(999, 42), "unknown writer"),
-            (source.Replace(Driver(510, 0), Driver(510, 2)), "inconsistent neutral"),
-            (source.Replace("  - {fileID: 400}\n", ""), "stalled input"),
-            (source.Replace("  m_DstStateMachine: {fileID: 103}", "  m_HasExitTime: 1\n  m_DstStateMachine: {fileID: 103}"), "timed selector"),
-            (source.Replace(Condition("Selector", 4, 100), Condition("Unknown toggle", 4, 100)), "unknown parent gate"),
-            (source.Replace("m_Name: Candidate1\n", "m_Name: Candidate1\n  m_StateMachineBehaviours:\n  - {fileID: 999}\n"), "consumer behaviour") }) ManualOnly(Parse(text), reason);
+            (source.Replace(Driver(510, 0), Driver(510, 2)), "unmatched neutral value cycles through Entry/Exit"),
+
+
+
+            (source.Replace(Condition("Selector", 4, 100), Condition("Unknown toggle", 4, 100)), "unknown parent gate")
+ }) ManualOnly(Parse(text), reason);
+        Table(Parse(source.Replace("  - {fileID: 400}\n", "")), stalledLeft: true);
+        foreach (string variation in new[] {
+            source.Replace("  m_DstStateMachine: {fileID: 103}", "  m_HasExitTime: 1\n  m_DstStateMachine: {fileID: 103}"),
+            source.Replace("m_Name: Candidate1\n", "m_Name: Candidate1\n  m_StateMachineBehaviours:\n  - {fileID: 999}\n") })
+        {
+            var partial = Parse(variation);
+            bool Assigned(int l, int r) => partial.Layers.Single().Transitions.Any(t => t.Conditions.Count > 0 &&
+                t.Conditions.All(c => c.Matches(c.Parameter == "GestureLeft" ? l : r)));
+            Check(!Assigned(1, 0) && Assigned(0, 2), "unresolved left route preserves independent right assignments and Catalog");
+        }
         ManualOnly(Parse(source, "--- !u!91 &91\nAnimatorController:\n  m_AnimatorLayers: []\n" + Driver(999, 42)), "writer in appended FX");
         Asset("Empty.anim", 3, empty.Replace("m_FloatCurves: []", "m_FloatCurves:\n  - classID: 95\n    path: ''\n    attribute: Selector"));
         ManualOnly(Parse(source), "animated input is not empty just because it has no face curve");

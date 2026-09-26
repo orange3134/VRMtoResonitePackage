@@ -196,9 +196,14 @@ stabilized at the authored Baseline while the exported tracking mixer stays enab
 Independent source-clip checks can use the snapshot without assuming runtime slot IDs.
 Native blink/viseme behavior is covered separately by synthetic tracking tests.
 
-`IndirectFaceEmoChecks` verifies the constant Parameter Driver extension to the unified
-FaceEmo importer. It generates nested selectors with noncanonical numeric values, checks
-all 64 pairs against an independent expected table, reverses source-layer priority, and
-checks both-hand Fist timing. Unknown parent gates, Add/Random/Copy, inconsistent neutral,
-stalled inputs, animated input clips, consumer behaviours and writers in appended FX must
-retain manual candidates without inventing hand assignments. No avatar assets are stored.
+`IndirectFaceEmoChecks` retains the Legnia-shaped nested-selector regression with arbitrary
+parameter names and numbers, both-hand Fist timing and source-layer ordering. It also
+checks that a stalled hand input follows the authored graph and that unresolved paths do
+not discard independent assignments or manual candidates.
+
+`FaceEmoGraphRoutingChecks` checks Catalog-first routing independently of Parameter Driver
+placement: driver-free Entry/Any State/ordinary chains, intermediate faces, nested Exit,
+parent-before-child behaviours, Set-Copy-Add chains, cross-FX writers, repeated controllers,
+cycles, transition priority/Mute/Solo, discrete 1D BlendTree children and fallback priority. Every supported fixture checks
+all 64 input pairs against authored expected values. Unseen clips and later FaceEmo patterns
+must never enter the Catalog through graph evaluation.

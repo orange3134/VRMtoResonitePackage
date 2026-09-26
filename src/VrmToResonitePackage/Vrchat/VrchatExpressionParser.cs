@@ -4,7 +4,7 @@ using VrmToResonitePackage.Unity;
 
 namespace VrmToResonitePackage.Vrchat;
 
-/// <summary>Reads face curves and FaceEmo patterns; does not execute Unity Animator routing.</summary>
+/// <summary>Reads FaceEmo candidates and supplies graphs for Catalog-constrained gesture routing.</summary>
 public static class VrchatExpressionParser
 {
     public static ExpressionModel Parse(UnityPackage package, YamlNode descriptor, IEnumerable<YamlNode> modularComponents = null)
@@ -20,14 +20,15 @@ public static class VrchatExpressionParser
             if (asset?.HasContent != true) continue;
             if (asset.Extension != ".controller") { Warn(asset.LogicalPath + ": unsupported controller type"); continue; }
             var scene = package.ReadScene(asset);
-            controllers.Add((scene, asset.Guid));
+            controllers.Add((scene, asset.Guid + ":" + controllers.Count));
         }
         foreach (var (scene, id) in controllers)
         {
             importer.Read(model.ImportedPatterns, scene, scene.Documents.Values.FirstOrDefault(d => d.ClassId == 91)?.Root,
-                id, EmptyMotion, controllers.Select(c => c.Scene));
+                id);
             if (model.ImportedPatterns.Cac) break;
         }
+        if (!model.ImportedPatterns.Cac) model.ImportedPatterns.GestureRouting = new(controllers, SafeRoutingMotion);
         foreach (string hand in new[] { "Left", "Right" })
         {
             model.Parameters["Gesture" + hand] = new("Gesture" + hand, 3, 0);
@@ -39,14 +40,14 @@ public static class VrchatExpressionParser
         return model;
 
         void Warn(string message) { model.Diagnostics.Add(message); UniLog.Warning("Expressions: " + message); }
-        bool EmptyMotion(YamlNode reference)
+        bool SafeRoutingMotion(YamlNode reference)
         {
             var asset = package.ByGuid(reference?.Guid);
             if (asset?.HasContent != true || asset.Extension != ".anim" ||
                 package.ReadScene(asset).Doc(reference.FileID ?? 0) is not { ClassId: 74 } doc) return false;
             var root = doc.Root;
             return root["m_Compressed"]?.AsBool() != true && (root["m_Events"]?.Seq?.Count ?? 0) == 0 &&
-                root.Map.All(kv => !kv.Key.EndsWith("Curves", StringComparison.Ordinal) || (kv.Value.Seq?.Count ?? 0) == 0);
+                !(root["m_FloatCurves"]?.Seq?.Any(c => c["classID"]?.AsInt() == 95) ?? false);
         }
         ExpressionClip ReadClip(YamlNode reference)
         {
