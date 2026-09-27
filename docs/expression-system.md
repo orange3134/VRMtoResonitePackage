@@ -4,7 +4,7 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 [変数・定数リファレンス](expression-variables.md)を参照。
 
 左右それぞれの現在のジェスチャーを 0〜7 の整数で保持し、
-`LeftGesture * 8 + RightGesture` で64通りの対応表を引く。
+`GestureTable.Pair.L{LeftGesture}R{RightGesture}` の名前で64通りの対応表を直接引く。
 対応表で選んだ表情の各トラックの終端値へ即座に切り替え、固定ポーズとして保持する。
 VRChatのカスタムFXからFaceEmo基準で最初の表情パターンを読み取り、対応表へ変換する。
 左右64通りへ静的に変換する方式であり、Animator 全体や汎用パラメーターの状態機械は生成しない。
@@ -37,7 +37,7 @@ flowchart LR
 Expressions/
   DV/                              システム共通の変数（1変数1子 Slot）
     Core.*                         左右の状態、現在の表情
-    GestureTable.Pair.0〜63         64個の Catalog 参照
+    GestureTable.Pair.L0R0〜L7R7         64個の Catalog 参照
     Version・Receiver・Catalog      バージョンと入口への参照
   Catalog/                         表情ごとの定義と最終値の一覧
   GestureTable/                    対応表を読む起点（監視ロジックなし）
@@ -123,7 +123,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 | 処理 | 実行するきっかけ |
 |---|---|
 | Lifecycle | OnStart とローカル装着状態の変化 |
-| Selection | API の同期呼び出し、左右から求めた PairIndex または検証済み表情参照の変化 |
+| Selection | API の同期呼び出し、左右から求めた PairKey または検証済み表情参照の変化 |
 | キーボード | 左右それぞれの8キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
 | Playback | 選択イベント内で保存済みValueを即時適用。選択参照・Bindings参照・書き込み権限の変化でも更新。通常出力へ一括Write |
@@ -161,14 +161,14 @@ Core の入力ノード化は現行の名前付き空間で再検証し、同一
 次の読み取りは `ReadDynamicValueVariable<T>`／`ReadDynamicObjectVariable<T>` を維持する。
 
 - 切り替え・初期化時の ForEach の出力レコード、選択中の Catalog：実行中に Source Slot が変わる。
-- `ExpressionSystem/GestureTable.Pair.N`：左右値や走査番号で読み取る変数名が変わる。
+- `ExpressionSystem/GestureTable.Pair.LnRm`：左右の値を含むキーで読み取る変数名が変わる。
 
 入力ノードには Source Slot を渡せないため、これらはそのまま入力ノードに置き換えない。
 
 子 Slot の処理は `Children` → `ForEachObject<IReadOnlyList<Slot>, Slot>`（表示名 ForEach）で列挙する。
 すべてのループ本体は列挙中に子 Slot の追加・削除・並べ替えを行わず、元の直下の子の順序を保つ。
 装着者は同じアバター配下の各ボードにある `GetActiveUserSelf` で取得する。
-各ボードは独立した FluxGroup を維持する。対応表の逆引きには、安定した Pair.0〜63 を数値で走査する For を使い、GetChild は使わない。
+各ボードは独立した FluxGroup を維持する。対応表の逆引きには、左0〜7と右0〜7の二重の For で Pair.LnRm を読む方式を使い、GetChild は使わない。
 
 ## 不具合の調べ方
 
@@ -179,13 +179,13 @@ Inspector 上の Core の変数名には `ExpressionSystem/Core.` が付く。Ge
 | Core の変数 | 確認する内容 |
 |---|---|
 | `LeftGesture` / `RightGesture` | 各入力から届いた0〜7の状態 |
-| `PairIndex` | 左×8＋右で求めた対応表の番号 |
+| `PairKey` | `L{左}R{右}` 形式の対応表キー（例：L1R2） |
 | AllowExternalInput | true=通常入力も許可、false=コンテキストメニューのみ（編集可能） |
 | `CurrentExpression` | Selection の検証を通過した再生対象。無効・未割当なら null |
 
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
-2. 番号が正しく表情が違う場合は、`PairIndex` に対応する `GestureTable` の参照と `AllowExternalInput` を確認し、`Selection` を調べる。
-3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable.Pair.N`（N は PairIndex）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`、`Bindings` の有効な参照を確認する。
+2. キーが正しく表情が違う場合は、`PairKey` に対応する `GestureTable` の参照と `AllowExternalInput` を確認し、`Selection` を調べる。
+3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable.Pair.LnRm`（末尾の LnRm は PairKey）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`、`Bindings` の有効な参照を確認する。
 4. 選択が正しく見た目が違う場合は、`Core/Logic/Playback` と該当出力の `Base`、`TrackingWeight`、`Result`、`Target` を調べる。
 
 `AllowExternalInput` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
@@ -212,11 +212,11 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
 ## Selection と再生対象
 
 Core に保存する表情参照は `CurrentExpression` だけ。`MappedExpression` と `CandidateExpression` は生成しない。
-Selection は `Expressions/DV/GestureTable.Pair.N` を読み、Slot 有効・Enabled=true・Bindings参照先が有効を確認する。
+Selection は左・右を文字列化して `L{左}R{右}` を組み立て、`Expressions/DV/GestureTable.Pair.LnRm` を読み、Slot 有効・Enabled=true・Bindings参照先が有効を確認する。
 通過した参照（無効なら null）をその更新中のローカル値として確定し、CurrentExpression と比較する。
 異なる場合は CurrentExpression を設定する。Playback を同期呼び出しし、終端値を即時にWriteする。
 同じ参照なら同じ固定ポーズになる。解除・無効化も補間せず Base へ戻す。
-未検証の対応表の参照を調べたい場合は、PairIndex に対応する行を直接見る。
+未検証の対応表の参照を調べたい場合は、PairKey に対応する行を直接見る。
 SelectionStatus は生成・計算しない。入力モードは AllowExternalInput、再生対象は CurrentExpression で確認する。
 未割当と無効・未ロードはどちらも CurrentExpression=null となり、理由は対応表と参照先を調べる。
 
@@ -285,7 +285,7 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
 
 直接表情を選ぶ `Select expression` は、対応表に存在する有効な表情だけを表示する。
 選択すると、現在の対応表を逆引きして該当する左右値を両方更新し、`ExpressionSystem/Core.AllowExternalInput=false` にする。
-同じ表情に複数の組がある場合は `PairIndex` が最小の組を使う。
+同じ表情に複数の組がある場合は左が小さい組を優先し、同じ左なら右が小さい組を使う。
 Catalog の Slot を固定用に保持する Override 変数は生成しない。
 
 `Allow gestures and keyboard` は bool を true に、`Menu only` は false にする。
@@ -305,8 +305,8 @@ Touchは接触・Clickの5ビット、Indexは5本の指の近位関節角度、
 
 ## 対応表と表情の編集
 
-`Expressions/DV/GestureTable.Pair.N` の各スロットには `ExpressionSystem/GestureTable.Pair.N` という DynamicReferenceVariable<Slot> がある。
-N は左×8＋右。例えば左1・右2は `Pair.10`。
+`Expressions/DV/GestureTable.Pair.LnRm` の各スロットには `ExpressionSystem/GestureTable.Pair.LnRm` という DynamicReferenceVariable<Slot> がある。
+n は左、m は右の0〜7の値。例えば左1・右2は `Pair.L1R2`。
 参照先を `Catalog` の表情スロットへ変更するだけで割り当てを編集できる。
 左右の組み合わせごとにアニメーションを複製せず、同じ表情は同じ Catalog エントリーを参照する。
 
@@ -672,7 +672,7 @@ Legniaは従来の正常なCatalog・固定ポーズ値・対応表と一致し�
 条件を補完できない手動候補の選択制限は別件として残る。
 Version 21ではメニュー項目の自動選択可否制御と `GestureTable/Logic` の監視を削除した。
 対応表の参照有無や表情の Active・Enabled に応じたメニューの Enabled 更新は行わない。
-`ExpressionApiSetup.BuildSelectReceiver` は表情IDからPair.0〜63を逆引きして入力を更新する。
+`ExpressionApiSetup.BuildSelectReceiver` は表情IDからPair.L0R0〜L7R7を左・右の順に逆引きして入力を更新する。
 今回の変更はハンド割り当ての復元であり、未割り当ての全Catalog候補を直接再生するUI/APIは追加していない。
 
 ### 12B 1.0.0: 元FaceEmo設定とCAC再インポートの割り当ての違い

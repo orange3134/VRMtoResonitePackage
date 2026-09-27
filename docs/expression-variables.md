@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 21`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 22`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -25,9 +25,9 @@
 | Diagnostics/Graph modules/各項目 | `ExpressionSystem.Diagnostics.GraphModule` | ボードのパスとノード数 |
 
 `Record()` は空間名を必須引数で受け取り、`OnlyDirectBinding=true` の空間を作る。
-例外は Expressions 自身（false）で、Core と GestureTable には空間を追加せず、Expressions/DV の `ExpressionSystem/Core.*` と `ExpressionSystem/GestureTable.Pair.N` を共有空間へ登録する。
+例外は Expressions 自身（false）で、Core と GestureTable には空間を追加せず、Expressions/DV の `ExpressionSystem/Core.*` と `ExpressionSystem/GestureTable.Pair.LnRm` を共有空間へ登録する。
 すべての DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot 直下の `DV` に、1変数1子 Slot で配置する。
-子 Slot 名は `/` 以降の変数名。例：`Expressions/DV/Core.LeftGesture`、`Expressions/DV/GestureTable.Pair.0`、
+子 Slot 名は `/` 以降の変数名。例：`Expressions/DV/Core.LeftGesture`、`Expressions/DV/GestureTable.Pair.L0R0`、
 `Catalog/各表情/DV/Id`、`Outputs/各項目/DV/Result`。
 以下の配置先は論理的な所属を示し、変数の実体は各空間の `DV/変数名` に置く。
 単なる整理用の Catalog・Outputs・Bindings・Diagnostics には空間を追加しない。
@@ -35,7 +35,7 @@
 ProtoFlux の読み書きは対象の空間名と変数名を明示し、変数生成は配置先の空間名を使う。単一モジュールの接頭辞は Slot 表示名から推測せず、明示的に付ける。
 固定の読み取り先がノード自身の祖先と同じ名前付き空間を指す場合は Dynamic Variable Input にする。
 各手のキーボード設定・装着状態、コントローラーの状態と親機種の設定、Core 内の Selection／Playback の状態・表情参照、各 Output 内の入力値が対象。
-実行時に対象が変わるレコードと Pair.N の可変名は ReadDynamicVariable を使う。Core と固定の表セルは、各モジュールから共通の ExpressionSystem 空間の Dynamic Variable Input で読める。
+実行時に対象が変わるレコードと Pair.LnRm の可変名は ReadDynamicVariable を使う。Core と固定の表セルは、各モジュールから共通の ExpressionSystem 空間の Dynamic Variable Input で読める。
 
 Version 17 で単一モジュールを統合・空間名を階層化し、Version 18 で DV 配下の1変数1スロット配置に統一した。旧形式の空間は新規生成しない。既存パッケージは再変換・再インポートで更新する。
 DynamicVariable を直接読む外部処理は新しい名前へ変更する。公開 Dynamic Impulse の Tag・引数は Version 4 と同じ。
@@ -51,11 +51,17 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 21 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 22 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
-| Expressions/DV/GestureTable.Pair.N | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
+| Expressions/DV/GestureTable.Pair.LnRm | `Pair.L0R0`〜`Pair.L7R7` | Slot | コンパイルした表情、または null | 設定。n は左、m は右の値（各0〜7）。`L`・左・`R`・右を連結して変数名を直接検索する |
+
+Version 22から対応表の参照名を `GestureTable.Pair.LnRm` に変更した。例：左1・右2は
+`GestureTable.Pair.L1R2`。選択時に左×8＋右の番号へ変換せず、左右を文字列化して直接参照する。
+Core の診断値も数値の `PairIndex` から文字列の `PairKey` へ変更した。
+Select API は左0〜7、各左に対して右0〜7を走査して同じキーを読み、見つかった左右値をそのまま使う。
+生成アバターは旧 `Pair.0`〜`Pair.63` を参照しない。旧パッケージの変更には再変換が必要。
 
 Version 20から `SmoothingSpeed` を共有する。各SmoothValueと同じSlotの
 `DynamicValueVariableDriver<float>` がこの変数を読み、Speedを駆動する。未解決時の既定値も10。
@@ -99,13 +105,13 @@ Bindings の子には ExpressionSystem.Catalog.Clip.Binding 空間で次の2項�
 |---|---|---|---|
 | `AllowExternalInput` | bool | true | **設定**。通常のジェスチャー・キーボード・外部左右 API の受付可否。メニュー操作で false、初期化で true。許可 API でも変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の 0〜7。メニューも同じ値を更新 |
-| `PairIndex` | int | 0 | Selection が計算した LeftGesture × 8 + RightGesture（0〜63） |
+| `PairKey` | string | L0R0 | Selection が組み立てた `L{LeftGesture}R{RightGesture}`。対応表のキー |
 | `CurrentExpression` | Slot | null | Slot 有効・Enabled=true・Bindings参照先が有効な候補。それ以外は null |
 
 Core の DynamicVariable に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取った参照を検証し、
 切替前後の比較後に CurrentExpression へ直接渡す。
 MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
-対応表の参照先の確認には PairIndex と GestureTable の行を使う。
+対応表の参照先の確認には PairKey と GestureTable の行を使う。
 
 AllowExternalInput 以外は状態として扱う。SelectionStatus は生成しない。入力モードは AllowExternalInput、再生対象は CurrentExpression で確認する。未割当と無効はいずれも CurrentExpression=null となる。
 PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の時間再生は行わない。
@@ -114,7 +120,7 @@ Lifecycle は OnStart とローカル装着状態の変更時に動き、現在�
 初期化済みかは保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。
 公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、装着状態の変更イベントより早い左右入力も保持する。
 
-初期化時は左右値・PairIndex を 0、AllowExternalInput を true、
+初期化時は左右値を 0、PairKey を L0R0、AllowExternalInput を true、
 CurrentExpression を null、全OutputsのHasPoseをfalseにし、通常出力のResultをBaseに書き戻す。追跡出力は専用DriveがBaseを反映する。
 その後の Selection と Playback の同期Writeで現在の対応表に応じた状態になる。
 
@@ -247,7 +253,7 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | 定数・値 | 役割 |
 |---|---|
 | `ExpressionSystem`、`ExpressionSystem.Catalog.Clip` など | 上記のレコード定義別の空間名。変数パスは空間名 + `/` + 項目名 |
-| `ExpressionSystem/GestureTable.Pair.` | 番号を付けて対応表を検索するパスの接頭辞 |
+| `ExpressionSystem/GestureTable.Pair.` | `L{左}R{右}` を付けて対応表を検索するパスの接頭辞 |
 | 0〜7 | 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp |
 | 8 / 64 | 片手の状態数／左右の組合せ数。Pair の計算・逆引き・API 範囲検査に使用 |
 | -1 | 手の未確定、Select の一致する Pair が未発見 |
@@ -260,14 +266,14 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 |---|---|---|
 | `LeftTag` / `RightTag` | `ResoPon/Expression/Gesture/Left` / `ResoPon/Expression/Gesture/Right` | int 0〜7。通常の左右入力。AllowExternalInput に従う |
 | `MenuLeftTag` / `MenuRightTag` | `ResoPon/Expression/Menu/Left` / `ResoPon/Expression/Menu/Right` | int 0〜7。メニュー専用にして片手を変更 |
-| `SelectTag` | `ResoPon/Expression/Menu/Select` | string。表にある有効な表情 ID を最小 Pair 番号へ逆引きし、両手を変更してメニュー専用にする |
+| `SelectTag` | `ResoPon/Expression/Menu/Select` | string。表にある有効な表情 ID を左・右の順に小さい組へ逆引きし、両手を変更してメニュー専用にする |
 | `InputEnabledTag` | `ResoPon/Expression/AllowExternalInput` | bool。通常入力の許可・停止。左右値は維持 |
 | `InitializeTag` | `ResoPon/Expression/Internal/Initialize` | 引数なし。Lifecycle の初期化確認 |
 | `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。選択更新を同期実行 |
 | `PlaybackTickTag` | `ResoPon/Expression/Internal/Playback` | 引数なし。終端ポーズの取得・適用を同期実行 |
 
 Internal の3つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
-選択中の一時候補、逆引き Pair 番号は LocalValue / LocalObject、初期化済みフラグは StoredValue<bool> を使う。
+選択中の一時候補、逆引きで見つけた左・右の値は LocalValue / LocalObject、初期化済みフラグは StoredValue<bool> を使う。
 これらも DynamicVariable の保存変数とは区別する。
 
 現行版は `PreviousOwner`、`Override`、`LeftInput`、`RightInput` という項目を生成しない。

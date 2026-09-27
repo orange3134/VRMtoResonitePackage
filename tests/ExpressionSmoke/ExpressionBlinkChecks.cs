@@ -72,7 +72,7 @@ internal static class ExpressionBlinkChecks
             driver.Eyes[1].OpenCloseTarget.IsLinkValid && driver.Eyes[1].OpenCloseTarget.Target == Field(reverse, "Base"),
             "real eye targets are rerouted to their own Base fields");
         Check(Reference<ISyncRef>(close, "OriginalDriver") == driver.Eyes[0].OpenCloseTarget, "original blink link remaps");
-        for (int i = 0; i < 4; i++) Set(table, "Pair." + (i + 1), catalog.FindChild(new[] { "Open", "Half", "Closed", "Sparse" }[i]));
+        for (int i = 0; i < 4; i++) Set(table, $"Pair.L0R{i + 1}", catalog.FindChild(new[] { "Open", "Half", "Closed", "Sparse" }[i]));
         void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             expressions.FindChild("API").FindChild("Receivers"), ExpressionSystemSetup.RightTag, true, index) == 1, "select blink test expression");
         void Blink(float l, float r) { manager.LeftEyeCloseOverride.Value = l; manager.RightEyeCloseOverride.Value = r; }

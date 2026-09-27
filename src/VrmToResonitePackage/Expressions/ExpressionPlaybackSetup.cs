@@ -13,18 +13,16 @@ internal sealed partial class ExpressionSystemSetup
         var core = g.Ref(_core);
         var actions = new List<IWorldElement>();
 
-        var index = g.Binary<int>("ValueAdd", g.Binary<int>("ValueMul", g.Read<int>(core, SystemSpace, "Core.LeftGesture"), g.Constant(8)),
+        var key = GesturePairKey(g, g.Read<int>(core, SystemSpace, "Core.LeftGesture"),
             g.Read<int>(core, SystemSpace, "Core.RightGesture"));
-        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(SystemSpace, "GestureTable.Pair."))),
-            ("B", g.Node("ToString_Int", null, ("V", index))));
-        var candidate = g.Read<Slot>(g.Ref(_table), path);
+        var candidate = ReadGesturePair(g, key);
         // Capture validation for this update without persisting intermediate references in Core.
         var selected = g.Local<Slot>();
         var current = g.Read<Slot>(core, SystemSpace, "Core.CurrentExpression");
         var noExpression = g.Ref<Slot>(null);
         var resolved = g.Choose<Slot>(ValidExpression(g, candidate), candidate, noExpression);
         actions.Add(g.Set<Slot>(selected, resolved));
-        actions.Add(g.Write<int>(core, SystemSpace, "Core.PairIndex", index));
+        actions.Add(g.Write<string>(core, SystemSpace, "Core.PairKey", key));
 
         actions.Add(g.If(g.NotEqual<Slot>(selected, current),
             g.Write<Slot>(core, SystemSpace, "Core.CurrentExpression", selected)));
@@ -34,7 +32,7 @@ internal sealed partial class ExpressionSystemSetup
         // API requests retain synchronous selection. Inspector/table edits also
         // update selection, but an unchanged pair/clip no longer runs this sequence.
         var changed = g.If(g.IsOwner(_root), select);
-        g.OnChanged<int>(index, changed);
+        g.OnChanged<string>(key, changed);
         g.OnChanged<Slot>(resolved, changed);
     }
 

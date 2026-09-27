@@ -62,7 +62,7 @@ the current pair and selected expression. It checks all 64 selected poses agains
 their AnimX tracks and target output fields,
 and requires at least eight distinct poses by default. When the authored avatar has fewer poses,
 set `RESOPON_TEST_EXPECTED_DISTINCT_POSES` to its independently verified count (2–64);
-the test then requires exactly that count. PilicaKumagaya 1.0 uses 6. Saved menu items without automatic Enabled drivers, selection of the lowest matching pair, rejection of ordinary input while disabled, and both actual bool mode buttons are also checked. Plum v1.0.1 is the registered local regression case.
+the test then requires exactly that count. PilicaKumagaya 1.0 uses 6. Saved menu items without automatic Enabled drivers, selection of the first matching left/right pair, rejection of ordinary input while disabled, and both actual bool mode buttons are also checked. Plum v1.0.1 is the registered local regression case.
 An optional third argument supplies a previous package to compare before the menu test:
 
 ```powershell
@@ -254,3 +254,11 @@ internal MenuRefresh event. Menu Enabled fields must have no automatic driver af
 generation, cloning and package reload. Runtime checks retain enabled menu items for
 unmapped, disabled and inactive expressions and after removing the last mapping.
 Selection validation and the ID-to-pair API lookup remain covered independently.
+
+Version 22 uses GestureTable.Pair.L0R0 through GestureTable.Pair.L7R7 and the string
+Core.PairKey (initially L0R0). All 64 keys and synchronous pair lookups are checked.
+A conflicting legacy numeric key must be ignored; direct selection must find L6R7
+using separate left/right loop values. Selection and Select boards must contain no
+integer multiply/divide/modulo for packing or unpacking pair indices, including
+after package reload. The baseline snapshot reader normalizes legacy numeric keys
+only for comparing authored mappings with older packages.

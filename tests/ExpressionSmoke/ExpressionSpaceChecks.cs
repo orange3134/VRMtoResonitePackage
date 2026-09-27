@@ -76,11 +76,11 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 21,
-            "schema without menu availability state is identified by package version 21");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 22,
+            "explicit L/R pair keys are identified by package version 22");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Core.LeftGesture", out _),
             "Core fields are readable from the system root");
-        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.Pair.0", out _),
+        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.Pair.L0R0", out _),
             "table rows are readable from the system root");
         var core = root.FindChild("Core");
         Check(core.WriteDynamicVariable("Expr/AllowExternalInput", false) != DynamicVariableWriteResult.Success,

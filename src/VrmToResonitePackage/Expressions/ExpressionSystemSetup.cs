@@ -48,9 +48,9 @@ internal sealed partial class ExpressionSystemSetup
         }
         Data(_root, "Core.AllowExternalInput", true);
         Reference<Slot>(_root, "Core.CurrentExpression", null);
-        Data(_root, "Core.PairIndex", 0);
+        Data(_root, "Core.PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 21);
+        Data(_root, "Version", 22);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -63,10 +63,11 @@ internal sealed partial class ExpressionSystemSetup
         AvatarSetup.EnsureAvatarRootIdentification(avatar);
         var setup = new ExpressionSystemSetup(avatar, model);
         setup.BuildCatalog(resolve, initialWeight);
-        for (int index = 0; index < 64; index++)
+        for (int left = 0; left < 8; left++)
+        for (int right = 0; right < 8; right++)
         {
-            string id = setup._compiled.Pairs[index];
-            Reference(setup._root, "GestureTable.Pair." + index, id != null ? setup._clips.GetValueOrDefault(id) : null);
+            string id = setup._compiled.Pairs[left * 8 + right];
+            Reference(setup._root, $"GestureTable.Pair.L{left}R{right}", id != null ? setup._clips.GetValueOrDefault(id) : null);
         }
         setup.BuildApi();
         setup.BuildInputs(menu);

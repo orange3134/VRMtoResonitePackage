@@ -70,13 +70,13 @@ internal static class ImportedGestureAvatarChecks
                 int previousRight = Get<int>(core, "RightGesture");
                 left.Children[l].GetComponent<ButtonDynamicImpulseTriggerWithValue<int>>().Pressed(null, default);
                 Check(Get<int>(core, "LeftGesture") == l && Get<int>(core, "RightGesture") == previousRight &&
-                    Get<int>(core, "PairIndex") == l * 8 + previousRight, "Left menu event did not evaluate immediately");
+                    Get<string>(core, "PairKey") == $"L{l}R{previousRight}", "Left menu event did not evaluate immediately");
                 right.Children[r].GetComponent<ButtonDynamicImpulseTriggerWithValue<int>>().Pressed(null, default);
                 Check(Get<int>(core, "LeftGesture") == l && Get<int>(core, "RightGesture") == r, "Menu did not update both hand states synchronously");
                 var mapped = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
-                    .Single(v => v.VariableName.Value == "ExpressionSystem/GestureTable.Pair." + (l * 8 + r)).Reference.Target;
+                    .Single(v => v.VariableName.Value == $"ExpressionSystem/GestureTable.Pair.L{l}R{r}").Reference.Target;
                 Check(mapped != null && Reference<Slot>(core, "CurrentExpression") == mapped, "Missing or incorrect selected pose");
-                Check(Get<int>(core, "PairIndex") == l * 8 + r && !Get<bool>(core, "AllowExternalInput"),
+                Check(Get<string>(core, "PairKey") == $"L{l}R{r}" && !Get<bool>(core, "AllowExternalInput"),
                     "Imported pair or input mode disagrees with the selected gesture pair");
                 for (int i = 0; i < 6; i++) await default(NextUpdate);
                 var pose = ExpressionPackageSnapshot.Pose(mapped);
@@ -116,19 +116,19 @@ internal static class ImportedGestureAvatarChecks
         var receiverRoot = root.FindChild("API").FindChild("Receivers");
         var mappings = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.Pair.", StringComparison.Ordinal))
-            .ToDictionary(v => int.Parse(v.VariableName.Value["ExpressionSystem/GestureTable.Pair.".Length..]), v => v.Reference.Target);
+            .ToDictionary(v => v.VariableName.Value["ExpressionSystem/GestureTable.Pair.".Length..], v => v.Reference.Target);
         int visible = 0;
         foreach (var expression in root.FindChild("Catalog").Children)
         {
-            var indices = mappings.Where(pair => pair.Value == expression).Select(pair => pair.Key).ToArray();
-            bool available = indices.Length > 0 && Get<bool>(expression, "Enabled") && expression.IsActive;
+            var keys = mappings.Where(pair => pair.Value == expression).Select(pair => pair.Key).ToArray();
+            bool available = keys.Length > 0 && Get<bool>(expression, "Enabled") && expression.IsActive;
             Check(expression.GetComponent<ContextMenuItemSource>().EnabledField.Value &&
                 expression.GetComponent<ContextMenuItemSource>().EnabledField.ActiveLink == null,
                 "Saved direct menu is enabled independently of table membership and expression state");
             if (!available) continue;
             visible++;
             expression.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>().Pressed(null, default);
-            Check(!Get<bool>(core, "AllowExternalInput") && Get<int>(core, "PairIndex") == indices.Min() &&
+            Check(!Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == keys.Order(StringComparer.Ordinal).First() &&
                 Reference<Slot>(core, "CurrentExpression") == expression,
                 "Saved direct menu updates the normal hand pair and locks ordinary input");
         }
@@ -146,7 +146,7 @@ internal static class ImportedGestureAvatarChecks
             "Enabling ordinary input retains the saved menu pair");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.LeftTag, true, 0);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.RightTag, true, 0);
-        Check(Get<int>(core, "PairIndex") == 0, "Saved normal input works after enabling");
+        Check(Get<string>(core, "PairKey") == "L0R0", "Saved normal input works after enabling");
         var disable = menu.FindChild("Menu only").GetComponent<ButtonDynamicImpulseTriggerWithValue<bool>>();
         Check(disable.PressedData.Tag.Value == ExpressionSystemSetup.InputEnabledTag && !disable.PressedData.Value.Value,
             "Saved menu-only button sends false");

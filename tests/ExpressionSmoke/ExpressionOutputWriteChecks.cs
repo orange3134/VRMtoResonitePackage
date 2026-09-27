@@ -42,7 +42,7 @@ internal static class ExpressionOutputWriteChecks
             for (int i = 0; i < model.Clips.Count; i++)
             {
                 var entry = catalog.FindChild(model.Clips[i].Name);
-                Set(table, "Pair." + (i + 1), entry);
+                Set(table, $"Pair.L0R{i + 1}", entry);
             }
             void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
                 ExpressionSystemSetup.RightTag, true, index) == 1, "int receiver selects test clip " + index);

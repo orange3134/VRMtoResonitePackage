@@ -26,6 +26,13 @@ internal static class ExpressionGraphChecks
         ExpressionLayoutChecks.CheckDirection(expressions);
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
         Check(nodes.Count > 0 && nodes.GroupBy(n => n.Slot).All(g => g.Count() == 1), "one Flux node per slot");
+        Check(!expressions.GetComponentsInChildren<DynamicValueVariable<int>>().Any(v =>
+            v.VariableName.Value == "ExpressionSystem/Core.PairIndex"), "numeric PairIndex state is absent");
+        foreach (string path in new[] { "Core/Logic/Selection", "API/Receivers/Logic/Select" })
+            Check(Descendant(expressions, path).GetComponentsInChildren<ProtoFluxNode>().All(node =>
+                !node.GetType().GetGenericArguments().Contains(typeof(int)) ||
+                node.GetType().Name is not ("ValueMul`1" or "ValueDiv`1" or "ValueMod`1")),
+                "pair lookup does not pack or unpack a numeric table index: " + path);
         Check(nodes.All(n => n.Group?.IsValid == true), "all expression Flux groups are valid");
         Check(nodes.All(n => n.Slot.Parent.GetComponents<ProtoFluxNode>().Count == 0), "Flux nodes belong to logic boards, not other nodes");
         Check(nodes.Select(n => n.Slot.GlobalPosition).Distinct().Count() == nodes.Count, "Flux node positions do not overlap across logic boards");

@@ -42,11 +42,11 @@ internal static class ExpressionInputEventChecks
             foreach (var entry in wearerReferences) entry.Reference.Target = expressions.World.LocalUser;
             Allow(true); Gesture("Left", 1); Gesture("Right", 0);
             await Frames(30);
-            int pair = Get<int>(core, "PairIndex");
-            Set(core, "PairIndex", -42);
+            string pair = Get<string>(core, "PairKey");
+            Set(core, "PairKey", "__unchanged");
             await Frames(10);
-            Check(Get<int>(core, "PairIndex") == -42, "idle frames do not execute Selection");
-            Set(core, "PairIndex", pair);
+            Check(Get<string>(core, "PairKey") == "__unchanged", "idle frames do not execute Selection");
+            Set(core, "PairKey", pair);
             var smile = catalog.FindChild("Smile");
             var menuItem = smile.GetComponent<ContextMenuItemSource>();
             Set(smile, "Enabled", false);

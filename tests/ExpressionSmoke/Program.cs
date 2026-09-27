@@ -130,20 +130,50 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
                 Gesture(hand, gesture);
                 Check(Get<int>(core, hand == 0 ? "LeftGesture" : "RightGesture") == gesture &&
                     Get<int>(core, hand == 0 ? "RightGesture" : "LeftGesture") == otherBefore &&
-                    Get<int>(core, "PairIndex") == Get<int>(core, "LeftGesture") * 8 + Get<int>(core, "RightGesture"),
+                    Get<string>(core, "PairKey") == $"L{Get<int>(core, "LeftGesture")}R{Get<int>(core, "RightGesture")}",
                     $"{(hand == 0 ? "Left" : "Right")}.{gestureNames[gesture]} updates only its hand and evaluates the pair synchronously");
             }
+        var pairVariables = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
+            .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.Pair.", StringComparison.Ordinal)).ToArray();
+        var expectedKeys = (from left in Enumerable.Range(0, 8) from right in Enumerable.Range(0, 8)
+                            select $"ExpressionSystem/GestureTable.Pair.L{left}R{right}").ToHashSet();
+        Check(pairVariables.Length == 64 && expectedKeys.SetEquals(pairVariables.Select(v => v.VariableName.Value)),
+            "all 64 generated table keys explicitly name their left and right gestures");
+        AllowInput();
+        for (int left = 0; left < 8; left++)
+        for (int right = 0; right < 8; right++)
+        {
+            Gesture(0, left); Gesture(1, right);
+            Check(Get<string>(core, "PairKey") == $"L{left}R{right}" &&
+                Reference<Slot>(core, "CurrentExpression") == Reference<Slot>(table, $"Pair.L{left}R{right}"),
+                $"L{left}R{right} directly selects its named table entry");
+        }
+        var previousHighPair = Reference<Slot>(table, "Pair.L6R7");
+        var decoy = table.AddSlot("Legacy numeric key (ignored)");
+        var legacyPair = decoy.AttachComponent<DynamicReferenceVariable<Slot>>();
+        legacyPair.VariableName.Value = "ExpressionSystem/GestureTable.Pair.55";
+        legacyPair.Reference.Target = catalog.FindChild("Angry");
+        Set(table, "Pair.L6R7", catalog.FindChild("Animated")); await Frames();
+        Gesture(0, 6); Gesture(1, 7);
+        Check(Get<string>(core, "PairKey") == "L6R7" && Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Animated"),
+            "selection ignores a conflicting legacy numeric key");
+        Gesture(0, 0); Gesture(1, 0); Select("Animated");
+        Check(Get<int>(core, "LeftGesture") == 6 && Get<int>(core, "RightGesture") == 7 &&
+            Get<string>(core, "PairKey") == "L6R7" && Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Animated"),
+            "direct menu reverse lookup visits high left and right keys without numeric unpacking");
+        Set(table, "Pair.L6R7", previousHighPair); decoy.Destroy();
+
         AllowInput(); Gesture(0, 0); Gesture(1, 0);
         Gesture(0, 1);
         Check(Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"),
             "left event selects Smile before the next frame");
         Gesture(1, 1);
-        Check(Get<int>(core, "PairIndex") == 9 && Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry"),
+        Check(Get<string>(core, "PairKey") == "L1R1" && Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry"),
             "back-to-back right event immediately evaluates the latest state of both hands");
         Gesture(1, 0); await Frames();
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 0 && Math.Abs(field.Value - 1) < 0.01,
             "left gesture selects Smile without modifying the right hand");
-        Check(Get<int>(core, "PairIndex") == 8 &&
+        Check(Get<string>(core, "PairKey") == "L1R0" &&
             Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"),
             "validated table entry is the current expression");
         Gesture(0, 1);
@@ -158,7 +188,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             Gesture(0, malformed);
             Gesture(1, malformed);
             Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
-                Get<int>(core, "PairIndex") == 9 && Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry") &&
+                Get<string>(core, "PairKey") == "L1R1" && Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry") &&
                 Get<bool>(core, "AllowExternalInput"),
                 "malformed gesture leaves hand state and playback unchanged: " + malformed);
         }
@@ -166,38 +196,38 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<bool>(core, "AllowExternalInput"), "ordinary input is initially enabled");
         Select("Smile"); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01 && !Get<bool>(core, "AllowExternalInput") &&
-            Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 0 && Get<int>(core, "PairIndex") == 8,
+            Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 0 && Get<string>(core, "PairKey") == "L1R0",
             "menu selection disables ordinary input and updates the normal hand pair");
         foreach (string invalidId in new string[] { null, "", "Missing expression", "smile", "Left.Fist", "Animated" })
         {
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, invalidId);
-            Check(!Get<bool>(core, "AllowExternalInput") && Get<int>(core, "PairIndex") == 8 &&
+            Check(!Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == "L1R0" &&
                 Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"), "invalid or unmapped ID preserves menu selection");
         }
         Gesture(0, 0); Gesture(1, 1); await Frames();
-        Check(Math.Abs(field.Value - 1) < 0.01 && Get<int>(core, "PairIndex") == 8 &&
+        Check(Math.Abs(field.Value - 1) < 0.01 && Get<string>(core, "PairKey") == "L1R0" &&
             Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 0 &&
             !Get<bool>(core, "AllowExternalInput"),
             "menu-only mode ignores normal input without altering hand values");
         MenuGesture(1, 1);
-        Check(!Get<bool>(core, "AllowExternalInput") && Get<int>(core, "PairIndex") == 9 &&
+        Check(!Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == "L1R1" &&
             Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry"),
             "menu can update the other hand while ordinary input is disabled");
         MenuGesture(0, -1); MenuGesture(1, 8);
-        Check(Get<int>(core, "PairIndex") == 9 && !Get<bool>(core, "AllowExternalInput"), "invalid menu values leave pair and mode unchanged");
+        Check(Get<string>(core, "PairKey") == "L1R1" && !Get<bool>(core, "AllowExternalInput"), "invalid menu values leave pair and mode unchanged");
         AllowInput();
-        Check(Get<bool>(core, "AllowExternalInput") && Get<int>(core, "PairIndex") == 9,
+        Check(Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == "L1R1",
             "enabling ordinary input retains the selected pair");
         Gesture(0, 0); await Frames();
-        Check(Math.Abs(field.Value - 0.2f) < 0.01 && Get<int>(core, "PairIndex") == 1, "ordinary input changes expressions after enabling");
+        Check(Math.Abs(field.Value - 0.2f) < 0.01 && Get<string>(core, "PairKey") == "L0R1", "ordinary input changes expressions after enabling");
         AllowInput(false);
         Gesture(0, 1);
-        Check(Get<int>(core, "PairIndex") == 1 && !Get<bool>(core, "AllowExternalInput"), "bool API can explicitly disable ordinary input");
+        Check(Get<string>(core, "PairKey") == "L0R1" && !Get<bool>(core, "AllowExternalInput"), "bool API can explicitly disable ordinary input");
         AllowInput();
 
         Check(catalog.FindChild("Animated").GetComponent<ContextMenuItemSource>().Enabled,
             "unmapped expression keeps its menu item enabled");
-        Set(table, "Pair.2", catalog.FindChild("Animated")); await Frames();
+        Set(table, "Pair.L0R2", catalog.FindChild("Animated")); await Frames();
         Check(catalog.FindChild("Animated").GetComponent<ContextMenuItemSource>().Enabled,
             "assigning an expression keeps its menu item enabled");
         Select("Animated");
@@ -211,18 +241,18 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "invalid selection immediately clears the tracked pose");
         await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "disabled mapped expression restores base output");
-        Set(table, "Pair.2", (Slot)null); await Frames();
+        Set(table, "Pair.L0R2", (Slot)null); await Frames();
         Check(catalog.FindChild("Animated").GetComponent<ContextMenuItemSource>().Enabled,
             "removing the last mapping keeps a disabled expression menu item enabled");
         AllowInput(); Gesture(0, 1); Gesture(1, 1);
 
         // Table keys are stable dynamic names; deleting/reordering rows cannot shift other mappings.
-        Set(table, "Pair.9", catalog.FindChild("Smile"));
+        Set(table, "Pair.L1R1", catalog.FindChild("Smile"));
         await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "editing table reference takes effect");
         Gesture(1, 0); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "different pair sharing the same clip retains its pose");
-        expressions.FindChild("DV").FindChild("GestureTable.Pair.8").Destroy(); await Frames();
+        expressions.FindChild("DV").FindChild("GestureTable.Pair.L1R0").Destroy(); await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "deleted table row falls back to base");
         Gesture(1, 1); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "deleting row 8 does not shift row 9");
@@ -286,12 +316,12 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         AllowInput();
         addedButton.Pressed(null, default);
         Check(Get<bool>(core, "AllowExternalInput"), "unmapped template selection does not lock input");
-        Set(table, "Pair.3", addedExpression); await Frames();
+        Set(table, "Pair.L0R3", addedExpression); await Frames();
         Check(addedExpression.GetComponent<ContextMenuItemSource>().Enabled, "mapped template becomes selectable");
         addedButton.Pressed(null, default);
         Check(!Get<bool>(core, "AllowExternalInput") && Reference<Slot>(core, "CurrentExpression") == addedExpression,
             "copied template's actual string button selects the newly enabled Catalog entry");
-        addedExpression.Destroy(); Set(table, "Pair.3", (Slot)null); AllowInput(); await Frames();
+        addedExpression.Destroy(); Set(table, "Pair.L0R3", (Slot)null); AllowInput(); await Frames();
 
         Select("Smile"); await Frames();
         var clone = avatar.Duplicate(avatar.Parent); await Frames(90);
@@ -300,22 +330,22 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await ExpressionDynamicInputChecks.CheckEdits(clone.FindChild("Expressions"));
         ExpressionDynamicInputChecks.CheckBindings(expressions);
         var cloneCore = clone.FindChild("Expressions").FindChild("Core");
-        Check(Get<int>(cloneCore, "PairIndex") == 0 && Get<bool>(cloneCore, "AllowExternalInput"),
+        Check(Get<string>(cloneCore, "PairKey") == "L0R0" && Get<bool>(cloneCore, "AllowExternalInput"),
             "clone diagnostics reflect reset hand inputs and ordinary input enabled");
         var cloneApi = clone.FindChild("Expressions").FindChild("API").FindChild("Receivers");
         Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(cloneApi,
             ExpressionSystemSetup.LeftTag, true, 1) == 1, "clone has its own int request receiver");
-        Check(Get<int>(cloneCore, "LeftGesture") == 1 && Get<int>(cloneCore, "RightGesture") == 0 && Get<int>(cloneCore, "PairIndex") == 8 &&
+        Check(Get<int>(cloneCore, "LeftGesture") == 1 && Get<int>(cloneCore, "RightGesture") == 0 && Get<string>(cloneCore, "PairKey") == "L1R0" &&
             Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 && !Get<bool>(core, "AllowExternalInput"),
             "clone int requests update only the clone and leave the original hand state and input mode unchanged");
         clone.Destroy();
         catalog.FindChild("Smile").Destroy(); await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "deleting selected expression restores base");
-        Set(table, "Pair.0", (Slot)null);
+        Set(table, "Pair.L0R0", (Slot)null);
         AllowInput(); Gesture(0, 0); Gesture(1, 0);
         tracking.Value.Value = 0.4f; await Frames();
         Check(Math.Abs(field.Value - 0.4f) < 0.01, "existing tracking driver continues through proxy");
-        Set(table, "Pair.2", catalog.FindChild("Angry"));
+        Set(table, "Pair.L0R2", catalog.FindChild("Angry"));
         Select("Angry");
         Check(Math.Abs(Get<float>(expressions.FindChild("Outputs").FindChild("Smile"), "Pose") - 0.7f) < 0.001f,
             "selection immediately writes the tracked pose");
@@ -323,14 +353,14 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Math.Abs(field.Value - 0.7f) < 0.001f, "tracking applies the final pose without interpolation");
         var wearer = avatar.Parent;
         // Departure must clear output directly, even when Neutral maps to a clip.
-        Set(table, "Pair.0", catalog.FindChild("Angry"));
+        Set(table, "Pair.L0R0", catalog.FindChild("Angry"));
         avatar.Parent = world.RootSlot;
         await Frames();
-        Check(Get<bool>(core, "AllowExternalInput") && Get<int>(core, "PairIndex") == 0 &&
+        Check(Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == "L0R0" &&
             Reference<Slot>(core, "CurrentExpression") == null &&
             Math.Abs(field.Value - 0.4f) < 0.01,
             "wearer departure restores base instead of playing the mapped Neutral expression");
-        Set(table, "Pair.0", (Slot)null);
+        Set(table, "Pair.L0R0", (Slot)null);
         Gesture(0, 1); Select("Angry"); await Frames();
         Check(Get<int>(core, "LeftGesture") == 0 && Get<bool>(core, "AllowExternalInput"),
             "gesture and select requests are ignored without a local wearer");
@@ -340,13 +370,13 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "input-mode requests are ignored without a local wearer");
         // Sentinel selection state proves wearer-only private stages did no work.
         var outputState = expressions.FindChild("Outputs").Children.Single();
-        Set(core, "PairIndex", -42);
+        Set(core, "PairKey", "__unchanged");
         foreach (var (board, tag) in new[] { ("Selection", "ResoPon/Expression/Internal/Selection"),
             ("Lifecycle", "ResoPon/Expression/Internal/Initialize") })
             Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core.FindChild("Logic").FindChild(board), tag, true) == 1,
                 "private stage receiver remains discoverable: " + board);
         await Frames();
-        Check(Get<int>(core, "PairIndex") == -42 &&
+        Check(Get<string>(core, "PairKey") == "__unchanged" &&
             Math.Abs(Get<float>(outputState, "Result") - 0.4f) < 0.01f,
             "private stages also reject updates without a local wearer");
         // A loaded/cloned instance with no wearer must not mutate shared state just
@@ -354,23 +384,23 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var unwornClone = avatar.Duplicate(world.RootSlot);
         await Frames();
         var unwornCore = unwornClone.FindChild("Expressions").FindChild("Core");
-        Check(Get<int>(unwornCore, "PairIndex") == -42 && !Get<bool>(unwornCore, "AllowExternalInput"),
+        Check(Get<string>(unwornCore, "PairKey") == "__unchanged" && !Get<bool>(unwornCore, "AllowExternalInput"),
             "an unworn clone does not initialize or repeatedly clear stored state");
         unwornClone.Parent = wearer;
         await Frames();
-        Check(Get<int>(unwornCore, "PairIndex") == 0 && Get<bool>(unwornCore, "AllowExternalInput") &&
+        Check(Get<string>(unwornCore, "PairKey") == "L0R0" && Get<bool>(unwornCore, "AllowExternalInput") &&
             Math.Abs(unwornClone.GetComponent<ValueField<float>>().Value.Value - 0.4f) < 0.01,
             "first wear initializes a previously unworn clone and restores its base output");
         unwornClone.Destroy();
         avatar.Parent = wearer;
         Gesture(0, 1); Gesture(1, 1);
-        Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 && Get<int>(core, "PairIndex") == 9 &&
+        Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 && Get<string>(core, "PairKey") == "L1R1" &&
             Get<bool>(core, "AllowExternalInput"),
             "first events after reattachment initialize once and retain both hand requests before the wearer-change event");
         AllowInput(); Gesture(0, 0); Gesture(1, 0);
         await Frames();
         Check(Get<bool>(core, "AllowExternalInput") &&
-            Get<int>(core, "PairIndex") == 0 && Math.Abs(field.Value - 0.4f) < 0.01,
+            Get<string>(core, "PairKey") == "L0R0" && Math.Abs(field.Value - 0.4f) < 0.01,
             "reattaching initializes hand state, selection, diagnostics and tracking");
         Select("Angry"); await Frames();
         var graph = avatar.SaveObject(DependencyHandling.CollectAssets);
@@ -389,13 +419,13 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         ExpressionGraphChecks.CheckLayout(restoredExpressions);
         await ExpressionDynamicInputChecks.CheckEdits(restoredExpressions);
         var restoredCore = restoredExpressions.FindChild("Core");
-        Check(Get<int>(restoredCore, "PairIndex") == 0 &&
+        Check(Get<string>(restoredCore, "PairKey") == "L0R0" &&
             Reference<Slot>(restoredCore, "CurrentExpression") == null && Get<bool>(restoredCore, "AllowExternalInput"),
             "package reload recomputes diagnostics from reset inputs and the edited empty table row");
-        Set(restoredExpressions.FindChild("GestureTable"), "Pair.2", restoredExpressions.FindChild("Catalog").FindChild("Angry"));
+        Set(restoredExpressions.FindChild("GestureTable"), "Pair.L0R2", restoredExpressions.FindChild("Catalog").FindChild("Angry"));
         Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredExpressions.FindChild("API").FindChild("Receivers"),
             ExpressionSystemSetup.RightTag, true, 2) == 1, "reloaded int request receiver is connected");
-        Check(Get<int>(restoredCore, "RightGesture") == 2 && Get<int>(restoredCore, "PairIndex") == 2 &&
+        Check(Get<int>(restoredCore, "RightGesture") == 2 && Get<string>(restoredCore, "PairKey") == "L0R2" &&
             Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
             "reloaded receiver evaluates the pair before the next frame");
         for (int i = 0; i < 60; i++) await default(NextUpdate);

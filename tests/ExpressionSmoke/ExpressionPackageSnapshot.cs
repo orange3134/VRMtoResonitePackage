@@ -30,14 +30,16 @@ internal static class ExpressionPackageSnapshot
         string pairPrefix = ExpressionTestFields.VariablePath(root.FindChild("GestureTable"), "Pair.");
         var table = root.FindChild("GestureTable").ExpressionVariables<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith(pairPrefix, StringComparison.Ordinal))
-            .ToDictionary(v => int.Parse(v.VariableName.Value[pairPrefix.Length..]), v => v.Reference.Target);
-        if (table.Count != 64 || Enumerable.Range(0, 64).Any(i => !table.ContainsKey(i)))
+            .ToDictionary(v => NormalizePairKey(v.VariableName.Value[pairPrefix.Length..]), v => v.Reference.Target);
+        var keys = (from left in Enumerable.Range(0, 8) from right in Enumerable.Range(0, 8)
+                    select $"L{left}R{right}").ToArray();
+        if (table.Count != 64 || keys.Any(key => !table.ContainsKey(key)))
             throw new InvalidOperationException("Baseline comparison needs exactly 64 gesture table rows");
         string json = JsonSerializer.Serialize(new
         {
             Outputs = new SortedDictionary<string, object>(outputs.ToDictionary(p => p.Key, p => (object)p.Value), StringComparer.Ordinal),
             Catalog = clips,
-            Pairs = Enumerable.Range(0, 64).Select(i => table[i] == null ? null : Value<string>(table[i], "Id")).ToArray()
+            Pairs = keys.Select(key => table[key] == null ? null : Value<string>(table[key], "Id")).ToArray()
         }, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(Path.Combine(artifacts, "expressions.json"), json);
         return json;
@@ -61,6 +63,10 @@ internal static class ExpressionPackageSnapshot
         }
         return values;
     }
+
+    // Baseline snapshots also accept pre-v22 numeric keys; generated avatars use only L/R keys.
+    private static string NormalizePairKey(string key) => int.TryParse(key, out int index)
+        ? $"L{index / 8}R{index % 8}" : key;
 
     private static T Value<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicValueVariable<T>>()
         .Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;

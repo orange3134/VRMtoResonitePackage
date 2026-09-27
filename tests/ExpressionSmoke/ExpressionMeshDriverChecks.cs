@@ -120,7 +120,7 @@ internal static class ExpressionMeshDriverChecks
         var baseValue = blink.ExpressionVariables<DynamicValueVariable<float>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Base").Value;
         Check(eye.OpenCloseTarget.Target == baseValue && eye.OpenCloseTarget.IsLinkValid, "blink still drives its independent Base");
         var dynamicResult = smile.ExpressionVariables<DynamicField<float>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Result");
-        Set(table, "Pair.1", catalog.FindChild("First pose")); Set(table, "Pair.2", catalog.FindChild("Second pose"));
+        Set(table, "Pair.L0R1", catalog.FindChild("First pose")); Set(table, "Pair.L0R2", catalog.FindChild("Second pose"));
         void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             expressions.FindChild("API").FindChild("Receivers"), ExpressionSystemSetup.RightTag, true, index) == 1, "select mesh test pose");
         manager.LeftEyeCloseOverride.Value = manager.RightEyeCloseOverride.Value = 0.1f;

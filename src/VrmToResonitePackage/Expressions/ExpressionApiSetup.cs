@@ -41,31 +41,48 @@ internal sealed partial class ExpressionSystemSetup
             ApplyRequest(g, mutation, fromMenu ? null : g.Read<bool>(core, SystemSpace, "Core.AllowExternalInput"))));
     }
 
-    // This is a numeric lookup over stable Pair.0..63 keys, not child-index traversal.
-    // Deleted or reordered table Slots cannot change a pair's identity.
-    private IWorldElement EachGesturePair(ExpressionFlux g, Func<IWorldElement, IWorldElement, IWorldElement> body)
+    private static IWorldElement GesturePairKey(ExpressionFlux g, IWorldElement left, IWorldElement right)
     {
-        var loop = g.Node("For", null, ("Count", g.Constant(64)));
-        var index = Out(loop, "Iteration");
+        var leftKey = g.Node("ConcatenateString", null, ("A", g.Text("L")),
+            ("B", g.Node("ToString_Int", null, ("V", left))));
+        var rightKey = g.Node("ConcatenateString", null, ("A", g.Text("R")),
+            ("B", g.Node("ToString_Int", null, ("V", right))));
+        return g.Node("ConcatenateString", null, ("A", leftKey), ("B", rightKey));
+    }
+
+    private IWorldElement ReadGesturePair(ExpressionFlux g, IWorldElement key)
+    {
         var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(SystemSpace, "GestureTable.Pair."))),
-            ("B", g.Node("ToString_Int", null, ("V", index))));
-        Link(loop, "LoopIteration", body(index, g.Read<Slot>(g.Ref(_table), path)));
-        return loop;
+            ("B", key));
+        return g.Read<Slot>(g.Ref(_table), path);
+    }
+
+    // Visit explicit L/R keys in left-then-right order, independent of Slot order.
+    private IWorldElement EachGesturePair(ExpressionFlux g, Func<IWorldElement, IWorldElement, IWorldElement, IWorldElement> body)
+    {
+        var leftLoop = g.Node("For", null, ("Count", g.Constant(8)));
+        var rightLoop = g.Node("For", null, ("Count", g.Constant(8)));
+        var left = Out(leftLoop, "Iteration");
+        var right = Out(rightLoop, "Iteration");
+        Link(leftLoop, "LoopIteration", rightLoop);
+        Link(rightLoop, "LoopIteration", body(left, right, ReadGesturePair(g, GesturePairKey(g, left, right))));
+        return leftLoop;
     }
 
     private void BuildSelectReceiver(ExpressionFlux g)
     {
         var receiver = g.Receiver(SelectTag);
         var id = Out(receiver, "Value");
-        var pair = g.Local<int>();
-        var find = EachGesturePair(g, (index, expression) => g.If(g.And(
-            g.Equal<int>(pair, g.Constant(-1)), g.Active(expression), g.Read<bool>(expression, ClipSpace, "Enabled"),
-            g.Equal<string>(id, g.Read<string>(expression, ClipSpace, "Id"))), g.Set<int>(pair, index)));
-        var select = g.Sequence(g.Set<int>(pair, g.Constant(-1)), find,
-            g.If(g.Binary<int>("ValueGreaterOrEqual", pair, g.Constant(0)), ApplyRequest(g, g.Sequence(
+        var selectedLeft = g.Local<int>();
+        var selectedRight = g.Local<int>();
+        var find = EachGesturePair(g, (left, right, expression) => g.If(g.And(
+            g.Equal<int>(selectedLeft, g.Constant(-1)), g.Active(expression), g.Read<bool>(expression, ClipSpace, "Enabled"),
+            g.Equal<string>(id, g.Read<string>(expression, ClipSpace, "Id"))),
+            g.Sequence(g.Set<int>(selectedLeft, left), g.Set<int>(selectedRight, right))));
+        var select = g.Sequence(g.Set<int>(selectedLeft, g.Constant(-1)), g.Set<int>(selectedRight, g.Constant(-1)), find,
+            g.If(g.Binary<int>("ValueGreaterOrEqual", selectedLeft, g.Constant(0)), ApplyRequest(g, g.Sequence(
                 g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowExternalInput", g.Constant(false)),
-                WriteHand(g, "Left", g.Binary<int>("ValueDiv", pair, g.Constant(8))),
-                WriteHand(g, "Right", g.Binary<int>("ValueMod", pair, g.Constant(8)))))));
+                WriteHand(g, "Left", selectedLeft), WriteHand(g, "Right", selectedRight)))));
         Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
             g.NotEqual<string>(id, g.Text("")), g.Node("NotNull", typeof(string), ("Instance", id))), select));
     }
