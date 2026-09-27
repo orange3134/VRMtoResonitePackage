@@ -91,7 +91,7 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 モジュール間では ProtoFlux ノードを直接接続しない。共有値はフィールド経由で参照し、所有者・定数の取得は各モジュール内で完結するため、
 1つの入力や再生処理を開くだけで全機種・APIまでつながった巨大なグラフにはならない。
 
-初回起動・装着開始時は `Lifecycle` → `Selection` の順で状態を確定する。
+初回起動・装着開始時は `Lifecycle` が左右値と選択状態を初期化する。Selection は左右の入力イベントを受理したときだけ実行する。
 呼び出しには対象モジュールだけを宛先とする同期 Dynamic Impulse を使い、
 選択状態をイベント内で確定し、Playback も同期呼び出しして選んだ表情の各トラックの終端値を即時に書き込む。
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → Selection → Playback を同期実行する。
@@ -165,7 +165,10 @@ Core の入力ノード化は現行の名前付き空間で再検証し、同一
 
 子 Slot の処理は `Children` → `ForEachObject<IReadOnlyList<Slot>, Slot>`（表示名 ForEach）で列挙する。
 すべてのループ本体は列挙中に子 Slot の追加・削除・並べ替えを行わず、元の直下の子の順序を保つ。
-装着者は同じアバター配下の各ボードにある `GetActiveUserSelf` で取得する。
+表情システムの装着判定は、Avatar Root Identification が公開する `modular_avatar/AvatarWorn` と
+`modular_avatar/AvatarWornLocal` を各ボードの DynamicVariableValueInput<bool> で読み取る。
+Expressions 内に `GetActiveUserSelf`／`GetActiveUser` は生成しない。
+User が必要なコントローラー・UserFingerPoseSource は、AvatarWornLocal=true のときだけ LocalUser を受け取り、それ以外は null となる。
 各ボードは独立した FluxGroup を維持する。直接選択はCatalogの子を列挙してIDを照合する。GestureTableの逆引きは行わない。
 
 ## 不具合の調べ方
@@ -221,19 +224,20 @@ SelectionStatus は生成・計算しない。入力モードは AllowHandGestur
 
 ## 装着状態と Lifecycle
 
-Selection・Lifecycle・API と機種別入力は PreviousOwner を持たず、「現在の装着者がローカルユーザーか」で更新を制御する。
-装着者が存在するかだけでは閲覧者も実行してしまうため、ローカルユーザーとの一致判定は残す。
+Selection・Lifecycle・API・キーボード・機種別入力は `AvatarWornLocal` で更新を制御する。
+`AvatarWorn` は誰かが装着中かの判定に使い、取り外し時のクリア、未装着時のホストによるBase適用、各クライアントの追跡合成を切り替える。
+UserRoot配下への配置だけでは装着とみなさない。AvatarUserReferenceAssigner の装着通知と階層からIdentificationが算出した値を共通の判定元とする。
 Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。
 
-- 装着開始・初回起動：必要なら初期化し、Selection を同期実行する。
+- 装着開始・初回起動：AvatarWornLocal=true になれば初期化する。入力イベントがなければ CurrentExpression=null のままにする。
 - 取り外し：初期化済みのクライアントが一度だけ入力・選択状態をクリアし、出力を Base に戻す。初期化済みフラグを解除する。
 - 未装着中：選択更新は停止する。通常出力は初期化・権限取得時にホストがBaseをWriteし、追跡対象は専用DriveがBaseに追従する。閲覧者は共有の選択状態を書き換えない。
 - 再装着・複製・読み込み：初回に左右値を 0、入力許可を true に戻して再開する。API が先に届いた場合も同じ初期化を行う。
 
-取り外し時に別の装着者が既にいる場合は、終了側は共有値をクリアせずローカルフラグだけを解除する。
-装着者の履歴は比較せず、ローカル装着状態の変化を FireOnLocalValueChange で検出する。
+取り外し時はローカルDriveと共有AvatarWornの反映順が異なるため、Driveと変数通知が反映される2更新後に両フラグを再確認して終了処理を行う。再装着済みならクリアせず、別の装着者が既にいる場合は共有値をクリアせずローカルの初期化済みフラグだけを解除する。
+装着者の履歴は比較せず、AvatarWorn／AvatarWornLocal の変化を FireOnLocalValueChange で検出する。API は受信時点の AvatarWornLocal が true の場合だけ処理する。
 変更イベントが処理される前に外して同じユーザーへ戻し、判定結果が変わらなかった場合は連続した装着として扱う。
-未装着中の追跡値変化も継続転送せず、終了時の出力を保持する。
+未装着中も追跡用Driveは各クライアントのBaseに追従する。
 既存パッケージへ反映するには再変換・再インポートが必要。
 
 ## 入力の動作

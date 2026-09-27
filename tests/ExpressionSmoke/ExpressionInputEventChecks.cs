@@ -16,8 +16,7 @@ internal static class ExpressionInputEventChecks
         var modules = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");
         var mocks = expressions.Parent.AddSlot("Temporary sensor inputs");
         var restore = new List<(ISyncRef Port, IWorldElement Target)>();
-        // The synthetic fixture is parented to UserRoot rather than equipped through
-        // AvatarRoot. Supply the reference normally assigned by the equip operation.
+        // Save the equip-assigned reference so the worn flags can also exercise dequip.
         var assigner = expressions.Parent.FindChild("Avatar Root Identification")
             .GetComponent<FrooxEngine.CommonAvatar.AvatarUserReferenceAssigner>();
         var wearerReferences = assigner.References.Select(r => (Reference: r, User: r.Target)).ToArray();
@@ -317,7 +316,7 @@ internal static class ExpressionInputEventChecks
             Gesture("Left", 6);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 6, "AvatarWornLocal false blocks keyboard even under the active user");
+            Check(Get<int>(core, "LeftGesture") == 0, "AvatarWornLocal false blocks both gesture API and keyboard even under UserRoot");
             foreach (var entry in wearerReferences) entry.Reference.Target = expressions.World.LocalUser;
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 1, "AvatarWornLocal true accepts a held chord when wearing begins");

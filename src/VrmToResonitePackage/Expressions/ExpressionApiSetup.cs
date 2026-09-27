@@ -33,7 +33,7 @@ internal sealed partial class ExpressionSystemSetup
         var receiver = g.Receiver<int>(tag);
         var mutation = g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),
             g.Trigger(g.Ref(_selection), SelectionTickTag));
-        Link(receiver, "OnTriggered", g.If(g.IsOwner(_root),
+        Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal,
             ApplyRequest(g, mutation, gestureInput
                 ? g.Read<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures") : null)));
     }
@@ -67,14 +67,14 @@ internal sealed partial class ExpressionSystemSetup
                 g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures", g.Constant(false)),
                 g.Write<Slot>(g.Ref(_core), SystemSpace, "Core.CurrentExpression", selected),
                 g.Trigger(g.Ref(_playback), PlaybackTickTag)))));
-        Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
+        Link(receiver, "OnTriggered", g.If(g.And(g.AvatarWornLocal,
             g.NotEqual<string>(id, g.Text("")), g.Node("NotNull", typeof(string), ("Instance", id))), select));
     }
 
     private void BuildHandGesturesEnabledReceiver(ExpressionFlux g)
     {
         var receiver = g.Receiver<bool>(HandGesturesEnabledTag);
-        Link(receiver, "OnTriggered", g.If(g.IsOwner(_root),
+        Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal,
             ApplyRequest(g, g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures", Out(receiver, "Value")))));
     }
 }

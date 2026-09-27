@@ -11,6 +11,7 @@ internal static class ImportedGestureAvatarChecks
         var avatar = world.LocalUser.Root.Slot.AddSlot("Imported gesture avatar");
         await PackageImporter.ImportPackage(package, avatar);
         await default(ToWorld);
+        ExpressionTestFields.EquipAvatar(avatar);
         for (int i = 0; i < 180; i++) await default(NextUpdate);
         var root = avatar.FindChild("Expressions") ?? throw new InvalidOperationException("Missing expression system");
         // Package import restores fields before the mesh assets finish loading.

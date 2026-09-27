@@ -61,6 +61,11 @@ internal static class ExpressionGraphChecks
         Report(expressions);
         ExpressionLayoutChecks.CheckDirection(expressions);
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
+        Check(nodes.All(n => n.GetType().Name is not ("GetActiveUserSelf" or "GetActiveUser")),
+            "expression boards use Avatar Root Identification instead of hierarchy wearer lookups");
+        foreach (string flag in new[] { "AvatarWorn", "AvatarWornLocal" })
+            Check(expressions.GetComponentsInChildren<GlobalValue<string>>().Any(v => v.Value.Value == "modular_avatar/" + flag),
+                "expression boards read identification flag: " + flag);
         Check(nodes.Count > 0 && nodes.GroupBy(n => n.Slot).All(g => g.Count() == 1), "one Flux node per slot");
         Check(!expressions.GetComponentsInChildren<DynamicValueVariable<int>>().Any(v =>
             v.VariableName.Value == "ExpressionSystem/Core.PairIndex"), "numeric PairIndex state is absent");

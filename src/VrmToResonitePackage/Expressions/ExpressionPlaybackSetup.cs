@@ -39,8 +39,8 @@ internal sealed partial class ExpressionSystemSetup
         // Apply static outputs as one selection operation. Tracking outputs have a
         // separate live driver, without per-shape change detectors or impulses.
         var value = g.Local<float>();
-        var wearer = g.IsOwner(_root);
-        var canWrite = g.Or(wearer, g.And(g.IsNull<User>(g.Owner(_root)),
+        var wearer = g.AvatarWornLocal;
+        var canWrite = g.Or(wearer, g.And(g.Not(g.AvatarWorn),
             g.Node("IsLocalUser", null, ("User", g.Node("HostUser")))));
         var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, SystemSpace, "Core.CurrentExpression"), g.Ref<Slot>(null));
         var bindings = g.Read<Slot>(current, ClipSpace, "Bindings");
@@ -86,7 +86,7 @@ internal sealed partial class ExpressionSystemSetup
             .Single(v => v.VariableName.Value == Path(OutputSpace, "Result")).TargetField.Target;
         var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>)
             g.Node("ValueFieldDrive", typeof(float), ("Value", MixOutput(g, g.Ref(output),
-                g.Not(g.IsNull<User>(g.Owner(_root))))));
+                g.AvatarWorn)));
         driver.GetRootProxy(addIfMissing: true).Drive.Target = target;
     }
 

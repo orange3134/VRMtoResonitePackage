@@ -47,6 +47,11 @@ internal static class ExpressionOutputWriteChecks
             void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
                 ExpressionSystemSetup.RightTag, true, index) == 1, "int receiver selects test clip " + index);
 
+            Select(1); await Frames();
+            Check(Get<int>(core, "RightGesture") == 0 && Reference<Slot>(core, "CurrentExpression") == null,
+                "parenting below UserRoot without equip does not accept gesture requests");
+            Near(a.Value, 0.2f, "unassigned avatar retains tracking Base");
+            EquipAvatar(avatar); await Frames(30);
             Select(1); await Frames(); Near(a.Value, 1, "short clip reaches its final pose");
             Select(2); await Frames(); Near(a.Value, 0.2f, "track order can change for A"); Near(b.Value, 0.6f, "track order can change for B");
             Select(3); await Frames(); Near(a.Value, 0.7f, "sparse clip drives its own shape"); Near(b.Value, 0.3f, "missing track restores Base");
@@ -124,6 +129,34 @@ internal static class ExpressionOutputWriteChecks
             Near(Get<float>(unwornOutput, "Result"), 0.8f, "unworn clone writes Base despite retained selection");
             Near(a.Value, 1, "unworn clone does not change the original result");
             unworn.Destroy();
+            // Dequip must also work while the avatar remains beneath the same UserRoot.
+            avatar.FindChild("Avatar Root Identification")
+                .GetComponent<FrooxEngine.CommonAvatar.AvatarUserReferenceAssigner>().OnDequip(null);
+            await Frames(30);
+            Check(Get<int>(core, "RightGesture") == 0 && Reference<Slot>(core, "CurrentExpression") == null,
+                "identification dequip clears selection without a hierarchy change");
+            Near(a.Value, 0.8f, "dequip restores tracked output Base");
+            Near(b.Value, 0.3f, "dequip restores static output Base");
+            Select(1);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.KeyboardRightTag, true, 1);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true,
+                Get<string>(catalog.FindChild("Short"), "Id"));
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, false);
+            await Frames();
+            Check(Get<int>(core, "RightGesture") == 0 && Get<bool>(core, "AllowHandGestures") &&
+                Reference<Slot>(core, "CurrentExpression") == null,
+                "identification blocks gesture, keyboard, menu and permission APIs while unworn under UserRoot");
+            tracking.Value = 0.65f; await Frames();
+            Near(a.Value, 0.65f, "unworn tracking continues to follow Base");
+            EquipAvatar(avatar); await Frames(30);
+            Select(1); await Frames();
+            Near(a.Value, 1, "re-equip re-enables selection without a hierarchy change");
+            avatar.Parent = avatar.World.RootSlot; await Frames(30);
+            Check(Get<int>(core, "RightGesture") == 0 && Reference<Slot>(core, "CurrentExpression") == null,
+                "hierarchy departure clears state despite different worn-flag update order");
+            Near(a.Value, 0.65f, "hierarchy departure restores tracking Base");
+            avatar.Parent = parent; await Frames(30);
+            Select(1); await Frames(); Near(a.Value, 1, "reattachment accepts input after worn flags update");
             Check(expressions.GetComponentsInChildren<ProtoFluxNode>().Count(n => n.GetType().Name == "LocalUpdate") == 0,
                 "output updates are event driven without LocalUpdate");
         }

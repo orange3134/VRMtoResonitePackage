@@ -83,6 +83,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         animatedCurve.Keys.Add(new(0, 0, 0.1f, 0.1f)); animatedCurve.Keys.Add(new(10, 1, 0.1f, 0.1f));
         animatedClip.Curves.Add(animatedCurve); model.Clips.Add(animatedClip);
         var expressions = await ExpressionSystemSetup.BuildAsync(avatar, model, _ => field);
+        EquipAvatar(avatar);
         Console.WriteLine("Built graph");
         for (int i = 0; i < 90; i++) await default(NextUpdate);
         Check(expressions.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "all generated ProtoFlux groups are valid");
@@ -355,7 +356,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
 
         Select("Smile"); await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
-        var clone = avatar.Duplicate(avatar.Parent); await Frames(90);
+        var clone = avatar.Duplicate(avatar.Parent); EquipAvatar(clone); await Frames(90);
         Check(Math.Abs(clone.GetComponent<ValueField<float>>().Value.Value - 0.2f) < 0.01, "cloning resets transient selection");
         Check(Math.Abs(field.Value - 1f) < 0.01, "cloning does not reset original");
         await ExpressionDynamicInputChecks.CheckEdits(clone.FindChild("Expressions"));
@@ -421,16 +422,18 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<string>(unwornCore, "PairKey") == "__unchanged" && !Get<bool>(unwornCore, "AllowHandGestures"),
             "an unworn clone does not initialize or repeatedly clear stored state");
         unwornClone.Parent = wearer;
+        EquipAvatar(unwornClone);
         await Frames();
         Check(Get<string>(unwornCore, "PairKey") == "L0R0" && Get<bool>(unwornCore, "AllowHandGestures") &&
             Math.Abs(unwornClone.GetComponent<ValueField<float>>().Value.Value - 0.4f) < 0.01,
             "first wear initializes a previously unworn clone and restores its base output");
         unwornClone.Destroy();
         avatar.Parent = wearer;
+        await Frames();
         Gesture(0, 1); Gesture(1, 1);
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 && Get<string>(core, "PairKey") == "L1R1" &&
             Get<bool>(core, "AllowHandGestures"),
-            "first events after reattachment initialize once and retain both hand requests before the wearer-change event");
+            "first events after AvatarWornLocal is restored retain both hand requests");
         AllowInput(); Gesture(0, 0); Gesture(1, 0);
         await Frames();
         Check(Get<bool>(core, "AllowHandGestures") &&
@@ -446,6 +449,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var restored = avatar.Parent.AddSlot("Restored");
         await PackageImporter.ImportPackage(packagePath, restored);
         await default(ToWorld);
+        EquipAvatar(restored);
         for (int i = 0; i < 120; i++) await default(NextUpdate);
         Check(Math.Abs(restored.GetComponent<ValueField<float>>().Value.Value - 0.4f) < 0.01, "package reload discards active requests and restores tracking");
         Check(restored.GetComponentsInChildren<StaticAnimationProvider>().Count == 0, "saved poses reload without animation assets");

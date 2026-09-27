@@ -4,6 +4,15 @@ using FrooxEngine;
 // Program must load before Main can register the external Resonite DLL resolver.
 internal static class ExpressionTestFields
 {
+    // Parenting below UserRoot alone is not equip. Exercise the identification's real equip hook.
+    public static void EquipAvatar(Slot avatar)
+    {
+        var equipSlot = avatar.GetComponent<FrooxEngine.CommonAvatar.AvatarObjectSlot>()
+            ?? avatar.AttachComponent<FrooxEngine.CommonAvatar.AvatarObjectSlot>();
+        avatar.FindChild("Avatar Root Identification")
+            .GetComponent<FrooxEngine.CommonAvatar.AvatarUserReferenceAssigner>().OnEquip(equipSlot);
+    }
+
     // Discover the saved record name so snapshots can also read legacy Expr packages.
     public static string VariablePath(Slot slot, string name)
     {

@@ -9,7 +9,7 @@ internal sealed partial class ExpressionSystemSetup
     private void ReceiveUpdate(ExpressionFlux g, string tag, IWorldElement action)
     {
         var receiver = g.Receiver(tag, false);
-        Link(receiver, "OnTriggered", g.If(g.IsOwner(_root), action));
+        Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal, action));
     }
 
     private void BuildLifecycle()
@@ -40,10 +40,17 @@ internal sealed partial class ExpressionSystemSetup
         // that initialized this instance clears it once, provided nobody else is wearing it.
         // Observers never initialize and therefore never write this cleanup state.
         var stop = g.If(initialized, g.Sequence(
-            g.If(g.IsNull<User>(g.Owner(_root)), clear),
+            g.If(g.Not(g.AvatarWorn), clear),
             g.Set<bool>(initialized, g.Constant(false))));
-        var update = g.If(g.IsOwner(_root), initialize, stop);
-        g.OnChanged<bool>(g.IsOwner(_root), update);
+        // The local drive can report departure before the shared AvatarWorn field updates.
+        // Allow two updates for the drive chain and variable notifications to settle.
+        // Recheck before discarding initialization or clearing shared state.
+        var delayedStop = g.Node("StartAsyncTask", null, ("TaskStart",
+            g.Node("DelayUpdates", null, ("Updates", g.Constant(2)),
+                ("Next", g.If(g.Not(g.AvatarWornLocal), stop)))));
+        var update = g.If(g.AvatarWornLocal, initialize, g.If(initialized, delayedStop));
+        g.OnChanged<bool>(g.AvatarWornLocal, update);
+        g.OnChanged<bool>(g.AvatarWorn, update);
         g.OnStart(update);
     }
 }

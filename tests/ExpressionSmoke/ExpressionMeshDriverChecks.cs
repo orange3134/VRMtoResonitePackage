@@ -109,6 +109,8 @@ internal static class ExpressionMeshDriverChecks
 
     private static async Task Verify(Slot avatar)
     {
+        EquipAvatar(avatar);
+        await Frames(30);
         var expressions = avatar.FindChild("Expressions"); var core = expressions.FindChild("Core");
         var catalog = expressions.FindChild("Catalog"); var table = expressions.FindChild("GestureTable");
         var first = avatar.FindChild("First").FindChild("Face").GetComponent<SkinnedMeshRenderer>();

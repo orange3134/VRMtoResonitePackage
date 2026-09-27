@@ -19,6 +19,7 @@ internal sealed class ExpressionFlux
     private readonly Dictionary<Slot, IWorldElement> _owners = new();
     private readonly Dictionary<Slot, IWorldElement> _ownerChecks = new();
     private IWorldElement _now;
+    private IWorldElement _localWearer;
     private static Dictionary<string, Type[]> _types;
     public ExpressionFlux(Slot root)
     {
@@ -117,6 +118,13 @@ internal sealed class ExpressionFlux
             : Node("GetActiveUser", null, ("Instance", Ref(root)));
     public IWorldElement IsOwner(Slot root) => _ownerChecks.TryGetValue(root, out var check) ? check :
         _ownerChecks[root] = Node("IsLocalUser", null, ("User", Owner(root)));
+    // Expression boards share the identification contract, not their own hierarchy checks.
+    public IWorldElement AvatarWorn => DynamicInput<bool>("modular_avatar", "AvatarWorn");
+    public IWorldElement AvatarWornLocal => DynamicInput<bool>("modular_avatar", "AvatarWornLocal");
+    // Controller and finger-pose sensors need a User, but only the local wearer handles input.
+    public IWorldElement LocalWearer => _localWearer ??=
+        Choose<User>(AvatarWornLocal, Node("LocalUser"), Ref<User>(null));
+
     public static string Path(string spaceName, string key) => spaceName + "/" + key;
     public static string Path(Slot slot, string key) => Path(NamedSpace(slot)?.SpaceName.Value
         ?? throw new InvalidOperationException("Expression record has no variable space: " + slot.Name), key);

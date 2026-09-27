@@ -61,6 +61,8 @@ internal static class ExpressionBlinkChecks
 
     private static async Task Verify(Slot avatar)
     {
+        EquipAvatar(avatar);
+        await Frames(30);
         var expressions = avatar.FindChild("Expressions");
         var core = expressions.FindChild("Core"); var table = expressions.FindChild("GestureTable");
         var catalog = expressions.FindChild("Catalog"); var outputs = expressions.FindChild("Outputs");

@@ -142,7 +142,7 @@ internal sealed partial class ExpressionSystemSetup
             match.Values.Add((INodeValueOutput<bool>)g.Node("KeyHeld", null,
                 ("Key", g.Read<InputKey>(source, KeyboardSpace, "Key." + index))));
 
-        var accepting = g.And(g.DynamicInput<bool>("modular_avatar", "AvatarWornLocal"),
+        var accepting = g.And(g.AvatarWornLocal,
             g.Equal<bool>(Held(InputKey.Control), g.Read<bool>(source, KeyboardSpace, "Control")),
             g.Equal<bool>(Held(InputKey.Shift), g.Read<bool>(source, KeyboardSpace, "Shift")),
             Out(match, "FoundMatch"));
@@ -183,7 +183,7 @@ internal sealed partial class ExpressionSystemSetup
         var reset = g.If(g.Not(initialized), g.Sequence(
             g.Write<int>(handRef, GestureHandSpace, "Candidate", g.Constant(-1)), g.Write<int>(handRef, GestureHandSpace, "Stable", g.Constant(-1)),
             g.Set<bool>(initialized, g.Constant(true))));
-        var controller = g.Node(device, null, ("User", g.Owner(_root)), ("Node", g.Constant(side)));
+        var controller = g.Node(device, null, ("User", g.LocalWearer), ("Node", g.Constant(side)));
         var active = Out(controller, "IsActive");
         var gesture = BuildControllerGesture(g, controller, device, side, module);
         var changed = g.NotEqual<int>(gesture, g.Read<int>(handRef, GestureHandSpace, "Candidate"));
@@ -191,7 +191,7 @@ internal sealed partial class ExpressionSystemSetup
         var send = g.Sequence(SendHandInput(g, g.Text(GestureTag(kind)), gesture),
             g.Write<int>(handRef, GestureHandSpace, "Stable", gesture));
         var enabled = g.And(active, g.Read<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures"));
-        var update = g.If(g.IsOwner(_root), g.Sequence(reset, g.If(enabled, g.Sequence(
+        var update = g.If(g.AvatarWornLocal, g.Sequence(reset, g.If(enabled, g.Sequence(
             g.If(changed, g.Sequence(g.Write<int>(handRef, GestureHandSpace, "Candidate", gesture), g.Write<float>(handRef, GestureHandSpace, "Since", g.Now))),
             g.If(g.And(stable, g.NotEqual<int>(g.Read<int>(handRef, GestureHandSpace, "Stable"), gesture)), send)),
             g.Sequence(
@@ -199,10 +199,10 @@ internal sealed partial class ExpressionSystemSetup
                 g.Write<int>(handRef, GestureHandSpace, "Stable", g.Constant(-1))))),
             g.Set<bool>(initialized, g.Constant(false)));
         // The stable predicate changes when the waiting time expires, even at rest.
-        var accepting = g.And(g.IsOwner(_root), enabled);
+        var accepting = g.And(g.AvatarWornLocal, enabled);
         g.OnChanged<int>(g.Choose<int>(accepting, gesture, g.Constant(-1)), update);
         g.OnChanged<bool>(g.And(accepting, stable), update);
-        g.OnChanged<bool>(g.IsOwner(_root), update);
+        g.OnChanged<bool>(g.AvatarWornLocal, update);
         g.OnStart(update);
     }
 }
