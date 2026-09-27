@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 23`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 24`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -51,7 +51,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 23 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 24 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
@@ -103,7 +103,7 @@ Bindings の子には ExpressionSystem.Catalog.Clip.Binding 空間で次の2項�
 
 | 名前 | 型 | 初期値 | 更新元・役割 |
 |---|---|---|---|
-| `AllowExternalInput` | bool | true | **設定**。通常のジェスチャー・キーボード・外部左右 API の受付可否。メニュー操作で false、初期化で true。許可 API でも変更可能 |
+| `AllowHandGestures` | bool | true | **設定**。ハンドジェスチャーとGesture APIだけの受付可否。キーボード・メニューは常に受け付ける。メニュー操作で false、初期化で true。許可 API でも変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューでは変更しない |
 | `PairKey` | string | L0R0 | 最後の左右入力イベントでSelectionが組み立てたキー。直接選択中の表情を示すものではない |
 | `CurrentExpression` | Slot | null | Slot 有効・Enabled=true・Bindings参照先が有効な候補。それ以外は null |
@@ -113,14 +113,14 @@ Core の DynamicVariable に保持する表情参照は CurrentExpression だけ
 MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
 左右入力の参照先確認にはPairKeyとGestureTableの行を使う。直接選択の確認にはCurrentExpressionを使う。
 
-AllowExternalInput 以外は状態として扱う。SelectionStatus は生成しない。入力モードは AllowExternalInput、再生対象は CurrentExpression で確認する。未割当と無効はいずれも CurrentExpression=null となる。
+AllowHandGestures 以外は状態として扱う。SelectionStatus は生成しない。入力モードは AllowHandGestures、再生対象は CurrentExpression で確認する。未割当と無効はいずれも CurrentExpression=null となる。
 PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の時間再生は行わない。
 
 Lifecycle は OnStart とローカル装着状態の変更時に動き、現在の装着者がローカルユーザーの場合だけ、初期化確認 → Selection を実行する。
 初期化済みかは保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。
 公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、装着状態の変更イベントより早い左右入力も保持する。
 
-初期化時は左右値を 0、PairKey を L0R0、AllowExternalInput を true、
+初期化時は左右値を 0、PairKey を L0R0、AllowHandGestures を true、
 CurrentExpression を null、全OutputsのHasPoseをfalseにし、通常出力のResultをBaseに書き戻す。追跡出力は専用DriveがBaseを反映する。
 その後の Selection と Playback の同期Writeで現在の対応表に応じた状態になる。
 
@@ -176,6 +176,8 @@ Trackingのない出力に追跡を後付けする場合、Baseに接続する�
 OriginalDriverは生成時の経路の記録であり、編集して追跡の有効・無効を切り替える設定ではない。
 
 ## Inputs/Keyboard/Left・Right
+
+Version 24ではTagの既定値を `ResoPon/Expression/Keyboard/Left`・`Right` とする。Gesture APIと違い、AllowHandGestures=falseでも受け付ける。
 
 各手の DynamicVariableSpace は `ExpressionSystem.Input.Keyboard`。
 変数は `DV/Tag`、`DV/Shift`、`DV/Control`、`DV/Key.0`〜`DV/Key.7` の各 Slot に置く。
@@ -264,9 +266,10 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 
 | C# 定数 | Tag | 引数・役割 |
 |---|---|---|
-| `LeftTag` / `RightTag` | `ResoPon/Expression/Gesture/Left` / `ResoPon/Expression/Gesture/Right` | int（範囲制限なし）。通常の左右入力。AllowExternalInput に従う |
+| `LeftTag` / `RightTag` | `ResoPon/Expression/Gesture/Left` / `ResoPon/Expression/Gesture/Right` | int（範囲制限なし）。ハンドジェスチャー入力。AllowHandGestures に従う |
+| `KeyboardLeftTag` / `KeyboardRightTag` | `ResoPon/Expression/Keyboard/Left` / `ResoPon/Expression/Keyboard/Right` | int（範囲制限なし）。AllowHandGesturesに関係なく左右値を更新。フラグは維持 |
 | `SelectTag` | `ResoPon/Expression/Menu/Select` | string。Catalogの有効な表情IDを検索し、CurrentExpressionを直接変更してメニュー専用にする |
-| `InputEnabledTag` | `ResoPon/Expression/AllowExternalInput` | bool。通常入力の許可・停止。左右値は維持 |
+| `HandGesturesEnabledTag` | `ResoPon/Expression/AllowHandGestures` | bool。ハンドジェスチャーだけの許可・停止。左右値と表情は維持 |
 | `InitializeTag` | `ResoPon/Expression/Internal/Initialize` | 引数なし。Lifecycle の初期化確認 |
 | `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。左右入力イベントから選択更新を同期実行 |
 | `PlaybackTickTag` | `ResoPon/Expression/Internal/Playback` | 引数なし。終端ポーズの取得・適用を同期実行 |
@@ -276,7 +279,7 @@ Internal の3つは公開操作用ではない。メニューボタンの送信�
 これらも DynamicVariable の保存変数とは区別する。
 
 現行版は `PreviousOwner`、`Override`、`LeftInput`、`RightInput` という項目を生成しない。
-表情固定は AllowExternalInput=false と左右のジェスチャー値で表現する。
+メニュー選択はAllowHandGestures=falseとCurrentExpressionで保持する。キーボードは停止せず、次のショートカットで表情を変更できる。
 
 ## 実装の参照先
 

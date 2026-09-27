@@ -160,7 +160,8 @@ internal static class ExpressionGraphChecks
 
         foreach (string path in new[] { "Core/Logic/Lifecycle", "Core/Logic/Selection", "Core/Logic/Playback",
             "API/Receivers/Logic/Left", "API/Receivers/Logic/Right",
-            "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowExternalInput" })
+            "API/Receivers/Logic/KeyboardLeft", "API/Receivers/Logic/KeyboardRight",
+            "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowHandGestures" })
         {
             var board = Descendant(expressions, path);
             Check(board != null && boards.Any(g => g.Key == board), "independent logic board exists: " + path);
@@ -188,7 +189,7 @@ internal static class ExpressionGraphChecks
         }
         var publicReceivers = Descendant(expressions, "API/Receivers").GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
-        Check(publicReceivers.Length == 4, "exactly four public API receivers");
+        Check(publicReceivers.Length == 6, "exactly six public API receivers");
         foreach (string hand in new[] { "Left", "Right" })
         {
             var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == hand);
@@ -198,9 +199,16 @@ internal static class ExpressionGraphChecks
             Check(receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/Gesture/" + hand,
                 hand + " uses the exact hand Tag");
         }
+        foreach (string hand in new[] { "Left", "Right" })
+        {
+            var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == "Keyboard" + hand);
+            Check(receiver.GetType().GetGenericArguments().Single() == typeof(int) &&
+                receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/Keyboard/" + hand,
+                "keyboard has a separate int receiver: " + hand);
+        }
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Select").GetType().GetGenericArguments().Single() == typeof(string),
             "direct Catalog selection receives an ID");
-        Check(publicReceivers.Single(node => node.Slot.Parent.Name == "AllowExternalInput").GetType().GetGenericArguments().Single() == typeof(bool),
+        Check(publicReceivers.Single(node => node.Slot.Parent.Name == "AllowHandGestures").GetType().GetGenericArguments().Single() == typeof(bool),
             "input permission receives a bool");
         Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value != "ExpressionSystem/Core.Override"),
             "no Override Slot state is generated");

@@ -29,16 +29,16 @@ Tag/target/ExcludeDisabled inputs must stay close to their consumers. A shuffled
 fixture covers creation-order independence, shallow inputs feeding deep nodes,
 feedback cycles, and repeatable arrangement. The synthetic run
 writes keyboard-layout.json for inspecting the generated coordinates and edges.
-Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Catalog ID and AllowExternalInput receives bool; no Command slots may remain.
+Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Catalog ID and AllowHandGestures receives bool; no Command slots may remain.
 Each actual Flux group must stay within one logic board. Core lifecycle, selection,
-playback, the four public API receivers, and each controller hand have independent
+playback, the six public API receivers, and each controller hand have independent
 boards. The test reports node/group counts and enforces a 256-node per-board budget,
 including after package reimport. Module diagnostic counts must match the graph.
 Each Output has its own sampling/mixing/fade board and a driven field exposed as Result.
 Result targets and
 playback diagnostic fields must retain native driver links after import, preventing
 a regression to synchronized writes on every frame.
-Selection/playback diagnostics, menu-only mode rejecting gesture/keyboard updates, enabling input again, mapped-only menu selection, a partial
+Selection/playback diagnostics, gesture permission rejecting hand input while accepting keyboard updates, enabling input again, direct Catalog menu selection, a partial
 tracking-to-expression crossfade, wearer departure, rejection of public and internal
 updates without a wearer, first events after reattachment, and independent cloned
 int gesture receivers are checked as runtime behavior.
@@ -62,7 +62,7 @@ the current pair and selected expression. It checks all 64 selected poses agains
 their AnimX tracks and target output fields,
 and requires at least eight distinct poses by default. When the authored avatar has fewer poses,
 set `RESOPON_TEST_EXPECTED_DISTINCT_POSES` to its independently verified count (2–64);
-the test then requires exactly that count. PilicaKumagaya 1.0 uses 6. Saved menu items without automatic Enabled drivers, selection of the first matching left/right pair, rejection of ordinary input while disabled, and both actual bool mode buttons are also checked. Plum v1.0.1 is the registered local regression case.
+the test then requires exactly that count. PilicaKumagaya 1.0 uses 6. Saved menu items without automatic Enabled drivers, direct Catalog selection preserving the hand pair, rejection of hand gesture input while disabled, and both actual bool mode buttons are also checked. Plum v1.0.1 is the registered local regression case.
 An optional third argument supplies a previous package to compare before the menu test:
 
 ```powershell
@@ -95,7 +95,7 @@ run on clones and package reloads. Existing same-frame events, editable tables, 
 wearer departure/reattachment and clone playback cover the synchronization behavior of Core inputs.
 
 Version 23 selects Catalog entries directly without changing LeftGesture/RightGesture or PairKey.
-Actual expression buttons disable ordinary input, write CurrentExpression and execute Playback.
+Actual expression buttons disable hand gesture input, write CurrentExpression and execute Playback.
 Unmapped Catalog entries and copied templates are selectable. Invalid IDs preserve selection.
 Only accepted gesture API events run Selection. Data edits, input permission changes and initialization
 must not select a gesture pair. Lifecycle and input actions retain their local change detectors.
@@ -263,3 +263,8 @@ with ExpressionSystem/GestureTable.Pair.L{0}R{1} and no integer multiply/divide/
 for packing or unpacking pair indices, including
 after package reload. The baseline snapshot reader normalizes legacy numeric keys
 only for comparing authored mappings with older packages.
+
+Version 24 renames Core.AllowExternalInput and its bool API to AllowHandGestures.
+Keyboard/Left and Keyboard/Right have separate int receivers that preserve and bypass
+this flag. All 16 actual shortcuts are exercised with hand gestures disabled, including
+modifier exclusion, held chords and reload. Gesture API requests remain gated.

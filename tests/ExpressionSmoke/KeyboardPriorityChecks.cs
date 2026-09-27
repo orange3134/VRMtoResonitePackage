@@ -27,12 +27,13 @@ internal static class KeyboardPriorityChecks
         async Task Frames() { for (int i = 0; i < 10; i++) await default(NextUpdate); }
         void Key(InputKey key, bool held) { foreach (var s in sensors[key]) s.Value.Value = held; }
         void Gesture(int hand, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
-            api, hand == 0 ? ExpressionSystemSetup.LeftTag : ExpressionSystemSetup.RightTag, true, value);
+            api, hand == 0 ? ExpressionSystemSetup.KeyboardLeftTag : ExpressionSystemSetup.KeyboardRightTag, true, value);
         int GestureValue(int hand) => Get<int>(core, hand == 0 ? "LeftGesture" : "RightGesture");
+        bool allowedBefore = Get<bool>(core, "AllowHandGestures");
         try
         {
             foreach (var w in wearers) w.Reference.Target = expressions.World.LocalUser;
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.InputEnabledTag, true, true);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, false);
             foreach (var hand in hands)
             {
                 var board = hand.FindChild("Logic");
@@ -79,9 +80,10 @@ internal static class KeyboardPriorityChecks
             foreach (var (port, target) in ports) port.Target = target;
             foreach (var w in wearers) w.Reference.Target = w.Previous;
             mocks.Destroy();
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, allowedBefore);
         }
         await Frames();
-        Console.WriteLine($"PASS: keyboard Shift hand={primary}, Shift+Ctrl hand={1 - primary}, all 16 shortcuts and modifier exclusion");
+        Console.WriteLine($"PASS: keyboard Shift hand={primary}, Shift+Ctrl hand={1 - primary}, all 16 shortcuts with hand gestures disabled and modifier exclusion");
     }
     private static T Get<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicValueVariable<T>>()
         .Single(v => v.VariableName.Value == VariablePath(slot, name)).Value.Value;

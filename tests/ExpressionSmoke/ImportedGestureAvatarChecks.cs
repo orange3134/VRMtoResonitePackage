@@ -55,7 +55,7 @@ internal static class ImportedGestureAvatarChecks
         var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null, "Saved menu has no hand submenus");
         var receiverRoot = root.FindChild("API").FindChild("Receivers");
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.InputEnabledTag, true, true);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
         var distinctPoses = new HashSet<string>();
         for (int l = 0; l < 8; l++)
             for (int r = 0; r < 8; r++)
@@ -70,7 +70,7 @@ internal static class ImportedGestureAvatarChecks
                 var mapped = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
                     .Single(v => v.VariableName.Value == $"ExpressionSystem/GestureTable.Pair.L{l}R{r}").Reference.Target;
                 Check(mapped != null && Reference<Slot>(core, "CurrentExpression") == mapped, "Missing or incorrect selected pose");
-                Check(Get<string>(core, "PairKey") == $"L{l}R{r}" && Get<bool>(core, "AllowExternalInput"),
+                Check(Get<string>(core, "PairKey") == $"L{l}R{r}" && Get<bool>(core, "AllowHandGestures"),
                     "Imported pair or input mode disagrees with the selected gesture pair");
                 for (int i = 0; i < 6; i++) await default(NextUpdate);
                 var pose = ExpressionPackageSnapshot.Pose(mapped);
@@ -119,7 +119,7 @@ internal static class ImportedGestureAvatarChecks
             int leftBefore = Get<int>(core, "LeftGesture"), rightBefore = Get<int>(core, "RightGesture");
             string pairBefore = Get<string>(core, "PairKey");
             expression.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>().Pressed(null, default);
-            Check(!Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == pairBefore &&
+            Check(!Get<bool>(core, "AllowHandGestures") && Get<string>(core, "PairKey") == pairBefore &&
                 Get<int>(core, "LeftGesture") == leftBefore && Get<int>(core, "RightGesture") == rightBefore &&
                 Reference<Slot>(core, "CurrentExpression") == expression,
                 "Saved direct menu preserves gestures and selects the Catalog expression");
@@ -130,20 +130,20 @@ internal static class ImportedGestureAvatarChecks
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.RightTag, true, (heldRight + 1) % 8);
         Check(Get<int>(core, "LeftGesture") == heldLeft && Get<int>(core, "RightGesture") == heldRight,
             "Saved menu-only mode ignores normal input");
-        var enable = menu.FindChild("Allow gestures and keyboard").GetComponent<ButtonDynamicImpulseTriggerWithValue<bool>>();
-        Check(enable.PressedData.Tag.Value == ExpressionSystemSetup.InputEnabledTag && enable.PressedData.Value.Value,
+        var enable = menu.FindChild("Allow hand gestures").GetComponent<ButtonDynamicImpulseTriggerWithValue<bool>>();
+        Check(enable.PressedData.Tag.Value == ExpressionSystemSetup.HandGesturesEnabledTag && enable.PressedData.Value.Value,
             "Saved allow-input button sends true");
         enable.Pressed(null, default);
-        Check(Get<bool>(core, "AllowExternalInput") && Get<int>(core, "LeftGesture") == heldLeft && Get<int>(core, "RightGesture") == heldRight,
+        Check(Get<bool>(core, "AllowHandGestures") && Get<int>(core, "LeftGesture") == heldLeft && Get<int>(core, "RightGesture") == heldRight,
             "Enabling ordinary input retains the saved menu pair");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.LeftTag, true, 0);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.RightTag, true, 0);
         Check(Get<string>(core, "PairKey") == "L0R0", "Saved normal input works after enabling");
-        var disable = menu.FindChild("Menu only").GetComponent<ButtonDynamicImpulseTriggerWithValue<bool>>();
-        Check(disable.PressedData.Tag.Value == ExpressionSystemSetup.InputEnabledTag && !disable.PressedData.Value.Value,
+        var disable = menu.FindChild("Disable hand gestures").GetComponent<ButtonDynamicImpulseTriggerWithValue<bool>>();
+        Check(disable.PressedData.Tag.Value == ExpressionSystemSetup.HandGesturesEnabledTag && !disable.PressedData.Value.Value,
             "Saved menu-only button sends false");
         disable.Pressed(null, default);
-        Check(!Get<bool>(core, "AllowExternalInput"), "Saved menu-only button disables ordinary input");
+        Check(!Get<bool>(core, "AllowHandGestures"), "Saved menu-only button disables ordinary input");
         Console.WriteLine($"PASS: {visible} Catalog direct-menu entries and both input-mode buttons work without Override state");
         var importedMenu = menu.FindChild("Imported menu");
         // All menu items stay enabled; valid Catalog IDs can select an expression.
@@ -169,10 +169,10 @@ internal static class ImportedGestureAvatarChecks
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
                 Check(importedButton.PressedData.Value.Value == editedId, "Saved imported-menu payload did not follow its expression's edited ID");
                 var api = root.FindChild("API").FindChild("Receivers");
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.InputEnabledTag, true, true);
-                Check(Get<bool>(core, "AllowExternalInput"), "Ordinary input is enabled before imported button verification");
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
+                Check(Get<bool>(core, "AllowHandGestures"), "Ordinary input is enabled before imported button verification");
                 importedButton.Pressed(null, default);
-                Check(!Get<bool>(core, "AllowExternalInput") && Reference<Slot>(core, "CurrentExpression") == selected,
+                Check(!Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == selected,
                     "Saved imported-menu button did not select the expression by its edited ID");
                 Console.WriteLine("PASS: saved imported-menu button follows edited expression ID and selects it synchronously");
             }
@@ -181,7 +181,7 @@ internal static class ImportedGestureAvatarChecks
                 Check(selected.WriteDynamicVariable("ExpressionSystem.Catalog.Clip/Id", originalId) == DynamicVariableWriteResult.Success, "Can restore imported expression ID");
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(root.FindChild("API").FindChild("Receivers"),
-                    ExpressionSystemSetup.InputEnabledTag, true, true);
+                    ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
             }
             Check(importedButton.PressedData.Value.Value == originalId, "Imported-menu payload follows the restored expression ID");
         }

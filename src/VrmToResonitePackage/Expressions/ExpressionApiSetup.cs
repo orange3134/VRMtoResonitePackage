@@ -11,10 +11,12 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildApi()
     {
         var logic = _api.AddSlot("Logic");
-        BuildGestureReceiver(new(logic.AddSlot("Left")), "Left", LeftTag);
-        BuildGestureReceiver(new(logic.AddSlot("Right")), "Right", RightTag);
+        BuildHandReceiver(new(logic.AddSlot("Left")), "Left", LeftTag, gestureInput: true);
+        BuildHandReceiver(new(logic.AddSlot("Right")), "Right", RightTag, gestureInput: true);
+        BuildHandReceiver(new(logic.AddSlot("KeyboardLeft")), "Left", KeyboardLeftTag, gestureInput: false);
+        BuildHandReceiver(new(logic.AddSlot("KeyboardRight")), "Right", KeyboardRightTag, gestureInput: false);
         BuildSelectReceiver(new(logic.AddSlot("Select")));
-        BuildInputEnabledReceiver(new(logic.AddSlot("AllowExternalInput")));
+        BuildHandGesturesEnabledReceiver(new(logic.AddSlot("AllowHandGestures")));
     }
 
     // Initialization runs before checking the input gate so the first event after
@@ -26,13 +28,14 @@ internal sealed partial class ExpressionSystemSetup
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
         g.Write<int>(g.Ref(_core), SystemSpace, "Core." + hand + "Gesture", gesture);
 
-    private void BuildGestureReceiver(ExpressionFlux g, string hand, string tag)
+    private void BuildHandReceiver(ExpressionFlux g, string hand, string tag, bool gestureInput)
     {
         var receiver = g.Receiver<int>(tag);
         var mutation = g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),
             g.Trigger(g.Ref(_selection), SelectionTickTag));
         Link(receiver, "OnTriggered", g.If(g.IsOwner(_root),
-            ApplyRequest(g, mutation, g.Read<bool>(g.Ref(_core), SystemSpace, "Core.AllowExternalInput"))));
+            ApplyRequest(g, mutation, gestureInput
+                ? g.Read<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures") : null)));
     }
 
     private static IWorldElement FormatGesturePair(ExpressionFlux g, string format, IWorldElement left, IWorldElement right)
@@ -61,17 +64,17 @@ internal sealed partial class ExpressionSystemSetup
             g.Set<Slot>(selected, expression)));
         var select = g.Sequence(g.Set<Slot>(selected, g.Ref<Slot>(null)), find,
             g.If(g.Not(g.IsNull<Slot>(selected)), ApplyRequest(g, g.Sequence(
-                g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowExternalInput", g.Constant(false)),
+                g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures", g.Constant(false)),
                 g.Write<Slot>(g.Ref(_core), SystemSpace, "Core.CurrentExpression", selected),
                 g.Trigger(g.Ref(_playback), PlaybackTickTag)))));
         Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
             g.NotEqual<string>(id, g.Text("")), g.Node("NotNull", typeof(string), ("Instance", id))), select));
     }
 
-    private void BuildInputEnabledReceiver(ExpressionFlux g)
+    private void BuildHandGesturesEnabledReceiver(ExpressionFlux g)
     {
-        var receiver = g.Receiver<bool>(InputEnabledTag);
+        var receiver = g.Receiver<bool>(HandGesturesEnabledTag);
         Link(receiver, "OnTriggered", g.If(g.IsOwner(_root),
-            ApplyRequest(g, g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowExternalInput", Out(receiver, "Value")))));
+            ApplyRequest(g, g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures", Out(receiver, "Value")))));
     }
 }

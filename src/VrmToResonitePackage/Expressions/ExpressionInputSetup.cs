@@ -10,7 +10,7 @@ namespace VrmToResonitePackage.Expressions;
 internal sealed partial class ExpressionSystemSetup
 {
     private static string GestureTag(int hand) => hand == 0 ? LeftTag : RightTag;
-    private IWorldElement SendGesture(ExpressionFlux g, IWorldElement tag, IWorldElement gesture) =>
+    private IWorldElement SendHandInput(ExpressionFlux g, IWorldElement tag, IWorldElement gesture) =>
         g.Trigger<int>(g.Ref(_api), tag, gesture);
 
     private void BuildInputs(bool menu)
@@ -53,10 +53,10 @@ internal sealed partial class ExpressionSystemSetup
             item.Label.DriveFrom(expression.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "DisplayName")).Value);
             SelectMenuTrigger(expression, expression);
         }
-        foreach (var (name, enabled) in new[] { ("Allow gestures and keyboard", true), ("Menu only", false) })
+        foreach (var (name, enabled) in new[] { ("Allow hand gestures", true), ("Disable hand gestures", false) })
         {
             var mode = items.AddSlot(name); MenuItem(mode, name);
-            MenuTrigger(mode, _api, InputEnabledTag, enabled);
+            MenuTrigger(mode, _api, HandGesturesEnabledTag, enabled);
         }
         if (_compiled.Menu.Count > 0)
         {
@@ -91,7 +91,7 @@ internal sealed partial class ExpressionSystemSetup
         for (int hand = 0; hand < 2; hand++)
         {
             var settings = Record(root, hand == 0 ? "Left" : "Right", KeyboardSpace);
-            Data(settings, "Tag", GestureTag(hand));
+            Data(settings, "Tag", hand == 0 ? KeyboardLeftTag : KeyboardRightTag);
             Data(settings, "Shift", true);
             Data(settings, "Control", hand != _keyboardPrimaryHand);
             for (int gesture = 0; gesture < 8; gesture++)
@@ -117,7 +117,7 @@ internal sealed partial class ExpressionSystemSetup
             Out(match, "FoundMatch"));
         // Mirror the authored hand graph: one rising condition sends the first
         // matching key index. Changing keys while the condition stays true does not resend.
-        var send = g.If(accepting, SendGesture(g, g.Read<string>(source, KeyboardSpace, "Tag"), Out(match, "Index")));
+        var send = g.If(accepting, SendHandInput(g, g.Read<string>(source, KeyboardSpace, "Tag"), Out(match, "Index")));
         g.OnChanged<bool>(accepting, send);
         g.OnStart(send);
     }
@@ -157,9 +157,9 @@ internal sealed partial class ExpressionSystemSetup
         var gesture = BuildControllerGesture(g, controller, device, side, module);
         var changed = g.NotEqual<int>(gesture, g.Read<int>(handRef, GestureHandSpace, "Candidate"));
         var stable = g.Not(g.Greater(g.Add(g.Read<float>(handRef, GestureHandSpace, "Since"), g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds")), g.Now));
-        var send = g.Sequence(SendGesture(g, g.Text(GestureTag(kind)), gesture),
+        var send = g.Sequence(SendHandInput(g, g.Text(GestureTag(kind)), gesture),
             g.Write<int>(handRef, GestureHandSpace, "Stable", gesture));
-        var enabled = g.And(active, g.Read<bool>(g.Ref(_core), SystemSpace, "Core.AllowExternalInput"));
+        var enabled = g.And(active, g.Read<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures"));
         var update = g.If(g.IsOwner(_root), g.Sequence(reset, g.If(enabled, g.Sequence(
             g.If(changed, g.Sequence(g.Write<int>(handRef, GestureHandSpace, "Candidate", gesture), g.Write<float>(handRef, GestureHandSpace, "Since", g.Now))),
             g.If(g.And(stable, g.NotEqual<int>(g.Read<int>(handRef, GestureHandSpace, "Stable"), gesture)), send)),

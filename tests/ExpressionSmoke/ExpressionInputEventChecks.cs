@@ -25,7 +25,7 @@ internal static class ExpressionInputEventChecks
         void Gesture(string side, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             api, side == "Left" ? ExpressionSystemSetup.LeftTag : ExpressionSystemSetup.RightTag, true, value);
         void Allow(bool value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
-            api, ExpressionSystemSetup.InputEnabledTag, true, value);
+            api, ExpressionSystemSetup.HandGesturesEnabledTag, true, value);
         Nodes.ValueInput<T> Replace<T>(Slot board, IWorldElement original) where T : unmanaged
         {
             var input = mocks.AddSlot("Sensor " + restore.Count).AttachComponent<Nodes.ValueInput<T>>();
@@ -237,9 +237,13 @@ internal static class ExpressionInputEventChecks
             Allow(false);
             Key(InputKey.Keypad1, true);
             await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 1 && !Get<bool>(core, "AllowHandGestures") &&
+                Reference<Slot>(core, "CurrentExpression") == smile, "keyboard selects a pose while hand gestures are disabled");
+            Gesture("Left", 4); await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 1, "disabled gesture API cannot overwrite keyboard selection");
             Allow(true);
-            await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 4, "a key pressed while input is disabled must be released before retrying");
+            Gesture("Left", 4); await Frames(5);
+            Check(Get<int>(core, "LeftGesture") == 4, "enabling gestures does not resend a held keyboard chord");
             Key(InputKey.Keypad1, false);
             await Frames(5);
             Key(InputKey.Keypad1, true);
@@ -260,12 +264,12 @@ internal static class ExpressionInputEventChecks
             await Frames(5);
             var leftSettings = keyboard.FindChild("Left").FindChild("DV");
             var rightSettings = keyboard.FindChild("Right").FindChild("DV");
-            Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.RightTag);
+            Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.KeyboardRightTag);
             Key(InputKey.Keypad1, true);
             await Frames(5);
             Check(Get<int>(core, "RightGesture") == 1, "keyboard sender reads the edited hand tag");
             Key(InputKey.Keypad1, false);
-            Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.LeftTag);
+            Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.KeyboardLeftTag);
             await Frames(5);
             Set(leftSettings.FindChild("Control"), "Control", true);
             Gesture("Left", 6);

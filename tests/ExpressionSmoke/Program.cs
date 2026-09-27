@@ -103,7 +103,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         void Select(string name) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
             ExpressionSystemSetup.SelectTag, true, Get<string>(catalog.FindChild(name), "Id"));
         void AllowInput(bool enabled = true) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-            ExpressionSystemSetup.InputEnabledTag, true, enabled);
+            ExpressionSystemSetup.HandGesturesEnabledTag, true, enabled);
         async Task Frames(int count = 30) { for (int i = 0; i < count; i++) await default(NextUpdate); }
         Check(core.FindChild("SourceState") == null && core.FindChild("ParameterState") == null && expressions.FindChild("Rules") == null,
             "generic source arbitration and Animator graph are absent");
@@ -189,7 +189,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             Gesture(0, extended); Gesture(1, right);
             Check(Get<int>(core, "LeftGesture") == extended && Get<int>(core, "RightGesture") == right &&
                 Get<string>(core, "PairKey") == key && Reference<Slot>(core, "CurrentExpression") == null &&
-                Get<bool>(core, "AllowExternalInput"),
+                Get<bool>(core, "AllowHandGestures"),
                 "extended gestures are retained even without a table entry: " + key);
             var row = expressions.FindChild("DV").AddSlot("GestureTable.Pair." + key);
             var mapping = row.AttachComponent<DynamicReferenceVariable<Slot>>();
@@ -204,21 +204,21 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         }
         Gesture(0, 1); Gesture(1, 1);
         await Frames();
-        Check(Get<bool>(core, "AllowExternalInput"), "ordinary input is initially enabled");
+        Check(Get<bool>(core, "AllowHandGestures"), "ordinary input is initially enabled");
         Select("Smile"); await Frames();
-        Check(Math.Abs(field.Value - 1) < 0.01 && !Get<bool>(core, "AllowExternalInput") &&
+        Check(Math.Abs(field.Value - 1) < 0.01 && !Get<bool>(core, "AllowHandGestures") &&
             Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 && Get<string>(core, "PairKey") == "L1R1",
             "direct selection disables ordinary input without changing either gesture");
         foreach (string invalidId in new string[] { null, "", "Missing expression", "smile", "Left.Fist" })
         {
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, invalidId);
-            Check(!Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == "L1R1" &&
+            Check(!Get<bool>(core, "AllowHandGestures") && Get<string>(core, "PairKey") == "L1R1" &&
                 Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"), "invalid ID preserves menu selection");
         }
         Gesture(0, 0); Gesture(1, 0); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01 && Get<string>(core, "PairKey") == "L1R1" &&
             Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
-            !Get<bool>(core, "AllowExternalInput"),
+            !Get<bool>(core, "AllowHandGestures"),
             "menu-only mode ignores normal input without altering direct selection");
         foreach (string hand in new[] { "Left", "Right" })
             Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
@@ -235,14 +235,14 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Set(table, "Pair.L6R7", previousHighPair);
         Gesture(0, 1); Gesture(1, 1); Select("Smile");
         AllowInput(); await Frames();
-        Check(Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == "L1R1" &&
+        Check(Get<bool>(core, "AllowHandGestures") && Get<string>(core, "PairKey") == "L1R1" &&
             Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"),
             "enabling ordinary input retains direct selection until the next gesture");
         Gesture(0, 0); await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01 && Get<string>(core, "PairKey") == "L0R1", "ordinary input changes expressions after enabling");
         AllowInput(false);
         Gesture(0, 1);
-        Check(Get<string>(core, "PairKey") == "L0R1" && !Get<bool>(core, "AllowExternalInput"), "bool API can explicitly disable ordinary input");
+        Check(Get<string>(core, "PairKey") == "L0R1" && !Get<bool>(core, "AllowHandGestures"), "bool API can explicitly disable ordinary input");
         AllowInput();
 
         Check(catalog.FindChild("Animated").GetComponent<ContextMenuItemSource>().Enabled,
@@ -311,7 +311,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(keyboard.Children.Count == 2, "keyboard exposes settings for each hand");
         var shortcut = keyboard.FindChild("Right").FindChild("DV").FindChild("Tag");
         Request(Get<string>(shortcut, "Tag"), 7); await Frames();
-        Check(Get<int>(core, "RightGesture") == 1, "keyboard binding is ignored in menu-only mode");
+        Check(Get<int>(core, "RightGesture") == 7 && !Get<bool>(core, "AllowHandGestures"),
+            "keyboard binding remains accepted after direct menu selection disables hand gestures");
         AllowInput();
         Request(Get<string>(shortcut, "Tag"), 7); await Frames();
         Check(Get<int>(core, "RightGesture") == 7, "keyboard binding works after enabling ordinary input");
@@ -323,7 +324,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(directButton.PressedData.Value.Value == "Smoke.RenamedSmile", "direct menu payload follows the expression's edited ID");
         AllowInput();
         directButton.Pressed(null, default);
-        Check(!Get<bool>(core, "AllowExternalInput") && Reference<Slot>(core, "CurrentExpression") == directExpression,
+        Check(!Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == directExpression,
             "direct menu selects the expression by its edited ID without renaming the Slot");
         Set(directExpression, "Id", originalId); await Frames(2);
         Check(directButton.PressedData.Value.Value == originalId, "direct menu payload follows the restored expression ID");
@@ -338,7 +339,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "copied template menu payload follows the new Catalog entry's unique ID");
         AllowInput();
         addedButton.Pressed(null, default);
-        Check(!Get<bool>(core, "AllowExternalInput") && Reference<Slot>(core, "CurrentExpression") == addedExpression,
+        Check(!Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == addedExpression,
             "copied template is directly selectable without a GestureTable mapping");
         var addedBinding = addedExpression.FindChild("Bindings").Children.First();
         Set(addedBinding, "Value", 0.65f);
@@ -353,13 +354,13 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await ExpressionDynamicInputChecks.CheckEdits(clone.FindChild("Expressions"));
         ExpressionDynamicInputChecks.CheckBindings(expressions);
         var cloneCore = clone.FindChild("Expressions").FindChild("Core");
-        Check(Get<string>(cloneCore, "PairKey") == "L0R0" && Get<bool>(cloneCore, "AllowExternalInput"),
+        Check(Get<string>(cloneCore, "PairKey") == "L0R0" && Get<bool>(cloneCore, "AllowHandGestures"),
             "clone diagnostics reflect reset hand inputs and ordinary input enabled");
         var cloneApi = clone.FindChild("Expressions").FindChild("API").FindChild("Receivers");
         Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(cloneApi,
             ExpressionSystemSetup.LeftTag, true, 1) == 1, "clone has its own int request receiver");
         Check(Get<int>(cloneCore, "LeftGesture") == 1 && Get<int>(cloneCore, "RightGesture") == 0 && Get<string>(cloneCore, "PairKey") == "L1R0" &&
-            Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 7 && !Get<bool>(core, "AllowExternalInput"),
+            Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 7 && !Get<bool>(core, "AllowHandGestures"),
             "clone int requests update only the clone and leave the original hand state and input mode unchanged");
         clone.Destroy();
         catalog.FindChild("Smile").Destroy(); await Frames();
@@ -379,17 +380,17 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Set(table, "Pair.L0R0", catalog.FindChild("Angry"));
         avatar.Parent = world.RootSlot;
         await Frames();
-        Check(Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == "L0R0" &&
+        Check(Get<bool>(core, "AllowHandGestures") && Get<string>(core, "PairKey") == "L0R0" &&
             Reference<Slot>(core, "CurrentExpression") == null &&
             Math.Abs(field.Value - 0.4f) < 0.01,
             "wearer departure restores base instead of playing the mapped Neutral expression");
         Set(table, "Pair.L0R0", (Slot)null);
         Gesture(0, 1); Select("Angry"); await Frames();
-        Check(Get<int>(core, "LeftGesture") == 0 && Get<bool>(core, "AllowExternalInput"),
+        Check(Get<int>(core, "LeftGesture") == 0 && Get<bool>(core, "AllowHandGestures"),
             "gesture and select requests are ignored without a local wearer");
-        Set(core, "AllowExternalInput", false);
+        Set(core, "AllowHandGestures", false);
         AllowInput(); await Frames();
-        Check(!Get<bool>(core, "AllowExternalInput"),
+        Check(!Get<bool>(core, "AllowHandGestures"),
             "input-mode requests are ignored without a local wearer");
         // Sentinel selection state proves wearer-only private stages did no work.
         var outputState = expressions.FindChild("Outputs").Children.Single();
@@ -407,22 +408,22 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var unwornClone = avatar.Duplicate(world.RootSlot);
         await Frames();
         var unwornCore = unwornClone.FindChild("Expressions").FindChild("Core");
-        Check(Get<string>(unwornCore, "PairKey") == "__unchanged" && !Get<bool>(unwornCore, "AllowExternalInput"),
+        Check(Get<string>(unwornCore, "PairKey") == "__unchanged" && !Get<bool>(unwornCore, "AllowHandGestures"),
             "an unworn clone does not initialize or repeatedly clear stored state");
         unwornClone.Parent = wearer;
         await Frames();
-        Check(Get<string>(unwornCore, "PairKey") == "L0R0" && Get<bool>(unwornCore, "AllowExternalInput") &&
+        Check(Get<string>(unwornCore, "PairKey") == "L0R0" && Get<bool>(unwornCore, "AllowHandGestures") &&
             Math.Abs(unwornClone.GetComponent<ValueField<float>>().Value.Value - 0.4f) < 0.01,
             "first wear initializes a previously unworn clone and restores its base output");
         unwornClone.Destroy();
         avatar.Parent = wearer;
         Gesture(0, 1); Gesture(1, 1);
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 && Get<string>(core, "PairKey") == "L1R1" &&
-            Get<bool>(core, "AllowExternalInput"),
+            Get<bool>(core, "AllowHandGestures"),
             "first events after reattachment initialize once and retain both hand requests before the wearer-change event");
         AllowInput(); Gesture(0, 0); Gesture(1, 0);
         await Frames();
-        Check(Get<bool>(core, "AllowExternalInput") &&
+        Check(Get<bool>(core, "AllowHandGestures") &&
             Get<string>(core, "PairKey") == "L0R0" && Math.Abs(field.Value - 0.4f) < 0.01,
             "reattaching initializes hand state, selection, diagnostics and tracking");
         Select("Angry"); await Frames();
@@ -443,7 +444,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await ExpressionDynamicInputChecks.CheckEdits(restoredExpressions);
         var restoredCore = restoredExpressions.FindChild("Core");
         Check(Get<string>(restoredCore, "PairKey") == "L0R0" &&
-            Reference<Slot>(restoredCore, "CurrentExpression") == null && Get<bool>(restoredCore, "AllowExternalInput"),
+            Reference<Slot>(restoredCore, "CurrentExpression") == null && Get<bool>(restoredCore, "AllowHandGestures"),
             "package reload recomputes diagnostics from reset inputs and the edited empty table row");
         Set(restoredExpressions.FindChild("GestureTable"), "Pair.L0R2", restoredExpressions.FindChild("Catalog").FindChild("Angry"));
         Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredExpressions.FindChild("API").FindChild("Receivers"),
@@ -459,6 +460,14 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<string>(restoredCore, "PairKey") == "L8R255" &&
             Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
             "saved external pair and unrestricted gesture receivers work after package reload");
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.HandGesturesEnabledTag, true, false);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.RightTag, true, 0);
+        Check(Get<int>(restoredCore, "RightGesture") == 255, "reloaded gesture permission blocks gesture API");
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.KeyboardLeftTag, true, 0);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.KeyboardRightTag, true, 2);
+        Check(Get<string>(restoredCore, "PairKey") == "L0R2" && !Get<bool>(restoredCore, "AllowHandGestures") &&
+            Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
+            "reloaded keyboard API selects a pose without enabling hand gestures");
         // Curves with equal endpoints may still have a tangent excursion.
         var testCurve = new ExpressionCurve { Binding = new("Face", "Curve") };
         testCurve.Keys.Add(new(0, 0, 0, 4)); testCurve.Keys.Add(new(1, 0, -4, 0));
