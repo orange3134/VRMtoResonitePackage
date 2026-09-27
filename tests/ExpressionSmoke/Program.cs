@@ -181,6 +181,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "same expression retains its fixed pose");
         Gesture(1, 1); await Frames();
+        ExpressionGraphChecks.CheckMenuColors(expressions);
         Check(Math.Abs(field.Value - 0.7f) < 0.01, "both-hand table entry selects Angry");
         foreach (int extended in new[] { int.MinValue, -1, 8, 255, int.MaxValue })
         {
@@ -206,6 +207,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await Frames();
         Check(Get<bool>(core, "AllowHandGestures"), "ordinary input is initially enabled");
         Select("Smile"); await Frames();
+        ExpressionGraphChecks.CheckMenuColors(expressions);
         Check(Math.Abs(field.Value - 1) < 0.01 && !Get<bool>(core, "AllowHandGestures") &&
             Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 && Get<string>(core, "PairKey") == "L1R1",
             "direct selection disables ordinary input without changing either gesture");
@@ -235,6 +237,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Set(table, "Pair.L6R7", previousHighPair);
         Gesture(0, 1); Gesture(1, 1); Select("Smile");
         AllowInput(); await Frames();
+        ExpressionGraphChecks.CheckMenuColors(expressions);
         Check(Get<bool>(core, "AllowHandGestures") && Get<string>(core, "PairKey") == "L1R1" &&
             Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"),
             "enabling ordinary input retains direct selection until the next gesture");
@@ -270,6 +273,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await Frames();
         Check(Math.Abs(field.Value - 0.7f) < 0.01, "editing a table reference waits for input");
         Gesture(1, 1); await Frames();
+        ExpressionGraphChecks.CheckMenuColors(expressions);
         Check(Math.Abs(field.Value - 1) < 0.01, "next gesture applies the edited table reference");
         Gesture(1, 0); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "different pair sharing the same clip retains its pose");
@@ -278,6 +282,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Gesture(1, 0); await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "next gesture falls back to base for the deleted row");
         Gesture(1, 1); await Frames();
+        ExpressionGraphChecks.CheckMenuColors(expressions);
         Check(Math.Abs(field.Value - 1) < 0.01, "deleting row 8 does not shift row 9");
 
         var touch = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules").FindChild("Touch");
@@ -345,14 +350,18 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Set(addedBinding, "Value", 0.65f);
         addedButton.Pressed(null, default); await Frames();
         Check(Math.Abs(field.Value - 0.65f) < 0.01, "reselecting the same expression refreshes edited bindings");
+        ExpressionGraphChecks.CheckMenuColors(expressions);
         addedExpression.Destroy(); AllowInput(); await Frames();
 
         Select("Smile"); await Frames();
+        ExpressionGraphChecks.CheckMenuColors(expressions);
         var clone = avatar.Duplicate(avatar.Parent); await Frames(90);
         Check(Math.Abs(clone.GetComponent<ValueField<float>>().Value.Value - 0.2f) < 0.01, "cloning resets transient selection");
         Check(Math.Abs(field.Value - 1f) < 0.01, "cloning does not reset original");
         await ExpressionDynamicInputChecks.CheckEdits(clone.FindChild("Expressions"));
         ExpressionDynamicInputChecks.CheckBindings(expressions);
+        ExpressionGraphChecks.CheckMenuColors(clone.FindChild("Expressions"));
+        ExpressionGraphChecks.CheckMenuColors(expressions);
         var cloneCore = clone.FindChild("Expressions").FindChild("Core");
         Check(Get<string>(cloneCore, "PairKey") == "L0R0" && Get<bool>(cloneCore, "AllowHandGestures"),
             "clone diagnostics reflect reset hand inputs and ordinary input enabled");
@@ -390,6 +399,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "gesture and select requests are ignored without a local wearer");
         Set(core, "AllowHandGestures", false);
         AllowInput(); await Frames();
+        ExpressionGraphChecks.CheckMenuColors(expressions);
         Check(!Get<bool>(core, "AllowHandGestures"),
             "input-mode requests are ignored without a local wearer");
         // Sentinel selection state proves wearer-only private stages did no work.

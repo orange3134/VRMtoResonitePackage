@@ -292,6 +292,12 @@ Version 23では左右ジェスチャーのコンテキストメニューと専�
 押下時にCatalogからIDを検索し、有効な表情のSlotをCurrentExpressionへ直接書き込み、Playbackを同期実行する。
 AllowHandGestures=falseにするが、LeftGesture・RightGesture・PairKeyは変更しない。GestureTable未割り当てでも選択できる。
 同じ表情の再選択でもPlaybackを実行するため、Binding.Valueの編集も反映できる。
+表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `Core.CurrentExpression` を参照して駆動する。
+Catalog・Imported menuともに選択中の表情は緑、それ以外は白。null用の白いOptionを先頭に置き、
+参照先の表情を削除した項目が未選択状態で緑にならないようにする。
+ジェスチャー許可・停止のColorは `ValueOptionDescriptionDriver<bool>` が `Core.AllowHandGestures` を読み、
+現在のboolに一致する項目だけ緑にする。両DriverともLabel・Spriteは駆動せず、Enabledの自動制御も追加しない。
+参照はアバター複製時に複製先へ再対応し、Catalogテンプレートを複製した項目は自分自身の表情を比較対象にする。
 Catalog の Slot を固定用に保持する Override 変数は生成しない。
 
 `Allow hand gestures` は bool を true に、`Disable hand gestures` は false にする。

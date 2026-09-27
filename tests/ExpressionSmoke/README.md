@@ -268,3 +268,9 @@ Version 24 renames Core.AllowExternalInput and its bool API to AllowHandGestures
 Keyboard/Left and Keyboard/Right have separate int receivers that preserve and bypass
 this flag. All 16 actual shortcuts are exercised with hand gestures disabled, including
 modifier exclusion, held chords and reload. Gesture API requests remain gated.
+
+Menu Color is driven by ReferenceOptionDescriptionDriver<Slot> for Catalog and imported
+expression items, and ValueOptionDescriptionDriver<bool> for hand-gesture permission.
+Only the current expression / matching flag is green; other options are white. Checks
+cover gesture selection, direct selection, permission changes, copied templates, clone
+isolation and package reload, with no changes to Enabled, label or sprite bindings.

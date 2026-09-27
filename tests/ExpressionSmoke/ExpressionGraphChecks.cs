@@ -1,3 +1,4 @@
+using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.ProtoFlux;
 using Nodes = FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes;
@@ -8,9 +9,43 @@ internal static class ExpressionGraphChecks
     // independently of the number of expressions, outputs, and gesture table rows.
     private const int MaximumBoardNodes = 256;
 
+    public static void CheckMenuColors(Slot expressions)
+    {
+        if (Descendant(expressions, "Inputs/ContextMenu") == null) return;
+        var current = ExpressionTestFields.Reference<Slot>(expressions.FindChild("Core"), "CurrentExpression");
+        bool allow = Value<bool>(expressions.FindChild("Core"), "AllowHandGestures");
+        var green = new colorX(0f, 1f, 0f, 1f, Renderite.Shared.ColorProfile.Linear);
+        foreach (var item in expressions.GetComponentsInChildren<ContextMenuItemSource>())
+        {
+            bool active;
+            if (item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>() is { } select)
+            {
+                var expected = expressions.FindChild("Catalog").Children
+                    .SingleOrDefault(c => Value<string>(c, "Id") == select.PressedData.Value.Value);
+                active = current != null && current == expected;
+                var driver = item.Slot.GetComponent<ReferenceOptionDescriptionDriver<Slot>>();
+                Check(driver != null && driver.Color.IsLinkValid && driver.Color.Target == item.Color,
+                    "expression menu Color uses ReferenceOptionDescriptionDriver: " + item.Slot.Name);
+                Check(!driver.Label.IsLinkValid && !driver.Sprite.IsLinkValid,
+                    "expression color driver preserves label and sprite bindings");
+            }
+            else if (item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithValue<bool>>() is { } toggle)
+            {
+                active = allow == toggle.PressedData.Value.Value;
+                var driver = item.Slot.GetComponent<ValueOptionDescriptionDriver<bool>>();
+                Check(driver != null && driver.Color.IsLinkValid && driver.Color.Target == item.Color,
+                    "permission menu Color uses ValueOptionDescriptionDriver: " + item.Slot.Name);
+            }
+            else continue;
+            Check(item.Color.Value.Equals(active ? green : colorX.White),
+                "only the currently selected menu option is green: " + item.Slot.Name);
+        }
+    }
+
     public static void CheckLayout(Slot expressions)
     {
         ExpressionSpaceChecks.Run(expressions);
+        CheckMenuColors(expressions);
         Check(expressions.FindChild("GestureTable").FindChild("Logic") == null &&
             Descendant(expressions, "Inputs/ContextMenu/Logic") == null,
             "menu availability watchers and refresh board are absent");

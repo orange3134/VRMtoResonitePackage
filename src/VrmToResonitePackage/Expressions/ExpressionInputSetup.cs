@@ -1,3 +1,4 @@
+using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.ProtoFlux;
 using Renderite.Shared;
@@ -33,10 +34,39 @@ internal sealed partial class ExpressionSystemSetup
         trigger.Target.Target = target; trigger.ExcludeDisabled.Value = true;
         trigger.PressedData.Tag.Value = tag; trigger.PressedData.Value.Value = payload;
     }
+    private static readonly colorX SelectedMenuColor = new(0f, 1f, 0f, 1f, ColorProfile.Linear);
+
+    private void SelectMenuColor(Slot item, Slot expression)
+    {
+        var driver = item.AttachComponent<ReferenceOptionDescriptionDriver<Slot>>();
+        driver.Reference.Target = _root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+            .Single(v => v.VariableName.Value == Path(SystemSpace, "Core.CurrentExpression")).Reference;
+        driver.DefaultOption.Color.Value = colorX.White;
+        // Null must never appear selected, including an imported item whose clip was deleted.
+        driver.Options.Add().Color.Value = colorX.White;
+        var selected = driver.Options.Add();
+        selected.ReferenceTarget.Target = expression;
+        selected.Color.Value = SelectedMenuColor;
+        driver.Color.Target = item.GetComponent<ContextMenuItemSource>().Color;
+    }
+
+    private void GesturePermissionMenuColor(Slot item, bool enabled)
+    {
+        var driver = item.AttachComponent<ValueOptionDescriptionDriver<bool>>();
+        driver.Value.Target = _root.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>()
+            .Single(v => v.VariableName.Value == Path(SystemSpace, "Core.AllowHandGestures")).Value;
+        driver.DefaultOption.Color.Value = colorX.White;
+        var selected = driver.Options.Add();
+        selected.ReferenceValue.Value = enabled;
+        selected.Color.Value = SelectedMenuColor;
+        driver.Color.Target = item.GetComponent<ContextMenuItemSource>().Color;
+    }
+
     private void SelectMenuTrigger(Slot item, Slot expression)
     {
         var id = expression.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Id")).Value;
         MenuTrigger(item, _api, SelectTag, id.Value);
+        SelectMenuColor(item, expression);
         item.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>().PressedData.Value.DriveFrom(id);
     }
     private void BuildMenus()
@@ -57,6 +87,7 @@ internal sealed partial class ExpressionSystemSetup
         {
             var mode = items.AddSlot(name); MenuItem(mode, name);
             MenuTrigger(mode, _api, HandGesturesEnabledTag, enabled);
+            GesturePermissionMenuColor(mode, enabled);
         }
         if (_compiled.Menu.Count > 0)
         {

@@ -96,6 +96,7 @@ internal static class ImportedGestureAvatarChecks
                     Check(Math.Abs(expected - actual) < 0.001f, $"Pair {l},{r}: output {Get<string>(output, "Shape")} expected {expected}, got {actual}");
                     values.Add(actual);
                 }
+                ExpressionGraphChecks.CheckMenuColors(root);
                 distinctPoses.Add(string.Join(",", values.Select(v => v.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))));
                 Console.WriteLine($"PASS: saved gesture Left {l}, Right {r} -> {mapped.Name}, {values.Count} output fields checked");
             }
@@ -123,6 +124,8 @@ internal static class ImportedGestureAvatarChecks
                 Get<int>(core, "LeftGesture") == leftBefore && Get<int>(core, "RightGesture") == rightBefore &&
                 Reference<Slot>(core, "CurrentExpression") == expression,
                 "Saved direct menu preserves gestures and selects the Catalog expression");
+            for (int i = 0; i < 2; i++) await default(NextUpdate);
+            ExpressionGraphChecks.CheckMenuColors(root);
         }
         Check(visible >= distinctPoses.Count, "Saved direct menu exposes every distinct mapped pose");
         int heldLeft = Get<int>(core, "LeftGesture"), heldRight = Get<int>(core, "RightGesture");
@@ -144,6 +147,8 @@ internal static class ImportedGestureAvatarChecks
             "Saved menu-only button sends false");
         disable.Pressed(null, default);
         Check(!Get<bool>(core, "AllowHandGestures"), "Saved menu-only button disables ordinary input");
+        for (int i = 0; i < 2; i++) await default(NextUpdate);
+        ExpressionGraphChecks.CheckMenuColors(root);
         Console.WriteLine($"PASS: {visible} Catalog direct-menu entries and both input-mode buttons work without Override state");
         var importedMenu = menu.FindChild("Imported menu");
         // All menu items stay enabled; valid Catalog IDs can select an expression.
