@@ -20,7 +20,8 @@ internal static class ExpressionTestFields
         if (space.SpaceName.Value == "ExpressionSystem")
         {
             for (var ancestor = slot; ancestor != space.Slot; ancestor = ancestor.Parent)
-                if (ancestor.Parent == space.Slot && ancestor.Name is "Core" or "GestureTable")
+                if ((ancestor.Parent == space.Slot && ancestor.Name is "Core" or "GestureTable") ||
+                    (ancestor.Parent == space.Slot.FindChild("DV") && ancestor.Name == "GestureTable"))
                     return "ExpressionSystem/" + ancestor.Name + "." + name;
         }
         return space.SpaceName.Value + "/" + name;

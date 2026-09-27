@@ -27,8 +27,9 @@ internal static class ExpressionPackageSnapshot
                     .Select(v => Value<string>(v.Reference.Target, "Id")).OrderBy(v => v, StringComparer.Ordinal).ToArray()
             });
         }
-        string pairPrefix = ExpressionTestFields.VariablePath(root.FindChild("GestureTable"), "Pair.");
-        var table = root.FindChild("GestureTable").ExpressionVariables<DynamicReferenceVariable<Slot>>()
+        var tableSlot = root.FindChild("DV")?.FindChild("GestureTable") ?? root.FindChild("GestureTable");
+        string pairPrefix = ExpressionTestFields.VariablePath(tableSlot, tableSlot.Parent.Name == "DV" ? "" : "Pair.");
+        var table = tableSlot.ExpressionVariables<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith(pairPrefix, StringComparison.Ordinal))
             .ToDictionary(v => NormalizePairKey(v.VariableName.Value[pairPrefix.Length..]), v => v.Reference.Target);
         var keys = (from left in Enumerable.Range(0, 8) from right in Enumerable.Range(0, 8)

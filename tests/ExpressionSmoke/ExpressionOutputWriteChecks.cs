@@ -36,13 +36,13 @@ internal static class ExpressionOutputWriteChecks
             var expressions = await ExpressionSystemSetup.BuildAsync(avatar, model, binding => binding.Shape == "A" ? a : b, menu: false);
             await Frames(90);
             var core = expressions.FindChild("Core"); var catalog = expressions.FindChild("Catalog");
-            var table = expressions.FindChild("GestureTable"); var outputs = expressions.FindChild("Outputs");
+            var table = expressions.FindChild("DV").FindChild("GestureTable"); var outputs = expressions.FindChild("Outputs");
             var outputA = outputs.FindChild("A"); var outputB = outputs.FindChild("B");
             var api = expressions.FindChild("API").FindChild("Receivers");
             for (int i = 0; i < model.Clips.Count; i++)
             {
                 var entry = catalog.FindChild(model.Clips[i].Name);
-                Set(table, $"Pair.L0R{i + 1}", entry);
+                Set(table, $"L0R{i + 1}", entry);
             }
             void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
                 ExpressionSystemSetup.RightTag, true, index) == 1, "int receiver selects test clip " + index);

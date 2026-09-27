@@ -36,7 +36,7 @@ internal sealed partial class ExpressionSystemSetup
         _catalog = _root.AddSlot("Catalog");
         _core = _root.AddSlot("Core");
         _outputs = _root.AddSlot("Outputs");
-        _table = _root.AddSlot("GestureTable");
+        _table = _root.AddSlot("DV").AddSlot("GestureTable");
         // Core fields and table rows bind to the single system space.
         _root.GetComponent<DynamicVariableSpace>().OnlyDirectBinding.Value = false;
         _inputs = _root.AddSlot("Inputs");
@@ -53,7 +53,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "Core.CurrentExpression", null);
         Data(_root, "Core.PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 27);
+        Data(_root, "Version", 28);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -70,7 +70,10 @@ internal sealed partial class ExpressionSystemSetup
         for (int right = 0; right < 8; right++)
         {
             string id = setup._compiled.Pairs[left * 8 + right];
-            Reference(setup._root, $"GestureTable.Pair.L{left}R{right}", id != null ? setup._clips.GetValueOrDefault(id) : null);
+            string key = $"L{left}R{right}";
+            var row = setup._table.AddSlot(key).AttachComponent<DynamicReferenceVariable<Slot>>();
+            row.VariableName.Value = Path(SystemSpace, "GestureTable." + key);
+            row.Reference.Target = id != null ? setup._clips.GetValueOrDefault(id) : null;
         }
         setup.BuildApi();
         setup.BuildInputs(menu);

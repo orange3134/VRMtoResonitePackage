@@ -52,7 +52,7 @@ internal static class ImportedGestureAvatarChecks
         }
         string expectedHand = Environment.GetEnvironmentVariable("RESOPON_TEST_KEYBOARD_PRIMARY_HAND");
         await KeyboardPriorityChecks.Run(root, expectedHand == null ? null : int.Parse(expectedHand));
-        var core = root.FindChild("Core"); var table = root.FindChild("GestureTable");
+        var core = root.FindChild("Core"); var table = root.FindChild("DV").FindChild("GestureTable");
         var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null, "Saved menu has no hand submenus");
         var receiverRoot = root.FindChild("API").FindChild("Receivers");
@@ -69,7 +69,7 @@ internal static class ImportedGestureAvatarChecks
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.RightTag, true, r);
                 Check(Get<int>(core, "LeftGesture") == l && Get<int>(core, "RightGesture") == r, "Gestures did not update both hand states synchronously");
                 var mapped = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
-                    .Single(v => v.VariableName.Value == $"ExpressionSystem/GestureTable.Pair.L{l}R{r}").Reference.Target;
+                    .Single(v => v.VariableName.Value == $"ExpressionSystem/GestureTable.L{l}R{r}").Reference.Target;
                 Check(mapped != null && Reference<Slot>(core, "CurrentExpression") == mapped, "Missing or incorrect selected pose");
                 Check(Get<string>(core, "PairKey") == $"L{l}R{r}" && Get<bool>(core, "AllowHandGestures"),
                     "Imported pair or input mode disagrees with the selected gesture pair");

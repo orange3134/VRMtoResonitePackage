@@ -64,7 +64,7 @@ internal static class ExpressionBlinkChecks
         EquipAvatar(avatar);
         await Frames(30);
         var expressions = avatar.FindChild("Expressions");
-        var core = expressions.FindChild("Core"); var table = expressions.FindChild("GestureTable");
+        var core = expressions.FindChild("Core"); var table = expressions.FindChild("DV").FindChild("GestureTable");
         var catalog = expressions.FindChild("Catalog"); var outputs = expressions.FindChild("Outputs");
         var close = outputs.FindChild("Close"); var reverse = outputs.FindChild("Reverse"); var mouth = outputs.FindChild("Mouth");
         var driver = avatar.GetComponent<EyeLinearDriver>(); var manager = avatar.GetComponent<EyeManager>();
@@ -74,7 +74,7 @@ internal static class ExpressionBlinkChecks
             driver.Eyes[1].OpenCloseTarget.IsLinkValid && driver.Eyes[1].OpenCloseTarget.Target == Field(reverse, "Base"),
             "real eye targets are rerouted to their own Base fields");
         Check(Reference<ISyncRef>(close, "OriginalDriver") == driver.Eyes[0].OpenCloseTarget, "original blink link remaps");
-        for (int i = 0; i < 4; i++) Set(table, $"Pair.L0R{i + 1}", catalog.FindChild(new[] { "Open", "Half", "Closed", "Sparse" }[i]));
+        for (int i = 0; i < 4; i++) Set(table, $"L0R{i + 1}", catalog.FindChild(new[] { "Open", "Half", "Closed", "Sparse" }[i]));
         void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             expressions.FindChild("API").FindChild("Receivers"), ExpressionSystemSetup.RightTag, true, index) == 1, "select blink test expression");
         void Blink(float l, float r) { manager.LeftEyeCloseOverride.Value = l; manager.RightEyeCloseOverride.Value = r; }

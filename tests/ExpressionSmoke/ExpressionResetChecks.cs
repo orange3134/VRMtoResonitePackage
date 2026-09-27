@@ -9,14 +9,14 @@ internal static class ExpressionResetChecks
     {
         var core = expressions.FindChild("Core");
         var api = expressions.FindChild("API").FindChild("Receivers");
-        var table = expressions.FindChild("GestureTable");
+        var table = expressions.FindChild("DV").FindChild("GestureTable");
         var outputs = expressions.FindChild("Outputs").Children.ToArray();
         var expression = expressions.FindChild("Catalog").Children.First(c =>
             c.IsActive && Get<bool>(c, "Enabled") && c.FindChild("Bindings").ChildrenCount > 0);
         var mappings = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
-            .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.Pair.", StringComparison.Ordinal))
+            .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal))
             .ToDictionary(v => v, v => v.Reference.Target);
-        var neutral = mappings.Keys.Single(v => v.VariableName.Value == "ExpressionSystem/GestureTable.Pair.L0R0");
+        var neutral = mappings.Keys.Single(v => v.VariableName.Value == "ExpressionSystem/GestureTable.L0R0");
         var button = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Reset settings")
             .GetComponent<ButtonDynamicImpulseTrigger>();
         try

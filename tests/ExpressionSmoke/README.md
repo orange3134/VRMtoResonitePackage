@@ -276,3 +276,9 @@ cover gesture selection, direct selection, permission changes, copied templates,
 isolation and package reload, with no changes to Enabled, label or sprite bindings.
 
 Version 25 adds the Reset settings menu and a payload-free Reset API. ExpressionResetChecks presses the actual button on generated, cloned and imported avatars, checks both hands and expression reset to neutral/Base with gestures enabled, verifies mappings survive, and confirms the next gesture resumes selection. The main fixture also checks that unworn reset requests are ignored.
+
+Version 28 groups all 64 table rows under Expressions/DV/GestureTable/LnRm,
+removes the empty Expressions/GestureTable slot, and reads
+ExpressionSystem/GestureTable.L{0}R{1} with FormatString. Placement, runtime
+selection, external rows (including keypad 8/9), clone, save and reload checks
+use the new layout. Snapshot comparison can still read older table layouts.

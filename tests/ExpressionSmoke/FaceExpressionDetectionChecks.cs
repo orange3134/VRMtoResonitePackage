@@ -105,8 +105,8 @@ internal static class FaceExpressionDetectionChecks
             Check(catalog.FindChild("Unassigned").FindChild("Bindings").ChildrenCount == 1, "unmapped catalog candidates contain only baseline differences");
             Check(catalog.FindChild("Smile").FindChild("Bindings").ChildrenCount == 2 &&
                 catalog.FindChild("Reset").FindChild("Bindings").ChildrenCount == 2, "mapped expressions preserve explicit baseline reset curves");
-            var mappings = expressions.FindChild("GestureTable").ExpressionVariables<FrooxEngine.DynamicReferenceVariable<FrooxEngine.Slot>>()
-                .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.Pair.", StringComparison.Ordinal)).ToArray();
+            var mappings = expressions.FindChild("DV").FindChild("GestureTable").ExpressionVariables<FrooxEngine.DynamicReferenceVariable<FrooxEngine.Slot>>()
+                .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal)).ToArray();
             Check(mappings.Length == 64 && mappings.All(v => v.Reference.Target != null), "all gesture combinations retain an assigned table entry");
             Console.WriteLine("PASS: detected Catalog filters unrelated candidates while preserving mapped reset poses");
         }

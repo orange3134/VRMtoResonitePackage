@@ -49,7 +49,7 @@ internal static class ExpressionGraphChecks
     {
         ExpressionSpaceChecks.Run(expressions);
         CheckMenuColors(expressions);
-        Check(expressions.FindChild("GestureTable").FindChild("Logic") == null &&
+        Check(expressions.FindChild("GestureTable") == null && expressions.FindChild("DV").FindChild("GestureTable").FindChild("Logic") == null &&
             Descendant(expressions, "Inputs/ContextMenu/Logic") == null,
             "menu availability watchers and refresh board are absent");
         Check(!expressions.GetComponentsInChildren<DynamicValueVariable<bool>>().Any(v =>
@@ -94,7 +94,7 @@ internal static class ExpressionGraphChecks
                 "pair lookup uses no string Add nodes: " + path);
             var formatter = lookupNodes.OfType<Nodes.Strings.FormatString>().Single(node =>
                 (node.Format.Target as Nodes.ValueObjectInput<string>)?.Value.Value ==
-                "ExpressionSystem/GestureTable.Pair.L{0}R{1}");
+                "ExpressionSystem/GestureTable.L{0}R{1}");
             Check(formatter.Parameters.Count == 2 && formatter.Parameters.All(p => p is Nodes.Box<int>),
                 "pair lookup formats two gesture integers into the full variable path: " + path);
         }

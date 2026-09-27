@@ -4,7 +4,7 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 [変数・定数リファレンス](expression-variables.md)を参照。
 
 左右それぞれの現在のジェスチャーを int で保持し、
-`GestureTable.Pair.L{LeftGesture}R{RightGesture}` の名前で対応表を直接引く。生成時は64通りで、外部から行を追加できる。
+`GestureTable.L{LeftGesture}R{RightGesture}` の名前で対応表を直接引く。生成時は64通りで、外部から行を追加できる。
 対応表で選んだ表情の各トラックの終端値へ即座に切り替え、固定ポーズとして保持する。
 VRChatのカスタムFXからFaceEmo基準で最初の表情パターンを読み取り、対応表へ変換する。
 左右64通りへ静的に変換する方式であり、Animator 全体や汎用パラメーターの状態機械は生成しない。
@@ -36,10 +36,10 @@ flowchart LR
 Expressions/
   DV/                              システム共通の変数（1変数1子 Slot）
     Core.*                         左右の状態、現在の表情
-    GestureTable.Pair.L0R0〜L7R7         64個の Catalog 参照
+    GestureTable/                  対応表の変数をまとめるスロット
+      L0R0〜L7R7                   64個の Catalog 参照
     Version・Receiver・Catalog      バージョンと入口への参照
   Catalog/                         表情ごとの定義と最終値の一覧
-  GestureTable/                    対応表を読む起点（監視ロジックなし）
   Core/                            入力・選択・再生ロジック
     Logic/
       Lifecycle/                   初期化、装着状態の変更監視
@@ -159,7 +159,7 @@ Core の入力ノード化は現行の名前付き空間で再検証し、同一
 次の読み取りは `ReadDynamicValueVariable<T>`／`ReadDynamicObjectVariable<T>` を維持する。
 
 - 切り替え・初期化時の ForEach の出力レコード、選択中の Catalog：実行中に Source Slot が変わる。
-- `ExpressionSystem/GestureTable.Pair.LnRm`：左右の値を含むキーで読み取る変数名が変わる。
+- `ExpressionSystem/GestureTable.LnRm`：左右の値を含むキーで読み取る変数名が変わる。
 
 入力ノードには Source Slot を渡せないため、これらはそのまま入力ノードに置き換えない。
 
@@ -186,7 +186,7 @@ Inspector 上の Core の変数名には `ExpressionSystem/Core.` が付く。Ge
 
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
 2. キーが正しく表情が違う場合は、`PairKey` に対応する `GestureTable` の参照と `AllowHandGestures` を確認し、`Selection` を調べる。
-3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable.Pair.LnRm`（末尾の LnRm は PairKey）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`、`Bindings` の有効な参照を確認する。
+3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（末尾の LnRm は PairKey）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`、`Bindings` の有効な参照を確認する。
 4. 選択が正しく見た目が違う場合は、`Core/Logic/Playback` と該当出力の `Base`、`TrackingWeight`、`Result`、`Target` を調べる。
 
 `AllowHandGestures` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
@@ -214,7 +214,7 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
 
 Core に保存する表情参照は `CurrentExpression` だけ。`MappedExpression` と `CandidateExpression` は生成しない。
 Selection は受理した左右入力イベントのときだけ実行する。左右値や表の編集・装着・入力許可の変更だけでは再評価しない。
-Selection は左・右を文字列化して `L{左}R{右}` を組み立て、`Expressions/DV/GestureTable.Pair.LnRm` を読み、Slot 有効・Enabled=true・Bindings参照先が有効を確認する。
+Selection は左・右を文字列化して `L{左}R{右}` を組み立て、`Expressions/DV/GestureTable/LnRm` を読み、Slot 有効・Enabled=true・Bindings参照先が有効を確認する。
 通過した参照（無効なら null）をその更新中のローカル値として確定し、CurrentExpression と比較する。
 異なる場合は CurrentExpression を設定する。Playback を同期呼び出しし、終端値を即時にWriteする。
 同じ参照なら同じ固定ポーズになる。解除・無効化も補間せず Base へ戻す。
@@ -272,8 +272,8 @@ Version 23では左右ジェスチャーのコンテキストメニューと専�
 - コンテキストメニュー: Catalogの表情を直接選択。左右値は変更しない。
 - キーボード: 表情の優先順位が高い手は Shift+テンキー0〜9（Ctrl なし）、もう一方は Ctrl+Shift+テンキー0〜9。
   Version 27ではテンキー0〜9をそれぞれジェスチャー値0〜9として送信する。
-  0が Neutral、1が Fist、7が ThumbsUp。8・9は拡張用で、対応するGestureTable.Pairがあればその表情を選び、未割り当てなら表情を解除する。
-  自動生成するジェスチャー表は引き続き左右0〜7の64組。8・9を含む割り当ては同じ命名規則（例: `GestureTable.Pair.L8R9`）で追加できる。
+  0が Neutral、1が Fist、7が ThumbsUp。8・9は拡張用で、対応するGestureTableの行があればその表情を選び、未割り当てなら表情を解除する。
+  自動生成するジェスチャー表は引き続き左右0〜7の64組。8・9を含む割り当ては同じ命名規則（例: `GestureTable.L8R9`）で追加できる。
   `ExpressionHandPriority` は変換後の64組の固定ポーズを比較する。両手それぞれがNeutralと異なる別の表情を持つとき、
   両手入力の結果がどちらの片手入力と一致するかを数え、採用回数が多い手をShift側にする。
   Clip IDが別でも全出力の最終値が同じなら同じ表情として扱う。両手専用表情・同じ表情・未解決の組は勝敗に数えない。
@@ -323,9 +323,12 @@ Touchは接触・Clickの5ビット、Indexは5本の指の近位関節角度、
 
 ## 対応表と表情の編集
 
-`Expressions/DV/GestureTable.Pair.LnRm` の各スロットには `ExpressionSystem/GestureTable.Pair.LnRm` という DynamicReferenceVariable<Slot> がある。
-n は左、m は右の int 値。ResoPon が生成するのは各0〜7で、例えば左1・右2は `Pair.L1R2`。
-外部で `Expressions/DV/GestureTable.Pair.L8R255` に変数名 `ExpressionSystem/GestureTable.Pair.L8R255`
+Version 28では空の `Expressions/GestureTable` を廃止し、対応表を `Expressions/DV/GestureTable` に集約した。
+変数名は `ExpressionSystem/GestureTable.LnRm` に変更した。既存パッケージは再変換で更新する。
+
+`Expressions/DV/GestureTable/LnRm` の各スロットには `ExpressionSystem/GestureTable.LnRm` という DynamicReferenceVariable<Slot> がある。
+n は左、m は右の int 値。ResoPon が生成するのは各0〜7で、例えば左1・右2は `L1R2`。
+外部で `Expressions/DV/GestureTable/L8R255` に変数名 `ExpressionSystem/GestureTable.L8R255`
 という DynamicReferenceVariable<Slot> を追加すれば、左右 API に8と255を送って選択できる。
 左右のGesture APIは負数も含む int 全域を受理する。対応行がなければ入力値を保持し、ベース入力へ戻る。
 Select APIはCatalogを直接検索するため、ジェスチャーの値・表の行数には依存しない。

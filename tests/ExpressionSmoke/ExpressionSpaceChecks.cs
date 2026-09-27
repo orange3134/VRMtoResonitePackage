@@ -48,9 +48,11 @@ internal static class ExpressionSpaceChecks
         {
             var space = variable.Slot.GetComponentInParents<DynamicVariableSpace>();
             var data = space.Slot.FindChild("DV");
-            Check(data != null && data.Parent == space.Slot && variable.Slot.Parent == data,
-                "variable lives directly under its space's DV: " + path);
-            Check(variable.Slot.Name == path[(path.IndexOf('/') + 1)..],
+            bool tableRow = path.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal);
+            var container = tableRow ? data?.FindChild("GestureTable") : data;
+            Check(data != null && data.Parent == space.Slot && variable.Slot.Parent == container,
+                "variable lives in its DV container or GestureTable group: " + path);
+            Check(variable.Slot.Name == (tableRow ? path["ExpressionSystem/GestureTable.".Length..] : path[(path.IndexOf('/') + 1)..]),
                 "variable slot is named after its key: " + path);
             Check(occupied.Add(variable.Slot), "one variable per slot: " + path);
         }
@@ -76,11 +78,11 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 27,
-            "ten keyboard gestures are identified by package version 27");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 28,
+            "grouped gesture table rows are identified by package version 28");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Core.LeftGesture", out _),
             "Core fields are readable from the system root");
-        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.Pair.L0R0", out _),
+        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),
             "table rows are readable from the system root");
         var core = root.FindChild("Core");
         Check(core.WriteDynamicVariable("Expr/AllowExternalInput", false) != DynamicVariableWriteResult.Success,
