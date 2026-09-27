@@ -1,4 +1,6 @@
 using FrooxEngine;
+using FrooxEngine.ProtoFlux;
+using Nodes = FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes;
 using static VrmToResonitePackage.Expressions.ExpressionFlux;
 using static VrmToResonitePackage.Expressions.ExpressionSpaces;
 
@@ -41,19 +43,18 @@ internal sealed partial class ExpressionSystemSetup
             ApplyRequest(g, mutation, fromMenu ? null : g.Read<bool>(core, SystemSpace, "Core.AllowExternalInput"))));
     }
 
-    private static IWorldElement GesturePairKey(ExpressionFlux g, IWorldElement left, IWorldElement right)
+    private static IWorldElement FormatGesturePair(ExpressionFlux g, string format, IWorldElement left, IWorldElement right)
     {
-        var leftKey = g.Node("ConcatenateString", null, ("A", g.Text("L")),
-            ("B", g.Node("ToString_Int", null, ("V", left))));
-        var rightKey = g.Node("ConcatenateString", null, ("A", g.Text("R")),
-            ("B", g.Node("ToString_Int", null, ("V", right))));
-        return g.Node("ConcatenateString", null, ("A", leftKey), ("B", rightKey));
+        var node = (Nodes.Strings.FormatString)
+            g.Node("FormatString", null, ("Format", g.Text(format)));
+        node.Parameters.Add((INodeObjectOutput<object>)g.Node("Box", typeof(int), ("Input", left)));
+        node.Parameters.Add((INodeObjectOutput<object>)g.Node("Box", typeof(int), ("Input", right)));
+        return node;
     }
 
-    private IWorldElement ReadGesturePair(ExpressionFlux g, IWorldElement key)
+    private IWorldElement ReadGesturePair(ExpressionFlux g, IWorldElement left, IWorldElement right)
     {
-        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(SystemSpace, "GestureTable.Pair."))),
-            ("B", key));
+        var path = FormatGesturePair(g, Path(SystemSpace, "GestureTable.Pair.L{0}R{1}"), left, right);
         return g.Read<Slot>(g.Ref(_table), path);
     }
 
@@ -65,7 +66,7 @@ internal sealed partial class ExpressionSystemSetup
         var left = Out(leftLoop, "Iteration");
         var right = Out(rightLoop, "Iteration");
         Link(leftLoop, "LoopIteration", rightLoop);
-        Link(rightLoop, "LoopIteration", body(left, right, ReadGesturePair(g, GesturePairKey(g, left, right))));
+        Link(rightLoop, "LoopIteration", body(left, right, ReadGesturePair(g, left, right)));
         return leftLoop;
     }
 

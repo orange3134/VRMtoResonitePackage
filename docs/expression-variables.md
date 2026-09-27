@@ -55,7 +55,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
-| Expressions/DV/GestureTable.Pair.LnRm | `Pair.L0R0`〜`Pair.L7R7` | Slot | コンパイルした表情、または null | 設定。n は左、m は右の値（各0〜7）。`L`・左・`R`・右を連結して変数名を直接検索する |
+| Expressions/DV/GestureTable.Pair.LnRm | `Pair.L0R0`〜`Pair.L7R7` | Slot | コンパイルした表情、または null | 設定。n は左、m は右の値（各0〜7）。`FormatString` の `ExpressionSystem/GestureTable.Pair.L{0}R{1}` に左・右の順で渡し、変数名を直接検索する |
 
 Version 22から対応表の参照名を `GestureTable.Pair.LnRm` に変更した。例：左1・右2は
 `GestureTable.Pair.L1R2`。選択時に左×8＋右の番号へ変換せず、左右を文字列化して直接参照する。

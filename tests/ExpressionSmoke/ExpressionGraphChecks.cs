@@ -1,5 +1,6 @@
 using FrooxEngine;
 using FrooxEngine.ProtoFlux;
+using Nodes = FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes;
 
 internal static class ExpressionGraphChecks
 {
@@ -29,10 +30,20 @@ internal static class ExpressionGraphChecks
         Check(!expressions.GetComponentsInChildren<DynamicValueVariable<int>>().Any(v =>
             v.VariableName.Value == "ExpressionSystem/Core.PairIndex"), "numeric PairIndex state is absent");
         foreach (string path in new[] { "Core/Logic/Selection", "API/Receivers/Logic/Select" })
-            Check(Descendant(expressions, path).GetComponentsInChildren<ProtoFluxNode>().All(node =>
+        {
+            var lookupNodes = Descendant(expressions, path).GetComponentsInChildren<ProtoFluxNode>();
+            Check(lookupNodes.All(node =>
                 !node.GetType().GetGenericArguments().Contains(typeof(int)) ||
                 node.GetType().Name is not ("ValueMul`1" or "ValueDiv`1" or "ValueMod`1")),
                 "pair lookup does not pack or unpack a numeric table index: " + path);
+            Check(lookupNodes.All(node => node.GetType().Name != "ConcatenateString"),
+                "pair lookup uses no string Add nodes: " + path);
+            var formatter = lookupNodes.OfType<Nodes.Strings.FormatString>().Single(node =>
+                (node.Format.Target as Nodes.ValueObjectInput<string>)?.Value.Value ==
+                "ExpressionSystem/GestureTable.Pair.L{0}R{1}");
+            Check(formatter.Parameters.Count == 2 && formatter.Parameters.All(p => p is Nodes.Box<int>),
+                "pair lookup formats two gesture integers into the full variable path: " + path);
+        }
         Check(nodes.All(n => n.Group?.IsValid == true), "all expression Flux groups are valid");
         Check(nodes.All(n => n.Slot.Parent.GetComponents<ProtoFluxNode>().Count == 0), "Flux nodes belong to logic boards, not other nodes");
         Check(nodes.Select(n => n.Slot.GlobalPosition).Distinct().Count() == nodes.Count, "Flux node positions do not overlap across logic boards");

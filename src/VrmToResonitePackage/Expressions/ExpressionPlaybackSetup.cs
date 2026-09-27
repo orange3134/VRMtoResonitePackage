@@ -13,9 +13,10 @@ internal sealed partial class ExpressionSystemSetup
         var core = g.Ref(_core);
         var actions = new List<IWorldElement>();
 
-        var key = GesturePairKey(g, g.Read<int>(core, SystemSpace, "Core.LeftGesture"),
-            g.Read<int>(core, SystemSpace, "Core.RightGesture"));
-        var candidate = ReadGesturePair(g, key);
+        var left = g.Read<int>(core, SystemSpace, "Core.LeftGesture");
+        var right = g.Read<int>(core, SystemSpace, "Core.RightGesture");
+        var key = FormatGesturePair(g, "L{0}R{1}", left, right);
+        var candidate = ReadGesturePair(g, left, right);
         // Capture validation for this update without persisting intermediate references in Core.
         var selected = g.Local<Slot>();
         var current = g.Read<Slot>(core, SystemSpace, "Core.CurrentExpression");
