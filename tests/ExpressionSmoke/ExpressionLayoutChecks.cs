@@ -64,6 +64,14 @@ internal static class ExpressionLayoutChecks
                 nodes.Count(n => n.GetType().Name == "ValueMultiplex`1") == 1 &&
                 nodes.Count(n => n.GetType().Name == "IndexOfFirstValueMatch`1") == (pad ? 0 : 1),
                 module.Name + " has one device-specific classifier");
+            if (!pad)
+            {
+                var match = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<byte>>().Single();
+                Check(match.Match.Target == nodes.Single(n => n.GetType().Name == "ComposeBits_byte") &&
+                    !nodes.Any(n => n is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueEquals<byte> ||
+                        n.GetType().Name == "OR_Multi_Bool"),
+                    "packed codes go directly into a byte first-match lookup without Equal/OR fan-out");
+            }
             Check(nodes.Count(n => n.GetType().Name == "FingerPose") == (module.Name == "Index" ? 5 : 0),
                 "only Index reads five finger joint rotations");
             Check(nodes.Count(n => n.GetType().Name == "Atan2_Float") == (pad ? 1 : 0),

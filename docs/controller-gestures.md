@@ -46,8 +46,11 @@ IndexControllerのIsActiveで入力機種を限定する。
 | HandGun (6) | 4 | 14 | 2 |
 | ThumbsUp (7) | 20 | 15 | 4 |
 
-原版の各条件は互いに排他的。生成Fluxではコード比較をORでまとめ、
-`IndexOfFirstValueMatch<bool>` と `ValueMultiplex<int>` で一致したジェスチャーを選ぶ。
+原版の各条件は互いに排他的。生成Fluxでは `ComposeBits_byte` を
+`IndexOfFirstValueMatch<byte>.Match` に直結し、`Values` に一致コードを列挙する。
+そのIndexで `ValueMultiplex<int>` の対応するジェスチャーを選ぶ。同じジェスチャーに複数の
+コードがある場合はコードごとに行を置き、個別のEqualやORを生成しない。
+FoundMatchがfalseならNeutralへ戻す。
 Touchの64〜73は原版のデスクトップ入力符号であり、VRセンサー判定には含めない。
 キーボードはResoPonの左右別入力を継続する。
 

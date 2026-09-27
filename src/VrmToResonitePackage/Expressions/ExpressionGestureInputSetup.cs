@@ -58,20 +58,15 @@ internal sealed partial class ExpressionSystemSetup
                 (4, new byte[] { 1 }), (6, new byte[] { 2 }), (7, new byte[] { 4 }) },
             _ => throw new ArgumentOutOfRangeException(nameof(device))
         };
-        var match = (Nodes.Utility.IndexOfFirstValueMatch<bool>)g.Node("IndexOfFirstValueMatch", typeof(bool),
-            ("Match", g.Constant(true)));
+        var match = (Nodes.Utility.IndexOfFirstValueMatch<byte>)g.Node("IndexOfFirstValueMatch", typeof(byte),
+            ("Match", bits));
         var selected = (Nodes.ValueMultiplex<int>)g.Node("ValueMultiplex", typeof(int), ("Index", Out(match, "Index")));
+        // Search the packed code directly. Each code has a corresponding gesture
+        // row, including repeated gestures for poses accepted by multiple codes.
         foreach (var (gesture, codes) in matches)
+        foreach (byte code in codes)
         {
-            IWorldElement condition;
-            if (codes.Length == 1) condition = g.Equal<byte>(bits, g.Constant(codes[0]));
-            else
-            {
-                var any = (Nodes.Operators.OR_Multi_Bool)g.Node("OR_Multi_Bool");
-                foreach (byte code in codes) any.Operands.Add((INodeValueOutput<bool>)g.Equal<byte>(bits, g.Constant(code)));
-                condition = any;
-            }
-            match.Values.Add((INodeValueOutput<bool>)condition);
+            match.Values.Add((INodeValueOutput<byte>)g.Constant(code));
             selected.Inputs.Add((INodeValueOutput<int>)g.Constant(gesture));
         }
         // No exact match clears all discrete poses in the source tool: Neutral here.
