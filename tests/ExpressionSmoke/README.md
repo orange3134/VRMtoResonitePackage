@@ -235,3 +235,10 @@ its own child slot under the owning space's DV container. The slot name is the
 variable key. Shared Core.* and GestureTable.Pair.* fields live in Expressions/DV.
 Structure checks cover each variable's owner, parent, name and single occupancy
 before and after package reload. Snapshot helpers also read older record layouts.
+
+Version 20 exposes a single ExpressionSystem/SmoothingSpeed float (default 20) in
+Expressions/DV/SmoothingSpeed. Each mesh SmoothValue.Speed is bound through a
+DynamicValueVariableDriver<float>. The real-mesh fixture changes this value and
+checks every smoother across both renderers, including the tracked blink output.
+It verifies nondefault values survive cloning and package reload, and edits to a
+clone or restored avatar leave the source and sibling speeds unchanged.

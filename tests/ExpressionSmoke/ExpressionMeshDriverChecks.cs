@@ -46,7 +46,10 @@ internal static class ExpressionMeshDriverChecks
             Clip("Second pose", (smileA, 0.7f), (smileB, 0.4f), (blinkA, 0.3f));
             await ExpressionSystemSetup.BuildAsync(avatar, model, b => targets[b], initialWeight: _ => 0f);
             await Frames(90); await Verify(avatar);
+            await CheckSmoothingSpeed(avatar, 20f, 37f);
             clone = avatar.Duplicate(parent); await Frames(90); await Verify(clone);
+            await CheckSmoothingSpeed(clone, 37f, 53f);
+            CheckSpeeds(avatar, 37f);
             var graph = avatar.SaveObject(DependencyHandling.CollectAssets);
             var record = RecordHelper.CreateForObject<SkyFrost.Base.Record>(avatar.Name, avatar.World.LocalUser.MachineID, null);
             var engine = avatar.Engine;
@@ -57,9 +60,37 @@ internal static class ExpressionMeshDriverChecks
             restored = parent.AddSlot("Restored mesh drivers");
             await PackageImporter.ImportPackage(package, restored); await default(ToWorld); await Frames(120);
             await Verify(restored);
+            await CheckSmoothingSpeed(restored, 37f, 71f);
+            CheckSpeeds(avatar, 37f); CheckSpeeds(clone, 53f);
         }
         finally { restored?.Destroy(); clone?.Destroy(); avatar.Destroy(); }
-        Console.WriteLine("MESH DRIVERS: per-renderer grouping, numeric bindings, late entries, DynamicField reads, blink, clone and reload passed");
+        Console.WriteLine("MESH DRIVERS: per-renderer grouping, numeric bindings, late entries, DynamicField reads, blink, shared speed edits, clone isolation and reload passed");
+    }
+
+    private static void CheckSpeeds(Slot avatar, float expected)
+    {
+        var smoothers = avatar.FindChild("Expressions").GetComponentsInChildren<SmoothValue<float>>();
+        Check(smoothers.Count == 3, "speed check covers both renderers and tracked blink output");
+        foreach (var smooth in smoothers)
+        {
+            Near(smooth.Speed.Value, expected, "all mesh SmoothValues follow this avatar's shared speed");
+            var driver = smooth.Slot.GetComponent<DynamicValueVariableDriver<float>>();
+            Check(driver?.VariableName.Value == "ExpressionSystem/SmoothingSpeed" && driver.Target.Target == smooth.Speed &&
+                driver.Target.IsLinkValid, "shared speed uses a bound native DynamicVariableDriver");
+        }
+    }
+
+    private static async Task CheckSmoothingSpeed(Slot avatar, float initial, float updated)
+    {
+        var expressions = avatar.FindChild("Expressions");
+        var speed = expressions.GetComponentsInChildren<DynamicValueVariable<float>>()
+            .Single(v => v.VariableName.Value == "ExpressionSystem/SmoothingSpeed");
+        Check(speed.Slot == expressions.FindChild("DV").FindChild("SmoothingSpeed"), "one shared speed is editable in Expressions/DV");
+        Near(speed.Value.Value, initial, "shared speed retains its value across clone/reload");
+        CheckSpeeds(avatar, initial);
+        speed.Value.Value = updated;
+        await Frames(3);
+        CheckSpeeds(avatar, updated);
     }
 
     private static async Task<SkinnedMeshRenderer> Mesh(Slot parent, string[] shapes)
@@ -98,6 +129,10 @@ internal static class ExpressionMeshDriverChecks
         Near(second.GetBlendShapeWeight("ActualSmile"), 0.8f, "same shape and slot names on second renderer remain independent");
         Near(first.GetBlendShapeWeight("ActualBlink"), 0.1f, "missing animation track follows blink Base");
         var smoother = (SmoothValue<float>)dynamicResult.TargetField.Target.Parent;
+        var sharedSpeed = expressions.FindChild("DV").FindChild("SmoothingSpeed").GetComponent<DynamicValueVariable<float>>();
+        float configuredSpeed = sharedSpeed.Value.Value;
+        // Slow this transition so a long headless frame cannot skip every intermediate sample.
+        sharedSpeed.Value.Value = 1f; await Frames(3); CheckSpeeds(avatar, 1f);
         float before = first.GetBlendShapeWeight("ActualSmile");
         Select(2);
         Near(smoother.TargetValue.Value, 0.7f, "selection immediately writes SmoothValue target");
@@ -114,6 +149,7 @@ internal static class ExpressionMeshDriverChecks
         Select(1);
         Near(smoother.TargetValue.Value, 0.2f, "rapid selection replaces target mid-transition");
         Near(first.GetBlendShapeWeight("ActualSmile"), before, "retarget does not restart with a discontinuity");
+        sharedSpeed.Value.Value = configuredSpeed;
         await Frames(); Near(first.GetBlendShapeWeight("ActualSmile"), 0.2f, "retarget reaches latest pose");
         Select(2); await Frames();
         Near(first.GetBlendShapeWeight("ActualSmile"), 0.7f, "mesh receives changed animation");

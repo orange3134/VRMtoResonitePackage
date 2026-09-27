@@ -56,7 +56,9 @@ internal static class ExpressionSpaceChecks
         }
         void Values<T>()
         {
-            foreach (var variable in root.GetComponentsInChildren<DynamicVariableBase<T>>())
+            // Drivers consume a variable at their target; only definitions belong in DV.
+            foreach (var variable in root.GetComponentsInChildren<DynamicVariableBase<T>>()
+                .Where(variable => variable is not DynamicValueVariableDriver<T>))
             {
                 Placement(variable, variable.VariableName.Value);
                 Check(variable.VariableName.Value.StartsWith(Prefix(variable.Slot), StringComparison.Ordinal),
@@ -74,8 +76,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 19,
-            "controller gesture schema is identified by package version 19");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 20,
+            "shared smoothing speed schema is identified by package version 20");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Core.LeftGesture", out _),
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.Pair.0", out _),

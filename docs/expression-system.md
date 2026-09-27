@@ -498,8 +498,12 @@ Output と Drivers の同名 Slot には連番を付け、診断パスの重複�
 VRM の binding は数値インデックスの場合があるため、登録名は解決済みメッシュフィールドから実メッシュ名を取得する。
 各OutputのResultは対応するSmoothValue.TargetValueへのDynamicFieldで、目標値を重複保存しない。
 SmoothValueは各Rendererの子にシェイプ名で1つずつ生成する。初期目標とBlendShapes[].Valueは解決済みフィールドの現在値で初期化し、
-Speed=20、WriteBack=falseでValueをBlendShapes[].ValueへTryLinkする。補間途中の値をTargetValueへ書き戻さない。
-Speedは秒数ではなく追従速度。小さくするとゆっくり、大きくすると速くなる。各SmoothValueのInspectorで調整できる。
+Speedの初期値は20、WriteBack=falseでValueをBlendShapes[].ValueへTryLinkする。補間途中の値をTargetValueへ書き戻さない。
+Version 20では `Expressions/DV/SmoothingSpeed` の `ExpressionSystem/SmoothingSpeed`（float、初期値20）を共通設定にする。
+各SmoothValueのSpeedは同じSlotのDynamicValueVariableDriver<float>でこの変数へ接続し、未解決時も20を使う。
+共通変数のValueを変えると、すべてのRendererの表情用SmoothValueへ反映される。
+Speedは秒数ではなく追従速度。小さくするとゆっくり、大きくすると速くなる。
+複製したアバターや保存再読込後も各アバター内で完結する。
 連続して表情を変えた場合は現在の補間値から新しい目標へ追従する。未装着・未割り当て時のBase復帰にも同じ補間を使う。
 瞬き・口パクの混合は従来どおりTargetValueを追従更新し、その結果にも同じスムージングがかかる。
 非メッシュの汎用フィールド出力は直接書き込む。

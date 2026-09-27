@@ -4,6 +4,7 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
+    private const float DefaultSmoothingSpeed = 20f;
     private readonly Dictionary<SkinnedMeshRenderer, DynamicBlendShapeDriver> _meshDrivers = new();
     private Slot _drivers;
 
@@ -41,7 +42,11 @@ internal sealed partial class ExpressionSystemSetup
         if (!shape._drive.TryLink(field))
             throw new InvalidOperationException($"Cannot drive blendshape: {renderer.Slot.Name}/{name}");
         var smooth = driver.Slot.AddSlot(UniqueChildName(driver.Slot, name)).AttachComponent<SmoothValue<float>>();
-        smooth.Speed.Value = 20f;
+        smooth.Speed.Value = DefaultSmoothingSpeed;
+        var speed = smooth.Slot.AttachComponent<DynamicValueVariableDriver<float>>();
+        speed.VariableName.Value = ExpressionFlux.Path(ExpressionSpaces.SystemSpace, "SmoothingSpeed");
+        speed.DefaultValue.Value = DefaultSmoothingSpeed;
+        speed.Target.Target = smooth.Speed;
         smooth.WriteBack.Value = false;
         smooth.TargetValue.Value = initialValue;
         if (!smooth.Value.TryLink(shape.Value))
