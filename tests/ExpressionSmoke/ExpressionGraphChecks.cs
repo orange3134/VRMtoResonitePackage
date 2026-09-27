@@ -33,7 +33,7 @@ internal static class ExpressionGraphChecks
             "keyboard edge state is local to its change detector");
         foreach (var output in expressions.FindChild("Outputs").Children)
         {
-            bool tracked = output.GetComponents<DynamicReferenceVariable<ISyncRef>>()
+            bool tracked = output.ExpressionVariables<DynamicReferenceVariable<ISyncRef>>()
                 .Any(v => v.VariableName.Value == "ExpressionSystem.Output/OriginalDriver");
             var outputNodes = output.GetComponentsInChildren<ProtoFluxNode>();
             Check(outputNodes.All(n => !n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal) &&
@@ -41,12 +41,12 @@ internal static class ExpressionGraphChecks
                 "outputs have no per-shape change monitors or impulses");
             Check(tracked ? outputNodes.Count(n => n.GetType().Name == "ValueFieldDrive`1") == 1 : outputNodes.Count == 0,
                 "only outputs with original tracking have a live mixing graph");
-            var result = output.GetComponents<DynamicField<float>>()
+            var result = output.ExpressionVariables<DynamicField<float>>()
                 .Single(v => v.VariableName.Value == "ExpressionSystem.Output/Result").TargetField.Target;
             Check((result.ActiveLink != null) == tracked, "only tracked Result fields have a drive");
             Check(output.GetComponent<ValueCopy<float>>() == null,
                 "outputs use no ValueCopy: " + output.Name);
-            Check(!output.GetComponents<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionSystem.Output/Result"),
+            Check(!output.ExpressionVariables<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionSystem.Output/Result"),
                 "Result is a field view, not duplicate stored state: " + output.Name);
             var target = ExpressionTestFields.Reference<IField<float>>(output, "Target");
             var renderer = target.FindNearestParent<SkinnedMeshRenderer>();
@@ -85,7 +85,7 @@ internal static class ExpressionGraphChecks
             Check(ExpressionTestFields.Reference<Slot>(entry, "Bindings") == entry.FindChild("Bindings"),
                 "Catalog directly references its pose records");
             foreach (var binding in entry.FindChild("Bindings").Children)
-                Check(binding.GetComponents<DynamicValueVariable<float>>().Count(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip.Binding/Value") == 1,
+                Check(binding.ExpressionVariables<DynamicValueVariable<float>>().Count(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip.Binding/Value") == 1,
                     "each binding stores one final float value");
         }
         var boards = nodes.GroupBy(Board).ToArray();
@@ -183,18 +183,18 @@ internal static class ExpressionGraphChecks
             .All(v => !v.VariableName.Value.EndsWith("Revision", StringComparison.Ordinal)),
             "expression state retains no input revisions");
         var core = Descendant(expressions, "Core");
-        Check(core.GetComponents<DynamicValueVariable<int>>().All(v => v.VariableName.Value != "ExpressionSystem/Core.SelectionStatus"),
+        Check(core.ExpressionVariables<DynamicValueVariable<int>>().All(v => v.VariableName.Value != "ExpressionSystem/Core.SelectionStatus"),
             "Core contains no SelectionStatus diagnostic variable");
-        Check(core.GetComponents<DynamicReferenceVariable<Slot>>().Select(v => v.VariableName.Value)
+        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().Select(v => v.VariableName.Value)
             .SequenceEqual(new[] { "ExpressionSystem/Core.CurrentExpression" }),
             "Core stores only the current expression, without intermediate diagnostic references");
-        Check(!core.GetComponents<DynamicValueVariable<float>>().Any(),
+        Check(!core.ExpressionVariables<DynamicValueVariable<float>>().Any(),
             "Core has no playback clocks");
         var playback = Descendant(expressions, "Core/Logic/Playback").GetComponentsInChildren<ProtoFluxNode>();
         Check(playback.All(n => n.GetType().Name is not "WorldTimeFloat" and not "ValueMod"), "pose application has no time or loop evaluation");
         foreach (var entry in expressions.FindChild("Catalog").Children)
-            Check(!entry.GetComponents<DynamicValueVariable<bool>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Loop") &&
-                !entry.GetComponents<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Duration"),
+            Check(!entry.ExpressionVariables<DynamicValueVariable<bool>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Loop") &&
+                !entry.ExpressionVariables<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Duration"),
                 "Catalog has no playback settings");
     }
 
@@ -241,6 +241,6 @@ internal static class ExpressionGraphChecks
         if (!condition) throw new InvalidOperationException(message);
     }
 
-    private static T Value<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>()
+    private static T Value<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicValueVariable<T>>()
         .Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;
 }

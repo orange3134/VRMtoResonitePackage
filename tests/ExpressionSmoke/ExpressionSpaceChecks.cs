@@ -11,7 +11,7 @@ internal static class ExpressionSpaceChecks
         };
         void Records(Slot parent, string name)
         {
-            foreach (var child in parent.Children) expected.Add(child, name);
+            foreach (var child in parent.Children.Where(child => child.Name != "DV")) expected.Add(child, name);
         }
         void Clips(Slot parent)
         {
@@ -43,22 +43,39 @@ internal static class ExpressionSpaceChecks
         // Check prefixes independently of the generator's helpers, including child table
         // variables and optional output drivers, before and after package serialization.
         string Prefix(Slot slot) => ExpressionTestFields.VariablePath(slot, "");
+        var occupied = new HashSet<Slot>();
+        void Placement(Component variable, string path)
+        {
+            var space = variable.Slot.GetComponentInParents<DynamicVariableSpace>();
+            var data = space.Slot.FindChild("DV");
+            Check(data != null && data.Parent == space.Slot && variable.Slot.Parent == data,
+                "variable lives directly under its space's DV: " + path);
+            Check(variable.Slot.Name == path[(path.IndexOf('/') + 1)..],
+                "variable slot is named after its key: " + path);
+            Check(occupied.Add(variable.Slot), "one variable per slot: " + path);
+        }
         void Values<T>()
         {
             foreach (var variable in root.GetComponentsInChildren<DynamicVariableBase<T>>())
+            {
+                Placement(variable, variable.VariableName.Value);
                 Check(variable.VariableName.Value.StartsWith(Prefix(variable.Slot), StringComparison.Ordinal),
                     "value belongs to its record's space: " + variable.VariableName.Value);
+            }
         }
         void References<T>() where T : class, IWorldElement
         {
             foreach (var variable in root.GetComponentsInChildren<DynamicReferenceVariable<T>>())
+            {
+                Placement(variable, variable.VariableName.Value);
                 Check(variable.VariableName.Value.StartsWith(Prefix(variable.Slot), StringComparison.Ordinal),
                     "reference belongs to its record's space: " + variable.VariableName.Value);
+            }
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 17,
-            "shared singleton space is identified by package version 17");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 18,
+            "DV variable layout is identified by package version 18");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Core.LeftGesture", out _),
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.Pair.0", out _),

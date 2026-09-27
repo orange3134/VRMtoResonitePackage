@@ -83,7 +83,7 @@ internal static class KeyboardPriorityChecks
         await Frames();
         Console.WriteLine($"PASS: keyboard Shift hand={primary}, Shift+Ctrl hand={1 - primary}, all 16 shortcuts and modifier exclusion");
     }
-    private static T Get<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>()
+    private static T Get<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicValueVariable<T>>()
         .Single(v => v.VariableName.Value == VariablePath(slot, name)).Value.Value;
     private static void Check(bool ok, string message) { if (!ok) throw new InvalidOperationException(message); }
 }

@@ -35,10 +35,14 @@ flowchart LR
 
 ```text
 Expressions/
+  DV/                              システム共通の変数（1変数1子 Slot）
+    Core.*                         左右の状態、現在の表情
+    GestureTable.Pair.0〜63         64個の Catalog 参照
+    Version・Receiver・Catalog      バージョンと入口への参照
   Catalog/                         表情ごとの定義と最終値の一覧
-  GestureTable/                    64個の Catalog 参照
+  GestureTable/                    対応表の監視ロジック
     Logic/                         メニュー表示に必要な参照・有効状態の変更監視
-  Core/                            左右の状態、現在の表情
+  Core/                            入力・選択・再生ロジック
     Logic/
       Lifecycle/                   初期化、装着状態の変更監視
       Selection/                   対応表からの選択と切り替え
@@ -169,7 +173,8 @@ Core の入力ノード化は現行の名前付き空間で再検証し、同一
 
 ## 不具合の調べ方
 
-まず Core の変数を見て、入力・選択・再生のどこで期待とずれたかを分ける。
+まず Expressions/DV の Core.* 変数を見て、入力・選択・再生のどこで期待とずれたかを分ける。
+各 Space の Slot 直下に DV を置き、値・参照・DynamicField を含め1変数1子 Slotで生成する。
 Inspector 上の Core の変数名には `ExpressionSystem/Core.` が付く。GestureTable も同じ ExpressionSystem 空間に GestureTable.* として登録する。複数インスタンスを持つレコードだけに、階層をドットで表す別の空間名を使う。
 
 | Core の変数 | 確認する内容 |
@@ -181,7 +186,7 @@ Inspector 上の Core の変数名には `ExpressionSystem/Core.` が付く。Ge
 
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
 2. 番号が正しく表情が違う場合は、`PairIndex` に対応する `GestureTable` の参照と `AllowExternalInput` を確認し、`Selection` を調べる。
-3. `CurrentExpression` が null の場合は、`GestureTable/Pair.N`（N は PairIndex）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`、`Bindings` の有効な参照を確認する。
+3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable.Pair.N`（N は PairIndex）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`、`Bindings` の有効な参照を確認する。
 4. 選択が正しく見た目が違う場合は、`Core/Logic/Playback` と該当出力の `Base`、`TrackingWeight`、`Result`、`Target` を調べる。
 
 `AllowExternalInput` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
@@ -192,11 +197,11 @@ Outputs の `Pose` は取得した終端値、`HasPose` は対応するトラッ
 
 
 resoloop を使う場合は、リポジトリ直下から次の読み取り専用スクリプトで Core の状態を一覧にできる。
-`-CoreSlot` には対象の正確なパスまたは現在のスロット ID、
+`-CoreSlot` には `Expressions/DV`（旧パッケージは `Expressions/Core`）の正確なパスまたは現在のスロット ID、
 `-Url` には ResoniteLink に表示される現在のポートを指定する。
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/inspect-expression.ps1 -CoreSlot "Root/Plum/Expressions/Core" -Url "ws://localhost:42038"
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/inspect-expression.ps1 -CoreSlot "Root/Plum/Expressions/DV" -Url "ws://localhost:42038"
 ```
 
 `-Json` を付けると CoreSlot と Values を持つ JSON を返す。SelectionStatus に基づく Selection 要約は出力しない。
@@ -208,7 +213,7 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
 ## Selection と再生対象
 
 Core に保存する表情参照は `CurrentExpression` だけ。`MappedExpression` と `CandidateExpression` は生成しない。
-Selection は `GestureTable/Pair.N` を読み、Slot 有効・Enabled=true・Bindings参照先が有効を確認する。
+Selection は `Expressions/DV/GestureTable.Pair.N` を読み、Slot 有効・Enabled=true・Bindings参照先が有効を確認する。
 通過した参照（無効なら null）をその更新中のローカル値として確定し、CurrentExpression と比較する。
 異なる場合は CurrentExpression を設定する。Playback を同期呼び出しし、終端値を即時にWriteする。
 同じ参照なら同じ固定ポーズになる。解除・無効化も補間せず Base へ戻す。
@@ -337,7 +342,7 @@ Touch・Index で両ボタンを押した場合は RockNRoll。Trigger は全機
 
 ## 対応表と表情の編集
 
-`GestureTable` の各スロットには `ExpressionSystem/GestureTable.Pair.N` という DynamicReferenceVariable<Slot> がある。
+`Expressions/DV/GestureTable.Pair.N` の各スロットには `ExpressionSystem/GestureTable.Pair.N` という DynamicReferenceVariable<Slot> がある。
 N は左×8＋右。例えば左1・右2は `Pair.10`。
 参照先を `Catalog` の表情スロットへ変更するだけで割り当てを編集できる。
 左右の組み合わせごとにアニメーションを複製せず、同じ表情は同じ Catalog エントリーを参照する。

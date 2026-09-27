@@ -37,7 +37,7 @@ internal sealed partial class ExpressionSystemSetup
     }
     private void SelectMenuTrigger(Slot item, Slot expression)
     {
-        var id = expression.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Id")).Value;
+        var id = expression.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Id")).Value;
         MenuTrigger(item, _api, SelectTag, id.Value);
         item.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>().PressedData.Value.DriveFrom(id);
     }
@@ -62,7 +62,7 @@ internal sealed partial class ExpressionSystemSetup
         foreach (var expression in _clips.Values)
         {
             var item = MenuItem(expression, expression.Name);
-            item.Label.DriveFrom(expression.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "DisplayName")).Value);
+            item.Label.DriveFrom(expression.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "DisplayName")).Value);
             item.EnabledField.DriveFrom(Data(expression, "MenuAvailable", false).Value);
             SelectMenuTrigger(expression, expression);
         }
@@ -94,7 +94,7 @@ internal sealed partial class ExpressionSystemSetup
                 {
                     SelectMenuTrigger(slot, expression);
                     slot.GetComponent<ContextMenuItemSource>().EnabledField.DriveFrom(
-                        expression.GetComponents<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == Path(ClipSpace, "MenuAvailable")).Value);
+                        expression.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == Path(ClipSpace, "MenuAvailable")).Value);
                 }
             }
         }
@@ -138,12 +138,11 @@ internal sealed partial class ExpressionSystemSetup
         for (int hand = 0; hand < 2; hand++)
         {
             var settings = Record(root, hand == 0 ? "Left" : "Right", KeyboardSpace);
-            var data = settings.AddSlot("DV");
-            Data(data.AddSlot("Tag"), "Tag", GestureTag(hand));
-            Data(data.AddSlot("Shift"), "Shift", true);
-            Data(data.AddSlot("Control"), "Control", hand != _keyboardPrimaryHand);
+            Data(settings, "Tag", GestureTag(hand));
+            Data(settings, "Shift", true);
+            Data(settings, "Control", hand != _keyboardPrimaryHand);
             for (int gesture = 0; gesture < 8; gesture++)
-                Data(data.AddSlot("Key." + gesture), "Key." + gesture, (InputKey)((int)InputKey.Keypad0 + gesture));
+                Data(settings, "Key." + gesture, (InputKey)((int)InputKey.Keypad0 + gesture));
             BuildKeyboardHand(settings.AddSlot("Logic"), settings);
         }
     }

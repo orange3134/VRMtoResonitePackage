@@ -28,7 +28,7 @@ internal static class ExpressionPackageSnapshot
             });
         }
         string pairPrefix = ExpressionTestFields.VariablePath(root.FindChild("GestureTable"), "Pair.");
-        var table = root.FindChild("GestureTable").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+        var table = root.FindChild("GestureTable").ExpressionVariables<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith(pairPrefix, StringComparison.Ordinal))
             .ToDictionary(v => int.Parse(v.VariableName.Value[pairPrefix.Length..]), v => v.Reference.Target);
         if (table.Count != 64 || Enumerable.Range(0, 64).Any(i => !table.ContainsKey(i)))
@@ -62,6 +62,6 @@ internal static class ExpressionPackageSnapshot
         return values;
     }
 
-    private static T Value<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>()
+    private static T Value<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicValueVariable<T>>()
         .Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;
 }

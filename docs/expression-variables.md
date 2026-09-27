@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 17`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 18`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -25,7 +25,11 @@
 | Diagnostics/Graph modules/各項目 | `ExpressionSystem.Diagnostics.GraphModule` | ボードのパスとノード数 |
 
 `Record()` は空間名を必須引数で受け取り、`OnlyDirectBinding=true` の空間を作る。
-例外は Expressions 自身（false）で、Core と GestureTable には空間を追加せず、子 Slot の `ExpressionSystem/Core.*` と `ExpressionSystem/GestureTable.Pair.N` を共有空間へ登録する。
+例外は Expressions 自身（false）で、Core と GestureTable には空間を追加せず、Expressions/DV の `ExpressionSystem/Core.*` と `ExpressionSystem/GestureTable.Pair.N` を共有空間へ登録する。
+すべての DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot 直下の `DV` に、1変数1子 Slot で配置する。
+子 Slot 名は `/` 以降の変数名。例：`Expressions/DV/Core.LeftGesture`、`Expressions/DV/GestureTable.Pair.0`、
+`Catalog/各表情/DV/Id`、`Outputs/各項目/DV/Result`。
+以下の配置先は論理的な所属を示し、変数の実体は各空間の `DV/変数名` に置く。
 単なる整理用の Catalog・Outputs・Bindings・Diagnostics には空間を追加しない。
 名前の定義は [ExpressionSpaces.cs](../src/VrmToResonitePackage/Expressions/ExpressionSpaces.cs) に集約する。
 ProtoFlux の読み書きは対象の空間名と変数名を明示し、変数生成は配置先の空間名を使う。単一モジュールの接頭辞は Slot 表示名から推測せず、明示的に付ける。
@@ -33,7 +37,7 @@ ProtoFlux の読み書きは対象の空間名と変数名を明示し、変数�
 各手のキーボード設定・装着状態、コントローラーの状態と親機種の設定、Core 内の Selection／Playback の状態・表情参照、各 Output 内の入力値が対象。
 実行時に対象が変わるレコードと Pair.N の可変名は ReadDynamicVariable を使う。Core と固定の表セルは、各モジュールから共通の ExpressionSystem 空間の Dynamic Variable Input で読める。
 
-Version 17 では単一モジュールを統合し、複数レコードの空間名を階層化した。旧形式の空間は新規生成しない。既存パッケージは再変換・再インポートで更新する。
+Version 17 で単一モジュールを統合・空間名を階層化し、Version 18 で DV 配下の1変数1スロット配置に統一した。旧形式の空間は新規生成しない。既存パッケージは再変換・再インポートで更新する。
 DynamicVariable を直接読む外部処理は新しい名前へ変更する。公開 Dynamic Impulse の Tag・引数は Version 4 と同じ。
 
 - **設定**：動作を調整する編集用の値。固定的に使われても、実装上は変更可能な変数。
@@ -47,10 +51,10 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 17 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 18 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
-| GestureTable/各セル | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
+| Expressions/DV/GestureTable.Pair.N | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
 
 ## Catalog/各表情
 

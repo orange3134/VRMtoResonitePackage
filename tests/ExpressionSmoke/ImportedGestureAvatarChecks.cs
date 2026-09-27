@@ -25,7 +25,7 @@ internal static class ImportedGestureAvatarChecks
         // exercises live native tracking, including cloned and reloaded packages.
         foreach (var output in root.FindChild("Outputs").Children)
         {
-            var original = output.GetComponents<DynamicReferenceVariable<ISyncRef>>()
+            var original = output.ExpressionVariables<DynamicReferenceVariable<ISyncRef>>()
                 .SingleOrDefault(v => v.VariableName.Value == "ExpressionSystem.Output/OriginalDriver")?.Reference.Target;
             if (original == null) continue;
             original.Target = null;
@@ -73,7 +73,7 @@ internal static class ImportedGestureAvatarChecks
                     Get<int>(core, "PairIndex") == l * 8 + previousRight, "Left menu event did not evaluate immediately");
                 right.Children[r].GetComponent<ButtonDynamicImpulseTriggerWithValue<int>>().Pressed(null, default);
                 Check(Get<int>(core, "LeftGesture") == l && Get<int>(core, "RightGesture") == r, "Menu did not update both hand states synchronously");
-                var mapped = table.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+                var mapped = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
                     .Single(v => v.VariableName.Value == "ExpressionSystem/GestureTable.Pair." + (l * 8 + r)).Reference.Target;
                 Check(mapped != null && Reference<Slot>(core, "CurrentExpression") == mapped, "Missing or incorrect selected pose");
                 Check(Get<int>(core, "PairIndex") == l * 8 + r && !Get<bool>(core, "AllowExternalInput"),
@@ -114,7 +114,7 @@ internal static class ImportedGestureAvatarChecks
         }
         else Check(distinctPoses.Count >= 8, "Gesture menu did not produce eight distinct visible poses");
         var receiverRoot = root.FindChild("API").FindChild("Receivers");
-        var mappings = table.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+        var mappings = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.Pair.", StringComparison.Ordinal))
             .ToDictionary(v => int.Parse(v.VariableName.Value["ExpressionSystem/GestureTable.Pair.".Length..]), v => v.Reference.Target);
         int visible = 0;
@@ -193,8 +193,8 @@ internal static class ImportedGestureAvatarChecks
         Console.WriteLine($"PASS: imported package menu drives all 64 pairs and {distinctPoses.Count} distinct poses");
     }
 
-    private static T Get<T>(Slot slot, string name) => slot.GetComponents<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;
+    private static T Get<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;
     private static T Reference<T>(Slot slot, string name) where T : class, IWorldElement =>
-        slot.GetComponents<DynamicReferenceVariable<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Reference.Target;
+        slot.ExpressionVariables<DynamicReferenceVariable<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Reference.Target;
     private static void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 }

@@ -5,7 +5,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$cliArguments = @('inspect', $CoreSlot, '--depth', '0', '--components-only', '--members', '--json')
+$cliArguments = @('inspect', $CoreSlot, '--depth', '1', '--components-only', '--members', '--json')
 if ($Url) { $cliArguments += @('--url', $Url) }
 
 $raw = & resoloop @cliArguments
@@ -31,7 +31,7 @@ $values = @(
     }
 )
 if (!($values.Name -contains 'LeftGesture') -or !($values.Name -contains 'CurrentExpression')) {
-    throw 'The selected slot is not an expression Core: expected LeftGesture and CurrentExpression.'
+    throw 'The selected slot contains no expression Core variables: expected LeftGesture and CurrentExpression.'
 }
 
 if ($Json) {

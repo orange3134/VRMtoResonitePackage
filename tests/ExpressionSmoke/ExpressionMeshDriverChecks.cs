@@ -86,9 +86,9 @@ internal static class ExpressionMeshDriverChecks
         var eye = avatar.GetComponent<EyeLinearDriver>().Eyes[0];
         Slot Output(IField<float> target) => expressions.FindChild("Outputs").Children.Single(o => Reference<IField<float>>(o, "Target") == target);
         var smile = Output(first.GetBlendShape("ActualSmile")); var blink = Output(first.GetBlendShape("ActualBlink"));
-        var baseValue = blink.GetComponents<DynamicValueVariable<float>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Base").Value;
+        var baseValue = blink.ExpressionVariables<DynamicValueVariable<float>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Base").Value;
         Check(eye.OpenCloseTarget.Target == baseValue && eye.OpenCloseTarget.IsLinkValid, "blink still drives its independent Base");
-        var dynamicResult = smile.GetComponents<DynamicField<float>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Result");
+        var dynamicResult = smile.ExpressionVariables<DynamicField<float>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Result");
         Set(table, "Pair.1", catalog.FindChild("First pose")); Set(table, "Pair.2", catalog.FindChild("Second pose"));
         void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             expressions.FindChild("API").FindChild("Receivers"), ExpressionSystemSetup.RightTag, true, index) == 1, "select mesh test pose");

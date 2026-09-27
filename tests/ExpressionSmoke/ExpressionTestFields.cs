@@ -16,7 +16,19 @@ internal static class ExpressionTestFields
         }
         return space.SpaceName.Value + "/" + name;
     }
+    // Read current DV containers and older packages with variables on the record itself.
+    public static List<T> ExpressionVariables<T>(this Slot context) where T : Component
+    {
+        var space = context.GetComponentInParents<DynamicVariableSpace>();
+        var data = space.Slot.FindChild("DV");
+        var variables = data != null ? data.GetComponentsInChildren<T>() : context.GetComponentsInChildren<T>();
+        string prefix = VariablePath(context, "");
+        return variables.Where(variable =>
+            ((IField<string>)variable.GetType().GetField("VariableName").GetValue(variable))
+                .Value.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+    }
+
     public static T Reference<T>(Slot slot, string name) where T : class, IWorldElement =>
-        slot.GetComponents<DynamicReferenceVariable<T>>()
+        slot.ExpressionVariables<DynamicReferenceVariable<T>>()
             .Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Reference.Target;
 }

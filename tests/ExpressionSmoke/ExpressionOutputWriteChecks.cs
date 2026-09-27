@@ -132,7 +132,7 @@ internal static class ExpressionOutputWriteChecks
     }
 
     private static async Task Frames(int count = 8) { for (int i = 0; i < count; i++) await default(NextUpdate); }
-    private static T Get<T>(Slot slot, string name) => slot.GetComponents<DynamicVariableBase<T>>().Single(v => v.VariableName.Value == VariablePath(slot, name)).DynamicValue;
+    private static T Get<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicVariableBase<T>>().Single(v => v.VariableName.Value == VariablePath(slot, name)).DynamicValue;
     private static void Set<T>(Slot slot, string name, T value) => Check(slot.WriteDynamicVariable(VariablePath(slot, name), value) == DynamicVariableWriteResult.Success, "write " + name);
     private static void Near(float actual, float expected, string message, float tolerance = 0.01f) => Check(Math.Abs(actual - expected) < tolerance, $"{message}: {actual} ~= {expected}");
     private static void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }

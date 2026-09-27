@@ -108,8 +108,8 @@ internal static class ExpressionBlinkChecks
         ExpressionGraphChecks.CheckLayout(expressions);
     }
 
-    private static IField<float> Field(Slot s, string n) => s.GetComponents<DynamicValueVariable<float>>().Single(v => v.VariableName.Value == VariablePath(s, n)).Value;
-    private static T Get<T>(Slot s, string n) => s.GetComponents<DynamicVariableBase<T>>().Single(v => v.VariableName.Value == VariablePath(s, n)).DynamicValue;
+    private static IField<float> Field(Slot s, string n) => s.ExpressionVariables<DynamicValueVariable<float>>().Single(v => v.VariableName.Value == VariablePath(s, n)).Value;
+    private static T Get<T>(Slot s, string n) => s.ExpressionVariables<DynamicVariableBase<T>>().Single(v => v.VariableName.Value == VariablePath(s, n)).DynamicValue;
     private static void Set<T>(Slot s, string n, T value) => Check(s.WriteDynamicVariable(VariablePath(s, n), value) == DynamicVariableWriteResult.Success, "write " + n);
     private static async Task Frames(int count = 10) { for (int i = 0; i < count; i++) await default(NextUpdate); }
     private static void Near(float actual, float expected, string message) => Check(Math.Abs(actual - expected) < 0.01f, $"{message}: {actual} ~= {expected}");

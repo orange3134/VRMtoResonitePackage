@@ -230,3 +230,9 @@ input and diagnostic records retain separate spaces with dotted hierarchy names.
 Space checks require exactly one system space, no Core/table spaces, and root
 lookup of both modules. Runtime input, table editing, clone and package reload
 checks exercise the shared scope; snapshot helpers still recognize older schemas.
+
+Version 18 places every dynamic value, reference and DynamicField directly in
+its own child slot under the owning space's DV container. The slot name is the
+variable key. Shared Core.* and GestureTable.Pair.* fields live in Expressions/DV.
+Structure checks cover each variable's owner, parent, name and single occupancy
+before and after package reload. Snapshot helpers also read older record layouts.

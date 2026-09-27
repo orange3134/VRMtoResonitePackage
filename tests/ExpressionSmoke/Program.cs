@@ -108,7 +108,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(core.FindChild("SourceState") == null && core.FindChild("ParameterState") == null && expressions.FindChild("Rules") == null,
             "generic source arbitration and Animator graph are absent");
         Console.WriteLine($"Flux nodes: {expressions.GetComponentsInChildren<ProtoFluxNode>().Count}; Core: {core.GetComponentsInChildren<ProtoFluxNode>().Count}");
-        Check(core.GetComponents<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value is not "ExpressionSystem/Core.LeftInput" and not "ExpressionSystem/Core.RightInput"),
+        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value is not "ExpressionSystem/Core.LeftInput" and not "ExpressionSystem/Core.RightInput"),
             "int requests retain no input Slot references");
         foreach (string tag in new[] { ExpressionSystemSetup.LeftTag, ExpressionSystemSetup.RightTag })
         {
@@ -217,7 +217,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Math.Abs(field.Value - 1) < 0.01, "editing table reference takes effect");
         Gesture(1, 0); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "different pair sharing the same clip retains its pose");
-        table.Children.First(s => s.Name.StartsWith("08 ")).Destroy(); await Frames();
+        expressions.FindChild("DV").FindChild("GestureTable.Pair.8").Destroy(); await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "deleted table row falls back to base");
         Gesture(1, 1); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "deleting row 8 does not shift row 9");
@@ -402,7 +402,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
     });
 }
 
-static T Get<T>(Slot slot, string name) => slot.GetComponents<DynamicVariableBase<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).DynamicValue;
+static T Get<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicVariableBase<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).DynamicValue;
 
 static void Set<T>(Slot slot, string name, T value)
 {

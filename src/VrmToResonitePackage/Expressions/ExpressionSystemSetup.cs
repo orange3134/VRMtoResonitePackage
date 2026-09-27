@@ -46,12 +46,12 @@ internal sealed partial class ExpressionSystemSetup
         _playback = logic.AddSlot("Playback");
         foreach (string hand in new[] { "Left", "Right" })
         {
-            Data(_core, "Core." + hand + "Gesture", 0);
+            Data(_root, "Core." + hand + "Gesture", 0);
         }
-        Data(_core, "Core.AllowExternalInput", true);
-        Reference<Slot>(_core, "Core.CurrentExpression", null);
-        Data(_core, "Core.PairIndex", 0);
-        Data(_root, "Version", 17);
+        Data(_root, "Core.AllowExternalInput", true);
+        Reference<Slot>(_root, "Core.CurrentExpression", null);
+        Data(_root, "Core.PairIndex", 0);
+        Data(_root, "Version", 18);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -66,9 +66,8 @@ internal sealed partial class ExpressionSystemSetup
         setup.BuildCatalog(resolve, initialWeight);
         for (int index = 0; index < 64; index++)
         {
-            var cell = setup._table.AddSlot($"{index:D2} Left {index / 8} - Right {index % 8}");
             string id = setup._compiled.Pairs[index];
-            Reference(cell, "GestureTable.Pair." + index, id != null ? setup._clips.GetValueOrDefault(id) : null);
+            Reference(setup._root, "GestureTable.Pair." + index, id != null ? setup._clips.GetValueOrDefault(id) : null);
         }
         setup.BuildApi();
         setup.BuildInputs(menu);
@@ -82,8 +81,8 @@ internal sealed partial class ExpressionSystemSetup
         {
             var template = setup._clips.Values.First().Duplicate(setup._root.FindChild("API").AddSlot("Templates"));
             template.Name = "Expression (copy into Catalog)";
-            template.GetComponents<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Id")).Value.Value = "";
-            template.GetComponents<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Enabled")).Value.Value = false;
+            template.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Id")).Value.Value = "";
+            template.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Enabled")).Value.Value = false;
         }
         int assigned = setup._compiled.Pairs.Count(id => id != null && setup._clips.ContainsKey(id));
         Console.WriteLine($"Expression system: {setup._clips.Count} clips, {setup._outputSlots.Count} outputs, {assigned}/64 gesture pairs assigned, " +
@@ -167,7 +166,7 @@ internal sealed partial class ExpressionSystemSetup
                     Reference<ISyncRef>(output, "OriginalDriver", oldDriver);
                     oldDriver.Target = baseValue.Value;
                 }
-                var result = output.AttachComponent<DynamicField<float>>();
+                var result = VariableSlot(output, "Result").AttachComponent<DynamicField<float>>();
                 result.VariableName.Value = Path(OutputSpace, "Result");
                 result.TargetField.Target = BuildOutputTarget(field, initialValue);
                 _outputSlots[id] = output; fields[field] = output;

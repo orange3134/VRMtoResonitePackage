@@ -76,7 +76,7 @@ internal sealed partial class ExpressionSystemSetup
         g.OnStart(g.If(canWrite, refresh));
         foreach (var output in _outputSlots.Values)
         {
-            if (!output.GetComponents<DynamicReferenceVariable<ISyncRef>>().Any(v =>
+            if (!output.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<ISyncRef>>().Any(v =>
                 v.VariableName.Value == Path(OutputSpace, "OriginalDriver"))) continue;
             BuildLiveTracking(output);
         }
@@ -88,7 +88,7 @@ internal sealed partial class ExpressionSystemSetup
         // Pose and HasPose are written by selection; tracking never resamples a clip
         // and never sends synchronized per-frame Write impulses.
         var g = new ExpressionFlux(output.AddSlot("Tracking"));
-        var target = output.GetComponents<DynamicField<float>>()
+        var target = output.FindChild("DV").GetComponentsInChildren<DynamicField<float>>()
             .Single(v => v.VariableName.Value == Path(OutputSpace, "Result")).TargetField.Target;
         var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>)
             g.Node("ValueFieldDrive", typeof(float), ("Value", MixOutput(g, g.Ref(output),

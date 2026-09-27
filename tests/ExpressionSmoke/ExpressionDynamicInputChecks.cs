@@ -9,7 +9,7 @@ internal static class ExpressionDynamicInputChecks
         var modules = root.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");
         foreach (var module in modules.Children)
         {
-            var settings = module.GetComponents<DynamicValueVariable<float>>();
+            var settings = module.ExpressionVariables<DynamicValueVariable<float>>();
             foreach (string hand in new[] { "Left", "Right" })
             {
                 var inputs = module.FindChild(hand).GetComponentsInChildren<DynamicVariableValueInput<float>>()
@@ -44,7 +44,7 @@ internal static class ExpressionDynamicInputChecks
             var current = logic.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>()
                 .Single(node => Name(node) == "ExpressionSystem/Core.CurrentExpression");
             var proxy = current.Slot.GetComponent<global::ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Variables.DynamicVariableInputProxy<Slot>>();
-            var field = root.FindChild("Core").GetComponents<DynamicReferenceVariable<Slot>>()
+            var field = root.FindChild("Core").ExpressionVariables<DynamicReferenceVariable<Slot>>()
                 .Single(variable => variable.VariableName.Value == "ExpressionSystem/Core.CurrentExpression");
             Check(proxy != null && proxy.HasValue && proxy.DynamicValue == field.Reference.Target,
                 "Core object input follows this avatar's selected expression: " + board);
@@ -57,7 +57,7 @@ internal static class ExpressionDynamicInputChecks
     {
         var modules = root.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");
         var module = modules.Children.First();
-        var field = module.GetComponents<DynamicValueVariable<float>>()
+        var field = module.ExpressionVariables<DynamicValueVariable<float>>()
             .Single(value => value.VariableName.Value == "ExpressionSystem.Input.HandGestures/StabilitySeconds");
         var key = root.FindChild("Inputs").FindChild("Keyboard").FindChild("Left").FindChild("DV").FindChild("Key.1")
             .GetComponent<DynamicValueVariable<Renderite.Shared.Key>>();

@@ -306,7 +306,7 @@ internal static class ExpressionInputEventChecks
         for (int i = 0; i < count; i++) await default(NextUpdate);
     }
     private static T Get<T>(Slot slot, string name) =>
-        slot.GetComponents<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == VariablePath(slot, name)).Value.Value;
+        slot.ExpressionVariables<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == VariablePath(slot, name)).Value.Value;
     private static void Set<T>(Slot slot, string name, T value)
     {
         if (slot.WriteDynamicVariable(VariablePath(slot, name), value) != DynamicVariableWriteResult.Success)

@@ -243,16 +243,25 @@ internal sealed class ExpressionFlux
         space.OnlyDirectBinding.Value = true;
         return slot;
     }
+    // All records keep one variable per child under their own space's DV container.
+    public static Slot VariableSlot(Slot context, string name)
+    {
+        var owner = NamedSpace(context)?.Slot
+            ?? throw new InvalidOperationException("Expression record has no variable space: " + context.Name);
+        var data = owner.FindChild("DV") ?? owner.AddSlot("DV");
+        return data.AddSlot(name);
+    }
+
     public static DynamicValueVariable<T> Data<T>(Slot slot, string name, T value)
     {
-        var variable = slot.AttachComponent<DynamicValueVariable<T>>();
+        var variable = VariableSlot(slot, name).AttachComponent<DynamicValueVariable<T>>();
         variable.VariableName.Value = Path(slot, name);
         variable.Value.Value = value;
         return variable;
     }
     public static DynamicReferenceVariable<T> Reference<T>(Slot slot, string name, T value) where T : class, IWorldElement
     {
-        var variable = slot.AttachComponent<DynamicReferenceVariable<T>>();
+        var variable = VariableSlot(slot, name).AttachComponent<DynamicReferenceVariable<T>>();
         variable.VariableName.Value = Path(slot, name);
         variable.Reference.Target = value;
         return variable;
