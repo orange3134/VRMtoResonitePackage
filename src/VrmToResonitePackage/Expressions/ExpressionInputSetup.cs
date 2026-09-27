@@ -172,11 +172,18 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildGestures()
     {
         var root = _inputs.AddSlot("HandGestures"); var modules = root.AddSlot("Modules");
-        foreach (string device in new[] { "TouchController", "IndexController", "ViveController", "WindowsMRController" })
+        using (var notice = new StreamReader(typeof(ExpressionSystemSetup).Assembly.GetManifestResourceStream("ResoPon.ControllerGestureNotice")))
+            root.AttachComponent<Comment>().Text.Value = notice.ReadToEnd();
+        foreach (string device in new[] { "TouchController", "IndexController", "ViveController", "WindowsMRController", "CosmosController" })
         {
             var module = Record(modules, device.Replace("Controller", ""), GestureSettingsSpace);
-            Data(module, "GripThreshold", 0.55f); Data(module, "TriggerThreshold", 0.55f); Data(module, "StabilitySeconds", 0.05f);
-            Data(module, "GripReleaseThreshold", 0.45f); Data(module, "TriggerReleaseThreshold", 0.45f);
+            Data(module, "StabilitySeconds", 0.05f);
+            if (device == "IndexController")
+            {
+                Data(module, "FingerThreshold", 40f); Data(module, "ThumbThreshold", 25f);
+            }
+            if (device is "ViveController" or "WindowsMRController")
+                for (int direction = 0; direction < 8; direction++) Data(module, "Direction." + direction, direction);
             foreach (var (side, kind) in new[] { (Chirality.Left, 0), (Chirality.Right, 1) })
                 BuildGestureHand(module, device, side, kind);
         }
@@ -188,42 +195,28 @@ internal sealed partial class ExpressionSystemSetup
         var g = new ExpressionFlux(hand.AddSlot("Logic"));
         var handRef = g.Ref(hand); var modRef = g.Ref(module);
         Data(hand, "Candidate", -1); Data(hand, "Since", 0f); Data(hand, "Stable", -1);
-        Data(hand, "GripHeld", false); Data(hand, "TriggerHeld", false);
         var initialized = g.Node("StoredValue", typeof(bool));
         var reset = g.If(g.Not(initialized), g.Sequence(
             g.Write<int>(handRef, GestureHandSpace, "Candidate", g.Constant(-1)), g.Write<int>(handRef, GestureHandSpace, "Stable", g.Constant(-1)),
-            g.Write<bool>(handRef, GestureHandSpace, "GripHeld", g.Constant(false)), g.Write<bool>(handRef, GestureHandSpace, "TriggerHeld", g.Constant(false)),
             g.Set<bool>(initialized, g.Constant(true))));
         var controller = g.Node(device, null, ("User", g.Owner(_root)), ("Node", g.Constant(side)));
-        var active = Out(controller, "IsActive"); var trigger = Out(controller, "Trigger");
-        IWorldElement grip = Out(controller, "Grip");
-        bool wand = device is "ViveController" or "WindowsMRController";
-        if (!wand) grip = g.Greater(grip, g.Choose<float>(g.Read<bool>(handRef, GestureHandSpace, "GripHeld"),
-            g.Read<float>(modRef, GestureSettingsSpace, "GripReleaseThreshold"), g.Read<float>(modRef, GestureSettingsSpace, "GripThreshold")));
-        var indexCurled = g.Greater(trigger, g.Choose<float>(g.Read<bool>(handRef, GestureHandSpace, "TriggerHeld"),
-            g.Read<float>(modRef, GestureSettingsSpace, "TriggerReleaseThreshold"), g.Read<float>(modRef, GestureSettingsSpace, "TriggerThreshold")));
-        var gesture = BuildControllerGesture(g, controller, device, grip, indexCurled);
+        var active = Out(controller, "IsActive");
+        var gesture = BuildControllerGesture(g, controller, device, side, module);
         var changed = g.NotEqual<int>(gesture, g.Read<int>(handRef, GestureHandSpace, "Candidate"));
         var stable = g.Not(g.Greater(g.Add(g.Read<float>(handRef, GestureHandSpace, "Since"), g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds")), g.Now));
         var send = g.Sequence(SendGesture(g, g.Text(GestureTag(kind)), gesture),
             g.Write<int>(handRef, GestureHandSpace, "Stable", gesture));
         var enabled = g.And(active, g.Read<bool>(g.Ref(_core), SystemSpace, "Core.AllowExternalInput"));
         var update = g.If(g.IsOwner(_root), g.Sequence(reset, g.If(enabled, g.Sequence(
-            g.Write<bool>(handRef, GestureHandSpace, "GripHeld", grip), g.Write<bool>(handRef, GestureHandSpace, "TriggerHeld", indexCurled),
             g.If(changed, g.Sequence(g.Write<int>(handRef, GestureHandSpace, "Candidate", gesture), g.Write<float>(handRef, GestureHandSpace, "Since", g.Now))),
             g.If(g.And(stable, g.NotEqual<int>(g.Read<int>(handRef, GestureHandSpace, "Stable"), gesture)), send)),
             g.Sequence(
                 g.Write<int>(handRef, GestureHandSpace, "Candidate", g.Constant(-1)),
-                g.Write<int>(handRef, GestureHandSpace, "Stable", g.Constant(-1)),
-                g.Write<bool>(handRef, GestureHandSpace, "GripHeld", g.Constant(false)),
-                g.Write<bool>(handRef, GestureHandSpace, "TriggerHeld", g.Constant(false))))),
+                g.Write<int>(handRef, GestureHandSpace, "Stable", g.Constant(-1))))),
             g.Set<bool>(initialized, g.Constant(false)));
-        // Watch interpreted values, not continuously changing analog amounts.
-        // The stable predicate produces one change when the waiting time expires.
+        // The stable predicate changes when the waiting time expires, even at rest.
         var accepting = g.And(g.IsOwner(_root), enabled);
         g.OnChanged<int>(g.Choose<int>(accepting, gesture, g.Constant(-1)), update);
-        g.OnChanged<bool>(g.And(accepting, grip), update);
-        g.OnChanged<bool>(g.And(accepting, indexCurled), update);
         g.OnChanged<bool>(g.And(accepting, stable), update);
         g.OnChanged<bool>(g.IsOwner(_root), update);
         g.OnStart(update);

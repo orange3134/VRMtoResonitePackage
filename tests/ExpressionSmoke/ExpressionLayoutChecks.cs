@@ -59,28 +59,17 @@ internal static class ExpressionLayoutChecks
         {
             var board = hand.FindChild("Logic");
             var nodes = board.GetComponentsInChildren<ProtoFluxNode>();
-            Check(nodes.Count(n => n.GetType().Name == "ComposeBits_byte") == 1 &&
-                nodes.Count(n => n.GetType().Name == "ValueMultiplex`1") == 2 &&
-                nodes.Count(n => n.GetType().Name == "IndexOfFirstValueMatch`1") == 1 &&
-                nodes.Count(n => n.GetType().Name == "OR_Multi_Bool") == (module.Name is "Touch" or "Index" ? 1 : 0),
-                module.Name + " separates bit packing, finger table and button priority");
-            float X(ProtoFluxNode n) => board.GlobalPointToLocal(n.Slot.GlobalPosition).x;
-            float Y(ProtoFluxNode n) => board.GlobalPointToLocal(n.Slot.GlobalPosition).y;
-            foreach (var target in nodes.Where(n => n.GetType().Name is "ComposeBits_byte" or "ValueMultiplex`1" or "IndexOfFirstValueMatch`1"))
-            {
-                var inputs = target.AllInputs.Select(p => Owner(p.Target)).Where(n => n != null).Distinct().ToArray();
-                for (int i = 1; i < inputs.Length; i++)
-                    Check(Y(inputs[i - 1]) > Y(inputs[i]) + 0.01f, module.Name + "/" + hand.Name + ": controller inputs follow top-to-bottom port order");
-                foreach (var input in inputs)
-                    Check(X(target) - X(input) is > 0 and < 0.65f,
-                        module.Name + "/" + hand.Name + ": controller inputs stay in the adjacent column");
-            }
-            var fingerTable = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueMultiplex<int>>()
-                .Single(n => Owner(n.Index.Target)?.GetType().Name == "Cast_byte_To_int");
-            Check(fingerTable.Inputs.Count == 8 && fingerTable.Inputs.Distinct().Count() == 8,
-                "eight separately labelled finger poses remain easy to inspect");
+            bool pad = module.Name is "Vive" or "WindowsMR";
+            Check(nodes.Count(n => n.GetType().Name == "ComposeBits_byte") == (pad ? 0 : 1) &&
+                nodes.Count(n => n.GetType().Name == "ValueMultiplex`1") == 1 &&
+                nodes.Count(n => n.GetType().Name == "IndexOfFirstValueMatch`1") == (pad ? 0 : 1),
+                module.Name + " has one device-specific classifier");
+            Check(nodes.Count(n => n.GetType().Name == "FingerPose") == (module.Name == "Index" ? 5 : 0),
+                "only Index reads five finger joint rotations");
+            Check(nodes.Count(n => n.GetType().Name == "Atan2_Float") == (pad ? 1 : 0),
+                "pad controllers use angular sectors");
         }
-        Console.WriteLine("LAYOUT: controller bit inputs, finger table and button priority are ordered and consumer-local");
+        Console.WriteLine("LAYOUT: device-specific controller boards retain valid input flow");
     }
 
     private static void CheckKeyboardInputs(Slot expressions)

@@ -1,89 +1,96 @@
 using FrooxEngine;
 using FrooxEngine.ProtoFlux;
+using Renderite.Shared;
 using Nodes = FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes;
 using static VrmToResonitePackage.Expressions.ExpressionFlux;
+using static VrmToResonitePackage.Expressions.ExpressionSpaces;
 
 namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
-    private static IWorldElement BuildControllerGesture(ExpressionFlux g, Component controller, string device,
-        IWorldElement grip, IWorldElement trigger)
+    // Observed in Avatar Expression Editor v1.12.1. See docs/controller-gestures.md.
+    private IWorldElement BuildControllerGesture(ExpressionFlux g, Component controller, string device,
+        Chirality side, Slot module)
     {
-        // AvatarAddonSystem / Touch V1.4.3 separates input bit packing from pose matching.
-        // Keep our existing thresholds and button priority; only adopt that graph structure.
-        bool wand = device is "ViveController" or "WindowsMRController";
-        IWorldElement thumb;
-        if (wand) thumb = Out(controller, "TouchpadTouch");
-        else
-        {
-            var contacts = (Nodes.Operators.OR_Multi_Bool)g.Node("OR_Multi_Bool");
-            string[] ports = device == "TouchController"
-                ? new[] { "JoystickTouch", "ButtonXA_Touch", "ButtonYB_Touch" }
-                : new[] { "JoystickTouch", "ButtonA_Touch", "ButtonB_Touch" };
-            foreach (string port in ports) contacts.Operands.Add((INodeValueOutput<bool>)Out(controller, port));
-            thumb = contacts;
-        }
+        if (device is "ViveController" or "WindowsMRController")
+            return BuildPadGesture(g, controller, module);
 
         var bits = g.Node("ComposeBits_byte");
-        var inputs = new (string Name, IWorldElement Value)[] {
-            ("Grip held", grip), ("Trigger held", trigger), ("Thumb touching", thumb) };
-        for (int bit = 0; bit < inputs.Length; bit++)
+        if (device == "IndexController")
         {
-            var input = g.Node("ValueRelay", typeof(bool), ("Input", inputs[bit].Value));
-            input.Slot.Name += $" : Bit{bit} {inputs[bit].Name}";
-            Link(bits, "Bit" + bit, input);
-        }
-
-        // Index bits (low to high): Grip, Trigger, Thumb. An open grip always means HandOpen.
-        int[] gestures = { 2, 6, 2, 7, 2, 3, 2, 1 }; // Open, Gun, Open, ThumbsUp, Open, Point, Open, Fist
-        var index = g.Node("Cast_byte_To_int", null, ("Input", bits));
-        var table = (Nodes.ValueMultiplex<int>)g.Node("ValueMultiplex", typeof(int), ("Index", index));
-        for (int mask = 0; mask < gestures.Length; mask++)
-        {
-            // Separate literals keep all eight rows adjacent to the table, in input order.
-            var value = (Component)g.Constant(gestures[mask], shared: false);
-            value.Slot.Name += $" : {Convert.ToString(mask, 2).PadLeft(3, '0')} -> {GestureNames[gestures[mask]]}";
-            table.Inputs.Add((INodeValueOutput<int>)value);
-        }
-
-        // First matching row wins: RockNRoll, Victory, then the finger pose.
-        // Vive/WindowsMR use the pad-click/grip chord; Touch/Index use B then A.
-        string rockName, victoryName;
-        IWorldElement rock, victory;
-        if (wand)
-        {
-            rockName = "Pad click with grip"; victoryName = "Pad click without grip";
-            var click = Out(controller, "TouchpadClick");
-            rock = g.And(click, grip); victory = g.And(click, g.Not(grip));
+            var source = g.Node("UserFingerPoseSource", null, ("User", g.Owner(_root)));
+            var threshold = g.Read<float>(g.Ref(module), GestureSettingsSpace, "FingerThreshold");
+            var thumbThreshold = g.Read<float>(g.Ref(module), GestureSettingsSpace, "ThumbThreshold");
+            if (side == Chirality.Right) thumbThreshold = g.Node("ValueNegate", typeof(float), ("N", thumbThreshold));
+            string[] fingers = { "IndexFinger", "MiddleFinger", "RingFinger", "Pinky", "Thumb" };
+            for (int bit = 0; bit < fingers.Length; bit++)
+            {
+                var pose = g.Node("FingerPose", null, ("PoseSource", source),
+                    ("FingerNode", g.Constant(Enum.Parse<BodyNode>(side + fingers[bit] + "_Proximal"))));
+                var euler = g.Node("EulerAngles_floatQ", null, ("Q", Out(pose, "Rotation")));
+                var axes = g.Node("Unpack_Float3", null, ("V", euler));
+                var curled = bit == 4
+                    ? g.Node("ValueGreaterOrEqual", typeof(float), ("A", thumbThreshold), ("B", Out(axes, "Y")))
+                    : g.Node("ValueLessOrEqual", typeof(float), ("A", threshold), ("B", Out(axes, "X")));
+                Link(bits, "Bit" + bit, curled);
+            }
         }
         else
         {
-            bool touch = device == "TouchController";
-            rockName = touch ? "B or Y pressed" : "B pressed";
-            victoryName = touch ? "A or X pressed" : "A pressed";
-            rock = Out(controller, touch ? "ButtonYB" : "ButtonB");
-            victory = Out(controller, touch ? "ButtonXA" : "ButtonA");
+            string[] ports = device == "TouchController"
+                ? new[] { "ButtonYB_Touch", "ButtonXA_Touch", "GripClick", "JoystickTouch", "TriggerClick" }
+                : new[] { "JoystickTouch", "GripClick", "TriggerTouch", "TriggerClick" };
+            for (int bit = 0; bit < ports.Length; bit++) Link(bits, "Bit" + bit, Out(controller, ports[bit]));
         }
-        var priority = (Nodes.Utility.IndexOfFirstValueMatch<bool>)g.Node("IndexOfFirstValueMatch", typeof(bool),
-            ("Match", g.Constant(true, shared: false)));
-        foreach (var (name, condition) in new[] {
-            (rockName, rock), (victoryName, victory),
-            ("Otherwise use finger pose", g.Constant(true, shared: false)) })
+
+        (int Gesture, byte[] Codes)[] matches = device switch
         {
-            var input = g.Node("ValueRelay", typeof(bool), ("Input", condition));
-            input.Slot.Name += " : " + name;
-            priority.Values.Add((INodeValueOutput<bool>)input);
-        }
-        var selected = (Nodes.ValueMultiplex<int>)g.Node("ValueMultiplex", typeof(int), ("Index", Out(priority, "Index")));
-        var results = new (string Name, IWorldElement Value)[] {
-            (rockName + ": RockNRoll", g.Constant(5)), (victoryName + ": Victory", g.Constant(4)), ("Finger pose", Out(table, "Output")) };
-        foreach (var (name, value) in results)
+            "TouchController" => new (int, byte[])[] {
+                (1, new byte[] { 28, 22, 21, 23 }), (2, new byte[] { 0 }),
+                (3, new byte[] { 5, 6, 12, 7 }), (4, new byte[] { 2, 8, 1, 3 }),
+                (5, new byte[] { 17, 18, 24 }), (6, new byte[] { 4 }), (7, new byte[] { 20 }) },
+            "IndexController" => new (int, byte[])[] {
+                (1, new byte[] { 31 }), (2, new byte[] { 0 }), (3, new byte[] { 30 }),
+                (4, new byte[] { 28 }), (5, new byte[] { 6, 22 }), (6, new byte[] { 14 }), (7, new byte[] { 15 }) },
+            "CosmosController" => new (int, byte[])[] {
+                (1, new byte[] { 12 }), (2, new byte[] { 0 }), (3, new byte[] { 3 }),
+                (4, new byte[] { 1 }), (6, new byte[] { 2 }), (7, new byte[] { 4 }) },
+            _ => throw new ArgumentOutOfRangeException(nameof(device))
+        };
+        var match = (Nodes.Utility.IndexOfFirstValueMatch<bool>)g.Node("IndexOfFirstValueMatch", typeof(bool),
+            ("Match", g.Constant(true)));
+        var selected = (Nodes.ValueMultiplex<int>)g.Node("ValueMultiplex", typeof(int), ("Index", Out(match, "Index")));
+        foreach (var (gesture, codes) in matches)
         {
-            var input = g.Node("ValueRelay", typeof(int), ("Input", value));
-            input.Slot.Name += " : " + name;
-            selected.Inputs.Add((INodeValueOutput<int>)input);
+            IWorldElement condition;
+            if (codes.Length == 1) condition = g.Equal<byte>(bits, g.Constant(codes[0]));
+            else
+            {
+                var any = (Nodes.Operators.OR_Multi_Bool)g.Node("OR_Multi_Bool");
+                foreach (byte code in codes) any.Operands.Add((INodeValueOutput<bool>)g.Equal<byte>(bits, g.Constant(code)));
+                condition = any;
+            }
+            match.Values.Add((INodeValueOutput<bool>)condition);
+            selected.Inputs.Add((INodeValueOutput<int>)g.Constant(gesture));
         }
-        return Out(selected, "Output");
+        // No exact match clears all discrete poses in the source tool: Neutral here.
+        return g.Choose<int>(Out(match, "FoundMatch"), Out(selected, "Output"), g.Constant(0));
+    }
+
+    private static IWorldElement BuildPadGesture(ExpressionFlux g, Component controller, Slot module)
+    {
+        var axes = g.Node("Unpack_Float2", null, ("V", Out(controller, "Touchpad")));
+        var angle = g.Node("Atan2_Float", null, ("Y", Out(axes, "X")), ("X", Out(axes, "Y")));
+        var degrees = g.Mul(angle, g.Node("RadToDeg"));
+        IWorldElement sector = g.Node("ValueAdd", typeof(int),
+            ("A", g.Node("LegacyRoundToInt_Float", null, ("N", g.Div(degrees, g.Constant(45f))))), ("B", g.Constant(4)));
+        // Both sides of the -180/+180 seam are the same downward sector.
+        sector = g.Choose<int>(g.Equal<int>(sector, g.Constant(8)), g.Constant(0), sector);
+        var selected = (Nodes.ValueMultiplex<int>)g.Node("ValueMultiplex", typeof(int), ("Index", sector));
+        for (int i = 0; i < 8; i++)
+            selected.Inputs.Add((INodeValueOutput<int>)g.Read<int>(g.Ref(module), GestureSettingsSpace, "Direction." + i));
+        // Keep ResoPon's two hand inputs independent (the MR add-on merges them).
+        return g.Choose<int>(Out(controller, "TouchpadTouch"), Out(selected, "Output"), g.Constant(0));
     }
 }

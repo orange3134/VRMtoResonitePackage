@@ -14,7 +14,7 @@ internal static class ExpressionDynamicInputChecks
             {
                 var inputs = module.FindChild(hand).GetComponentsInChildren<DynamicVariableValueInput<float>>()
                     .Where(node => Name(node).StartsWith("ExpressionSystem.Input.HandGestures/", StringComparison.Ordinal)).ToArray();
-                int expected = module.Name is "Vive" or "WindowsMR" ? 3 : 5;
+                int expected = module.Name == "Index" ? 3 : 1;
                 Check(inputs.Length == expected, "all used ancestor settings use Dynamic Inputs: " + module.Name + "/" + hand);
                 foreach (var input in inputs)
                 {

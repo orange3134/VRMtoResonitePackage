@@ -10,6 +10,9 @@ internal static class ExpressionGraphChecks
     public static void CheckLayout(Slot expressions)
     {
         ExpressionSpaceChecks.Run(expressions);
+        Check(Descendant(expressions, "Inputs/HandGestures").GetComponent<Comment>()?.Text.Value
+            .Contains("Copyright (c) 2022-2025 rhenium, kazu0617, orange") == true,
+            "controller source license survives generation, clone and package reload");
         ExpressionDynamicInputChecks.CheckBindings(expressions);
         Report(expressions);
         ExpressionLayoutChecks.CheckDirection(expressions);

@@ -94,7 +94,7 @@ No expression board uses LocalUpdate; lifecycle, selection, menu availability an
 local change detectors. OnStart handles initial values without storing previous inputs in shared state.
 The sensor-event fixture replaces hardware outputs temporarily and executes the exported graph:
 both hands must wait for stability, fire when the timer expires without more sensor changes,
-preserve hysteresis, reset on gate/disconnect transitions, and redetect on reconnect.
+use device-specific pose classification, reset on gate/disconnect transitions, and redetect on reconnect.
 Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends only the left hand; Ctrl+Shift+keypad sends only the right. Keypad alone and Ctrl+keypad without Shift must leave both hands unchanged.
 Idle sentinels prove Selection and menu scans do not run on unchanged frames. Table edits and
 clip enable/disable changes must update selection and menu visibility without API requests.
@@ -162,15 +162,14 @@ reads and Selection snapshots, blink routing, cloning and package reload.
 Standalone test fields are driven directly and exposed through the same DynamicField.
 Imported-package checks wait for driver mesh assets before verifying named shape links.
 
-Controller checks exhaust 128 raw input combinations per hand for Touch and Index,
-and 16 per hand for Vive and WindowsMR (576 cases total) using actual exported Flux.
-They preserve each device's thumb-touch sources, analog/digital grip interpretation,
-and button priority: B before A, or pad click with/without grip. Stability, analog
-hysteresis, reconnect, input gates and manual-input retention run on every device.
-Every classifier must use bit packing, a finger-pose table and a separate button-priority
-table, without chained OR/conditional nodes. Layout checks require their inputs to
-follow port order in the adjacent column, including in saved/reloaded real-mesh fixtures
-and imported avatars.
+Controller checks execute the generated Flux against the observed Avatar Expression
+Editor tables: all 32 Touch codes, all 32 Index finger poses, all 16 Cosmos codes,
+and eight directions on both Vive and Windows MR, for each hand (192 cases).
+They also cover finger/thumb angle thresholds, sector boundaries and the downward
+seam, editable settings, stability, reconnect, input gates, manual-input retention,
+and independence of the opposite hand. These are single-user mock sensor checks;
+physical controller operation and multiplayer behavior require in-world testing.
+See [controller gesture evidence](../../docs/controller-gestures.md).
 
 `NormalExpressionPatternChecks` verifies FaceEmo's first normal pattern against an
 independent all-64 pose oracle: reverse FX layer priority, stable hand/gesture sorting,

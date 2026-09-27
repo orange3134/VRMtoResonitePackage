@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 18`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 19`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -51,7 +51,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 18 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 19 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | Expressions/DV/GestureTable.Pair.N | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
@@ -183,35 +183,32 @@ Held や前回マスクなどの DynamicVariable は作らず、変更検出の�
 
 ## Inputs/HandGestures/Modules：機種別入力
 
-Touch・Index・Vive・WindowsMR の各モジュールに以下の設定を持つ。
+Touch・Index・Vive・WindowsMR・Cosmos の各モジュールに使用する設定だけを置く。
 
 | 名前 | 型 | 初期値 | 役割 |
 |---|---|---|---|
-| `GripThreshold` | float | 0.55 | Grip の押下判定しきい値。Touch・Index で使用 |
-| `GripReleaseThreshold` | float | 0.45 | GripHeld=true のときのしきい値。押下と解放の境界をずらして揺れを防ぐ |
-| `TriggerThreshold` | float | 0.55 | Trigger の押下判定しきい値 |
-| `TriggerReleaseThreshold` | float | 0.45 | TriggerHeld=true のときのしきい値 |
-| `StabilitySeconds` | float | 0.05 | 候補が変わらず続く必要時間（秒） |
+| `StabilitySeconds` | float | 0.05 | 全機種。候補が変わらず続く必要時間（秒） |
+| `FingerThreshold` | float | 40 | Indexの人差し指〜小指の近位関節X角度。以上なら曲げた指 |
+| `ThumbThreshold` | float | 25 | Indexの親指Y角度。左はこの値以下、右は符号を反転した値以下 |
+| `Direction.0`〜`Direction.7` | int | 各添字の0〜7 | Vive・WindowsMRの下・左下・左・左上・上・右上・右・右下への割り当て |
 
-比較は厳密な `入力値 > しきい値`。Vive・WindowsMR は Grip の bool 出力を直接使うため、Grip の2設定は判定に使わない。
-全4機種で Grip・Trigger の判定結果と親指接触をビット化し、8行の指形状表と3行のボタン優先表で選ぶ。
-判定条件・公開設定は従来と同じ。詳細は[コントローラーのハンドサイン判定](expression-system.md#コントローラーのハンドサイン判定)を参照。
+Version 19でGrip/Triggerの押下・解放しきい値とGripHeld/TriggerHeldを廃止した。
+Touch／CosmosはControllerの接触とClick出力、Indexは指の姿勢、Vive／MRはパッド方向を使う。
+詳細は[コントローラー別ジェスチャー判定](controller-gestures.md)を参照。
 各モジュールの Left / Right は独立した ExpressionSystem.Input.HandGestures.Hand スコープを持つ。
 機種別入力もローカルな `StoredValue<bool>` で初期化済みかを管理し、User 参照は保持しない。
-ローカルユーザーが装着者でなくなるとフラグを false に戻し、次の装着時に候補・安定値・押下判定を初期化する。
+ローカルユーザーが装着者でなくなるとフラグを false に戻し、次の装着時に候補・安定値を初期化する。
 
 | 名前 | 型 | 初期値 | 更新元・役割 |
 |---|---|---|---|
 | `Candidate` | int | -1 | 最新の入力判定候補。変化すると Since を更新 |
 | `Since` | float | 0 | Candidate が変わった WorldTimeFloat（秒）。安定待ちの起点 |
 | `Stable` | int | -1 | 安定判定後に送信したジェスチャー。変化時だけ再送するための比較値 |
-| `GripHeld` | bool | false | 前回の Grip 判定。次回の押下／解放しきい値を選ぶ |
-| `TriggerHeld` | bool | false | 前回の Trigger 判定。次回の押下／解放しきい値を選ぶ |
 
 -1 は未確定・未送信で、公開左右 API の有効値ではない。
-判定した手形・Grip/Trigger 判定・受付状態の変化時に処理する。
+判定した手形・受付状態の変化時に処理する。
 Since + StabilitySeconds に時刻が達して安定判定が変化したときも処理するため、指を止めたままでも確定入力を送れる。
-切断・非アクティブ時や入力禁止中は Candidate・Stable を -1、GripHeld・TriggerHeld を false に戻し、入力イベントは送らない。
+切断・非アクティブ時や入力禁止中は Candidate・Stable を -1 に戻し、入力イベントは送らない。
 Core は左右それぞれで最後に受理した値を保持し、更新番号は保持しない。
 再接続・入力再許可後に安定した手形を検出すると、その手の値を新しい入力で更新する。
 モジュール自体の削除・無効化でも手の状態は残る。明示的な Neutral（0）で解除できる。

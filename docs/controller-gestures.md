@@ -1,0 +1,104 @@
+# コントローラー別ジェスチャー判定
+
+## 調査元と適用範囲
+
+2026-09-27にResoLoopで接続したワールド内の **Avatar Expression Editor v1.12.1** を調査した。
+`BlendShapeInspector/Style/Main/Content/Vert/Element/Hori/ButtonE/Button/Pref` 内の
+ハンドサイン表情アドオン（Touch V1.4.3、Index V1.2.2、Vive V1.3.1-plusEye、
+Win MR V1.0.0、Cosmos V1.0.0）の `LogiX` と `Handsign` を参照した。
+入力を組み立てるFluxだけでなく、`ValueEqualityDriver<byte>` と `MultiBoolConditionDriver`
+による一致判定まで確認している。ノードの型・ポートは実行中Resonite 2026.9.18.82の
+Reflection／Flux-SDKメタデータで確認し、ビルド・実行テストでも実DLLに対して検証する。
+セッションID・一時的なResoniteLink ID・調査JSONはコミットしない。
+著作権表示とMITライセンスは [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) を参照。
+
+ResoPonのVersion 19から、従来の共通Grip／Triggerしきい値・ボタン優先判定を廃止する。
+標準ProtoFluxだけで機種別入力を判定し、既存の左右int APIと64組のGestureTableへ渡す。
+Touch／Index／Cosmosは完全一致する手形がなければNeutral (0)、一致コード0はHandOpen (2)。
+Cosmosの原版にRockNRollは存在しない。未定義の組み合わせを別の手形へ丸めない。
+
+## Touch・Index・Cosmos
+
+`ComposeBits_byte` の下位から順に次の値を接続する。
+
+| 機種 | Bit0 | Bit1 | Bit2 | Bit3 | Bit4 |
+|---|---|---|---|---|---|
+| Touch | ButtonYB_Touch | ButtonXA_Touch | GripClick | JoystickTouch | TriggerClick |
+| Index | 人差し指 | 中指 | 薬指 | 小指 | 親指 |
+| Cosmos | JoystickTouch | GripClick | TriggerTouch | TriggerClick | 未使用 |
+
+TouchのA/B/X/Yは接触を使い、押下優先の上書きは行わない。GripClick／TriggerClickの閾値は
+ResoniteのControllerノードに委ね、ResoPonで0.55/0.45の二重判定を加えない。
+
+Indexは装着者の `UserFingerPoseSource` → `FingerPose` の各 `_Proximal` のRotationを
+`EulerAngles_floatQ` で角度にする。人差し指〜小指は `X >= FingerThreshold`（既定40度）、
+親指は左が `Y <= ThumbThreshold`（25度）、右が `Y <= -ThumbThreshold`（-25度）。
+これは原版の接続方向をそのまま移したもので、親指だけ左右でしきい値の符号が変わる。
+IndexControllerのIsActiveで入力機種を限定する。
+
+| ジェスチャー | Touchの一致コード | Indexの一致コード | Cosmosの一致コード |
+|---|---|---|---|
+| Fist (1) | 28, 22, 21, 23 | 31 | 12 |
+| HandOpen (2) | 0 | 0 | 0 |
+| FingerPoint (3) | 5, 6, 12, 7 | 30 | 3 |
+| Victory (4) | 2, 8, 1, 3 | 28 | 1 |
+| RockNRoll (5) | 17, 18, 24 | 6, 22 | なし |
+| HandGun (6) | 4 | 14 | 2 |
+| ThumbsUp (7) | 20 | 15 | 4 |
+
+原版の各条件は互いに排他的。生成Fluxではコード比較をORでまとめ、
+`IndexOfFirstValueMatch<bool>` と `ValueMultiplex<int>` で一致したジェスチャーを選ぶ。
+Touchの64〜73は原版のデスクトップ入力符号であり、VRセンサー判定には含めない。
+キーボードはResoPonの左右別入力を継続する。
+
+## Vive・Windows MR
+
+原版は手形を推測せず、Touchpadの方向を8出力へ分配している。
+`round(atan2(pad.x, pad.y) * RadToDeg / 45) + 4` を使い、TouchpadTouchがfalseなら解除する。
+丸めには原版と同じ `LegacyRoundToInt_Float` を使い、下方向の+180度側（8）を0へ折り返す。
+
+原版の方向出力にVRChatジェスチャー番号はないため、ResoPonでは次の編集可能な対応表を置く。
+これはResoPonでの割り当てであり、原版のジェスチャー対応表ではない。
+
+| 設定 | 方向 | 初期ジェスチャー |
+|---|---|---|
+| Direction.0 | 下 | Neutral (0) |
+| Direction.1 | 左下 | Fist (1) |
+| Direction.2 | 左 | HandOpen (2) |
+| Direction.3 | 左上 | FingerPoint (3) |
+| Direction.4 | 上 | Victory (4) |
+| Direction.5 | 右上 | RockNRoll (5) |
+| Direction.6 | 右 | HandGun (6) |
+| Direction.7 | 右下 | ThumbsUp (7) |
+
+設定は各機種のDVにあるintで、0〜7を指定する。接触中の座標(0,0)は原版同様に上方向として扱う。
+MR原版はPrimaryHand優先・反対の手へのフォールバックで1つの出力へ統合するが、
+ResoPonは左右64組の表情選択を維持するため、各手のTouchpadを独立して読む。
+タッチ解除はNeutral。機器切断は最後に受理した値を保持する。
+
+## 共通の実行制御と移植しない出力
+
+各手の判定値は既存のStabilitySeconds（既定0.05秒）を満たしてから送信する。
+装着者のローカル実行だけが左右状態を更新する。非装着・入力禁止・機器停止では送信せず、
+CandidateとStableを-1へリセットする。入力再開時は現在の手形を改めて確定する。
+原版にある近くのユーザーやホストへの代替は使わず、ResoPonの装着者に限定する。
+
+今回の対象はジェスチャーによる離散的な表情選択。
+原版のAnalogFist／Strength、ViveのOptional.Eye、表情ウェイトのSmoothLerpは、
+既存のResoPonの最終ポーズ選択・SmoothValue・独立した瞬き出力へ直接移植しない。
+Standard Controller V1.0も調査済みだが、Strength・Secondary・Grabの3つのウェイトを直接出力し、
+0〜7の手形判定は持たないため、自動ジェスチャーモジュールとしては追加しない。
+手形へ変換できる判定を持つ5機種を生成する。
+
+## 検証
+
+`ExpressionInputEventChecks` は生成された実Fluxのセンサー出力だけを置き換える。
+左右ごとにTouchの全32コード、Indexの全32指姿勢、Cosmosの全16コード、
+Vive／MRの全8方向を観測表と照合する（基本192ケース）。さらに角度しきい値の両側、
+方向境界と下向きの継ぎ目、設定変更、入力禁止／再許可、切断／再接続、安定待ち、
+手を止めた際の手動入力保持、反対の手へ干渉しないことを検証する。
+既存のExpressionSmokeでクローン・保存再読込・瞬き・口パクとの共存も検証する。
+模擬センサーによる単一ユーザー検証であり、実機を装着した操作や複数ユーザーの確認は含まない。
+
+2026-09-27の実アバター回帰ではMarycia 2Pを変換・inspectし、28 Catalog・132出力・64/64割り当てを確認した。
+保存済みパッケージのメニューを通して全64組・14種類の表情と132出力の値を照合した。

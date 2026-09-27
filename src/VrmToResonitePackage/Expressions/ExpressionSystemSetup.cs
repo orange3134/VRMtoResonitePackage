@@ -51,7 +51,7 @@ internal sealed partial class ExpressionSystemSetup
         Data(_root, "Core.AllowExternalInput", true);
         Reference<Slot>(_root, "Core.CurrentExpression", null);
         Data(_root, "Core.PairIndex", 0);
-        Data(_root, "Version", 18);
+        Data(_root, "Version", 19);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");

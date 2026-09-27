@@ -59,7 +59,7 @@ Expressions/
         DV/                        Tag、Shift、Control、Key.0〜Key.7
         Logic/                     着用・修飾キー・押下成立の変更監視と送信
     HandGestures/Modules/
-      Touch|Index|Vive|WindowsMR/   削除できる機種別入力
+      Touch|Index|Vive|WindowsMR|Cosmos/   削除できる機種別入力
         Left/Logic/                左手の入力検出・安定化・通知
         Right/Logic/               右手の入力検出・安定化・通知
   API/Receivers/Logic/
@@ -147,7 +147,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 `DynamicVariableValueInput<T>`／`DynamicVariableObjectInput<T>` で読む。
 間に別名の空間があっても、要求した空間名で祖先を検索する。
 
-- 各手の Candidate・Stable・Since・GripHeld・TriggerHeld：`ExpressionSystem.Input.HandGestures.Hand`。
+- 各手の Candidate・Stable・Since：`ExpressionSystem.Input.HandGestures.Hand`。
 - 機種ごとの Grip/Trigger しきい値・StabilitySeconds：親モジュールの `ExpressionSystem.Input.HandGestures`。
 - Selection の左右値：`ExpressionSystem/Core.LeftGesture`・`ExpressionSystem/Core.RightGesture`。
 - Selection の CurrentExpression：`ExpressionSystem/Core.CurrentExpression` の Object Input。
@@ -297,48 +297,12 @@ Catalog の Slot を固定用に保持する Override 変数は生成しない�
 
 ### コントローラーのハンドサイン判定
 
-`Inputs/HandGestures/Modules/<機種>/Left|Right/Logic` は全機種共通で次の順に読む。
-
-1. 入力: 機種別 Controller と、Grip・Trigger の押下／解放判定。Vive・WindowsMR の Grip は bool を直接使用する。
-2. 入力ビット: Touch・Index は親指の3つの接触を1つの `OR_Multi_Bool` にまとめ、Vive・WindowsMR は TouchpadTouch を使う。
-   名前付き Relay の `Bit0=GripHeld`、`Bit1=TriggerHeld`、`Bit2=親指接触` を `ComposeBits_byte` へ接続する。
-3. ジェスチャー表: ビット値を添字にして `ValueMultiplex<int>` の8行から指の形を選ぶ。
-4. ボタン優先順位: `IndexOfFirstValueMatch<bool>` で下表の優先1、優先2、常時 true の順に判定し、
-   `ValueMultiplex<int>` の RockNRoll、Victory、指の形から選ぶ。
-5. 安定判定と送信: 従来どおり安定待ちと入力制限を適用し、変化した手の値だけを送信する。
-
-| 添字 | Thumb / Trigger / Grip | ボタンを押していない場合の結果 |
-|---|---|---|
-| 0 | 000 | HandOpen (2) |
-| 1 | 001 | HandGun (6) |
-| 2 | 010 | HandOpen (2) |
-| 3 | 011 | ThumbsUp (7) |
-| 4 | 100 | HandOpen (2) |
-| 5 | 101 | FingerPoint (3) |
-| 6 | 110 | HandOpen (2) |
-| 7 | 111 | Fist (1) |
-
-機種ごとの入力と優先順位は次のとおり。どちらにも一致しない場合に指形状表を使う。
-
-| 機種 | Grip | 親指接触 | 優先1: RockNRoll (5) | 優先2: Victory (4) |
-|---|---|---|---|---|
-| Touch | float・ヒステリシス | JoystickTouch / ButtonXA_Touch / ButtonYB_Touch の OR | B/Y 押下 | A/X 押下 |
-| Index | float・ヒステリシス | JoystickTouch / ButtonA_Touch / ButtonB_Touch の OR | B 押下 | A 押下 |
-| Vive | bool | TouchpadTouch | TouchpadClick かつ Grip | TouchpadClick かつ Grip なし |
-| WindowsMR | bool | TouchpadTouch | TouchpadClick かつ Grip | TouchpadClick かつ Grip なし |
-
-Touch・Index で両ボタンを押した場合は RockNRoll。Trigger は全機種で float のヒステリシス判定を使う。
-`ExpressionGestureInputSetup.cs` の共通処理で、全機種の指形状表とボタン優先表を生成する。
-入力は接続先の左隣に上からポート順で配置し、8行の定数を共有しないことで対応する入力行の近くに置く。
-入力 Relay と定数の Slot 名に、ビットの意味・ビット値・ジェスチャー名を付ける。
-判定条件と既定のしきい値（押下0.55／解放0.45）、安定待ち0.05秒は変更していない。
-公開変数と保存形式も同じため、Version は10を維持する。
-
-参考にした実物は `AvatarAddonSystem/AddonTarget.System/AddonTarget.Space/<color=red>ModuleTree</color>/<color=red>AddonList</color>/ハンドサイン表情 (改行) Touch V1.4.3`。
-2026-09-21 に ResoLoop の読み取りで確認した。参照実装は B/Y接触・A/X接触・GripClick・JoystickTouch・TriggerClick を
-下位5ビットにまとめ、各 Driver の ValueEqualityDriver<byte> で照合する。StandardController は Strength の取得に使う。
-このビット化と照合を分ける構成を参考にしたが、ユーザー指定により ResoPon の既存の判定条件を維持している。
-参照実装の生のビット値・Click 判定・接触だけでの Victory 判定は移植していない。
+Version 19ではAvatar Expression Editor v1.12.1の機種別判定を採用する。
+Touchは接触・Clickの5ビット、Indexは5本の指の近位関節角度、Cosmosは4ビットの完全一致を使う。
+一致しない手形はNeutralへ戻す。Vive・WindowsMRはTouchpadの8方向を編集可能な
+`Direction.0`〜`Direction.7`でジェスチャーへ割り当てる。左右は独立して扱う。
+安定待ち・装着者限定・入力停止・切断時の保持は共通の送信処理で管理する。
+判定表、元ツールとの差、検証範囲は[コントローラー別ジェスチャー判定](controller-gestures.md)を参照。
 
 ## 対応表と表情の編集
 
@@ -1137,3 +1101,5 @@ MaryciaではGestureLeftWeight／GestureRightWeightは0、bnEyeCloseと左右・
 片手単独では各7種類となり、既定ウェイト0のFistはNeutralと同じ表情になる。通常版と通常／2Pの
 UserEdit版でも64組の解析を確認した。ExpressionSmokeの全回帰テストも成功した。
 実クライアントでの目視確認は含まない。
+
+2026-09-27: Version 19ではEditor v1.12.1の実物から各機種の判定を再調査し、上記の旧共通判定を置き換えた。現在の仕様は[コントローラー別ジェスチャー判定](controller-gestures.md)を参照。
