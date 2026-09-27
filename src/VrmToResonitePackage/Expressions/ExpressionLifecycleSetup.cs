@@ -42,8 +42,7 @@ internal sealed partial class ExpressionSystemSetup
         var stop = g.If(initialized, g.Sequence(
             g.If(g.IsNull<User>(g.Owner(_root)), clear),
             g.Set<bool>(initialized, g.Constant(false))));
-        var update = g.If(g.IsOwner(_root), g.Sequence(initialize,
-            g.Trigger(g.Ref(_selection), SelectionTickTag)), stop);
+        var update = g.If(g.IsOwner(_root), initialize, stop);
         g.OnChanged<bool>(g.IsOwner(_root), update);
         g.OnStart(update);
     }

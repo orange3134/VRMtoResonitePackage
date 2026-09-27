@@ -30,11 +30,6 @@ internal sealed partial class ExpressionSystemSetup
         actions.Add(g.Trigger(g.Ref(_playback), PlaybackTickTag));
         var select = g.Sequence(actions.ToArray());
         ReceiveUpdate(g, SelectionTickTag, select);
-        // API requests retain synchronous selection. Inspector/table edits also
-        // update selection, but an unchanged pair/clip no longer runs this sequence.
-        var changed = g.If(g.IsOwner(_root), select);
-        g.OnChanged<string>(key, changed);
-        g.OnChanged<Slot>(resolved, changed);
     }
 
     private void BuildPlayback()

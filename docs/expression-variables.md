@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 22`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 23`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -51,7 +51,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 22 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 23 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
@@ -60,7 +60,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 Version 22から対応表の参照名を `GestureTable.Pair.LnRm` に変更した。例：左1・右2は
 `GestureTable.Pair.L1R2`。選択時に左×8＋右の番号へ変換せず、左右を文字列化して直接参照する。
 Core の診断値も数値の `PairIndex` から文字列の `PairKey` へ変更した。
-Select API は左0〜7、各左に対して右0〜7を走査して同じキーを読み、見つかった左右値をそのまま使う。
+Version 23のSelect APIはCatalogからIDを検索してCurrentExpressionを直接設定する。左右値とPairKeyは維持する。
 生成アバターは旧 `Pair.0`〜`Pair.63` を参照しない。旧パッケージの変更には再変換が必要。
 
 Version 20から `SmoothingSpeed` を共有する。各SmoothValueと同じSlotの
@@ -83,8 +83,8 @@ Version 20から `SmoothingSpeed` を共有する。各SmoothValueと同じSlot�
 Version 21ではメニュー項目の Enabled を対応表の参照有無や表情の Active・Enabled から駆動しない。
 `MenuAvailable`、`GestureTable/Logic`、`Inputs/ContextMenu/Logic`、内部 `MenuRefresh` を生成しない。
 直接選択と Imported menu の項目には自動の選択可否制御を付けず、表の変更を監視してメニューを走査しない。
-Select API の有効な表情 ID → Pair の逆引きと、Core/Logic/Selection の選択検証は継続する。
-未割り当てや無効な表情のボタンを押しても、左右の入力値や選択状態は変更されない。
+Select APIはGestureTableへの割り当てを条件にせず、Catalogの有効な表情を選択する。
+無効な表情や存在しないIDでは選択状態を変更しない。左右値は直接選択では常に保持する。
 
 Bindings の子には ExpressionSystem.Catalog.Clip.Binding 空間で次の2項目を保存する。
 
@@ -104,14 +104,14 @@ Bindings の子には ExpressionSystem.Catalog.Clip.Binding 空間で次の2項�
 | 名前 | 型 | 初期値 | 更新元・役割 |
 |---|---|---|---|
 | `AllowExternalInput` | bool | true | **設定**。通常のジェスチャー・キーボード・外部左右 API の受付可否。メニュー操作で false、初期化で true。許可 API でも変更可能 |
-| `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューも同じ値を更新 |
-| `PairKey` | string | L0R0 | Selection が組み立てた `L{LeftGesture}R{RightGesture}`。対応表のキー |
+| `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューでは変更しない |
+| `PairKey` | string | L0R0 | 最後の左右入力イベントでSelectionが組み立てたキー。直接選択中の表情を示すものではない |
 | `CurrentExpression` | Slot | null | Slot 有効・Enabled=true・Bindings参照先が有効な候補。それ以外は null |
 
 Core の DynamicVariable に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取った参照を検証し、
 切替前後の比較後に CurrentExpression へ直接渡す。
 MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
-対応表の参照先の確認には PairKey と GestureTable の行を使う。
+左右入力の参照先確認にはPairKeyとGestureTableの行を使う。直接選択の確認にはCurrentExpressionを使う。
 
 AllowExternalInput 以外は状態として扱う。SelectionStatus は生成しない。入力モードは AllowExternalInput、再生対象は CurrentExpression で確認する。未割当と無効はいずれも CurrentExpression=null となる。
 PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の時間再生は行わない。
@@ -255,8 +255,8 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `ExpressionSystem`、`ExpressionSystem.Catalog.Clip` など | 上記のレコード定義別の空間名。変数パスは空間名 + `/` + 項目名 |
 | `ExpressionSystem/GestureTable.Pair.` | `L{左}R{右}` を付けて対応表を検索するパスの接頭辞 |
 | 0〜7 | 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp |
-| 8 / 64 | 生成時の片手の状態数／左右の組合せ数。Select の逆引きにも使用。左右 API の値は制限しない |
-| -1 | 手の未確定、Select の一致する Pair が未発見 |
+| 8 / 64 | 生成時の片手の状態数／左右の組合せ数。左右 API の値は制限しない |
+| -1 | 手の未確定（機種別入力の内部状態） |
 | 0 / 1（float） | 追跡混合率の端点 |
 | null | 未選択 Slot、未記録 User など参照なし |
 
@@ -265,15 +265,14 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | C# 定数 | Tag | 引数・役割 |
 |---|---|---|
 | `LeftTag` / `RightTag` | `ResoPon/Expression/Gesture/Left` / `ResoPon/Expression/Gesture/Right` | int（範囲制限なし）。通常の左右入力。AllowExternalInput に従う |
-| `MenuLeftTag` / `MenuRightTag` | `ResoPon/Expression/Menu/Left` / `ResoPon/Expression/Menu/Right` | int（範囲制限なし）。メニュー専用にして片手を変更 |
-| `SelectTag` | `ResoPon/Expression/Menu/Select` | string。表にある有効な表情 ID を左・右の順に小さい組へ逆引きし、両手を変更してメニュー専用にする |
+| `SelectTag` | `ResoPon/Expression/Menu/Select` | string。Catalogの有効な表情IDを検索し、CurrentExpressionを直接変更してメニュー専用にする |
 | `InputEnabledTag` | `ResoPon/Expression/AllowExternalInput` | bool。通常入力の許可・停止。左右値は維持 |
 | `InitializeTag` | `ResoPon/Expression/Internal/Initialize` | 引数なし。Lifecycle の初期化確認 |
-| `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。選択更新を同期実行 |
+| `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。左右入力イベントから選択更新を同期実行 |
 | `PlaybackTickTag` | `ResoPon/Expression/Internal/Playback` | 引数なし。終端ポーズの取得・適用を同期実行 |
 
 Internal の3つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
-選択中の一時候補、逆引きで見つけた左・右の値は LocalValue / LocalObject、初期化済みフラグは StoredValue<bool> を使う。
+選択中の一時候補、Catalog検索で見つけた表情参照は LocalObject、初期化済みフラグは StoredValue<bool> を使う。
 これらも DynamicVariable の保存変数とは区別する。
 
 現行版は `PreviousOwner`、`Override`、`LeftInput`、`RightInput` という項目を生成しない。
@@ -283,7 +282,7 @@ Internal の3つは公開操作用ではない。メニューボタンの送信�
 
 - [ExpressionSystemSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionSystemSetup.cs)：Core、Catalog、Outputs、対応表、診断レコードの生成。
 - [ExpressionFlux.cs](../src/VrmToResonitePackage/Expressions/ExpressionFlux.cs)：スコープ、変数・定数ノード、読み書き。
-- [ExpressionApiSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionApiSetup.cs)：入力検証、左右値の更新、モード変更、ID の逆引き。
+- [ExpressionApiSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionApiSetup.cs)：入力検証、左右値の更新、モード変更、IDからCatalogを直接選択。
 - [ExpressionLifecycleSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionLifecycleSetup.cs)：装着状態による初期化・終了処理。
 - [ExpressionPlaybackSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionPlaybackSetup.cs)：選択検証、終端ポーズの取得・通常出力のWrite・追跡専用Drive。
 - [ExpressionInputSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionInputSetup.cs)：メニュー、キー割当、機種別入力。

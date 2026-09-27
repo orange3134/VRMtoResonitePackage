@@ -9,8 +9,6 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
-    private static readonly string[] GestureNames = { "Neutral", "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
-
     private static string GestureTag(int hand) => hand == 0 ? LeftTag : RightTag;
     private IWorldElement SendGesture(ExpressionFlux g, IWorldElement tag, IWorldElement gesture) =>
         g.Trigger<int>(g.Ref(_api), tag, gesture);
@@ -47,16 +45,6 @@ internal sealed partial class ExpressionSystemSetup
         menu.AttachComponent<RootContextMenuItem>().Item.Target = MenuItem(menu, "Expressions");
         var items = menu.AddSlot("Items");
         menu.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
-        for (int hand = 0; hand < 2; hand++)
-        {
-            var side = items.AddSlot(hand == 0 ? "Left hand" : "Right hand"); MenuItem(side, side.Name);
-            var gestures = side.AddSlot("Items"); side.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = gestures;
-            for (int gesture = 0; gesture < 8; gesture++)
-            {
-                var item = gestures.AddSlot(gesture + " " + GestureNames[gesture]); MenuItem(item, item.Name);
-                MenuTrigger(item, _api, hand == 0 ? MenuLeftTag : MenuRightTag, gesture);
-            }
-        }
         var direct = items.AddSlot("Direct selection"); MenuItem(direct, "Select expression");
         direct.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = _catalog;
         foreach (var expression in _clips.Values)

@@ -53,30 +53,24 @@ internal static class ImportedGestureAvatarChecks
         await KeyboardPriorityChecks.Run(root, expectedHand == null ? null : int.Parse(expectedHand));
         var core = root.FindChild("Core"); var table = root.FindChild("GestureTable");
         var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
-        var left = menu.FindChild("Left hand").FindChild("Items"); var right = menu.FindChild("Right hand").FindChild("Items");
-        for (int hand = 0; hand < 2; hand++)
-            for (int gesture = 0; gesture < 8; gesture++)
-            {
-                var button = (hand == 0 ? left : right).Children[gesture].GetComponent<ButtonDynamicImpulseTriggerWithValue<int>>();
-                Check(button != null && button.PressedData.Tag.Value == (hand == 0 ? ExpressionSystemSetup.MenuLeftTag : ExpressionSystemSetup.MenuRightTag) &&
-                    button.PressedData.Value.Value == gesture,
-                    "Saved menu button contains the hand Tag and correct int payload");
-            }
+        Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null, "Saved menu has no hand submenus");
+        var receiverRoot = root.FindChild("API").FindChild("Receivers");
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.InputEnabledTag, true, true);
         var distinctPoses = new HashSet<string>();
         for (int l = 0; l < 8; l++)
             for (int r = 0; r < 8; r++)
             {
-                // Both clicks run in the same update; each event must resolve the current pair immediately.
+                // Both gesture events run in the same update and resolve the pair immediately.
                 int previousRight = Get<int>(core, "RightGesture");
-                left.Children[l].GetComponent<ButtonDynamicImpulseTriggerWithValue<int>>().Pressed(null, default);
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.LeftTag, true, l);
                 Check(Get<int>(core, "LeftGesture") == l && Get<int>(core, "RightGesture") == previousRight &&
-                    Get<string>(core, "PairKey") == $"L{l}R{previousRight}", "Left menu event did not evaluate immediately");
-                right.Children[r].GetComponent<ButtonDynamicImpulseTriggerWithValue<int>>().Pressed(null, default);
-                Check(Get<int>(core, "LeftGesture") == l && Get<int>(core, "RightGesture") == r, "Menu did not update both hand states synchronously");
+                    Get<string>(core, "PairKey") == $"L{l}R{previousRight}", "Left gesture event did not evaluate immediately");
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.RightTag, true, r);
+                Check(Get<int>(core, "LeftGesture") == l && Get<int>(core, "RightGesture") == r, "Gestures did not update both hand states synchronously");
                 var mapped = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
                     .Single(v => v.VariableName.Value == $"ExpressionSystem/GestureTable.Pair.L{l}R{r}").Reference.Target;
                 Check(mapped != null && Reference<Slot>(core, "CurrentExpression") == mapped, "Missing or incorrect selected pose");
-                Check(Get<string>(core, "PairKey") == $"L{l}R{r}" && !Get<bool>(core, "AllowExternalInput"),
+                Check(Get<string>(core, "PairKey") == $"L{l}R{r}" && Get<bool>(core, "AllowExternalInput"),
                     "Imported pair or input mode disagrees with the selected gesture pair");
                 for (int i = 0; i < 6; i++) await default(NextUpdate);
                 var pose = ExpressionPackageSnapshot.Pose(mapped);
@@ -103,7 +97,7 @@ internal static class ImportedGestureAvatarChecks
                     values.Add(actual);
                 }
                 distinctPoses.Add(string.Join(",", values.Select(v => v.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))));
-                Console.WriteLine($"PASS: saved menu Left {l}, Right {r} -> {mapped.Name}, {values.Count} output fields checked");
+                Console.WriteLine($"PASS: saved gesture Left {l}, Right {r} -> {mapped.Name}, {values.Count} output fields checked");
             }
         string expectedCount = Environment.GetEnvironmentVariable("RESOPON_TEST_EXPECTED_DISTINCT_POSES");
         if (expectedCount != null)
@@ -112,25 +106,23 @@ internal static class ImportedGestureAvatarChecks
                 "Expected distinct pose count must be between 2 and 64");
             Check(distinctPoses.Count == expected, $"Expected {expected} distinct visible poses, got {distinctPoses.Count}");
         }
-        else Check(distinctPoses.Count >= 8, "Gesture menu did not produce eight distinct visible poses");
-        var receiverRoot = root.FindChild("API").FindChild("Receivers");
-        var mappings = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
-            .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.Pair.", StringComparison.Ordinal))
-            .ToDictionary(v => v.VariableName.Value["ExpressionSystem/GestureTable.Pair.".Length..], v => v.Reference.Target);
+        else Check(distinctPoses.Count >= 8, "Gesture inputs did not produce eight distinct visible poses");
         int visible = 0;
         foreach (var expression in root.FindChild("Catalog").Children)
         {
-            var keys = mappings.Where(pair => pair.Value == expression).Select(pair => pair.Key).ToArray();
-            bool available = keys.Length > 0 && Get<bool>(expression, "Enabled") && expression.IsActive;
+            bool available = Get<bool>(expression, "Enabled") && expression.IsActive;
             Check(expression.GetComponent<ContextMenuItemSource>().EnabledField.Value &&
                 expression.GetComponent<ContextMenuItemSource>().EnabledField.ActiveLink == null,
                 "Saved direct menu is enabled independently of table membership and expression state");
             if (!available) continue;
             visible++;
+            int leftBefore = Get<int>(core, "LeftGesture"), rightBefore = Get<int>(core, "RightGesture");
+            string pairBefore = Get<string>(core, "PairKey");
             expression.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>().Pressed(null, default);
-            Check(!Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == keys.Order(StringComparer.Ordinal).First() &&
+            Check(!Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == pairBefore &&
+                Get<int>(core, "LeftGesture") == leftBefore && Get<int>(core, "RightGesture") == rightBefore &&
                 Reference<Slot>(core, "CurrentExpression") == expression,
-                "Saved direct menu updates the normal hand pair and locks ordinary input");
+                "Saved direct menu preserves gestures and selects the Catalog expression");
         }
         Check(visible >= distinctPoses.Count, "Saved direct menu exposes every distinct mapped pose");
         int heldLeft = Get<int>(core, "LeftGesture"), heldRight = Get<int>(core, "RightGesture");
@@ -152,10 +144,10 @@ internal static class ImportedGestureAvatarChecks
             "Saved menu-only button sends false");
         disable.Pressed(null, default);
         Check(!Get<bool>(core, "AllowExternalInput"), "Saved menu-only button disables ordinary input");
-        Console.WriteLine($"PASS: {visible} mapped direct-menu entries and both input-mode buttons work without Override state");
+        Console.WriteLine($"PASS: {visible} Catalog direct-menu entries and both input-mode buttons work without Override state");
         var importedMenu = menu.FindChild("Imported menu");
-        // All menu items stay enabled; only mapped, valid IDs can select a hand pair.
-        var mappedIds = mappings.Values.Where(expression => expression != null && expression.IsActive && Get<bool>(expression, "Enabled"))
+        // All menu items stay enabled; valid Catalog IDs can select an expression.
+        var mappedIds = root.FindChild("Catalog").Children.Where(expression => expression.IsActive && Get<bool>(expression, "Enabled"))
             .Select(expression => Get<string>(expression, "Id")).ToHashSet();
         if (importedMenu != null && !importedMenu.GetComponentsInChildren<ContextMenuItemSource>().Any(item =>
             item.Enabled && mappedIds.Contains(item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>()?.PressedData.Value.Value)))
@@ -194,7 +186,7 @@ internal static class ImportedGestureAvatarChecks
             Check(importedButton.PressedData.Value.Value == originalId, "Imported-menu payload follows the restored expression ID");
         }
         Check(root.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "Invalid imported Flux group");
-        Console.WriteLine($"PASS: imported package menu drives all 64 pairs and {distinctPoses.Count} distinct poses");
+        Console.WriteLine($"PASS: imported package gesture API drives all 64 pairs and {distinctPoses.Count} distinct poses");
     }
 
     private static T Get<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;

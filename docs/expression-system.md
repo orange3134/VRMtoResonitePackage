@@ -11,19 +11,17 @@ VRChatのカスタムFXからFaceEmo基準で最初の表情パターンを読�
 標準コンポーネントと ProtoFlux で動作し、利用側に ResoPon の DLL は不要。
 
 変換済みポーズの格納先である `Catalog` と、選択先を決める `GestureTable` は別である。
-対応表に割り当てられない Clip は Catalog に残っていても直接選択メニューでは選べない。
-自動割り当てが0/64なら、すべての入力で `CurrentExpression` が null になる。
+Version 23ではメニューからCatalogの表情を直接選択できる。GestureTableへの割り当ては不要。
+自動割り当てが0/64なら左右入力では `CurrentExpression` が null になるが、メニューからは有効なCatalog表情を選択できる。
 その場合は `Expressions/Diagnostics` と変換ログのレイヤー・Clip の除外理由を確認する。
 
 ```mermaid
 flowchart LR
     H[ジェスチャー・キーボード・外部入力] --> G{AllowExternalInput}
     G -->|true| S[LeftGesture / RightGesture]
-    M[左右のコンテキストメニュー] --> L[boolをfalseにして左右値を更新]
-    D[対応表にある表情をメニューで選択] --> T[対応する左右の組を取得]
-    T --> L
-    L --> S
-    S --> P[64通りのGestureTableから選択]
+    D[メニューでCatalogの表情を選択] --> T[boolをfalseにしてCurrentExpressionを設定]
+    T --> R
+    S -->|入力イベント時のみ| P[GestureTableからCurrentExpressionを設定]
     P --> R[選択イベントで終端ポーズを保存]
     R --> V[通常出力はResultへWrite → BlendShape]
     R --> Q[追跡のある出力だけ専用Driveで合成 → BlendShape]
@@ -52,7 +50,7 @@ Expressions/
   Drivers/各 Renderer/            DynamicBlendShapeDriver、必要なシェイプのみ登録
     各シェイプ/                   SmoothValue<float>、TargetValue → BlendShapes[].Value
   Inputs/
-    ContextMenu/                   左右入力・表情選択（項目の自動選択可否制御なし）
+    ContextMenu/                   表情の直接選択・入力許可（項目の自動選択可否制御なし）
     Keyboard/
       Left|Right/                  各手の共通設定用の変数空間
         DV/                        Tag、Shift、Control、Key.0〜Key.7
@@ -64,9 +62,7 @@ Expressions/
   API/Receivers/Logic/
     Left/                          左手の int 入力受付
     Right/                         右手の int 入力受付
-    MenuLeft/                      メニューから左手を更新し入力を固定
-    MenuRight/                     メニューから右手を更新し入力を固定
-    Select/                        Catalog IDを対応表の左右値へ変換
+    Select/                        Catalog IDからCurrentExpressionを直接設定
     AllowExternalInput/            boolによる通常入力の許可・停止
   API/Examples/                    左右の int イベントを送るボタンの例
   API/Templates/                   Catalog に複製する表情テンプレート
@@ -123,7 +119,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 | 処理 | 実行するきっかけ |
 |---|---|
 | Lifecycle | OnStart とローカル装着状態の変化 |
-| Selection | API の同期呼び出し、左右から求めた PairKey または検証済み表情参照の変化 |
+| Selection | 受理した左右のGesture APIイベントからの同期呼び出しのみ |
 | キーボード | 左右それぞれの8キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
 | Playback | 選択イベント内で保存済みValueを即時適用。選択参照・Bindings参照・書き込み権限の変化でも更新。通常出力へ一括Write |
@@ -168,7 +164,7 @@ Core の入力ノード化は現行の名前付き空間で再検証し、同一
 子 Slot の処理は `Children` → `ForEachObject<IReadOnlyList<Slot>, Slot>`（表示名 ForEach）で列挙する。
 すべてのループ本体は列挙中に子 Slot の追加・削除・並べ替えを行わず、元の直下の子の順序を保つ。
 装着者は同じアバター配下の各ボードにある `GetActiveUserSelf` で取得する。
-各ボードは独立した FluxGroup を維持する。対応表の逆引きには、左0〜7と右0〜7の二重の For で Pair.LnRm を読む方式を使い、GetChild は使わない。
+各ボードは独立した FluxGroup を維持する。直接選択はCatalogの子を列挙してIDを照合する。GestureTableの逆引きは行わない。
 
 ## 不具合の調べ方
 
@@ -212,6 +208,7 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
 ## Selection と再生対象
 
 Core に保存する表情参照は `CurrentExpression` だけ。`MappedExpression` と `CandidateExpression` は生成しない。
+Selection は受理した左右入力イベントのときだけ実行する。左右値や表の編集・装着・入力許可の変更だけでは再評価しない。
 Selection は左・右を文字列化して `L{左}R{右}` を組み立て、`Expressions/DV/GestureTable.Pair.LnRm` を読み、Slot 有効・Enabled=true・Bindings参照先が有効を確認する。
 通過した参照（無効なら null）をその更新中のローカル値として確定し、CurrentExpression と比較する。
 異なる場合は CurrentExpression を設定する。Playback を同期呼び出しし、終端値を即時にWriteする。
@@ -240,7 +237,7 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
 ## 入力の動作
 
 ジェスチャー番号は次の対応になる。
-各左右メニュー項目は 0〜7 の int を固定値として持ち、`ResoPon/Expression/Menu/Left` または `ResoPon/Expression/Menu/Right` Tag に送る。受信側は bool を false にして該当の手を更新する。
+Version 23では左右ジェスチャーのコンテキストメニューと専用のMenu/Left・Menu/Right APIを生成しない。
 キーボードとコントローラーは Gesture/Left・Gesture/Right の int API を使い、bool が true のときだけ受け付ける。文字列への変換は行わない。
 動作確認では `Core/LeftGesture`、`RightGesture`、`CurrentExpression` と対応表の参照先を見る。
 
@@ -256,11 +253,11 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
 | 7 | ThumbsUp |
 
 同じ手には最後に受理したイベントを採用し、もう一方の手は変更しない。bool が false の間は、通常入力を受理せず、左右値を維持する。
-キーボードとメニューの指定はラッチする。キーやボタンを離しても戻らず、Neutral を選ぶと0に戻る。
+キーボードの指定はラッチする。キーを離しても戻らず、Neutral を送ると0に戻る。
 物理入力は安定したジェスチャーが変化したときと接続時にだけ送る。
 通常入力が許可されている間は、手を動かさずにキーボードで設定した状態を維持し、次の物理ジェスチャー変更で更新する。メニュー専用モードでは機種別の判定状態をリセットし、許可を戻した後は再び安定した手形を検出して送る。
 
-- コンテキストメニュー: `Left hand` / `Right hand` に各8項目。
+- コンテキストメニュー: Catalogの表情を直接選択。左右値は変更しない。
 - キーボード: 表情の優先順位が高い手は Shift+テンキー0〜7（Ctrl なし）、もう一方は Ctrl+Shift+テンキー0〜7。
   テンキー0が Neutral、1が Fist、以降は順に7の ThumbsUp まで。
   `ExpressionHandPriority` は変換後の64組の固定ポーズを比較する。両手それぞれがNeutralと異なる別の表情を持つとき、
@@ -283,15 +280,16 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
   Grip/Trigger の押し込み・解放しきい値と安定待ち時間を機種ごとに編集できる。
   指を個別に取得できない機種の Victory/Rock はボタン操作から判定する。
 
-直接表情を選ぶ `Select expression` は、対応表に存在する有効な表情だけを表示する。
-選択すると、現在の対応表を逆引きして該当する左右値を両方更新し、`ExpressionSystem/Core.AllowExternalInput=false` にする。
-同じ表情に複数の組がある場合は左が小さい組を優先し、同じ左なら右が小さい組を使う。
+直接表情を選ぶ `Select expression` はCatalogの表情を一覧にする。項目のEnabledを自動制御しない。
+押下時にCatalogからIDを検索し、有効な表情のSlotをCurrentExpressionへ直接書き込み、Playbackを同期実行する。
+AllowExternalInput=falseにするが、LeftGesture・RightGesture・PairKeyは変更しない。GestureTable未割り当てでも選択できる。
+同じ表情の再選択でもPlaybackを実行するため、Binding.Valueの編集も反映できる。
 Catalog の Slot を固定用に保持する Override 変数は生成しない。
 
 `Allow gestures and keyboard` は bool を true に、`Menu only` は false にする。
-モードだけの変更では左右値を変えない。初期値は true。
+モードだけの変更では左右値・CurrentExpressionを変えない。初期値は true。
 メニューから表情を選ぶと再び false になるため、通常入力へ戻すには許可をオンにする。
-コンテキストメニューの左右項目・直接選択は bool が false でも使える。
+直接選択は bool が false でも使える。通常入力を再許可した後も、次の左右入力イベントまでは直接選択を保持する。
 元のExpression MenuのButton/Toggleは読み込まない。
 
 ### コントローラーのハンドサイン判定
@@ -309,20 +307,20 @@ Touchは接触・Clickの5ビット、Indexは5本の指の近位関節角度、
 n は左、m は右の int 値。ResoPon が生成するのは各0〜7で、例えば左1・右2は `Pair.L1R2`。
 外部で `Expressions/DV/GestureTable.Pair.L8R255` に変数名 `ExpressionSystem/GestureTable.Pair.L8R255`
 という DynamicReferenceVariable<Slot> を追加すれば、左右 API に8と255を送って選択できる。
-左右の通常・メニュー API は負数も含む int 全域を受理する。対応行がなければ入力値を保持し、ベース入力へ戻る。
-ID による Select の逆引きは引き続き各0〜7だけを走査するため、拡張行の選択には左右 API を使う。
+左右のGesture APIは負数も含む int 全域を受理する。対応行がなければ入力値を保持し、ベース入力へ戻る。
+Select APIはCatalogを直接検索するため、ジェスチャーの値・表の行数には依存しない。
 参照先を `Catalog` の表情スロットへ変更するだけで割り当てを編集できる。
 左右の組み合わせごとにアニメーションを複製せず、同じ表情は同じ Catalog エントリーを参照する。
 
 表は変数名で引くので、スロットの並び替え・表示名の変更・別の行の削除で対応がずれることはない。
 変数名は固定し、同じ名前を重複させない。削除した行を戻す場合は同じ変数名で再作成する。
 行が未設定、参照先が削除・無効化、またはBindings参照先が無効なら Outputs のベース入力を使う。
-表の参照を編集すると次の更新で反映される。異なる行でも同じ表情を指す場合は同じ固定値を適用する。
+表の参照の編集は次の左右入力イベントで反映される。異なる行でも同じ表情を指す場合は同じ固定値を適用する。
 
 表情の追加は `API/Templates` または既存の Catalog エントリーを Catalog へ複製し、
 `Enabled` を有効にして `Id`、`DisplayName`、`Bindings` を設定する。Bindings はその表情の値一覧への Slot 参照。
 `Id` は空でない一意の文字列にする。外部からの直接選択にはこの ID を使う。
-直接選択ボタンから表情を適用するには、GestureTable の少なくとも1組へ参照を割り当てる。対応表の編集でメニュー項目の Enabled は変更しない。切り替えは即時に反映する。削除は表情スロットごと行える。
+直接選択ボタンからの適用にGestureTableの割り当ては不要。対応表の編集でメニュー項目の Enabled は変更しない。直接選択は即時に反映する。削除は表情スロットごと行える。
 テンプレートから複製したメニューの表示名・送信する ID は複製先の変数に追従する。項目の Enabled は駆動しない。
 
 Bindings の子には ExpressionSystem.Catalog.Clip.Binding 空間を置き、Output に対応する Outputs レコード、
@@ -334,25 +332,23 @@ Bindings の参照自体を変更した場合は、その変更を監視して�
 ## 外部イベント API（Version 16、Tag・引数は Version 4 と共通）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
-左右の通常入力・メニュー入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
+左右のGesture入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
 
 | Tag | 引数 | 動作 |
 |---|---|---|
 | `ResoPon/Expression/Gesture/Left` | int（範囲制限なし） | bool が true のとき左手を更新 |
 | `ResoPon/Expression/Gesture/Right` | int（範囲制限なし） | bool が true のとき右手を更新 |
-| `ResoPon/Expression/Menu/Left` | int（範囲制限なし） | bool を false にして左手を更新 |
-| `ResoPon/Expression/Menu/Right` | int（範囲制限なし） | bool を false にして右手を更新 |
-| `ResoPon/Expression/Menu/Select` | string: Catalog の `ExpressionSystem.Catalog.Clip/Id` | 対応表を逆引きし、bool を false にして両手を更新 |
+| `ResoPon/Expression/Menu/Select` | string: Catalog の `ExpressionSystem.Catalog.Clip/Id` | Catalogを検索し、boolをfalseにしてCurrentExpressionを直接設定 |
 | `ResoPon/Expression/AllowExternalInput` | bool | 通常入力を許可するか設定。左右値は維持 |
 
 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp。
-Tag は大文字・小文字を含めて完全一致。引数型違い、無効・未割当の ID は入力状態を変更しない。
+Tag は大文字・小文字を含めて完全一致。引数型違い、無効・存在しない ID は入力状態を変更しない。
 固定したいときは Menu 側の Tag を使い、手入力など固定しない送信元は Gesture 側を使う。
 メニューの送信にも専用の Tag を使うため、通常入力を無効にしてもメニューは操作できる。
 
-左右メニューは bool と片手の値、直接選択メニューは bool と両手の値を同じ Impulse 内で更新する。
-その後、通常と同じ `Selection` を同期実行し、Playback が固定ポーズと通常出力を同期更新する。追跡対象は通常のドライバー更新で反映する。
-bool を false にしただけでは左右値は変えず、表情は対応表から引き続き決定する。
+左右入力は片手の値を更新してSelectionを実行する。直接選択メニューはboolとCurrentExpressionを同じImpulse内で更新する。
+直接選択ではSelectionを経由せず、Playbackが固定ポーズと通常出力を同期更新する。追跡対象は通常のドライバー更新で反映する。
+boolの変更だけでは左右値も表情も変更しない。
 初期化は入力許可の判定より前に行い、複製・再ロード・再装着時には bool=true、左右=0 に戻す。
 Dynamic Impulse はネットワーク RPC ではなく、装着者以外のクライアントからの実行は無視する。
 
@@ -673,11 +669,11 @@ Add/Random/Copy、動かない入力状態、顔以外のカーブを持つ入�
 Any State、Entry、入れ子Exit、途中状態のSet→Copy→Add、別FX、親子Behaviour順序、重複FXを合成テストで確認する。
 Legniaは従来の正常なCatalog・固定ポーズ値・対応表と一致し、元データとの8,832項目の照合も一致した。
 
-条件を補完できない手動候補の選択制限は別件として残る。
+当時は条件を補完できない手動候補の選択制限が残っていたが、Version 23ではCatalogからの直接選択に変更した。
 Version 21ではメニュー項目の自動選択可否制御と `GestureTable/Logic` の監視を削除した。
 対応表の参照有無や表情の Active・Enabled に応じたメニューの Enabled 更新は行わない。
-`ExpressionApiSetup.BuildSelectReceiver` は表情IDからPair.L0R0〜L7R7を左・右の順に逆引きして入力を更新する。
-今回の変更はハンド割り当ての復元であり、未割り当ての全Catalog候補を直接再生するUI/APIは追加していない。
+Version 23の `ExpressionApiSetup.BuildSelectReceiver` はCatalogから表情IDを検索し、CurrentExpressionを直接更新する。
+これによりGestureTable未割り当ての有効なCatalog候補も直接再生できる。
 
 ### 12B 1.0.0: 元FaceEmo設定とCAC再インポートの割り当ての違い
 

@@ -29,9 +29,9 @@ Tag/target/ExcludeDisabled inputs must stay close to their consumers. A shuffled
 fixture covers creation-order independence, shallow inputs feeding deep nodes,
 feedback cycles, and repeatable arrangement. The synthetic run
 writes keyboard-layout.json for inspecting the generated coordinates and edges.
-Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight also receive int; Select receives a mapped ID and AllowExternalInput receives bool; no Command slots may remain.
+Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Catalog ID and AllowExternalInput receives bool; no Command slots may remain.
 Each actual Flux group must stay within one logic board. Core lifecycle, selection,
-playback, the six public API receivers, and each controller hand have independent
+playback, the four public API receivers, and each controller hand have independent
 boards. The test reports node/group counts and enforces a 256-node per-board budget,
 including after package reimport. Module diagnostic counts must match the graph.
 Each Output has its own sampling/mixing/fade board and a driven field exposed as Result.
@@ -94,16 +94,17 @@ StabilitySeconds must update that module's hands while other modules retain thei
 run on clones and package reloads. Existing same-frame events, editable tables, removable modules,
 wearer departure/reattachment and clone playback cover the synchronization behavior of Core inputs.
 
-Version 4 removes Override Slot state. Actual menu buttons must disable ordinary input and update the same
-LeftGesture/RightGesture fields used by gesture input. Unmapped IDs must leave the pair and mode unchanged.
-No expression board uses LocalUpdate; lifecycle, selection and input actions use
-local change detectors. OnStart handles initial values without storing previous inputs in shared state.
+Version 23 selects Catalog entries directly without changing LeftGesture/RightGesture or PairKey.
+Actual expression buttons disable ordinary input, write CurrentExpression and execute Playback.
+Unmapped Catalog entries and copied templates are selectable. Invalid IDs preserve selection.
+Only accepted gesture API events run Selection. Data edits, input permission changes and initialization
+must not select a gesture pair. Lifecycle and input actions retain their local change detectors.
 The sensor-event fixture replaces hardware outputs temporarily and executes the exported graph:
 both hands must wait for stability, fire when the timer expires without more sensor changes,
 use device-specific pose classification, reset on gate/disconnect transitions, and redetect on reconnect.
 Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends only the left hand; Ctrl+Shift+keypad sends only the right. Keypad alone and Ctrl+keypad without Shift must leave both hands unchanged.
 Idle sentinels prove Selection does not run on unchanged frames. Table edits and
-clip enable/disable changes must update selection without API requests, while menu Enabled fields remain unchanged.
+clip enable/disable changes wait for the next gesture event, while menu Enabled fields remain unchanged.
 Keyboard Flux consists of exactly two boards, Left/Logic and Right/Logic, with one
 bool change detector, IndexOfFirstValueMatch<bool>, and sender per hand. Settings
 live under each hand's DV in the ExpressionSystem.Input.Keyboard space, with Tag,
@@ -196,7 +197,7 @@ malformed face data. `WeightedCurveChecks` retains its independent Bezier oracle
 retained weights, aliases, missing names, ambiguous paths and idempotence.
 
 For real avatars, the optional imported-package check saves `current-expressions/expressions.json`
-and replays all 64 menu pairs against actual mesh output fields. OriginalDriver inputs are
+and replays all 64 gesture API pairs against actual mesh output fields. OriginalDriver inputs are
 stabilized at the authored Baseline while the exported tracking mixer stays enabled.
 Independent source-clip checks can use the snapshot without assuming runtime slot IDs.
 Native blink/viseme behavior is covered separately by synthetic tracking tests.
@@ -253,12 +254,12 @@ Version 21 removes GestureTable/Logic, Inputs/ContextMenu/Logic, MenuAvailable a
 internal MenuRefresh event. Menu Enabled fields must have no automatic driver after
 generation, cloning and package reload. Runtime checks retain enabled menu items for
 unmapped, disabled and inactive expressions and after removing the last mapping.
-Selection validation and the ID-to-pair API lookup remain covered independently.
+Selection validation and direct Catalog ID lookup are covered independently.
 
 Version 22 uses GestureTable.Pair.L0R0 through GestureTable.Pair.L7R7 and the string
 Core.PairKey (initially L0R0). All 64 keys and synchronous pair lookups are checked.
-A conflicting legacy numeric key must be ignored; direct selection must find L6R7
-using separate left/right loop values. Selection and Select boards must contain no
-integer multiply/divide/modulo for packing or unpacking pair indices, including
+A conflicting legacy numeric key must be ignored. Gesture Selection uses FormatString
+with ExpressionSystem/GestureTable.Pair.L{0}R{1} and no integer multiply/divide/modulo
+for packing or unpacking pair indices, including
 after package reload. The baseline snapshot reader normalizes legacy numeric keys
 only for comparing authored mappings with older packages.

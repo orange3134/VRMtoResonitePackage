@@ -11,8 +11,6 @@ internal sealed partial class ExpressionSystemSetup
 {
     internal const string LeftTag = "ResoPon/Expression/Gesture/Left";
     internal const string RightTag = "ResoPon/Expression/Gesture/Right";
-    internal const string MenuLeftTag = "ResoPon/Expression/Menu/Left";
-    internal const string MenuRightTag = "ResoPon/Expression/Menu/Right";
     internal const string SelectTag = "ResoPon/Expression/Menu/Select";
     internal const string InputEnabledTag = "ResoPon/Expression/AllowExternalInput";
     private readonly ExpressionModel _model;
@@ -50,7 +48,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "Core.CurrentExpression", null);
         Data(_root, "Core.PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 22);
+        Data(_root, "Version", 23);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");

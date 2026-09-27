@@ -29,7 +29,7 @@ internal static class ExpressionGraphChecks
         Check(nodes.Count > 0 && nodes.GroupBy(n => n.Slot).All(g => g.Count() == 1), "one Flux node per slot");
         Check(!expressions.GetComponentsInChildren<DynamicValueVariable<int>>().Any(v =>
             v.VariableName.Value == "ExpressionSystem/Core.PairIndex"), "numeric PairIndex state is absent");
-        foreach (string path in new[] { "Core/Logic/Selection", "API/Receivers/Logic/Select" })
+        foreach (string path in new[] { "Core/Logic/Selection" })
         {
             var lookupNodes = Descendant(expressions, path).GetComponentsInChildren<ProtoFluxNode>();
             Check(lookupNodes.All(node =>
@@ -44,6 +44,11 @@ internal static class ExpressionGraphChecks
             Check(formatter.Parameters.Count == 2 && formatter.Parameters.All(p => p is Nodes.Box<int>),
                 "pair lookup formats two gesture integers into the full variable path: " + path);
         }
+        Check(Descendant(expressions, "Core/Logic/Selection").GetComponentsInChildren<ProtoFluxNode>()
+            .All(n => !n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
+            "gesture selection has no state-change monitors");
+        Check(Descendant(expressions, "API/Receivers/Logic/Select").GetComponentsInChildren<ProtoFluxNode>()
+            .All(n => n is not Nodes.Strings.FormatString), "direct selection does not look up gesture pairs");
         Check(nodes.All(n => n.Group?.IsValid == true), "all expression Flux groups are valid");
         Check(nodes.All(n => n.Slot.Parent.GetComponents<ProtoFluxNode>().Count == 0), "Flux nodes belong to logic boards, not other nodes");
         Check(nodes.Select(n => n.Slot.GlobalPosition).Distinct().Count() == nodes.Count, "Flux node positions do not overlap across logic boards");
@@ -154,7 +159,7 @@ internal static class ExpressionGraphChecks
         }
 
         foreach (string path in new[] { "Core/Logic/Lifecycle", "Core/Logic/Selection", "Core/Logic/Playback",
-            "API/Receivers/Logic/Left", "API/Receivers/Logic/Right", "API/Receivers/Logic/MenuLeft", "API/Receivers/Logic/MenuRight",
+            "API/Receivers/Logic/Left", "API/Receivers/Logic/Right",
             "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowExternalInput" })
         {
             var board = Descendant(expressions, path);
@@ -183,7 +188,7 @@ internal static class ExpressionGraphChecks
         }
         var publicReceivers = Descendant(expressions, "API/Receivers").GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
-        Check(publicReceivers.Length == 6, "exactly six public API receivers");
+        Check(publicReceivers.Length == 4, "exactly four public API receivers");
         foreach (string hand in new[] { "Left", "Right" })
         {
             var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == hand);
@@ -193,15 +198,8 @@ internal static class ExpressionGraphChecks
             Check(receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/Gesture/" + hand,
                 hand + " uses the exact hand Tag");
         }
-        foreach (string hand in new[] { "Left", "Right" })
-        {
-            var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == "Menu" + hand);
-            Check(receiver.GetType().GetGenericArguments().Single() == typeof(int) &&
-                receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/Menu/" + hand,
-                "menu has a separate int path while ordinary input is disabled: " + hand);
-        }
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Select").GetType().GetGenericArguments().Single() == typeof(string),
-            "mapped expression selection receives an ID");
+            "direct Catalog selection receives an ID");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "AllowExternalInput").GetType().GetGenericArguments().Single() == typeof(bool),
             "input permission receives a bool");
         Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value != "ExpressionSystem/Core.Override"),
