@@ -19,7 +19,7 @@ internal sealed partial class ExpressionSystemSetup
         var bits = g.Node("ComposeBits_byte");
         if (device == "IndexController")
         {
-            var source = g.Node("UserFingerPoseSource", null, ("User", g.LocalWearer));
+            var source = g.Node("UserFingerPoseSource", null, ("User", g.Owner(_root)));
             var threshold = g.Read<float>(g.Ref(module), GestureSettingsSpace, "FingerThreshold");
             var thumbThreshold = g.Read<float>(g.Ref(module), GestureSettingsSpace, "ThumbThreshold");
             if (side == Chirality.Right) thumbThreshold = g.Node("ValueNegate", typeof(float), ("N", thumbThreshold));

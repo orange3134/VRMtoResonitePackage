@@ -167,8 +167,8 @@ Core の入力ノード化は現行の名前付き空間で再検証し、同一
 すべてのループ本体は列挙中に子 Slot の追加・削除・並べ替えを行わず、元の直下の子の順序を保つ。
 表情システムの装着判定は、Avatar Root Identification が公開する `modular_avatar/AvatarWorn` と
 `modular_avatar/AvatarWornLocal` を各ボードの DynamicVariableValueInput<bool> で読み取る。
-Expressions 内に `GetActiveUserSelf`／`GetActiveUser` は生成しない。
-User が必要なコントローラー・UserFingerPoseSource は、AvatarWornLocal=true のときだけ LocalUser を受け取り、それ以外は null となる。
+User が必要なコントローラー・UserFingerPoseSource だけは `GetActiveUserSelf` を直接参照する。
+装着判定にはこのUserを使わず、入力受付は引き続き `AvatarWornLocal` で制御する。
 各ボードは独立した FluxGroup を維持する。直接選択はCatalogの子を列挙してIDを照合する。GestureTableの逆引きは行わない。
 
 ## 不具合の調べ方

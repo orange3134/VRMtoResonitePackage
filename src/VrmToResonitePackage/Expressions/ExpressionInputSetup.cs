@@ -183,7 +183,7 @@ internal sealed partial class ExpressionSystemSetup
         var reset = g.If(g.Not(initialized), g.Sequence(
             g.Write<int>(handRef, GestureHandSpace, "Candidate", g.Constant(-1)), g.Write<int>(handRef, GestureHandSpace, "Stable", g.Constant(-1)),
             g.Set<bool>(initialized, g.Constant(true))));
-        var controller = g.Node(device, null, ("User", g.LocalWearer), ("Node", g.Constant(side)));
+        var controller = g.Node(device, null, ("User", g.Owner(_root)), ("Node", g.Constant(side)));
         var active = Out(controller, "IsActive");
         var gesture = BuildControllerGesture(g, controller, device, side, module);
         var changed = g.NotEqual<int>(gesture, g.Read<int>(handRef, GestureHandSpace, "Candidate"));

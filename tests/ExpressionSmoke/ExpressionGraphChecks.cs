@@ -61,8 +61,19 @@ internal static class ExpressionGraphChecks
         Report(expressions);
         ExpressionLayoutChecks.CheckDirection(expressions);
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
-        Check(nodes.All(n => n.GetType().Name is not ("GetActiveUserSelf" or "GetActiveUser")),
-            "expression boards use Avatar Root Identification instead of hierarchy wearer lookups");
+        Check(nodes.All(n => n.GetType().Name is not ("GetActiveUser" or "LocalUser")),
+            "expression boards do not substitute LocalUser for the active user");
+        bool NeedsUser(ProtoFluxNode node) => node.GetType().Name is "TouchController" or "IndexController" or
+            "ViveController" or "WindowsMRController" or "CosmosController" or "UserFingerPoseSource";
+        foreach (var sensor in nodes.Where(NeedsUser))
+            Check(((ISyncRef)VrmToResonitePackage.Expressions.ExpressionFlux.Member(sensor, "User"))
+                .Target?.GetType().Name == "GetActiveUserSelf", "user sensors read GetActiveUserSelf: " + sensor.GetType().Name);
+        foreach (var wearer in nodes.Where(n => n.GetType().Name == "GetActiveUserSelf"))
+        {
+            var consumers = nodes.Where(n => n.AllInputs.Any(input => input.Target == wearer)).ToArray();
+            Check(consumers.Length > 0 && consumers.All(NeedsUser),
+                "GetActiveUserSelf is used only by sensors requiring a User");
+        }
         foreach (string flag in new[] { "AvatarWorn", "AvatarWornLocal" })
             Check(expressions.GetComponentsInChildren<GlobalValue<string>>().Any(v => v.Value.Value == "modular_avatar/" + flag),
                 "expression boards read identification flag: " + flag);
