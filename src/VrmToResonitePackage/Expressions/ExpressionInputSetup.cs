@@ -89,6 +89,11 @@ internal sealed partial class ExpressionSystemSetup
             MenuTrigger(mode, _api, HandGesturesEnabledTag, enabled);
             GesturePermissionMenuColor(mode, enabled);
         }
+        var reset = items.AddSlot("Reset settings"); MenuItem(reset, reset.Name);
+        var resetButton = reset.AttachComponent<ButtonDynamicImpulseTrigger>();
+        resetButton.Target.Target = _api;
+        resetButton.ExcludeDisabled.Value = true;
+        resetButton.PressedTag.Value = ResetTag;
         if (_compiled.Menu.Count > 0)
         {
             var imported = items.AddSlot("Imported menu"); MenuItem(imported, imported.Name);

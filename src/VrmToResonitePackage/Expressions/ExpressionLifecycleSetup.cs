@@ -33,7 +33,10 @@ internal sealed partial class ExpressionSystemSetup
                 g.Write<float>(output, OutputSpace, "Result", g.Read<float>(output, OutputSpace, "Base"))))));
 
         var clear = g.Sequence(cleanup.ToArray());
-        var initialize = g.If(g.Not(initialized), g.Sequence(clear, g.Set<bool>(initialized, g.Constant(true))));
+        var reset = g.Sequence(clear, g.Set<bool>(initialized, g.Constant(true)));
+        var initialize = g.If(g.Not(initialized), reset);
+        // Explicit reset also works after initialization and does not select the neutral table entry.
+        ReceiveUpdate(g, ResetStateTag, reset);
         // API events may arrive before the wearer-change event; initialize synchronously.
         ReceiveUpdate(g, InitializeTag, initialize);
         // Only the current local wearer runs selection/playback. On departure, the client

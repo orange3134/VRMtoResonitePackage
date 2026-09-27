@@ -192,6 +192,7 @@ internal static class ImportedGestureAvatarChecks
             Check(importedButton.PressedData.Value.Value == originalId, "Imported-menu payload follows the restored expression ID");
         }
         Check(root.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "Invalid imported Flux group");
+        await ExpressionResetChecks.Run(root);
         Console.WriteLine($"PASS: imported package gesture API drives all 64 pairs and {distinctPoses.Count} distinct poses");
     }
 

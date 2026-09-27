@@ -14,12 +14,14 @@ internal sealed partial class ExpressionSystemSetup
     internal const string KeyboardLeftTag = "ResoPon/Expression/Keyboard/Left";
     internal const string KeyboardRightTag = "ResoPon/Expression/Keyboard/Right";
     internal const string SelectTag = "ResoPon/Expression/Menu/Select";
+    internal const string ResetTag = "ResoPon/Expression/Reset";
     internal const string HandGesturesEnabledTag = "ResoPon/Expression/AllowHandGestures";
     private readonly ExpressionModel _model;
     private readonly Slot _root, _catalog, _core, _outputs, _table, _api, _inputs;
     private readonly Slot _lifecycle, _selection, _playback;
     private const string PlaybackTickTag = "ResoPon/Expression/Internal/Playback";
     private const string SelectionTickTag = "ResoPon/Expression/Internal/Selection";
+    private const string ResetStateTag = "ResoPon/Expression/Internal/Reset";
     private const string InitializeTag = "ResoPon/Expression/Internal/Initialize";
     private GesturePairCompiler _compiled;
     private int _keyboardPrimaryHand;
@@ -50,7 +52,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "Core.CurrentExpression", null);
         Data(_root, "Core.PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 24);
+        Data(_root, "Version", 25);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");

@@ -31,7 +31,7 @@ feedback cycles, and repeatable arrangement. The synthetic run
 writes keyboard-layout.json for inspecting the generated coordinates and edges.
 Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Catalog ID and AllowHandGestures receives bool; no Command slots may remain.
 Each actual Flux group must stay within one logic board. Core lifecycle, selection,
-playback, the six public API receivers, and each controller hand have independent
+playback, the seven public API receivers, and each controller hand have independent
 boards. The test reports node/group counts and enforces a 256-node per-board budget,
 including after package reimport. Module diagnostic counts must match the graph.
 Each Output has its own sampling/mixing/fade board and a driven field exposed as Result.
@@ -274,3 +274,5 @@ expression items, and ValueOptionDescriptionDriver<bool> for hand-gesture permis
 Only the current expression / matching flag is green; other options are white. Checks
 cover gesture selection, direct selection, permission changes, copied templates, clone
 isolation and package reload, with no changes to Enabled, label or sprite bindings.
+
+Version 25 adds the Reset settings menu and a payload-free Reset API. ExpressionResetChecks presses the actual button on generated, cloned and imported avatars, checks both hands and expression reset to neutral/Base with gestures enabled, verifies mappings survive, and confirms the next gesture resumes selection. The main fixture also checks that unworn reset requests are ignored.

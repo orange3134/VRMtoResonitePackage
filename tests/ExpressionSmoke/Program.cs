@@ -372,6 +372,9 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<int>(cloneCore, "LeftGesture") == 1 && Get<int>(cloneCore, "RightGesture") == 0 && Get<string>(cloneCore, "PairKey") == "L1R0" &&
             Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 7 && !Get<bool>(core, "AllowHandGestures"),
             "clone int requests update only the clone and leave the original hand state and input mode unchanged");
+        await ExpressionResetChecks.Run(clone.FindChild("Expressions"));
+        Check(Get<int>(core, "RightGesture") == 7 && !Get<bool>(core, "AllowHandGestures"),
+            "clone reset leaves the original input state unchanged");
         clone.Destroy();
         catalog.FindChild("Smile").Destroy(); await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "deleting selected expression restores base");
@@ -399,10 +402,13 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<int>(core, "LeftGesture") == 0 && Get<bool>(core, "AllowHandGestures"),
             "gesture and select requests are ignored without a local wearer");
         Set(core, "AllowHandGestures", false);
-        AllowInput(); await Frames();
+        AllowInput();
+        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Reset settings")
+            .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
+        await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
         Check(!Get<bool>(core, "AllowHandGestures"),
-            "input-mode requests are ignored without a local wearer");
+            "input-mode and reset requests are ignored without a local wearer");
         // Sentinel selection state proves wearer-only private stages did no work.
         var outputState = expressions.FindChild("Outputs").Children.Single();
         Set(core, "PairKey", "__unchanged");
@@ -482,6 +488,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<string>(restoredCore, "PairKey") == "L0R2" && !Get<bool>(restoredCore, "AllowHandGestures") &&
             Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
             "reloaded keyboard API selects a pose without enabling hand gestures");
+        await ExpressionResetChecks.Run(expressions);
+        await ExpressionResetChecks.Run(restoredExpressions);
         // Curves with equal endpoints may still have a tangent excursion.
         var testCurve = new ExpressionCurve { Binding = new("Face", "Curve") };
         testCurve.Keys.Add(new(0, 0, 0, 4)); testCurve.Keys.Add(new(1, 0, -4, 0));

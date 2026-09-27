@@ -347,7 +347,7 @@ Value に固定値を設定する。変換時は元カーブの最後のキー�
 Value・子レコードを編集した後は、表情を再選択して適用する。
 Bindings の参照自体を変更した場合は、その変更を監視して適用する。
 
-## 外部イベント API（Version 16、Tag・引数は Version 4 と共通）
+## 外部イベント API（Version 25）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
 左右のGesture入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
@@ -360,6 +360,7 @@ Bindings の参照自体を変更した場合は、その変更を監視して�
 | `ResoPon/Expression/Keyboard/Right` | int（範囲制限なし） | フラグに関係なく右手を更新。フラグ自体は維持 |
 | `ResoPon/Expression/Menu/Select` | string: Catalog の `ExpressionSystem.Catalog.Clip/Id` | Catalogを検索し、boolをfalseにしてCurrentExpressionを直接設定 |
 | `ResoPon/Expression/AllowHandGestures` | bool | ハンドジェスチャーを許可するか設定。左右値・表情は維持 |
+| `ResoPon/Expression/Reset` | なし | 表情を解除してBaseへ戻し、左右を0、ジェスチャー入力を有効にする |
 
 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp。
 Tag は大文字・小文字を含めて完全一致。引数型違い、無効・存在しない ID は入力状態を変更しない。
@@ -369,6 +370,10 @@ Tag は大文字・小文字を含めて完全一致。引数型違い、無効�
 左右入力は片手の値を更新してSelectionを実行する。直接選択メニューはboolとCurrentExpressionを同じImpulse内で更新する。
 直接選択ではSelectionを経由せず、Playbackが固定ポーズと通常出力を同期更新する。追跡対象は通常のドライバー更新で反映する。
 boolの変更だけでは左右値も表情も変更しない。
+Version 25のコンテキストメニュー「Reset settings」は引数なしのReset APIを送る。
+CurrentExpression=null、左右のGesture=0、PairKey=L0R0、AllowHandGestures=trueへ一括で戻し、各出力のHasPoseを解除してBaseを反映する。
+GestureTableの割り当てやCatalog、キー設定は変更しない。L0R0に表情が割り当てられていてもリセットでは再選択せず、次の左右入力イベントで再評価する。
+Resetもローカル装着者限定で、ジェスチャー無効時にも受け付ける。
 初期化は入力許可の判定より前に行い、複製・再ロード・再装着時には bool=true、左右=0 に戻す。
 Dynamic Impulse はネットワーク RPC ではなく、装着者以外のクライアントからの実行は無視する。
 

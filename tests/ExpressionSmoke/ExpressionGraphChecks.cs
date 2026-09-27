@@ -212,7 +212,7 @@ internal static class ExpressionGraphChecks
         foreach (string path in new[] { "Core/Logic/Lifecycle", "Core/Logic/Selection", "Core/Logic/Playback",
             "API/Receivers/Logic/Left", "API/Receivers/Logic/Right",
             "API/Receivers/Logic/KeyboardLeft", "API/Receivers/Logic/KeyboardRight",
-            "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowHandGestures" })
+            "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowHandGestures", "API/Receivers/Logic/Reset" })
         {
             var board = Descendant(expressions, path);
             Check(board != null && boards.Any(g => g.Key == board), "independent logic board exists: " + path);
@@ -240,7 +240,7 @@ internal static class ExpressionGraphChecks
         }
         var publicReceivers = Descendant(expressions, "API/Receivers").GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
-        Check(publicReceivers.Length == 6, "exactly six public API receivers");
+        Check(publicReceivers.Length == 7, "exactly seven public API receivers");
         foreach (string hand in new[] { "Left", "Right" })
         {
             var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == hand);
@@ -261,6 +261,14 @@ internal static class ExpressionGraphChecks
             "direct Catalog selection receives an ID");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "AllowHandGestures").GetType().GetGenericArguments().Single() == typeof(bool),
             "input permission receives a bool");
+        Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Reset").GetType().Name == "DynamicImpulseReceiver",
+            "reset receives an impulse without a payload");
+        if (Descendant(expressions, "Inputs/ContextMenu/Items") is { } menuItems)
+        {
+            var resetButton = menuItems.FindChild("Reset settings")?.GetComponent<ButtonDynamicImpulseTrigger>();
+            Check(resetButton?.Target.Target == Descendant(expressions, "API/Receivers") &&
+                resetButton.PressedTag.Value == "ResoPon/Expression/Reset", "reset menu targets this avatar's reset API");
+        }
         Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value != "ExpressionSystem/Core.Override"),
             "no Override Slot state is generated");
         Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<User>>().Count == 0,

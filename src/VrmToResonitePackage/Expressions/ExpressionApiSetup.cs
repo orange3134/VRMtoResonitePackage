@@ -17,6 +17,8 @@ internal sealed partial class ExpressionSystemSetup
         BuildHandReceiver(new(logic.AddSlot("KeyboardRight")), "Right", KeyboardRightTag, gestureInput: false);
         BuildSelectReceiver(new(logic.AddSlot("Select")));
         BuildHandGesturesEnabledReceiver(new(logic.AddSlot("AllowHandGestures")));
+        var reset = new ExpressionFlux(logic.AddSlot("Reset"));
+        ReceiveUpdate(reset, ResetTag, reset.Trigger(reset.Ref(_lifecycle), ResetStateTag));
     }
 
     // Initialization runs before checking the input gate so the first event after
