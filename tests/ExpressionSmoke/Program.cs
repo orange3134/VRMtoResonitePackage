@@ -44,6 +44,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await NamedShapeRepairChecks.Run(world.LocalUser.Root.Slot);
         await FaceExpressionDetectionChecks.RunCatalog(world.LocalUser.Root.Slot);
         if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage, artifacts, baselinePackage); return; }
+        await GeneratedAvatarChecks.Run(world.LocalUser.Root.Slot, artifacts);
         await ExpressionOutputWriteChecks.Run(world.LocalUser.Root.Slot);
         await ExpressionBlinkChecks.Run(world.LocalUser.Root.Slot, artifacts);
         await ExpressionMeshDriverChecks.Run(world.LocalUser.Root.Slot, artifacts);

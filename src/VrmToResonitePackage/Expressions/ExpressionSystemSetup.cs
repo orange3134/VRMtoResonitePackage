@@ -62,7 +62,7 @@ internal sealed partial class ExpressionSystemSetup
         bool menu = true, Func<IField<float>, float?> initialWeight = null)
     {
         if (model.Clips.Count == 0 || model.DetectedExpressions != null && model.Clips.All(c => c.Curves.Count == 0)) return Task.FromResult<Slot>(null);
-        AvatarSetup.ImportAvatarRootIdentification(avatar);
+        AvatarSetup.EnsureAvatarRootIdentification(avatar);
         var setup = new ExpressionSystemSetup(avatar, model);
         setup.BuildCatalog(resolve, initialWeight);
         for (int index = 0; index < 64; index++)

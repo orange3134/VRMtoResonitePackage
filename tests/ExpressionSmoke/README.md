@@ -43,6 +43,12 @@ tracking-to-expression crossfade, wearer departure, rejection of public and inte
 updates without a wearer, first events after reattachment, and independent cloned
 int gesture receivers are checked as runtime behavior.
 
+The generated avatar helper checks cover the package-free Avatar Root Identification
+and loading thumbnail: equip/dequip, stale wearer references after detaching, head
+tracking, pending/loaded mesh visibility, fallback texture collection, and behavior
+after saving, inspecting and reimporting the resulting package. The converter must
+not contain embedded `.resonitepackage` resources.
+
 An optional second argument imports a locally converted avatar instead of the synthetic
 runtime fixture. This mode requires a fully assigned gesture table; animated clips are sampled at Core AnimationTime:
 

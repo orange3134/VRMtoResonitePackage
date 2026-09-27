@@ -27,10 +27,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Resources\AvatarRootIdentification.resonitepackage" />
     <EmbeddedResource Include="../../THIRD-PARTY-NOTICES.md" LogicalName="ResoPon.ControllerGestureNotice" />
     <None Include="../../THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <EmbeddedResource Include="Resources\loading_standin.resonitepackage" />
+    <EmbeddedResource Include="Resources\LoadingFallback.png" />
     <EmbeddedResource Include="Resources\logo.svg" />
     <EmbeddedResource Include="Resources\loading.svg" />
     <EmbeddedResource Include="Resources\arrow.svg" />

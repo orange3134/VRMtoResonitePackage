@@ -63,12 +63,39 @@ Resoniteのモデルインポータは `JoinIdenticalVertices` を適用する�
 - `ThirdPersonOnly` / `FirstPersonOnly` はrendererのEnabledではなく `RenderMaterialOverride` で切り替える。
 - Modular Avatar互換の `DynamicVariableSpace("modular_avatar")`、`OnlyDirectBinding=true`、
   `modular_avatar/AvatarWornLocal` を維持する。
-- 装着者判定は埋め込み `AvatarRootIdentification.resonitepackage` をインポートする。
-  手動のLocalUpdate書き込みへ置き換えない。
+- 装着者判定は `AvatarSetup.EnsureAvatarRootIdentification` が標準コンポーネントと ProtoFlux を生成する。
+  `AvatarUserReferenceAssigner` の装着者参照が非 null かつ `GetActiveUserSelf` と一致したときだけ
+  `modular_avatar/AvatarWorn` を true にする。`AvatarWornLocal` はさらに `IsLocalUser` を要求する。
+  `AvatarWorn` は `ValueField<bool>` → `ValueCopy<bool>` → 動的変数、`AvatarWornLocal` は
+  `ValueFieldDrive<bool>` からの直接 Drive を維持する。単なる UserRoot 配下への移動では装着扱いにしない。
+  `modular_avatar/AvatarRoot` はアバター自身への駆動参照として公開する。
 - Invisible Materialは `Assets/Invisible Material` の透明な `PBS_RimSpecular` とする。
 - `Auto` は頭ボーン配下の影響頂点を除いたheadless meshを生成する。
   元rendererを三人称用、headless rendererを一人称用にし、生成meshのblendshapeは除去する。
 - `ApplyFirstPersonAutoAsync` は `MaterialTuner.Apply` の後に実行し、最終マテリアルを参照させる。
+
+## メッシュ読み込み中の表示
+
+VRM・VRChat 共通で `MeshLoadingSetup` が対象 renderer の読み込みを監視し、
+`LoadingStandInSetup.BuildAsync` が標準コンポーネントと ProtoFlux から代替表示を生成する。
+入力用の埋め込み `.resonitepackage`、`LoadObject`、package import callback は不要。
+変換結果の `.resonitepackage` 出力と検査は従来どおり。
+
+- `modular_avatar/MeshNotLoaded=false` の公開中は対象 renderer を無効にし、代替表示を有効にする。
+  全 mesh の読み込み後は変数名を空にし、各 driver の既定値により表示を切り替える。
+  代替表示自身とシステムの音声範囲表示は監視対象に含めない。
+- `VirtualParent` は `modular_avatar/AvatarPoseNode.Head` を参照し、位置と回転だけを Drive する。
+  オフセットは頭から上に約 0.05236、表示は Y180 度の両面・透過 `UnlitMaterial` の Quad。
+  大きさは公開済み `HumanBonePose.head` の原点の Y 座標 × 0.25 を各軸へ設定する。
+- `GetActiveUserSelf` → `UserUserID` → `CloudUserInfo.UserId` からプロフィール画像を取得する。
+  `IconURL` が null なら `Resources/LoadingFallback.png` を使う。これは以前のパッケージの
+  代替画像と同一バイト列で、通常の画像リソースとして LocalDB へインポートする。
+  LocalDB は `local:` または `resdb:` URI を返すため、生成時に `resdb:` 固定とは仮定しない。
+  画像 URI は texture と fallback 定数の両方に設定し、出力パッケージへのアセット収集対象にする。
+- `AvatarWorn` かつ `IsLocalUser` の場合だけ `RenderTransformOverride(UserView).ScaleOverride=0`。
+  それ以外は null に戻し、本人以外やミラーでは通常の表示を維持する。
+- `tests/ExpressionSmoke/GeneratedAvatarChecks.cs` で装着・解除・親階層の変更、頭追従、
+  mesh 読み込み前後、パッケージ保存・inspect・再インポート後の動作を検証する。
 
 ## SpringBone
 

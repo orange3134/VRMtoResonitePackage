@@ -4,6 +4,7 @@ using FrooxEngine;
 using FrooxEngine.CommonAvatar;
 using FrooxEngine.FinalIK;
 using Renderite.Shared;
+using VrmToResonitePackage.Expressions;
 using VrmToResonitePackage.Vrm;
 
 namespace VrmToResonitePackage;
@@ -809,7 +810,7 @@ internal static class AvatarSetup
         space.SpaceName.Value = ModularAvatarNamespace;
         space.OnlyDirectBinding.Value = true;
 
-        ImportAvatarRootIdentification(root);
+        EnsureAvatarRootIdentification(root);
 
         IAssetProvider<FrooxEngine.Material> invisibleMaterial = GetOrCreateInvisibleMaterial(root);
         int configured = 0;
@@ -860,7 +861,7 @@ internal static class AvatarSetup
         space.SpaceName.Value = ModularAvatarNamespace;
         space.OnlyDirectBinding.Value = true;
 
-        ImportAvatarRootIdentification(root);
+        EnsureAvatarRootIdentification(root);
 
         Dictionary<string, Slot> slotsByName = SlotIndex.Build(root);
         Slot firstPersonBone = ResolveFirstPersonBone(root, vrm, slotsByName, nodeSlots);
@@ -1169,7 +1170,7 @@ internal static class AvatarSetup
         }
     }
 
-    internal static void ImportAvatarRootIdentification(Slot root)
+    internal static void EnsureAvatarRootIdentification(Slot root)
     {
         var space = root.GetComponents<DynamicVariableSpace>()
             .FirstOrDefault(s => s.SpaceName.Value == ModularAvatarNamespace)
@@ -1177,8 +1178,8 @@ internal static class AvatarSetup
         space.SpaceName.Value = ModularAvatarNamespace;
         space.OnlyDirectBinding.Value = true;
 
-        // The imported identification graph consumes this reference to determine whether
-        // the avatar is worn. Keep its value driven so dynamic-variable linking cannot clear it.
+        // Publish the avatar root for Modular Avatar consumers. Keep its value driven
+        // so dynamic-variable linking cannot clear it.
         const string variableName = ModularAvatarNamespace + "/AvatarRoot";
         var variable = root.GetComponents<DynamicReferenceVariable<Slot>>()
             .FirstOrDefault(v => v.VariableName.Value == variableName)
@@ -1197,65 +1198,31 @@ internal static class AvatarSetup
             return;
         }
 
-        string tempPath = Path.Combine(Path.GetTempPath(),
-            "ResoPon_AvatarRootIdentification_" + Guid.NewGuid().ToString("N") + ".resonitepackage");
-        try
-        {
-            using (System.IO.Stream resource = typeof(AvatarSetup).Assembly.GetManifestResourceStream(
-                       "VrmToResonitePackage.Resources.AvatarRootIdentification.resonitepackage"))
-            {
-                if (resource == null)
-                {
-                    UniLog.Warning("Avatar Root Identification resource が見つかりませんでした。VRM FirstPerson の装着判定をスキップします。");
-                    return;
-                }
+        Slot identification = root.AddSlot("Avatar Root Identification");
+        var worn = identification.AttachComponent<DynamicValueVariable<bool>>();
+        worn.VariableName.Value = ModularAvatarNamespace + "/AvatarWorn";
+        var wornLocal = identification.AttachComponent<DynamicValueVariable<bool>>();
+        wornLocal.VariableName.Value = AvatarWornLocalVariable;
 
-                using FileStream file = File.Create(tempPath);
-                resource.CopyTo(file);
-            }
+        var g = new ExpressionFlux(identification.AddSlot("Check Avatar Worn"));
+        var wearer = (FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.RefObjectInput<User>)
+            g.Node("RefObjectInput", typeof(User));
+        var assigner = identification.AttachComponent<AvatarUserReferenceAssigner>();
+        assigner.AssignMode.Value = AvatarUserReferenceAssigner.Mode.Whitelist;
+        assigner.References.Add().Target = wearer.Target;
+        var activeUser = g.Owner(root);
+        var isWorn = g.And(g.Not(g.IsNull<User>(wearer)), g.Equal<User>(activeUser, wearer));
 
-            using RecordPackage package = RecordPackage.Decode(tempPath);
-            SkyFrost.Base.Record record = package.MainRecord;
-            if (record == null)
-            {
-                UniLog.Warning("Avatar Root Identification package に main record がありません。VRM FirstPerson の装着判定をスキップします。");
-                return;
-            }
-
-            string signature = RecordPackage.GetAssetSignature(new Uri(record.AssetURI));
-            using System.IO.Stream asset = package.ReadAsset(signature);
-            DataTreeDictionary graph = DataTreeConverter.LoadAuto(asset);
-            if (graph == null)
-            {
-                UniLog.Warning("Avatar Root Identification package の DataTree を読み込めませんでした。VRM FirstPerson の装着判定をスキップします。");
-                return;
-            }
-
-            Slot packageRoot = root.AddSlot("Avatar Root Identification");
-            packageRoot.LoadObject(graph, record);
-            packageRoot.ForeachComponentInChildren(delegate(IPackageImportEventReceiver receiver)
-            {
-                receiver.OnPackageImported();
-            }, includeLocal: false, cacheItems: true);
-        }
-        catch (Exception ex)
-        {
-            UniLog.Warning($"Avatar Root Identification package の読み込みに失敗しました。VRM FirstPerson の装着判定をスキップします: {ex.Message}");
-        }
-        finally
-        {
-            try
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
-            catch
-            {
-                // Temp cleanup is best-effort.
-            }
-        }
+        // Preserve the shared AvatarWorn value and the client-local AvatarWornLocal drive.
+        var sharedWorn = identification.AttachComponent<ValueField<bool>>();
+        var wornDrive = (FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<bool>)
+            g.Node("ValueFieldDrive", typeof(bool), ("Value", isWorn));
+        wornDrive.GetRootProxy(addIfMissing: true).Drive.Target = sharedWorn.Value;
+        worn.Value.DriveFrom(sharedWorn.Value);
+        var localDrive = (FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<bool>)
+            g.Node("ValueFieldDrive", typeof(bool), ("Value", g.And(isWorn, g.IsOwner(root))));
+        localDrive.GetRootProxy(addIfMissing: true).Drive.Target = wornLocal.Value;
+        ExpressionFlux.Arrange(identification);
     }
 
     private static IAssetProvider<FrooxEngine.Material> GetOrCreateInvisibleMaterial(Slot root)
