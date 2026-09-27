@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 26`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 27`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -18,7 +18,7 @@
 | Catalog/各表情、API/Templates/各表情 | `ExpressionSystem.Catalog.Clip` | 表情の設定と固定値一覧への参照 |
 | 各表情/Bindings/各項目 | `ExpressionSystem.Catalog.Clip.Binding` | 出力レコードへの参照と固定値 |
 | Outputs/各項目 | `ExpressionSystem.Output` | BlendShape の基礎入力・混合・最終出力 |
-| Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と8キーの割当 |
+| Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と10キーの割当 |
 | Inputs/HandGestures/Modules/各機種 | `ExpressionSystem.Input.HandGestures` | しきい値と安定待ち時間 |
 | 各機種/Left、Right | `ExpressionSystem.Input.HandGestures.Hand` | 片手の入力判定状態 |
 | Diagnostics/Import warning | `ExpressionSystem.Diagnostics.ImportWarning` | 変換時の警告文 |
@@ -51,7 +51,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 26 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 27 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
@@ -180,18 +180,18 @@ OriginalDriverは生成時の経路の記録であり、編集して追跡の有
 Version 24ではTagの既定値を `ResoPon/Expression/Keyboard/Left`・`Right` とする。Gesture APIと違い、AllowHandGestures=falseでも受け付ける。
 
 各手の DynamicVariableSpace は `ExpressionSystem.Input.Keyboard`。
-変数は `DV/Tag`、`DV/Shift`、`DV/Control`、`DV/Key.0`〜`DV/Key.7` の各 Slot に置く。
+変数は `DV/Tag`、`DV/Shift`、`DV/Control`、`DV/Key.0`〜`DV/Key.9` の各 Slot に置く。
 
 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|
 | `Tag` | string | 左右の Gesture API Tag | 設定。イベントの送信先 Tag |
-| `Key.0`〜`Key.7` | Renderite.Shared.Key | Keypad0〜Keypad7 | 設定。添字が送信する手の状態（0=Neutral、1=Fist、7=ThumbsUp）。None は未割当 |
+| `Key.0`〜`Key.9` | Renderite.Shared.Key | Keypad0〜Keypad9 | 設定。添字が送信する手の状態（0=Neutral、1=Fist、7=ThumbsUp、8・9は拡張用）。None は未割当 |
 | `Shift` | bool | true | 設定。その手の全キーに共通の Shift 押下状態の一致条件 |
 | `Control` | bool | 左=false、右=true | 設定。その手の全キーに共通の Ctrl 押下状態の一致条件 |
 
 キーごとの Enabled・Gesture は持たない。Flux は各手の `Logic` にまとめる。
 `KeyHeld(Key.Control)` と `KeyHeld(Key.Shift)` で左右どちらの修飾キーも扱い、Alt は判定しない。
-8個の KeyHeld を `IndexOfFirstValueMatch<bool>` に渡し、最初の true の添字をペイロードにする。
+10個の KeyHeld を `IndexOfFirstValueMatch<bool>` に渡し、最初の true の添字をペイロードにする。
 `modular_avatar/AvatarWornLocal`、修飾キーの一致、FoundMatch の AND を
 `FireOnLocalValueChange<bool>` で監視し、true になった時だけ送信する。OnStart も同じ条件を使う。
 着用判定は既存の Avatar Root Identification が提供し、FirstPerson 設定がなくても表情生成時に用意する。

@@ -30,6 +30,7 @@ internal static class KeyboardPriorityChecks
             api, hand == 0 ? ExpressionSystemSetup.KeyboardLeftTag : ExpressionSystemSetup.KeyboardRightTag, true, value);
         int GestureValue(int hand) => Get<int>(core, hand == 0 ? "LeftGesture" : "RightGesture");
         bool allowedBefore = Get<bool>(core, "AllowHandGestures");
+        Slot extendedRow = null;
         try
         {
             foreach (var w in wearers) w.Reference.Target = expressions.World.LocalUser;
@@ -60,15 +61,33 @@ internal static class KeyboardPriorityChecks
             {
                 int target = ctrl == 0 ? primary : 1 - primary;
                 Key(InputKey.Control, ctrl == 1); Key(InputKey.Shift, true);
-                for (int gesture = 0; gesture < 8; gesture++)
+                for (int gesture = 0; gesture < 10; gesture++)
                 {
-                    Gesture(0, (gesture + 1) % 8); Gesture(1, (gesture + 1) % 8);
+                    Gesture(0, (gesture + 1) % 10); Gesture(1, (gesture + 1) % 10);
                     Key((InputKey)((int)InputKey.Keypad0 + gesture), true); await Frames();
-                    Check(GestureValue(target) == gesture && GestureValue(1 - target) == (gesture + 1) % 8,
+                    Check(GestureValue(target) == gesture && GestureValue(1 - target) == (gesture + 1) % 10,
                         $"Ctrl={ctrl} keypad {gesture} updates only hand {target}");
                     Key((InputKey)((int)InputKey.Keypad0 + gesture), false); await Frames();
                 }
             }
+            Gesture(0, 0); Gesture(1, 0);
+            Key(InputKey.Control, Control(0)); Key(InputKey.Keypad8, true); await Frames();
+            Key(InputKey.Keypad8, false); await Frames();
+            Key(InputKey.Control, Control(1)); Key(InputKey.Keypad9, true); await Frames();
+            Key(InputKey.Keypad9, false); await Frames();
+            Check(GestureValue(0) == 8 && GestureValue(1) == 9 && Get<string>(core, "PairKey") == "L8R9" &&
+                Reference<Slot>(core, "CurrentExpression") == null, "keypad 8/9 produce an unmapped L8R9 without truncation");
+            var expression = expressions.FindChild("Catalog").Children.First(c => Get<bool>(c, "Enabled"));
+            extendedRow = expressions.FindChild("DV").AddSlot("GestureTable.Pair.L8R9");
+            var mapping = extendedRow.AttachComponent<DynamicReferenceVariable<Slot>>();
+            mapping.VariableName.Value = "ExpressionSystem/GestureTable.Pair.L8R9";
+            mapping.Reference.Target = expression;
+            await Frames();
+            Check(Reference<Slot>(core, "CurrentExpression") == null, "adding an extended row waits for keyboard input");
+            Key(InputKey.Keypad9, true); await Frames();
+            Check(Reference<Slot>(core, "CurrentExpression") == expression && !Get<bool>(core, "AllowHandGestures"),
+                "keypad 9 selects an externally added L8R9 expression while hand gestures are disabled");
+            Key(InputKey.Keypad9, false); await Frames();
             Key(InputKey.Shift, false); Key(InputKey.Control, false);
             Gesture(0, 0); Gesture(1, 0); Key(InputKey.Keypad1, true); await Frames();
             Check(GestureValue(0) == 0 && GestureValue(1) == 0, "no modifier does not trigger either hand");
@@ -80,10 +99,11 @@ internal static class KeyboardPriorityChecks
             foreach (var (port, target) in ports) port.Target = target;
             foreach (var w in wearers) w.Reference.Target = w.Previous;
             mocks.Destroy();
+            extendedRow?.Destroy();
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, allowedBefore);
         }
         await Frames();
-        Console.WriteLine($"PASS: keyboard Shift hand={primary}, Shift+Ctrl hand={1 - primary}, all 16 shortcuts with hand gestures disabled and modifier exclusion");
+        Console.WriteLine($"PASS: keyboard Shift hand={primary}, Shift+Ctrl hand={1 - primary}, all 20 shortcuts with hand gestures disabled and modifier exclusion");
     }
     private static T Get<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicValueVariable<T>>()
         .Single(v => v.VariableName.Value == VariablePath(slot, name)).Value.Value;

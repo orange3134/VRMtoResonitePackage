@@ -29,7 +29,7 @@ internal static class ExpressionDynamicInputChecks
         {
             var inputs = hand.GetComponentsInChildren<DynamicVariableValueInput<Renderite.Shared.Key>>();
             var settings = hand.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<Renderite.Shared.Key>>();
-            Check(inputs.Count == 8 && settings.Count == 8, "each keyboard hand has eight key bindings");
+            Check(inputs.Count == 10 && settings.Count == 10, "each keyboard hand has ten key bindings");
             foreach (var input in inputs)
             {
                 var proxy = input.Slot.GetComponent<global::ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Variables.DynamicVariableInputProxy<Renderite.Shared.Key>>();

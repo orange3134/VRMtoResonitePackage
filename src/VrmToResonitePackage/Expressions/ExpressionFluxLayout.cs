@@ -45,7 +45,7 @@ internal static class ExpressionFluxLayout
         var columns = Columns(nodes, outgoing);
         var heights = nodes.ToDictionary(node => node, Height);
         // Give each source one layout consumer. Keeping an input subtree together
-        // prevents unrelated modifier inputs from interleaving an eight-key fan-in.
+        // prevents unrelated modifier inputs from interleaving a keypad fan-in.
         var consumer = nodes.ToDictionary(n => n, n => outgoing[n].Where(t => columns[t] > columns[n])
             .OrderBy(t => columns[t]).ThenBy(t => order[t]).FirstOrDefault());
         var children = nodes.ToDictionary(n => n, n => inputs[n].Where(s => consumer[s] == n).ToArray());

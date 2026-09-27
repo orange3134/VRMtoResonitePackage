@@ -102,13 +102,13 @@ must not select a gesture pair. Lifecycle and input actions retain their local c
 The sensor-event fixture replaces hardware outputs temporarily and executes the exported graph:
 both hands must wait for stability, fire when the timer expires without more sensor changes,
 use device-specific pose classification, reset on gate/disconnect transitions, and redetect on reconnect.
-Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends only the left hand; Ctrl+Shift+keypad sends only the right. Keypad alone and Ctrl+keypad without Shift must leave both hands unchanged.
+All 20 keyboard shortcuts (keypad 0 through 9 for each hand) are checked, including an externally added L8R9 expression. Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends only the left hand; Ctrl+Shift+keypad sends only the right. Keypad alone and Ctrl+keypad without Shift must leave both hands unchanged.
 Idle sentinels prove Selection does not run on unchanged frames. Table edits and
 clip enable/disable changes wait for the next gesture event, while menu Enabled fields remain unchanged.
 Keyboard Flux consists of exactly two boards, Left/Logic and Right/Logic, with one
 bool change detector, IndexOfFirstValueMatch<bool>, and sender per hand. Settings
 live under each hand's DV in the ExpressionSystem.Input.Keyboard space, with Tag,
-Control, Shift and Key.0 through Key.7 only. Simultaneous keys select the lowest
+Control, Shift and Key.0 through Key.9 only. Simultaneous keys select the lowest
 index; adding or releasing another key while the chord stays valid does not resend.
 Runtime checks cover shared modifier edits, independent hand settings, edited Tags,
 and AvatarWornLocal blocking input even while the avatar remains under the active user.

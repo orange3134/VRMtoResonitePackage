@@ -54,7 +54,7 @@ Expressions/
     ContextMenu/                   表情の直接選択・入力許可（項目の自動選択可否制御なし）
     Keyboard/
       Left|Right/                  各手の共通設定用の変数空間
-        DV/                        Tag、Shift、Control、Key.0〜Key.7
+        DV/                        Tag、Shift、Control、Key.0〜Key.9
         Logic/                     着用・修飾キー・押下成立の変更監視と送信
     HandGestures/Modules/
       Touch|Index|Vive|WindowsMR|Cosmos/   削除できる機種別入力
@@ -80,7 +80,7 @@ Flux は1スロット1ノードで、各モジュール直下にノードを置�
 データの供給元を左、入力を使うノードを右に置く。Impulse も発火元から呼び出し先へ左から右に配置する。
 複数入力はポート順に左側の上から下へ並べ、同じ接続先の入力群の間に別の入力群を挟まない。
 入力を使う最初のノードの直前まで列を寄せ、入力側の枝は列ごとの占有範囲を使って詰める。
-これにより8キーのような大きな入力群があっても、Tag・送信先などの小さな入力を接続先の近くへ置ける。
+これにより10キーのような大きな入力群があっても、Tag・送信先などの小さな入力を接続先の近くへ置ける。
 ノード固有の幅とポート数から間隔を取る。定数と変数入力はモジュール単位で共有する。
 共有入力は最初の接続先を基準に配置する。離れた用途で共有する必要のない定数は独立させる
 （キーボードの Match=true と送信の ExcludeDisabled=true）。状態を持つノードは複製しない。
@@ -122,7 +122,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 |---|---|
 | Lifecycle | OnStart とローカル装着状態の変化 |
 | Selection | 受理した左右のGesture APIイベントからの同期呼び出しのみ |
-| キーボード | 左右それぞれの8キーの条件が変化したとき。新しく成立した割当だけ送信 |
+| キーボード | 左右それぞれの10キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
 | Playback | 選択イベント内で保存済みValueを即時適用。選択参照・Bindings参照・書き込み権限の変化でも更新。通常出力へ一括Write |
 | Outputs | 通常出力にはFluxなし。既存の追跡がある出力だけTrackingのDriveで継続合成。変更監視・通知は置かない |
@@ -270,18 +270,20 @@ Version 23では左右ジェスチャーのコンテキストメニューと専�
 ハンドジェスチャーが許可されている間は、手を動かさずにキーボードで設定した状態を維持し、次の物理ジェスチャー変更で更新する。ハンドジェスチャー停止中は機種別の判定状態をリセットし、許可を戻した後は再び安定した手形を検出して送る。
 
 - コンテキストメニュー: Catalogの表情を直接選択。左右値は変更しない。
-- キーボード: 表情の優先順位が高い手は Shift+テンキー0〜7（Ctrl なし）、もう一方は Ctrl+Shift+テンキー0〜7。
-  テンキー0が Neutral、1が Fist、以降は順に7の ThumbsUp まで。
+- キーボード: 表情の優先順位が高い手は Shift+テンキー0〜9（Ctrl なし）、もう一方は Ctrl+Shift+テンキー0〜9。
+  Version 27ではテンキー0〜9をそれぞれジェスチャー値0〜9として送信する。
+  0が Neutral、1が Fist、7が ThumbsUp。8・9は拡張用で、対応するGestureTable.Pairがあればその表情を選び、未割り当てなら表情を解除する。
+  自動生成するジェスチャー表は引き続き左右0〜7の64組。8・9を含む割り当ては同じ命名規則（例: `GestureTable.Pair.L8R9`）で追加できる。
   `ExpressionHandPriority` は変換後の64組の固定ポーズを比較する。両手それぞれがNeutralと異なる別の表情を持つとき、
   両手入力の結果がどちらの片手入力と一致するかを数え、採用回数が多い手をShift側にする。
   Clip IDが別でも全出力の最終値が同じなら同じ表情として扱う。両手専用表情・同じ表情・未解決の組は勝敗に数えない。
   同数なら片手で選べる異なる非Neutralポーズが多い手、それも同数なら左手を採用する。
   これは生成時のキー設定であり、Catalog・GestureTable・元FXの読み込み規則は変更しない。
   優先側はDiagnosticsに記録する。保存後にGestureTableを編集してもショートカットは自動変更しない。
-  `Left/DV` と `Right/DV` の `Key.0`〜`Key.7`、共通の `Shift`・`Control`、送信先の `Tag` を編集できる。
+  `Left/DV` と `Right/DV` の `Key.0`〜`Key.9`、共通の `Shift`・`Control`、送信先の `Tag` を編集できる。
   各手は `ExpressionSystem.Input.Keyboard` 空間を持ち、Enabled とキーごとの Gesture は作らない。
   Flux は `Keyboard/Left/Logic` と `Right/Logic` の2つに生成する。
-  `modular_avatar/AvatarWornLocal`、修飾キーの一致、8キーのいずれかの押下を AND でまとめ、
+  `modular_avatar/AvatarWornLocal`、修飾キーの一致、10キーのいずれかの押下を AND でまとめ、
   1つの FireOnLocalValueChange<bool> で監視する。条件成立時は最小番号のキーの添字を一度送る。
   条件が成立したまま他のキーを追加・解放しても再送しない。全キーを離すなどして条件を false に戻すと再度送信できる。
   Control・Shift は左右どちらの物理キーでもよい。各手の設定は独立して変更できる。

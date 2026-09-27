@@ -10,6 +10,7 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
+    private const int KeyboardGestureCount = 10;
     private static string GestureTag(int hand) => hand == 0 ? LeftTag : RightTag;
     private IWorldElement SendHandInput(ExpressionFlux g, IWorldElement tag, IWorldElement gesture) =>
         g.Trigger<int>(g.Ref(_api), tag, gesture);
@@ -130,7 +131,7 @@ internal sealed partial class ExpressionSystemSetup
             Data(settings, "Tag", hand == 0 ? KeyboardLeftTag : KeyboardRightTag);
             Data(settings, "Shift", true);
             Data(settings, "Control", hand != _keyboardPrimaryHand);
-            for (int gesture = 0; gesture < 8; gesture++)
+            for (int gesture = 0; gesture < KeyboardGestureCount; gesture++)
                 Data(settings, "Key." + gesture, (InputKey)((int)InputKey.Keypad0 + gesture));
             BuildKeyboardHand(settings.AddSlot("Logic"), settings);
         }
@@ -143,7 +144,7 @@ internal sealed partial class ExpressionSystemSetup
         IWorldElement Held(InputKey key) => g.Node("KeyHeld", null, ("Key", g.Constant(key)));
         var match = (global::FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<bool>)
             g.Node("IndexOfFirstValueMatch", typeof(bool), ("Match", g.Constant(true, shared: false)));
-        for (int index = 0; index < 8; index++)
+        for (int index = 0; index < KeyboardGestureCount; index++)
             match.Values.Add((INodeValueOutput<bool>)g.Node("KeyHeld", null,
                 ("Key", g.Read<InputKey>(source, KeyboardSpace, "Key." + index))));
 
