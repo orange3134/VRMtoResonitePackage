@@ -195,9 +195,11 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<int>(core, "PairIndex") == 1 && !Get<bool>(core, "AllowExternalInput"), "bool API can explicitly disable ordinary input");
         AllowInput();
 
+        Check(catalog.FindChild("Animated").GetComponent<ContextMenuItemSource>().Enabled,
+            "unmapped expression keeps its menu item enabled");
         Set(table, "Pair.2", catalog.FindChild("Animated")); await Frames();
         Check(catalog.FindChild("Animated").GetComponent<ContextMenuItemSource>().Enabled,
-            "assigning an unmapped expression exposes its menu item");
+            "assigning an expression keeps its menu item enabled");
         Select("Animated");
         Check(Math.Abs(Get<float>(expressions.FindChild("Outputs").FindChild("Smile"), "Pose") - 1) < 0.001f,
             "animated clip stores its final key before the next frame");
@@ -209,7 +211,9 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "invalid selection immediately clears the tracked pose");
         await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "disabled mapped expression restores base output");
-        Set(table, "Pair.2", (Slot)null);
+        Set(table, "Pair.2", (Slot)null); await Frames();
+        Check(catalog.FindChild("Animated").GetComponent<ContextMenuItemSource>().Enabled,
+            "removing the last mapping keeps a disabled expression menu item enabled");
         AllowInput(); Gesture(0, 1); Gesture(1, 1);
 
         // Table keys are stable dynamic names; deleting/reordering rows cannot shift other mappings.

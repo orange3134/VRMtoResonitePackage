@@ -31,7 +31,7 @@ feedback cycles, and repeatable arrangement. The synthetic run
 writes keyboard-layout.json for inspecting the generated coordinates and edges.
 Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight also receive int; Select receives a mapped ID and AllowExternalInput receives bool; no Command slots may remain.
 Each actual Flux group must stay within one logic board. Core lifecycle, selection,
-playback, the six public API receivers and menu visibility, and each controller hand have independent
+playback, the six public API receivers, and each controller hand have independent
 boards. The test reports node/group counts and enforces a 256-node per-board budget,
 including after package reimport. Module diagnostic counts must match the graph.
 Each Output has its own sampling/mixing/fade board and a driven field exposed as Result.
@@ -62,7 +62,7 @@ the current pair and selected expression. It checks all 64 selected poses agains
 their AnimX tracks and target output fields,
 and requires at least eight distinct poses by default. When the authored avatar has fewer poses,
 set `RESOPON_TEST_EXPECTED_DISTINCT_POSES` to its independently verified count (2–64);
-the test then requires exactly that count. PilicaKumagaya 1.0 uses 6. Saved direct-menu visibility, selection of the lowest matching pair, rejection of ordinary input while disabled, and both actual bool mode buttons are also checked. Plum v1.0.1 is the registered local regression case.
+the test then requires exactly that count. PilicaKumagaya 1.0 uses 6. Saved menu items without automatic Enabled drivers, selection of the lowest matching pair, rejection of ordinary input while disabled, and both actual bool mode buttons are also checked. Plum v1.0.1 is the registered local regression case.
 An optional third argument supplies a previous package to compare before the menu test:
 
 ```powershell
@@ -96,14 +96,14 @@ wearer departure/reattachment and clone playback cover the synchronization behav
 
 Version 4 removes Override Slot state. Actual menu buttons must disable ordinary input and update the same
 LeftGesture/RightGesture fields used by gesture input. Unmapped IDs must leave the pair and mode unchanged.
-No expression board uses LocalUpdate; lifecycle, selection, menu availability and input actions use
+No expression board uses LocalUpdate; lifecycle, selection and input actions use
 local change detectors. OnStart handles initial values without storing previous inputs in shared state.
 The sensor-event fixture replaces hardware outputs temporarily and executes the exported graph:
 both hands must wait for stability, fire when the timer expires without more sensor changes,
 use device-specific pose classification, reset on gate/disconnect transitions, and redetect on reconnect.
 Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends only the left hand; Ctrl+Shift+keypad sends only the right. Keypad alone and Ctrl+keypad without Shift must leave both hands unchanged.
-Idle sentinels prove Selection and menu scans do not run on unchanged frames. Table edits and
-clip enable/disable changes must update selection and menu visibility without API requests.
+Idle sentinels prove Selection does not run on unchanged frames. Table edits and
+clip enable/disable changes must update selection without API requests, while menu Enabled fields remain unchanged.
 Keyboard Flux consists of exactly two boards, Left/Logic and Right/Logic, with one
 bool change detector, IndexOfFirstValueMatch<bool>, and sender per hand. Settings
 live under each hand's DV in the ExpressionSystem.Input.Keyboard space, with Tag,
@@ -248,3 +248,9 @@ DynamicValueVariableDriver<float>. The real-mesh fixture changes this value and
 checks every smoother across both renderers, including the tracked blink output.
 It verifies nondefault values survive cloning and package reload, and edits to a
 clone or restored avatar leave the source and sibling speeds unchanged.
+
+Version 21 removes GestureTable/Logic, Inputs/ContextMenu/Logic, MenuAvailable and the
+internal MenuRefresh event. Menu Enabled fields must have no automatic driver after
+generation, cloning and package reload. Runtime checks retain enabled menu items for
+unmapped, disabled and inactive expressions and after removing the last mapping.
+Selection validation and the ID-to-pair API lookup remain covered independently.

@@ -10,6 +10,14 @@ internal static class ExpressionGraphChecks
     public static void CheckLayout(Slot expressions)
     {
         ExpressionSpaceChecks.Run(expressions);
+        Check(expressions.FindChild("GestureTable").FindChild("Logic") == null &&
+            Descendant(expressions, "Inputs/ContextMenu/Logic") == null,
+            "menu availability watchers and refresh board are absent");
+        Check(!expressions.GetComponentsInChildren<DynamicValueVariable<bool>>().Any(v =>
+            v.VariableName.Value == "ExpressionSystem.Catalog.Clip/MenuAvailable"),
+            "menu availability state is absent");
+        Check(expressions.GetComponentsInChildren<ContextMenuItemSource>().All(item =>
+            item.EnabledField.ActiveLink == null), "menu item Enabled fields have no automatic drivers");
         Check(Descendant(expressions, "Inputs/HandGestures").GetComponent<Comment>()?.Text.Value
             .Contains("Copyright (c) 2022-2025 rhenium, kazu0617, orange") == true,
             "controller source license survives generation, clone and package reload");
@@ -129,7 +137,7 @@ internal static class ExpressionGraphChecks
 
         foreach (string path in new[] { "Core/Logic/Lifecycle", "Core/Logic/Selection", "Core/Logic/Playback",
             "API/Receivers/Logic/Left", "API/Receivers/Logic/Right", "API/Receivers/Logic/MenuLeft", "API/Receivers/Logic/MenuRight",
-            "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowExternalInput", "Inputs/ContextMenu/Logic" })
+            "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowExternalInput" })
         {
             var board = Descendant(expressions, path);
             Check(board != null && boards.Any(g => g.Key == board), "independent logic board exists: " + path);

@@ -122,8 +122,9 @@ internal static class ImportedGestureAvatarChecks
         {
             var indices = mappings.Where(pair => pair.Value == expression).Select(pair => pair.Key).ToArray();
             bool available = indices.Length > 0 && Get<bool>(expression, "Enabled") && expression.IsActive;
-            Check(expression.GetComponent<ContextMenuItemSource>().Enabled == available,
-                "Saved direct menu only shows expressions in the current table");
+            Check(expression.GetComponent<ContextMenuItemSource>().EnabledField.Value &&
+                expression.GetComponent<ContextMenuItemSource>().EnabledField.ActiveLink == null,
+                "Saved direct menu is enabled independently of table membership and expression state");
             if (!available) continue;
             visible++;
             expression.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>().Pressed(null, default);
@@ -153,14 +154,17 @@ internal static class ImportedGestureAvatarChecks
         Check(!Get<bool>(core, "AllowExternalInput"), "Saved menu-only button disables ordinary input");
         Console.WriteLine($"PASS: {visible} mapped direct-menu entries and both input-mode buttons work without Override state");
         var importedMenu = menu.FindChild("Imported menu");
-        // Unmapped imported expressions are intentionally absent from the visible menu.
+        // All menu items stay enabled; only mapped, valid IDs can select a hand pair.
+        var mappedIds = mappings.Values.Where(expression => expression != null && expression.IsActive && Get<bool>(expression, "Enabled"))
+            .Select(expression => Get<string>(expression, "Id")).ToHashSet();
         if (importedMenu != null && !importedMenu.GetComponentsInChildren<ContextMenuItemSource>().Any(item =>
-            item.Enabled && item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>() != null))
+            item.Enabled && mappedIds.Contains(item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>()?.PressedData.Value.Value)))
             importedMenu = null;
         if (importedMenu != null)
         {
             var importedButton = importedMenu.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithValue<string>>()
-                .FirstOrDefault(button => button.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && button.Slot.GetComponent<ContextMenuItemSource>().Enabled);
+                .FirstOrDefault(button => button.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && mappedIds.Contains(button.PressedData.Value.Value) &&
+                    button.Slot.GetComponent<ContextMenuItemSource>().Enabled);
             Check(importedButton != null, "Imported menu contains an actual string selection button");
             var catalog = root.FindChild("Catalog");
             string originalId = importedButton.PressedData.Value.Value;

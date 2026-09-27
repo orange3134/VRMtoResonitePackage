@@ -40,8 +40,7 @@ Expressions/
     GestureTable.Pair.0〜63         64個の Catalog 参照
     Version・Receiver・Catalog      バージョンと入口への参照
   Catalog/                         表情ごとの定義と最終値の一覧
-  GestureTable/                    対応表の監視ロジック
-    Logic/                         メニュー表示に必要な参照・有効状態の変更監視
+  GestureTable/                    対応表を読む起点（監視ロジックなし）
   Core/                            入力・選択・再生ロジック
     Logic/
       Lifecycle/                   初期化、装着状態の変更監視
@@ -53,7 +52,7 @@ Expressions/
   Drivers/各 Renderer/            DynamicBlendShapeDriver、必要なシェイプのみ登録
     各シェイプ/                   SmoothValue<float>、TargetValue → BlendShapes[].Value
   Inputs/
-    ContextMenu/                   対応表にある表情のみメニュー表示
+    ContextMenu/                   左右入力・表情選択（項目の自動選択可否制御なし）
     Keyboard/
       Left|Right/                  各手の共通設定用の変数空間
         DV/                        Tag、Shift、Control、Key.0〜Key.7
@@ -125,7 +124,6 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 |---|---|
 | Lifecycle | OnStart とローカル装着状態の変化 |
 | Selection | API の同期呼び出し、左右から求めた PairIndex または検証済み表情参照の変化 |
-| メニュー表示 | 装着開始、Catalog の項目数、対応表の有効な参照先の変化 |
 | キーボード | 左右それぞれの8キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
 | Playback | 選択イベント内で保存済みValueを即時適用。選択参照・Bindings参照・書き込み権限の変化でも更新。通常出力へ一括Write |
@@ -136,10 +134,11 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 初期値の設定だけでは発火しないため、初回に必要な処理には `OnStart` も使う。
 装着者の確認は各処理の入口に残す。
 
-この変更で、無変化時の Impulse 実行・変数への書き込み・メニュー全走査を減らす。
+この構成で、無変化時の Impulse 実行・変数への書き込みを減らす。メニュー全走査は行わない。
 物理入力・時刻・実行時の Source を読む DynamicVariable など、連続変化扱いの入力は検出のための評価が残る。
 毎フレームの評価をすべてなくすものではない。監視を独立させるため、グラフのノード数は増える。
-対応表の監視は `GestureTable/Logic` に置き、行を削除しても同じキーの再作成を検出できる。
+Version 21では `GestureTable/Logic` のメニュー用監視を生成しない。
+現在の組み合わせの選択更新は `Core/Logic/Selection` が担当する。
 
 ## 入力・列挙ノード
 
@@ -169,7 +168,7 @@ Core の入力ノード化は現行の名前付き空間で再検証し、同一
 子 Slot の処理は `Children` → `ForEachObject<IReadOnlyList<Slot>, Slot>`（表示名 ForEach）で列挙する。
 すべてのループ本体は列挙中に子 Slot の追加・削除・並べ替えを行わず、元の直下の子の順序を保つ。
 装着者は同じアバター配下の各ボードにある `GetActiveUserSelf` で取得する。
-各ボードは独立した FluxGroup を維持する。対応表の逆引きとメニュー表示判定には、安定した Pair.0〜63 を数値で走査する For を使い、GetChild は使わない。
+各ボードは独立した FluxGroup を維持する。対応表の逆引きには、安定した Pair.0〜63 を数値で走査する For を使い、GetChild は使わない。
 
 ## 不具合の調べ方
 
@@ -227,7 +226,7 @@ Selection・Lifecycle・API と機種別入力は PreviousOwner を持たず、�
 装着者が存在するかだけでは閲覧者も実行してしまうため、ローカルユーザーとの一致判定は残す。
 Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。
 
-- 装着開始・初回起動：必要なら初期化し、Selection とメニュー表示更新を同期実行する。
+- 装着開始・初回起動：必要なら初期化し、Selection を同期実行する。
 - 取り外し：初期化済みのクライアントが一度だけ入力・選択状態をクリアし、出力を Base に戻す。初期化済みフラグを解除する。
 - 未装着中：選択更新は停止する。通常出力は初期化・権限取得時にホストがBaseをWriteし、追跡対象は専用DriveがBaseに追従する。閲覧者は共有の選択状態を書き換えない。
 - 再装着・複製・読み込み：初回に左右値を 0、入力許可を true に戻して再開する。API が先に届いた場合も同じ初期化を行う。
@@ -319,8 +318,8 @@ N は左×8＋右。例えば左1・右2は `Pair.10`。
 表情の追加は `API/Templates` または既存の Catalog エントリーを Catalog へ複製し、
 `Enabled` を有効にして `Id`、`DisplayName`、`Bindings` を設定する。Bindings はその表情の値一覧への Slot 参照。
 `Id` は空でない一意の文字列にする。外部からの直接選択にはこの ID を使う。
-直接選択メニューに表示するには、GestureTable の少なくとも1組へ参照を割り当てる。対応表の編集はメニュー表示にも次の更新で反映する。切り替えは即時に反映する。削除は表情スロットごと行える。
-テンプレートから複製したメニューの表示名・有効状態・送信する ID は複製先の変数に追従する。
+直接選択ボタンから表情を適用するには、GestureTable の少なくとも1組へ参照を割り当てる。対応表の編集でメニュー項目の Enabled は変更しない。切り替えは即時に反映する。削除は表情スロットごと行える。
+テンプレートから複製したメニューの表示名・送信する ID は複製先の変数に追従する。項目の Enabled は駆動しない。
 
 Bindings の子には ExpressionSystem.Catalog.Clip.Binding 空間を置き、Output に対応する Outputs レコード、
 Value に固定値を設定する。変換時は元カーブの最後のキー値を保存する。
@@ -442,7 +441,7 @@ Sanatia 1.11はこの形式で、第1セットの左右7種類は同じ姿勢、
 両形式とも、後続セットと無関係なFX・メニュー由来のクリップはCatalogに混ぜない。
 採用したセット・ジェスチャー分岐数・手動候補数は `FaceEmo normal:` / `FaceEmo CAC:` に残す。
 元クリップとコンパイルした固定ポーズが両方Catalogに存在することはある。
-対応表に割り当てた表情だけをメニューへ表示する既存ルールは維持する。
+Version 21では対応表への割り当てによるメニュー項目の自動選択可否制御を行わない。
 
 SanatiaにはDescriptorと同じVRCSDK3A.dllのGUIDを持つ音声コンポーネントも含まれる。
 アバター候補はGUIDとScriptのfileIDを確認する。DLL内Descriptorは542108242、単独MonoScriptは
@@ -671,7 +670,8 @@ Any State、Entry、入れ子Exit、途中状態のSet→Copy→Add、別FX、�
 Legniaは従来の正常なCatalog・固定ポーズ値・対応表と一致し、元データとの8,832項目の照合も一致した。
 
 条件を補完できない手動候補の選択制限は別件として残る。
-`ExpressionInputSetup.BuildMenuAvailability` はGestureTable内で参照される表情だけを表示し、
+Version 21ではメニュー項目の自動選択可否制御と `GestureTable/Logic` の監視を削除した。
+対応表の参照有無や表情の Active・Enabled に応じたメニューの Enabled 更新は行わない。
 `ExpressionApiSetup.BuildSelectReceiver` は表情IDからPair.0〜63を逆引きして入力を更新する。
 今回の変更はハンド割り当ての復元であり、未割り当ての全Catalog候補を直接再生するUI/APIは追加していない。
 

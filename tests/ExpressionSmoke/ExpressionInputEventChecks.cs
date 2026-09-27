@@ -48,16 +48,18 @@ internal static class ExpressionInputEventChecks
             Check(Get<int>(core, "PairIndex") == -42, "idle frames do not execute Selection");
             Set(core, "PairIndex", pair);
             var smile = catalog.FindChild("Smile");
-            Set(smile, "MenuAvailable", false);
-            await Frames(10);
-            Check(!Get<bool>(smile, "MenuAvailable"), "idle frames do not rescan menu availability");
+            var menuItem = smile.GetComponent<ContextMenuItemSource>();
             Set(smile, "Enabled", false);
             await Frames(30);
             Check(Reference<Slot>(core, "CurrentExpression") == null, "disabling a selected clip updates selection without an API event");
+            Check(menuItem.EnabledField.Value, "disabled expression keeps its menu item enabled");
+            smile.ActiveSelf = false; await Frames(10);
+            Check(menuItem.EnabledField.Value, "inactive expression does not change the menu Enabled field");
+            smile.ActiveSelf = true;
             Set(smile, "Enabled", true);
             await Frames(30);
-            Check(Reference<Slot>(core, "CurrentExpression") == smile && Get<bool>(smile, "MenuAvailable"),
-                "enabling a mapped clip refreshes selection and menu availability");
+            Check(Reference<Slot>(core, "CurrentExpression") == smile && menuItem.EnabledField.Value,
+                "enabling a mapped clip refreshes selection while the menu remains enabled");
 
             foreach (var module in modules.Children)
             foreach (string side in new[] { "Left", "Right" })

@@ -63,7 +63,6 @@ internal sealed partial class ExpressionSystemSetup
         {
             var item = MenuItem(expression, expression.Name);
             item.Label.DriveFrom(expression.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "DisplayName")).Value);
-            item.EnabledField.DriveFrom(Data(expression, "MenuAvailable", false).Value);
             SelectMenuTrigger(expression, expression);
         }
         foreach (var (name, enabled) in new[] { ("Allow gestures and keyboard", true), ("Menu only", false) })
@@ -71,7 +70,6 @@ internal sealed partial class ExpressionSystemSetup
             var mode = items.AddSlot(name); MenuItem(mode, name);
             MenuTrigger(mode, _api, InputEnabledTag, enabled);
         }
-        BuildMenuAvailability(menu);
         if (_compiled.Menu.Count > 0)
         {
             var imported = items.AddSlot("Imported menu"); MenuItem(imported, imported.Name);
@@ -93,40 +91,7 @@ internal sealed partial class ExpressionSystemSetup
                 else if (_clips.TryGetValue(_compiled.Menu[control], out var expression))
                 {
                     SelectMenuTrigger(slot, expression);
-                    slot.GetComponent<ContextMenuItemSource>().EnabledField.DriveFrom(
-                        expression.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == Path(ClipSpace, "MenuAvailable")).Value);
                 }
-            }
-        }
-    }
-
-    private void BuildMenuAvailability(Slot menu)
-    {
-        _menuAvailability = menu.AddSlot("Logic");
-        var g = new ExpressionFlux(_menuAvailability);
-        var available = g.Local<bool>();
-        var refresh = g.Each(g.Ref(_catalog), expression => g.Sequence(
-            g.Set<bool>(available, g.Constant(false)),
-            EachGesturePair(g, (_, mapped) => g.If(g.Equal<Slot>(expression, mapped),
-                g.Set<bool>(available, g.And(g.Active(expression), g.Read<bool>(expression, ClipSpace, "Enabled"))))),
-            g.Write<bool>(expression, ClipSpace, "MenuAvailable", available)));
-        ReceiveUpdate(g, MenuRefreshTag, refresh);
-        g.OnChanged<int>(g.Node("ChildrenCount", null, ("Instance", g.Ref(_catalog))),
-            g.If(g.IsOwner(_root), refresh));
-
-        // Watch fixed table keys from inside their namespace. Keep watchers outside
-        // the editable rows so deleting/recreating a row cannot remove its watcher.
-        var logic = _table.AddSlot("Logic");
-        for (int first = 0; first < 64; first += 8)
-        {
-            var watch = new ExpressionFlux(logic.AddSlot($"Menu mappings {first:D2}-{first + 7:D2}"));
-            var changed = watch.If(watch.IsOwner(_root), watch.Trigger(watch.Ref(_menuAvailability), MenuRefreshTag));
-            for (int pair = first; pair < first + 8; pair++)
-            {
-                var mapped = watch.Read<Slot>(watch.Ref(_table), SystemSpace, "GestureTable.Pair." + pair);
-                var visible = watch.Choose<Slot>(watch.And(watch.Active(mapped),
-                    watch.Read<bool>(mapped, ClipSpace, "Enabled")), mapped, watch.Ref<Slot>(null));
-                watch.OnChanged<Slot>(visible, changed);
             }
         }
     }

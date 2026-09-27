@@ -43,8 +43,7 @@ internal sealed partial class ExpressionSystemSetup
             g.If(g.IsNull<User>(g.Owner(_root)), clear),
             g.Set<bool>(initialized, g.Constant(false))));
         var update = g.If(g.IsOwner(_root), g.Sequence(initialize,
-            g.Trigger(g.Ref(_selection), SelectionTickTag),
-            _menuAvailability == null ? null : g.Trigger(g.Ref(_menuAvailability), MenuRefreshTag)), stop);
+            g.Trigger(g.Ref(_selection), SelectionTickTag)), stop);
         g.OnChanged<bool>(g.IsOwner(_root), update);
         g.OnStart(update);
     }
