@@ -18,12 +18,12 @@ $values = @(
         $members = $entry.component.members
         if (!$members.VariableName) { continue }
         $variableName = $members.VariableName.value
-        if (!$variableName.StartsWith('ExpressionCore/') -and !$variableName.StartsWith('Expr/')) { continue }
+        if (!$variableName.StartsWith('ExpressionSystem/Core.') -and !$variableName.StartsWith('ExpressionCore/') -and !$variableName.StartsWith('Expr/')) { continue }
         $member = if ($members.Value) { $members.Value } else { $members.Reference }
         if (!$member) { continue }
         $value = if ($member.kind -eq 'reference') { $member.targetId } else { $member.value }
         [pscustomobject][ordered]@{
-            Name = $variableName.Substring($variableName.IndexOf('/') + 1)
+            Name = $variableName -replace '^(ExpressionSystem/Core\.|ExpressionCore/|Expr/)', ''
             Value = $value
             Kind = $member.kind
             ComponentId = $entry.component.id

@@ -1,38 +1,39 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 15`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 17`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
-変数名は `空間名/項目名`。以下の項目一覧では空間名を省略する。
-例えば Core の `LeftGesture` は `ExpressionCore/LeftGesture`、Catalog の `Id` は `ExpressionClip/Id`。
-変数定義が異なるレコードには別の空間名を付け、同じ定義のインスタンス間だけで名前を共用する。
+変数名は `空間名/項目名`。以下の項目一覧では空間名とモジュール接頭辞を省略する。
+例えば Core の `LeftGesture` は `ExpressionSystem/Core.LeftGesture`、Catalog の `Id` は `ExpressionSystem.Catalog.Clip/Id`。
+システム内で単一のモジュールは ExpressionSystem 空間を共有し、変数名の接頭辞をドットで区切る。
+複数インスタンスを持つレコードだけに別の空間を作り、空間名もドットで階層を表す。
 左右の手や各表情は、それぞれ独立した DynamicVariableSpace を持つため、同じ名前でも値は別になる。
 
 | 配置先（Expressions からの相対位置） | 空間名 | 定義の役割 |
 |---|---|---|
 | Expressions 自身 | `ExpressionSystem` | バージョンと入口への参照 |
-| Core | `ExpressionCore` | 入力・選択・再生状態 |
-| GestureTable | `ExpressionGestureTable` | 左右64通りの表情参照 |
-| Catalog/各表情、API/Templates/各表情 | `ExpressionClip` | 表情の設定と固定値一覧への参照 |
-| 各表情/Bindings/各項目 | `ExpressionBinding` | 出力レコードへの参照と固定値 |
-| Outputs/各項目 | `ExpressionOutput` | BlendShape の基礎入力・混合・最終出力 |
+| Core | `ExpressionSystem`（変数名 `Core.*`） | 入力・選択・再生状態 |
+| GestureTable | `ExpressionSystem`（変数名 `GestureTable.Pair.*`） | 左右64通りの表情参照 |
+| Catalog/各表情、API/Templates/各表情 | `ExpressionSystem.Catalog.Clip` | 表情の設定と固定値一覧への参照 |
+| 各表情/Bindings/各項目 | `ExpressionSystem.Catalog.Clip.Binding` | 出力レコードへの参照と固定値 |
+| Outputs/各項目 | `ExpressionSystem.Output` | BlendShape の基礎入力・混合・最終出力 |
 | Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と8キーの割当 |
-| Inputs/HandGestures/Modules/各機種 | `ExpressionGestureSettings` | しきい値と安定待ち時間 |
-| 各機種/Left、Right | `ExpressionGestureHand` | 片手の入力判定状態 |
-| Diagnostics/Import warning | `ExpressionImportWarning` | 変換時の警告文 |
-| Diagnostics/Graph modules/各項目 | `ExpressionGraphModule` | ボードのパスとノード数 |
+| Inputs/HandGestures/Modules/各機種 | `ExpressionSystem.Input.HandGestures` | しきい値と安定待ち時間 |
+| 各機種/Left、Right | `ExpressionSystem.Input.HandGestures.Hand` | 片手の入力判定状態 |
+| Diagnostics/Import warning | `ExpressionSystem.Diagnostics.ImportWarning` | 変換時の警告文 |
+| Diagnostics/Graph modules/各項目 | `ExpressionSystem.Diagnostics.GraphModule` | ボードのパスとノード数 |
 
 `Record()` は空間名を必須引数で受け取り、`OnlyDirectBinding=true` の空間を作る。
-例外は GestureTable（false）で、子 Slot の `ExpressionGestureTable/Pair.N` を表のスコープから読む。
+例外は Expressions 自身（false）で、Core と GestureTable には空間を追加せず、子 Slot の `ExpressionSystem/Core.*` と `ExpressionSystem/GestureTable.Pair.N` を共有空間へ登録する。
 単なる整理用の Catalog・Outputs・Bindings・Diagnostics には空間を追加しない。
 名前の定義は [ExpressionSpaces.cs](../src/VrmToResonitePackage/Expressions/ExpressionSpaces.cs) に集約する。
-ProtoFlux の読み書きは対象の空間名を明示し、変数生成は配置先の空間名を使う。
+ProtoFlux の読み書きは対象の空間名と変数名を明示し、変数生成は配置先の空間名を使う。単一モジュールの接頭辞は Slot 表示名から推測せず、明示的に付ける。
 固定の読み取り先がノード自身の祖先と同じ名前付き空間を指す場合は Dynamic Variable Input にする。
 各手のキーボード設定・装着状態、コントローラーの状態と親機種の設定、Core 内の Selection／Playback の状態・表情参照、各 Output 内の入力値が対象。
-実行時に対象が変わるレコード、Pair.N の可変名、祖先にない兄弟 Core への参照は ReadDynamicVariable を使う。
+実行時に対象が変わるレコードと Pair.N の可変名は ReadDynamicVariable を使う。Core と固定の表セルは、各モジュールから共通の ExpressionSystem 空間の Dynamic Variable Input で読める。
 
-Version 4 以前の共通 `Expr` 空間は新規生成しない。既存パッケージは再変換・再インポートで更新する。
+Version 17 では単一モジュールを統合し、複数レコードの空間名を階層化した。旧形式の空間は新規生成しない。既存パッケージは再変換・再インポートで更新する。
 DynamicVariable を直接読む外部処理は新しい名前へ変更する。公開 Dynamic Impulse の Tag・引数は Version 4 と同じ。
 
 - **設定**：動作を調整する編集用の値。固定的に使われても、実装上は変更可能な変数。
@@ -46,7 +47,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 15 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 17 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | GestureTable/各セル | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
@@ -62,7 +63,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | `Bindings` | Slot | 直下の Bindings | 定義。固定ポーズの値一覧への参照。null・削除・無効化時は選択無効 |
 | `MenuAvailable` | bool | false | 状態。メニュー生成時のみ作成。装着開始・対応表や有効状態などの変更時に再計算。Slot が有効・Enabled=true・対応表に参照ありなら true。ロード完了は判定しない |
 
-Bindings の子には ExpressionBinding 空間で次の2項目を保存する。
+Bindings の子には ExpressionSystem.Catalog.Clip.Binding 空間で次の2項目を保存する。
 
 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|
@@ -191,7 +192,7 @@ Touch・Index・Vive・WindowsMR の各モジュールに以下の設定を持�
 比較は厳密な `入力値 > しきい値`。Vive・WindowsMR は Grip の bool 出力を直接使うため、Grip の2設定は判定に使わない。
 全4機種で Grip・Trigger の判定結果と親指接触をビット化し、8行の指形状表と3行のボタン優先表で選ぶ。
 判定条件・公開設定は従来と同じ。詳細は[コントローラーのハンドサイン判定](expression-system.md#コントローラーのハンドサイン判定)を参照。
-各モジュールの Left / Right は独立した ExpressionGestureHand スコープを持つ。
+各モジュールの Left / Right は独立した ExpressionSystem.Input.HandGestures.Hand スコープを持つ。
 機種別入力もローカルな `StoredValue<bool>` で初期化済みかを管理し、User 参照は保持しない。
 ローカルユーザーが装着者でなくなるとフラグを false に戻し、次の装着時に候補・安定値・押下判定を初期化する。
 
@@ -231,8 +232,8 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 
 | 定数・値 | 役割 |
 |---|---|
-| `ExpressionSystem`、`ExpressionCore` など | 上記のレコード定義別の空間名。変数パスは空間名 + `/` + 項目名 |
-| `ExpressionGestureTable/Pair.` | 番号を付けて対応表を検索するパスの接頭辞 |
+| `ExpressionSystem`、`ExpressionSystem.Catalog.Clip` など | 上記のレコード定義別の空間名。変数パスは空間名 + `/` + 項目名 |
+| `ExpressionSystem/GestureTable.Pair.` | 番号を付けて対応表を検索するパスの接頭辞 |
 | 0〜7 | 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp |
 | 8 / 64 | 片手の状態数／左右の組合せ数。Pair の計算・逆引き・API 範囲検査に使用 |
 | -1 | 手の未確定、Select の一致する Pair が未発見 |

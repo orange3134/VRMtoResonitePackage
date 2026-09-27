@@ -25,7 +25,7 @@ internal sealed partial class ExpressionSystemSetup
             g.Trigger(g.Ref(_selection), SelectionTickTag))));
 
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
-        g.Write<int>(g.Ref(_core), CoreSpace, hand + "Gesture", gesture);
+        g.Write<int>(g.Ref(_core), SystemSpace, "Core." + hand + "Gesture", gesture);
 
     private void BuildGestureReceiver(ExpressionFlux g, string hand, string tag, bool fromMenu)
     {
@@ -33,12 +33,12 @@ internal sealed partial class ExpressionSystemSetup
         var receiver = g.Receiver<int>(tag);
         var payload = Out(receiver, "Value");
         var mutation = fromMenu
-            ? g.Sequence(g.Write<bool>(core, CoreSpace, "AllowExternalInput", g.Constant(false)), WriteHand(g, hand, payload))
+            ? g.Sequence(g.Write<bool>(core, SystemSpace, "Core.AllowExternalInput", g.Constant(false)), WriteHand(g, hand, payload))
             : WriteHand(g, hand, payload);
         Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
             g.Binary<int>("ValueGreaterOrEqual", payload, g.Constant(0)),
             g.Binary<int>("ValueLessThan", payload, g.Constant(8))),
-            ApplyRequest(g, mutation, fromMenu ? null : g.Read<bool>(core, CoreSpace, "AllowExternalInput"))));
+            ApplyRequest(g, mutation, fromMenu ? null : g.Read<bool>(core, SystemSpace, "Core.AllowExternalInput"))));
     }
 
     // This is a numeric lookup over stable Pair.0..63 keys, not child-index traversal.
@@ -47,7 +47,7 @@ internal sealed partial class ExpressionSystemSetup
     {
         var loop = g.Node("For", null, ("Count", g.Constant(64)));
         var index = Out(loop, "Iteration");
-        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(TableSpace, "Pair."))),
+        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(SystemSpace, "GestureTable.Pair."))),
             ("B", g.Node("ToString_Int", null, ("V", index))));
         Link(loop, "LoopIteration", body(index, g.Read<Slot>(g.Ref(_table), path)));
         return loop;
@@ -63,7 +63,7 @@ internal sealed partial class ExpressionSystemSetup
             g.Equal<string>(id, g.Read<string>(expression, ClipSpace, "Id"))), g.Set<int>(pair, index)));
         var select = g.Sequence(g.Set<int>(pair, g.Constant(-1)), find,
             g.If(g.Binary<int>("ValueGreaterOrEqual", pair, g.Constant(0)), ApplyRequest(g, g.Sequence(
-                g.Write<bool>(g.Ref(_core), CoreSpace, "AllowExternalInput", g.Constant(false)),
+                g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowExternalInput", g.Constant(false)),
                 WriteHand(g, "Left", g.Binary<int>("ValueDiv", pair, g.Constant(8))),
                 WriteHand(g, "Right", g.Binary<int>("ValueMod", pair, g.Constant(8)))))));
         Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
@@ -74,6 +74,6 @@ internal sealed partial class ExpressionSystemSetup
     {
         var receiver = g.Receiver<bool>(InputEnabledTag);
         Link(receiver, "OnTriggered", g.If(g.IsOwner(_root),
-            ApplyRequest(g, g.Write<bool>(g.Ref(_core), CoreSpace, "AllowExternalInput", Out(receiver, "Value")))));
+            ApplyRequest(g, g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowExternalInput", Out(receiver, "Value")))));
     }
 }

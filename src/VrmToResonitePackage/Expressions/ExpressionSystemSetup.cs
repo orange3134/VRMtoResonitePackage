@@ -33,10 +33,11 @@ internal sealed partial class ExpressionSystemSetup
         _model = model;
         _root = Record(avatar, "Expressions", SystemSpace);
         _catalog = _root.AddSlot("Catalog");
-        _core = Record(_root, "Core", CoreSpace);
+        _core = _root.AddSlot("Core");
         _outputs = _root.AddSlot("Outputs");
-        _table = Record(_root, "GestureTable", TableSpace);
-        _table.GetComponent<DynamicVariableSpace>().OnlyDirectBinding.Value = false;
+        _table = _root.AddSlot("GestureTable");
+        // Core fields and table rows bind to the single system space.
+        _root.GetComponent<DynamicVariableSpace>().OnlyDirectBinding.Value = false;
         _inputs = _root.AddSlot("Inputs");
         _api = _root.AddSlot("API").AddSlot("Receivers");
         var logic = _core.AddSlot("Logic");
@@ -45,12 +46,12 @@ internal sealed partial class ExpressionSystemSetup
         _playback = logic.AddSlot("Playback");
         foreach (string hand in new[] { "Left", "Right" })
         {
-            Data(_core, hand + "Gesture", 0);
+            Data(_core, "Core." + hand + "Gesture", 0);
         }
-        Data(_core, "AllowExternalInput", true);
-        Reference<Slot>(_core, "CurrentExpression", null);
-        Data(_core, "PairIndex", 0);
-        Data(_root, "Version", 16);
+        Data(_core, "Core.AllowExternalInput", true);
+        Reference<Slot>(_core, "Core.CurrentExpression", null);
+        Data(_core, "Core.PairIndex", 0);
+        Data(_root, "Version", 17);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -67,7 +68,7 @@ internal sealed partial class ExpressionSystemSetup
         {
             var cell = setup._table.AddSlot($"{index:D2} Left {index / 8} - Right {index % 8}");
             string id = setup._compiled.Pairs[index];
-            Reference(cell, "Pair." + index, id != null ? setup._clips.GetValueOrDefault(id) : null);
+            Reference(cell, "GestureTable.Pair." + index, id != null ? setup._clips.GetValueOrDefault(id) : null);
         }
         setup.BuildApi();
         setup.BuildInputs(menu);

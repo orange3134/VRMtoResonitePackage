@@ -22,11 +22,11 @@ internal sealed partial class ExpressionSystemSetup
         var cleanup = new List<IWorldElement>();
         foreach (string hand in new[] { "Left", "Right" })
         {
-            cleanup.Add(g.Write<int>(core, CoreSpace, hand + "Gesture", g.Constant(0)));
+            cleanup.Add(g.Write<int>(core, SystemSpace, "Core." + hand + "Gesture", g.Constant(0)));
         }
-        cleanup.Add(g.Write<bool>(core, CoreSpace, "AllowExternalInput", g.Constant(true)));
-        cleanup.Add(g.Write<Slot>(core, CoreSpace, "CurrentExpression", g.Ref<Slot>(null)));
-        cleanup.Add(g.Write<int>(core, CoreSpace, "PairIndex", g.Constant(0)));
+        cleanup.Add(g.Write<bool>(core, SystemSpace, "Core.AllowExternalInput", g.Constant(true)));
+        cleanup.Add(g.Write<Slot>(core, SystemSpace, "Core.CurrentExpression", g.Ref<Slot>(null)));
+        cleanup.Add(g.Write<int>(core, SystemSpace, "Core.PairIndex", g.Constant(0)));
         cleanup.Add(g.Each(g.Ref(_outputs), output => g.Sequence(
             g.Write<bool>(output, OutputSpace, "HasPose", g.Constant(false)),
             g.If(g.IsNull<ISyncRef>(g.Read<ISyncRef>(output, OutputSpace, "OriginalDriver")),

@@ -13,21 +13,21 @@ internal sealed partial class ExpressionSystemSetup
         var core = g.Ref(_core);
         var actions = new List<IWorldElement>();
 
-        var index = g.Binary<int>("ValueAdd", g.Binary<int>("ValueMul", g.Read<int>(core, CoreSpace, "LeftGesture"), g.Constant(8)),
-            g.Read<int>(core, CoreSpace, "RightGesture"));
-        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(TableSpace, "Pair."))),
+        var index = g.Binary<int>("ValueAdd", g.Binary<int>("ValueMul", g.Read<int>(core, SystemSpace, "Core.LeftGesture"), g.Constant(8)),
+            g.Read<int>(core, SystemSpace, "Core.RightGesture"));
+        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(SystemSpace, "GestureTable.Pair."))),
             ("B", g.Node("ToString_Int", null, ("V", index))));
         var candidate = g.Read<Slot>(g.Ref(_table), path);
         // Capture validation for this update without persisting intermediate references in Core.
         var selected = g.Local<Slot>();
-        var current = g.Read<Slot>(core, CoreSpace, "CurrentExpression");
+        var current = g.Read<Slot>(core, SystemSpace, "Core.CurrentExpression");
         var noExpression = g.Ref<Slot>(null);
         var resolved = g.Choose<Slot>(ValidExpression(g, candidate), candidate, noExpression);
         actions.Add(g.Set<Slot>(selected, resolved));
-        actions.Add(g.Write<int>(core, CoreSpace, "PairIndex", index));
+        actions.Add(g.Write<int>(core, SystemSpace, "Core.PairIndex", index));
 
         actions.Add(g.If(g.NotEqual<Slot>(selected, current),
-            g.Write<Slot>(core, CoreSpace, "CurrentExpression", selected)));
+            g.Write<Slot>(core, SystemSpace, "Core.CurrentExpression", selected)));
         actions.Add(g.Trigger(g.Ref(_playback), PlaybackTickTag));
         var select = g.Sequence(actions.ToArray());
         ReceiveUpdate(g, SelectionTickTag, select);
@@ -48,7 +48,7 @@ internal sealed partial class ExpressionSystemSetup
         var wearer = g.IsOwner(_root);
         var canWrite = g.Or(wearer, g.And(g.IsNull<User>(g.Owner(_root)),
             g.Node("IsLocalUser", null, ("User", g.Node("HostUser")))));
-        var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, CoreSpace, "CurrentExpression"), g.Ref<Slot>(null));
+        var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, SystemSpace, "Core.CurrentExpression"), g.Ref<Slot>(null));
         var bindings = g.Read<Slot>(current, ClipSpace, "Bindings");
         var update = g.Each(g.Ref(_outputs), output =>
         {

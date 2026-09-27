@@ -7,9 +7,7 @@ internal static class ExpressionSpaceChecks
     {
         var expected = new Dictionary<Slot, string>
         {
-            [root] = "ExpressionSystem",
-            [root.FindChild("Core")] = "ExpressionCore",
-            [root.FindChild("GestureTable")] = "ExpressionGestureTable"
+            [root] = "ExpressionSystem"
         };
         void Records(Slot parent, string name)
         {
@@ -17,21 +15,21 @@ internal static class ExpressionSpaceChecks
         }
         void Clips(Slot parent)
         {
-            Records(parent, "ExpressionClip");
-            foreach (var clip in parent.Children) Records(clip.FindChild("Bindings"), "ExpressionBinding");
+            Records(parent, "ExpressionSystem.Catalog.Clip");
+            foreach (var clip in parent.Children) Records(clip.FindChild("Bindings"), "ExpressionSystem.Catalog.Clip.Binding");
         }
         Clips(root.FindChild("Catalog"));
         Clips(root.FindChild("API").FindChild("Templates"));
-        Records(root.FindChild("Outputs"), "ExpressionOutput");
+        Records(root.FindChild("Outputs"), "ExpressionSystem.Output");
         var inputs = root.FindChild("Inputs");
         Records(inputs.FindChild("Keyboard"), "ExpressionSystem.Input.Keyboard");
         var modules = inputs.FindChild("HandGestures").FindChild("Modules");
-        Records(modules, "ExpressionGestureSettings");
-        foreach (var module in modules.Children) Records(module, "ExpressionGestureHand");
+        Records(modules, "ExpressionSystem.Input.HandGestures");
+        foreach (var module in modules.Children) Records(module, "ExpressionSystem.Input.HandGestures.Hand");
         var diagnostics = root.FindChild("Diagnostics");
-        Records(diagnostics.FindChild("Graph modules"), "ExpressionGraphModule");
+        Records(diagnostics.FindChild("Graph modules"), "ExpressionSystem.Diagnostics.GraphModule");
         foreach (var warning in diagnostics.Children.Where(s => s.Name == "Import warning"))
-            expected.Add(warning, "ExpressionImportWarning");
+            expected.Add(warning, "ExpressionSystem.Diagnostics.ImportWarning");
 
         var spaces = root.GetComponentsInChildren<DynamicVariableSpace>();
         Check(spaces.Count == expected.Count, "every record has exactly one explicit schema space");
@@ -39,12 +37,12 @@ internal static class ExpressionSpaceChecks
         {
             Check(expected.TryGetValue(space.Slot, out string name) && space.SpaceName.Value == name,
                 "space matches record schema: " + space.Slot.Name);
-            Check(space.OnlyDirectBinding.Value == (name != "ExpressionGestureTable"),
-                "only the gesture table permits unqualified binding");
+            Check(space.OnlyDirectBinding.Value == (name != "ExpressionSystem"),
+                "the shared system space binds Core fields and child table rows");
         }
         // Check prefixes independently of the generator's helpers, including child table
         // variables and optional output drivers, before and after package serialization.
-        string Prefix(Slot slot) => slot.GetComponentInParents<DynamicVariableSpace>().SpaceName.Value + "/";
+        string Prefix(Slot slot) => ExpressionTestFields.VariablePath(slot, "");
         void Values<T>()
         {
             foreach (var variable in root.GetComponentsInChildren<DynamicVariableBase<T>>())
@@ -59,8 +57,12 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 16,
-            "smoothed mesh output targets are identified by package version 16");
+        Check(root.GetComponents<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 17,
+            "shared singleton space is identified by package version 17");
+        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Core.LeftGesture", out _),
+            "Core fields are readable from the system root");
+        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.Pair.0", out _),
+            "table rows are readable from the system root");
         var core = root.FindChild("Core");
         Check(core.WriteDynamicVariable("Expr/AllowExternalInput", false) != DynamicVariableWriteResult.Success,
             "legacy shared-space writes cannot modify the new Core");

@@ -13,7 +13,7 @@ internal static class ExpressionDynamicInputChecks
             foreach (string hand in new[] { "Left", "Right" })
             {
                 var inputs = module.FindChild(hand).GetComponentsInChildren<DynamicVariableValueInput<float>>()
-                    .Where(node => Name(node).StartsWith("ExpressionGestureSettings/", StringComparison.Ordinal)).ToArray();
+                    .Where(node => Name(node).StartsWith("ExpressionSystem.Input.HandGestures/", StringComparison.Ordinal)).ToArray();
                 int expected = module.Name is "Vive" or "WindowsMR" ? 3 : 5;
                 Check(inputs.Length == expected, "all used ancestor settings use Dynamic Inputs: " + module.Name + "/" + hand);
                 foreach (var input in inputs)
@@ -42,10 +42,10 @@ internal static class ExpressionDynamicInputChecks
         {
             var logic = root.FindChild("Core").FindChild("Logic").FindChild(board);
             var current = logic.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>()
-                .Single(node => Name(node) == "ExpressionCore/CurrentExpression");
+                .Single(node => Name(node) == "ExpressionSystem/Core.CurrentExpression");
             var proxy = current.Slot.GetComponent<global::ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Variables.DynamicVariableInputProxy<Slot>>();
             var field = root.FindChild("Core").GetComponents<DynamicReferenceVariable<Slot>>()
-                .Single(variable => variable.VariableName.Value == "ExpressionCore/CurrentExpression");
+                .Single(variable => variable.VariableName.Value == "ExpressionSystem/Core.CurrentExpression");
             Check(proxy != null && proxy.HasValue && proxy.DynamicValue == field.Reference.Target,
                 "Core object input follows this avatar's selected expression: " + board);
             Check(logic.GetComponentsInChildren<DynamicVariableValueInput<int>>().Count > 0,
@@ -58,7 +58,7 @@ internal static class ExpressionDynamicInputChecks
         var modules = root.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");
         var module = modules.Children.First();
         var field = module.GetComponents<DynamicValueVariable<float>>()
-            .Single(value => value.VariableName.Value == "ExpressionGestureSettings/StabilitySeconds");
+            .Single(value => value.VariableName.Value == "ExpressionSystem.Input.HandGestures/StabilitySeconds");
         var key = root.FindChild("Inputs").FindChild("Keyboard").FindChild("Left").FindChild("DV").FindChild("Key.1")
             .GetComponent<DynamicValueVariable<Renderite.Shared.Key>>();
         var originalKey = key.Value.Value;
@@ -66,7 +66,7 @@ internal static class ExpressionDynamicInputChecks
         try
         {
             key.Value.Value = Renderite.Shared.Key.Keypad7;
-            Check(module.WriteDynamicVariable("ExpressionGestureSettings/StabilitySeconds", original + 0.137f) == DynamicVariableWriteResult.Success,
+            Check(module.WriteDynamicVariable("ExpressionSystem.Input.HandGestures/StabilitySeconds", original + 0.137f) == DynamicVariableWriteResult.Success,
                 "can edit ancestor setting");
             for (int i = 0; i < 3; i++) await default(NextUpdate);
             CheckBindings(root);

@@ -123,7 +123,7 @@ internal sealed partial class ExpressionSystemSetup
             var changed = watch.If(watch.IsOwner(_root), watch.Trigger(watch.Ref(_menuAvailability), MenuRefreshTag));
             for (int pair = first; pair < first + 8; pair++)
             {
-                var mapped = watch.Read<Slot>(watch.Ref(_table), TableSpace, "Pair." + pair);
+                var mapped = watch.Read<Slot>(watch.Ref(_table), SystemSpace, "GestureTable.Pair." + pair);
                 var visible = watch.Choose<Slot>(watch.And(watch.Active(mapped),
                     watch.Read<bool>(mapped, ClipSpace, "Enabled")), mapped, watch.Ref<Slot>(null));
                 watch.OnChanged<Slot>(visible, changed);
@@ -208,7 +208,7 @@ internal sealed partial class ExpressionSystemSetup
         var stable = g.Not(g.Greater(g.Add(g.Read<float>(handRef, GestureHandSpace, "Since"), g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds")), g.Now));
         var send = g.Sequence(SendGesture(g, g.Text(GestureTag(kind)), gesture),
             g.Write<int>(handRef, GestureHandSpace, "Stable", gesture));
-        var enabled = g.And(active, g.Read<bool>(g.Ref(_core), CoreSpace, "AllowExternalInput"));
+        var enabled = g.And(active, g.Read<bool>(g.Ref(_core), SystemSpace, "Core.AllowExternalInput"));
         var update = g.If(g.IsOwner(_root), g.Sequence(reset, g.If(enabled, g.Sequence(
             g.Write<bool>(handRef, GestureHandSpace, "GripHeld", grip), g.Write<bool>(handRef, GestureHandSpace, "TriggerHeld", indexCurled),
             g.If(changed, g.Sequence(g.Write<int>(handRef, GestureHandSpace, "Candidate", gesture), g.Write<float>(handRef, GestureHandSpace, "Since", g.Now))),

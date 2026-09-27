@@ -81,8 +81,8 @@ layout, and multi-client networking still require interactive verification.
 
 Node simplification uses scoped Dynamic Variable Inputs in controller hands, ancestor gesture settings,
 and Core selection/playback diagnostics, plus the local inputs of each Output. Namespace lookup must reach the same space instance from the fixed source
-and the input node; different intervening namespace names do not block that lookup. Dynamic source Slots,
-variable table keys and sibling Core lookups retain ReadDynamic nodes. The NATIVE report lists both forms.
+and the input node; different intervening namespace names do not block that lookup. Dynamic source Slots
+and variable table keys retain ReadDynamic nodes. Core lookups bind to the shared system space from every module. The NATIVE report lists both forms.
 Input proxy checks inspect actual HasValue/DynamicValue for both hands and Core object inputs. Editing
 StabilitySeconds must update that module's hands while other modules retain their values. The same checks
 run on clones and package reloads. Existing same-frame events, editable tables, removable modules,
@@ -223,3 +223,10 @@ independent same-name renderers, clone and package reload. Graph checks require
 exactly one smoother per mesh output and verify both links. Imported-avatar checks
 wait for smoothing to converge before comparing all 64 final poses with the baseline.
 Speed defaults to 20 and WriteBack is disabled. Generic standalone fields remain direct.
+
+Version 17 merges singleton Core and GestureTable spaces into ExpressionSystem.
+Their keys are Core.* and GestureTable.Pair.*; repeated clip, binding, output,
+input and diagnostic records retain separate spaces with dotted hierarchy names.
+Space checks require exactly one system space, no Core/table spaces, and root
+lookup of both modules. Runtime input, table editing, clone and package reload
+checks exercise the shared scope; snapshot helpers still recognize older schemas.

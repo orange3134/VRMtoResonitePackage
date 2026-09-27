@@ -26,10 +26,10 @@ internal static class ImportedGestureAvatarChecks
         foreach (var output in root.FindChild("Outputs").Children)
         {
             var original = output.GetComponents<DynamicReferenceVariable<ISyncRef>>()
-                .SingleOrDefault(v => v.VariableName.Value == "ExpressionOutput/OriginalDriver")?.Reference.Target;
+                .SingleOrDefault(v => v.VariableName.Value == "ExpressionSystem.Output/OriginalDriver")?.Reference.Target;
             if (original == null) continue;
             original.Target = null;
-            Check(output.WriteDynamicVariable("ExpressionOutput/Base", Get<float>(output, "Baseline")) == DynamicVariableWriteResult.Success,
+            Check(output.WriteDynamicVariable("ExpressionSystem.Output/Base", Get<float>(output, "Baseline")) == DynamicVariableWriteResult.Success,
                 "can stabilize tracking Base for fixed-pose comparison");
         }
         for (int i = 0; i < 6; i++) await default(NextUpdate);
@@ -74,7 +74,7 @@ internal static class ImportedGestureAvatarChecks
                 right.Children[r].GetComponent<ButtonDynamicImpulseTriggerWithValue<int>>().Pressed(null, default);
                 Check(Get<int>(core, "LeftGesture") == l && Get<int>(core, "RightGesture") == r, "Menu did not update both hand states synchronously");
                 var mapped = table.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-                    .Single(v => v.VariableName.Value == "ExpressionGestureTable/Pair." + (l * 8 + r)).Reference.Target;
+                    .Single(v => v.VariableName.Value == "ExpressionSystem/GestureTable.Pair." + (l * 8 + r)).Reference.Target;
                 Check(mapped != null && Reference<Slot>(core, "CurrentExpression") == mapped, "Missing or incorrect selected pose");
                 Check(Get<int>(core, "PairIndex") == l * 8 + r && !Get<bool>(core, "AllowExternalInput"),
                     "Imported pair or input mode disagrees with the selected gesture pair");
@@ -115,8 +115,8 @@ internal static class ImportedGestureAvatarChecks
         else Check(distinctPoses.Count >= 8, "Gesture menu did not produce eight distinct visible poses");
         var receiverRoot = root.FindChild("API").FindChild("Receivers");
         var mappings = table.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Where(v => v.VariableName.Value.StartsWith("ExpressionGestureTable/Pair.", StringComparison.Ordinal))
-            .ToDictionary(v => int.Parse(v.VariableName.Value["ExpressionGestureTable/Pair.".Length..]), v => v.Reference.Target);
+            .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.Pair.", StringComparison.Ordinal))
+            .ToDictionary(v => int.Parse(v.VariableName.Value["ExpressionSystem/GestureTable.Pair.".Length..]), v => v.Reference.Target);
         int visible = 0;
         foreach (var expression in root.FindChild("Catalog").Children)
         {
@@ -167,7 +167,7 @@ internal static class ImportedGestureAvatarChecks
             var selected = catalog.Children.Single(entry => Get<string>(entry, "Id") == originalId);
             const string editedId = "Smoke.RenamedImportedExpression";
             Check(catalog.Children.All(entry => Get<string>(entry, "Id") != editedId), "Edited test ID is unique");
-            Check(selected.WriteDynamicVariable("ExpressionClip/Id", editedId) == DynamicVariableWriteResult.Success, "Can edit imported expression ID");
+            Check(selected.WriteDynamicVariable("ExpressionSystem.Catalog.Clip/Id", editedId) == DynamicVariableWriteResult.Success, "Can edit imported expression ID");
             try
             {
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
@@ -182,7 +182,7 @@ internal static class ImportedGestureAvatarChecks
             }
             finally
             {
-                Check(selected.WriteDynamicVariable("ExpressionClip/Id", originalId) == DynamicVariableWriteResult.Success, "Can restore imported expression ID");
+                Check(selected.WriteDynamicVariable("ExpressionSystem.Catalog.Clip/Id", originalId) == DynamicVariableWriteResult.Success, "Can restore imported expression ID");
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(root.FindChild("API").FindChild("Receivers"),
                     ExpressionSystemSetup.InputEnabledTag, true, true);

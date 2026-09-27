@@ -143,12 +143,13 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 `DynamicVariableValueInput<T>`／`DynamicVariableObjectInput<T>` で読む。
 間に別名の空間があっても、要求した空間名で祖先を検索する。
 
-- 各手の Candidate・Stable・Since・GripHeld・TriggerHeld：`ExpressionGestureHand`。
-- 機種ごとの Grip/Trigger しきい値・StabilitySeconds：親モジュールの `ExpressionGestureSettings`。
-- Selection の左右値：`ExpressionCore`。
-- Selection の CurrentExpression：`ExpressionCore` の Object Input。
-- 各 Output の Id・Base・TrackingWeight・Result：`ExpressionOutput`。
+- 各手の Candidate・Stable・Since・GripHeld・TriggerHeld：`ExpressionSystem.Input.HandGestures.Hand`。
+- 機種ごとの Grip/Trigger しきい値・StabilitySeconds：親モジュールの `ExpressionSystem.Input.HandGestures`。
+- Selection の左右値：`ExpressionSystem/Core.LeftGesture`・`ExpressionSystem/Core.RightGesture`。
+- Selection の CurrentExpression：`ExpressionSystem/Core.CurrentExpression` の Object Input。
+- 各 Output の Id・Base・TrackingWeight・Result：`ExpressionSystem.Output`。
 
+API・機種別入力・各 Output からも、Core.* は祖先の ExpressionSystem 空間へ入力ノードでバインドする。
 Core の入力ノード化は現行の名前付き空間で再検証し、同一フレームの入力、複製、再装着、
 保存再読み込み後の選択・再生を確認した。機種別設定の編集も、両手の入力プロキシが該当する
 モジュールの値へ追従し、別機種・複製元と混ざらないことを確認する。
@@ -156,9 +157,8 @@ Core の入力ノード化は現行の名前付き空間で再検証し、同一
 
 次の読み取りは `ReadDynamicValueVariable<T>`／`ReadDynamicObjectVariable<T>` を維持する。
 
-- API・機種別入力・各 Output からの Core 参照：Core は兄弟階層にあり、入力ノード自身の祖先にはない。
 - 切り替え・初期化時の ForEach の出力レコード、選択中の Catalog：実行中に Source Slot が変わる。
-- `ExpressionGestureTable/Pair.N`：左右値や走査番号で読み取る変数名が変わる。
+- `ExpressionSystem/GestureTable.Pair.N`：左右値や走査番号で読み取る変数名が変わる。
 
 入力ノードには Source Slot を渡せないため、これらはそのまま入力ノードに置き換えない。
 
@@ -170,7 +170,7 @@ Core の入力ノード化は現行の名前付き空間で再検証し、同一
 ## 不具合の調べ方
 
 まず Core の変数を見て、入力・選択・再生のどこで期待とずれたかを分ける。
-Inspector 上の Core の変数名には `ExpressionCore/` が付く。他のレコードも定義別の空間名を使う。
+Inspector 上の Core の変数名には `ExpressionSystem/Core.` が付く。GestureTable も同じ ExpressionSystem 空間に GestureTable.* として登録する。複数インスタンスを持つレコードだけに、階層をドットで表す別の空間名を使う。
 
 | Core の変数 | 確認する内容 |
 |---|---|
@@ -186,7 +186,7 @@ Inspector 上の Core の変数名には `ExpressionCore/` が付く。他のレ
 
 `AllowExternalInput` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
 変換時の警告は引き続き `Diagnostics` に残る。
-`Diagnostics/Graph modules` の各レコードには `ExpressionGraphModule/Path` と `ExpressionGraphModule/NodeCount` があり、モジュールの場所と規模を確認できる。
+`Diagnostics/Graph modules` の各レコードには `ExpressionSystem.Diagnostics.GraphModule/Path` と `ExpressionSystem.Diagnostics.GraphModule/NodeCount` があり、モジュールの場所と規模を確認できる。
 Outputs の `Pose` は取得した終端値、`HasPose` は対応するトラックがあるかを示す。再生時計は持たない。
 反映が止まっている場合は、アバターの装着状態、該当モジュールの有効状態と `Outputs/Result`・`Target` を確認する。
 
@@ -202,7 +202,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/inspect-expression.p
 `-Json` を付けると CoreSlot と Values を持つ JSON を返す。SelectionStatus に基づく Selection 要約は出力しない。
 URL を省略した場合は resoloop の環境変数・プロジェクト設定を使う。
 参照値は現在の ResoniteLink 接続での ID として表示するため、保存後の固定 ID として使わない。
-診断スクリプトは旧 `Expr/` と現行 `ExpressionCore/` の両方を読み取れる。新しい空間名・診断項目の反映には再変換・再インポートが必要。
+診断スクリプトは旧 `Expr/`・`ExpressionCore/` と現行 `ExpressionSystem/Core.` を読み取れる。新しい空間名・診断項目の反映には再変換・再インポートが必要。
 
 
 ## Selection と再生対象
@@ -280,7 +280,7 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
   指を個別に取得できない機種の Victory/Rock はボタン操作から判定する。
 
 直接表情を選ぶ `Select expression` は、対応表に存在する有効な表情だけを表示する。
-選択すると、現在の対応表を逆引きして該当する左右値を両方更新し、`ExpressionCore/AllowExternalInput=false` にする。
+選択すると、現在の対応表を逆引きして該当する左右値を両方更新し、`ExpressionSystem/Core.AllowExternalInput=false` にする。
 同じ表情に複数の組がある場合は `PairIndex` が最小の組を使う。
 Catalog の Slot を固定用に保持する Override 変数は生成しない。
 
@@ -337,7 +337,7 @@ Touch・Index で両ボタンを押した場合は RockNRoll。Trigger は全機
 
 ## 対応表と表情の編集
 
-`GestureTable` の各スロットには `ExpressionGestureTable/Pair.N` という DynamicReferenceVariable<Slot> がある。
+`GestureTable` の各スロットには `ExpressionSystem/GestureTable.Pair.N` という DynamicReferenceVariable<Slot> がある。
 N は左×8＋右。例えば左1・右2は `Pair.10`。
 参照先を `Catalog` の表情スロットへ変更するだけで割り当てを編集できる。
 左右の組み合わせごとにアニメーションを複製せず、同じ表情は同じ Catalog エントリーを参照する。
@@ -353,7 +353,7 @@ N は左×8＋右。例えば左1・右2は `Pair.10`。
 直接選択メニューに表示するには、GestureTable の少なくとも1組へ参照を割り当てる。対応表の編集はメニュー表示にも次の更新で反映する。切り替えは即時に反映する。削除は表情スロットごと行える。
 テンプレートから複製したメニューの表示名・有効状態・送信する ID は複製先の変数に追従する。
 
-Bindings の子には ExpressionBinding 空間を置き、Output に対応する Outputs レコード、
+Bindings の子には ExpressionSystem.Catalog.Clip.Binding 空間を置き、Output に対応する Outputs レコード、
 Value に固定値を設定する。変換時は元カーブの最後のキー値を保存する。
 新しいシェイプを追加する場合は、対応する Outputs とメッシュへの接続も用意する。
 Value・子レコードを編集した後は、表情を再選択して適用する。
@@ -370,7 +370,7 @@ Bindings の参照自体を変更した場合は、その変更を監視して�
 | `ResoPon/Expression/Gesture/Right` | int 0〜7 | bool が true のとき右手を更新 |
 | `ResoPon/Expression/Menu/Left` | int 0〜7 | bool を false にして左手を更新 |
 | `ResoPon/Expression/Menu/Right` | int 0〜7 | bool を false にして右手を更新 |
-| `ResoPon/Expression/Menu/Select` | string: Catalog の `ExpressionClip/Id` | 対応表を逆引きし、bool を false にして両手を更新 |
+| `ResoPon/Expression/Menu/Select` | string: Catalog の `ExpressionSystem.Catalog.Clip/Id` | 対応表を逆引きし、bool を false にして両手を更新 |
 | `ResoPon/Expression/AllowExternalInput` | bool | 通常入力を許可するか設定。左右値は維持 |
 
 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp。
@@ -534,7 +534,7 @@ Speedは秒数ではなく追従速度。小さくするとゆっくり、大き
 連続して表情を変えた場合は現在の補間値から新しい目標へ追従する。未装着・未割り当て時のBase復帰にも同じ補間を使う。
 瞬き・口パクの混合は従来どおりTargetValueを追従更新し、その結果にも同じスムージングがかかる。
 非メッシュの汎用フィールド出力は直接書き込む。
-Playback は通常出力の ExpressionOutput/Result を読み、値が変わる場合だけWriteする。追跡対象のResultはTrackingのDriveが駆動する。
+Playback は通常出力の ExpressionSystem.Output/Result を読み、値が変わる場合だけWriteする。追跡対象のResultはTrackingのDriveが駆動する。
 
 2026-09-27: Version 16の実メッシュ検証では、選択直後のTargetValue更新、実ウェイトの中間値、
 遷移途中の再選択、瞬き合成、複製・保存再読込を確認した。Legniaの実変換・inspectでは138個の

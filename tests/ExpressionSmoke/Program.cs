@@ -108,7 +108,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(core.FindChild("SourceState") == null && core.FindChild("ParameterState") == null && expressions.FindChild("Rules") == null,
             "generic source arbitration and Animator graph are absent");
         Console.WriteLine($"Flux nodes: {expressions.GetComponentsInChildren<ProtoFluxNode>().Count}; Core: {core.GetComponentsInChildren<ProtoFluxNode>().Count}");
-        Check(core.GetComponents<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value is not "ExpressionCore/LeftInput" and not "ExpressionCore/RightInput"),
+        Check(core.GetComponents<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value is not "ExpressionSystem/Core.LeftInput" and not "ExpressionSystem/Core.RightInput"),
             "int requests retain no input Slot references");
         foreach (string tag in new[] { ExpressionSystemSetup.LeftTag, ExpressionSystemSetup.RightTag })
         {
