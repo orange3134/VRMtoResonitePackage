@@ -55,7 +55,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
-| Expressions/DV/GestureTable.Pair.LnRm | `Pair.L0R0`〜`Pair.L7R7` | Slot | コンパイルした表情、または null | 設定。n は左、m は右の値（各0〜7）。`FormatString` の `ExpressionSystem/GestureTable.Pair.L{0}R{1}` に左・右の順で渡し、変数名を直接検索する |
+| Expressions/DV/GestureTable.Pair.LnRm | `Pair.L0R0`〜`Pair.L7R7` | Slot | コンパイルした表情、または null | 設定。n は左、m は右の int 値（生成時は各0〜7）。`FormatString` の `ExpressionSystem/GestureTable.Pair.L{0}R{1}` に左・右の順で渡し、変数名を直接検索する |
 
 Version 22から対応表の参照名を `GestureTable.Pair.LnRm` に変更した。例：左1・右2は
 `GestureTable.Pair.L1R2`。選択時に左×8＋右の番号へ変換せず、左右を文字列化して直接参照する。
@@ -104,7 +104,7 @@ Bindings の子には ExpressionSystem.Catalog.Clip.Binding 空間で次の2項�
 | 名前 | 型 | 初期値 | 更新元・役割 |
 |---|---|---|---|
 | `AllowExternalInput` | bool | true | **設定**。通常のジェスチャー・キーボード・外部左右 API の受付可否。メニュー操作で false、初期化で true。許可 API でも変更可能 |
-| `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の 0〜7。メニューも同じ値を更新 |
+| `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューも同じ値を更新 |
 | `PairKey` | string | L0R0 | Selection が組み立てた `L{LeftGesture}R{RightGesture}`。対応表のキー |
 | `CurrentExpression` | Slot | null | Slot 有効・Enabled=true・Bindings参照先が有効な候補。それ以外は null |
 
@@ -255,7 +255,7 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `ExpressionSystem`、`ExpressionSystem.Catalog.Clip` など | 上記のレコード定義別の空間名。変数パスは空間名 + `/` + 項目名 |
 | `ExpressionSystem/GestureTable.Pair.` | `L{左}R{右}` を付けて対応表を検索するパスの接頭辞 |
 | 0〜7 | 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp |
-| 8 / 64 | 片手の状態数／左右の組合せ数。Pair の計算・逆引き・API 範囲検査に使用 |
+| 8 / 64 | 生成時の片手の状態数／左右の組合せ数。Select の逆引きにも使用。左右 API の値は制限しない |
 | -1 | 手の未確定、Select の一致する Pair が未発見 |
 | 0 / 1（float） | 追跡混合率の端点 |
 | null | 未選択 Slot、未記録 User など参照なし |
@@ -264,8 +264,8 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 
 | C# 定数 | Tag | 引数・役割 |
 |---|---|---|
-| `LeftTag` / `RightTag` | `ResoPon/Expression/Gesture/Left` / `ResoPon/Expression/Gesture/Right` | int 0〜7。通常の左右入力。AllowExternalInput に従う |
-| `MenuLeftTag` / `MenuRightTag` | `ResoPon/Expression/Menu/Left` / `ResoPon/Expression/Menu/Right` | int 0〜7。メニュー専用にして片手を変更 |
+| `LeftTag` / `RightTag` | `ResoPon/Expression/Gesture/Left` / `ResoPon/Expression/Gesture/Right` | int（範囲制限なし）。通常の左右入力。AllowExternalInput に従う |
+| `MenuLeftTag` / `MenuRightTag` | `ResoPon/Expression/Menu/Left` / `ResoPon/Expression/Menu/Right` | int（範囲制限なし）。メニュー専用にして片手を変更 |
 | `SelectTag` | `ResoPon/Expression/Menu/Select` | string。表にある有効な表情 ID を左・右の順に小さい組へ逆引きし、両手を変更してメニュー専用にする |
 | `InputEnabledTag` | `ResoPon/Expression/AllowExternalInput` | bool。通常入力の許可・停止。左右値は維持 |
 | `InitializeTag` | `ResoPon/Expression/Internal/Initialize` | 引数なし。Lifecycle の初期化確認 |

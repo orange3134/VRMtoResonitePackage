@@ -37,9 +37,7 @@ internal sealed partial class ExpressionSystemSetup
         var mutation = fromMenu
             ? g.Sequence(g.Write<bool>(core, SystemSpace, "Core.AllowExternalInput", g.Constant(false)), WriteHand(g, hand, payload))
             : WriteHand(g, hand, payload);
-        Link(receiver, "OnTriggered", g.If(g.And(g.IsOwner(_root),
-            g.Binary<int>("ValueGreaterOrEqual", payload, g.Constant(0)),
-            g.Binary<int>("ValueLessThan", payload, g.Constant(8))),
+        Link(receiver, "OnTriggered", g.If(g.IsOwner(_root),
             ApplyRequest(g, mutation, fromMenu ? null : g.Read<bool>(core, SystemSpace, "Core.AllowExternalInput"))));
     }
 

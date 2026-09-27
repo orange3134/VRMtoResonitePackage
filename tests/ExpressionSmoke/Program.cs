@@ -183,15 +183,25 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Math.Abs(field.Value - 1) < 0.01, "same expression retains its fixed pose");
         Gesture(1, 1); await Frames();
         Check(Math.Abs(field.Value - 0.7f) < 0.01, "both-hand table entry selects Angry");
-        foreach (int malformed in new[] { int.MinValue, -1, 8, 255, int.MaxValue })
+        foreach (int extended in new[] { int.MinValue, -1, 8, 255, int.MaxValue })
         {
-            Gesture(0, malformed);
-            Gesture(1, malformed);
-            Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
-                Get<string>(core, "PairKey") == "L1R1" && Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry") &&
+            int right = extended == 8 ? 255 : extended;
+            string key = $"L{extended}R{right}";
+            Gesture(0, extended); Gesture(1, right);
+            Check(Get<int>(core, "LeftGesture") == extended && Get<int>(core, "RightGesture") == right &&
+                Get<string>(core, "PairKey") == key && Reference<Slot>(core, "CurrentExpression") == null &&
                 Get<bool>(core, "AllowExternalInput"),
-                "malformed gesture leaves hand state and playback unchanged: " + malformed);
+                "extended gestures are retained even without a table entry: " + key);
+            var row = expressions.FindChild("DV").AddSlot("GestureTable.Pair." + key);
+            var mapping = row.AttachComponent<DynamicReferenceVariable<Slot>>();
+            mapping.VariableName.Value = "ExpressionSystem/GestureTable.Pair." + key;
+            mapping.Reference.Target = catalog.FindChild("Angry");
+            await Frames();
+            Check(Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry") &&
+                Math.Abs(field.Value - 0.7f) < 0.01,
+                "externally added extended pair immediately plays its expression: " + key);
         }
+        Gesture(0, 1); Gesture(1, 1);
         await Frames();
         Check(Get<bool>(core, "AllowExternalInput"), "ordinary input is initially enabled");
         Select("Smile"); await Frames();
@@ -213,8 +223,16 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(!Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == "L1R1" &&
             Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry"),
             "menu can update the other hand while ordinary input is disabled");
+        MenuGesture(0, 8); MenuGesture(1, 255);
+        Gesture(0, 0); Gesture(1, 0);
+        Check(Get<string>(core, "PairKey") == "L8R255" && !Get<bool>(core, "AllowExternalInput") &&
+            Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry"),
+            "extended menu inputs select external rows and still block ordinary input");
         MenuGesture(0, -1); MenuGesture(1, 8);
-        Check(Get<string>(core, "PairKey") == "L1R1" && !Get<bool>(core, "AllowExternalInput"), "invalid menu values leave pair and mode unchanged");
+        Check(Get<string>(core, "PairKey") == "L-1R8" && !Get<bool>(core, "AllowExternalInput") &&
+            Reference<Slot>(core, "CurrentExpression") == null,
+            "unmapped extended menu inputs retain the pair and clear selection");
+        MenuGesture(0, 1); MenuGesture(1, 1);
         AllowInput();
         Check(Get<bool>(core, "AllowExternalInput") && Get<string>(core, "PairKey") == "L1R1",
             "enabling ordinary input retains the selected pair");
@@ -430,6 +448,12 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "reloaded receiver evaluates the pair before the next frame");
         for (int i = 0; i < 60; i++) await default(NextUpdate);
         Check(Math.Abs(restored.GetComponent<ValueField<float>>().Value.Value - 0.7f) < 0.01, "reloaded stock ProtoFlux applies a fixed pose without converter callbacks");
+        var restoredApi = restoredExpressions.FindChild("API").FindChild("Receivers");
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.LeftTag, true, 8);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.RightTag, true, 255);
+        Check(Get<string>(restoredCore, "PairKey") == "L8R255" &&
+            Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
+            "saved external pair and unrestricted gesture receivers work after package reload");
         // Curves with equal endpoints may still have a tangent excursion.
         var testCurve = new ExpressionCurve { Binding = new("Face", "Curve") };
         testCurve.Keys.Add(new(0, 0, 0, 4)); testCurve.Keys.Add(new(1, 0, -4, 0));

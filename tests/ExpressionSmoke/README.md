@@ -16,7 +16,7 @@ serialized VRChat menu enum values, gesture conditions, Hermite curves, public
 impulse validation, all 64 compiled gesture pairs, layer composition and history rejection,
 all eight int values on each of the ResoPon/Expression/Gesture/Left and ResoPon/Expression/Gesture/Right Tags, immediate evaluation of each
 received hand pair (including back-to-back events before the next frame), unchanged-expression
-playback, out-of-range integers, invalid/null selection IDs, argument-type mismatches, last-input retention across controller
+playback, unrestricted integers (including externally added table rows and missing rows), invalid/null selection IDs, argument-type mismatches, last-input retention across controller
 inactivity and removable modules, editable table references, original tracking drivers, same-wearer clones,
 and saving/reimporting/replaying an actual `.resonitepackage`.
 It also verifies one Flux node per slot, node slots directly under each logic board, and distinct node

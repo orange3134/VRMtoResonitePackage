@@ -3,8 +3,8 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
-左右それぞれの現在のジェスチャーを 0〜7 の整数で保持し、
-`GestureTable.Pair.L{LeftGesture}R{RightGesture}` の名前で64通りの対応表を直接引く。
+左右それぞれの現在のジェスチャーを int で保持し、
+`GestureTable.Pair.L{LeftGesture}R{RightGesture}` の名前で対応表を直接引く。生成時は64通りで、外部から行を追加できる。
 対応表で選んだ表情の各トラックの終端値へ即座に切り替え、固定ポーズとして保持する。
 VRChatのカスタムFXからFaceEmo基準で最初の表情パターンを読み取り、対応表へ変換する。
 左右64通りへ静的に変換する方式であり、Animator 全体や汎用パラメーターの状態機械は生成しない。
@@ -178,7 +178,7 @@ Inspector 上の Core の変数名には `ExpressionSystem/Core.` が付く。Ge
 
 | Core の変数 | 確認する内容 |
 |---|---|
-| `LeftGesture` / `RightGesture` | 各入力から届いた0〜7の状態 |
+| `LeftGesture` / `RightGesture` | 各入力から届いた int の状態（範囲制限なし） |
 | `PairKey` | `L{左}R{右}` 形式の対応表キー（例：L1R2） |
 | AllowExternalInput | true=通常入力も許可、false=コンテキストメニューのみ（編集可能） |
 | `CurrentExpression` | Selection の検証を通過した再生対象。無効・未割当なら null |
@@ -306,7 +306,11 @@ Touchは接触・Clickの5ビット、Indexは5本の指の近位関節角度、
 ## 対応表と表情の編集
 
 `Expressions/DV/GestureTable.Pair.LnRm` の各スロットには `ExpressionSystem/GestureTable.Pair.LnRm` という DynamicReferenceVariable<Slot> がある。
-n は左、m は右の0〜7の値。例えば左1・右2は `Pair.L1R2`。
+n は左、m は右の int 値。ResoPon が生成するのは各0〜7で、例えば左1・右2は `Pair.L1R2`。
+外部で `Expressions/DV/GestureTable.Pair.L8R255` に変数名 `ExpressionSystem/GestureTable.Pair.L8R255`
+という DynamicReferenceVariable<Slot> を追加すれば、左右 API に8と255を送って選択できる。
+左右の通常・メニュー API は負数も含む int 全域を受理する。対応行がなければ入力値を保持し、ベース入力へ戻る。
+ID による Select の逆引きは引き続き各0〜7だけを走査するため、拡張行の選択には左右 API を使う。
 参照先を `Catalog` の表情スロットへ変更するだけで割り当てを編集できる。
 左右の組み合わせごとにアニメーションを複製せず、同じ表情は同じ Catalog エントリーを参照する。
 
@@ -334,15 +338,15 @@ Bindings の参照自体を変更した場合は、その変更を監視して�
 
 | Tag | 引数 | 動作 |
 |---|---|---|
-| `ResoPon/Expression/Gesture/Left` | int 0〜7 | bool が true のとき左手を更新 |
-| `ResoPon/Expression/Gesture/Right` | int 0〜7 | bool が true のとき右手を更新 |
-| `ResoPon/Expression/Menu/Left` | int 0〜7 | bool を false にして左手を更新 |
-| `ResoPon/Expression/Menu/Right` | int 0〜7 | bool を false にして右手を更新 |
+| `ResoPon/Expression/Gesture/Left` | int（範囲制限なし） | bool が true のとき左手を更新 |
+| `ResoPon/Expression/Gesture/Right` | int（範囲制限なし） | bool が true のとき右手を更新 |
+| `ResoPon/Expression/Menu/Left` | int（範囲制限なし） | bool を false にして左手を更新 |
+| `ResoPon/Expression/Menu/Right` | int（範囲制限なし） | bool を false にして右手を更新 |
 | `ResoPon/Expression/Menu/Select` | string: Catalog の `ExpressionSystem.Catalog.Clip/Id` | 対応表を逆引きし、bool を false にして両手を更新 |
 | `ResoPon/Expression/AllowExternalInput` | bool | 通常入力を許可するか設定。左右値は維持 |
 
 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp。
-Tag は大文字・小文字を含めて完全一致。範囲外の int、引数型違い、無効・未割当の ID は入力状態を変更しない。
+Tag は大文字・小文字を含めて完全一致。引数型違い、無効・未割当の ID は入力状態を変更しない。
 固定したいときは Menu 側の Tag を使い、手入力など固定しない送信元は Gesture 側を使う。
 メニューの送信にも専用の Tag を使うため、通常入力を無効にしてもメニューは操作できる。
 
