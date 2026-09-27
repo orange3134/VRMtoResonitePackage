@@ -4,7 +4,7 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
-    private const float DefaultSmoothingSpeed = 20f;
+    private const float DefaultSmoothingSpeed = 10f;
     private readonly Dictionary<SkinnedMeshRenderer, DynamicBlendShapeDriver> _meshDrivers = new();
     private Slot _drivers;
 

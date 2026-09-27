@@ -54,11 +54,11 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 | Expressions | `Version` | int | 20 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
-| Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 20 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
+| Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
 | Expressions/DV/GestureTable.Pair.N | `Pair.0`〜`Pair.63` | Slot | コンパイルした表情、または null | 設定。番号は `左 × 8 + 右`。子の並び順ではなく変数名で検索する |
 
 Version 20から `SmoothingSpeed` を共有する。各SmoothValueと同じSlotの
-`DynamicValueVariableDriver<float>` がこの変数を読み、Speedを駆動する。未解決時の既定値も20。
+`DynamicValueVariableDriver<float>` がこの変数を読み、Speedを駆動する。未解決時の既定値も10。
 このDriverはDynamicVariableBaseを継承するが変数の定義ではなく参照側なので、DVではなく駆動対象と同じSlotに置く。
 値は補間秒数ではなく追従速度で、小さいほどゆっくり、大きいほど速い。各Speedの直接編集ではなく、
 共通変数のValueを編集する。通常の表情と追跡を合成した出力の両方へ適用される。

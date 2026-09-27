@@ -46,7 +46,7 @@ internal static class ExpressionMeshDriverChecks
             Clip("Second pose", (smileA, 0.7f), (smileB, 0.4f), (blinkA, 0.3f));
             await ExpressionSystemSetup.BuildAsync(avatar, model, b => targets[b], initialWeight: _ => 0f);
             await Frames(90); await Verify(avatar);
-            await CheckSmoothingSpeed(avatar, 20f, 37f);
+            await CheckSmoothingSpeed(avatar, 10f, 37f);
             clone = avatar.Duplicate(parent); await Frames(90); await Verify(clone);
             await CheckSmoothingSpeed(clone, 37f, 53f);
             CheckSpeeds(avatar, 37f);

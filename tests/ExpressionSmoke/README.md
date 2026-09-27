@@ -221,7 +221,7 @@ weights, continuous retargeting during a transition, convergence, blink composit
 independent same-name renderers, clone and package reload. Graph checks require
 exactly one smoother per mesh output and verify both links. Imported-avatar checks
 wait for smoothing to converge before comparing all 64 final poses with the baseline.
-Speed defaults to 20 and WriteBack is disabled. Generic standalone fields remain direct.
+Speed defaults to 10 and WriteBack is disabled. Generic standalone fields remain direct.
 
 Version 17 merges singleton Core and GestureTable spaces into ExpressionSystem.
 Their keys are Core.* and GestureTable.Pair.*; repeated clip, binding, output,
@@ -236,7 +236,7 @@ variable key. Shared Core.* and GestureTable.Pair.* fields live in Expressions/D
 Structure checks cover each variable's owner, parent, name and single occupancy
 before and after package reload. Snapshot helpers also read older record layouts.
 
-Version 20 exposes a single ExpressionSystem/SmoothingSpeed float (default 20) in
+Version 20 exposes a single ExpressionSystem/SmoothingSpeed float (default 10) in
 Expressions/DV/SmoothingSpeed. Each mesh SmoothValue.Speed is bound through a
 DynamicValueVariableDriver<float>. The real-mesh fixture changes this value and
 checks every smoother across both renderers, including the tracked blink output.
