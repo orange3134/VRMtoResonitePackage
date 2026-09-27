@@ -50,14 +50,14 @@ internal sealed partial class ExpressionSystemSetup
         driver.Color.Target = item.GetComponent<ContextMenuItemSource>().Color;
     }
 
-    private void GesturePermissionMenuColor(Slot item, bool enabled)
+    private void GesturePermissionMenuColor(Slot item)
     {
         var driver = item.AttachComponent<ValueOptionDescriptionDriver<bool>>();
         driver.Value.Target = _root.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>()
             .Single(v => v.VariableName.Value == Path(SystemSpace, "Core.AllowHandGestures")).Value;
-        driver.DefaultOption.Color.Value = colorX.White;
+        driver.DefaultOption.Color.Value = new colorX(1f, 0f, 0f, 1f, ColorProfile.Linear);
         var selected = driver.Options.Add();
-        selected.ReferenceValue.Value = enabled;
+        selected.ReferenceValue.Value = true;
         selected.Color.Value = SelectedMenuColor;
         driver.Color.Target = item.GetComponent<ContextMenuItemSource>().Color;
     }
@@ -83,12 +83,12 @@ internal sealed partial class ExpressionSystemSetup
             item.Label.DriveFrom(expression.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "DisplayName")).Value);
             SelectMenuTrigger(expression, expression);
         }
-        foreach (var (name, enabled) in new[] { ("Allow hand gestures", true), ("Disable hand gestures", false) })
-        {
-            var mode = items.AddSlot(name); MenuItem(mode, name);
-            MenuTrigger(mode, _api, HandGesturesEnabledTag, enabled);
-            GesturePermissionMenuColor(mode, enabled);
-        }
+        var mode = items.AddSlot("Hand gestures"); MenuItem(mode, mode.Name);
+        var toggleButton = mode.AttachComponent<ButtonDynamicImpulseTrigger>();
+        toggleButton.Target.Target = _api;
+        toggleButton.ExcludeDisabled.Value = true;
+        toggleButton.PressedTag.Value = ToggleHandGesturesTag;
+        GesturePermissionMenuColor(mode);
         var reset = items.AddSlot("Reset settings"); MenuItem(reset, reset.Name);
         var resetButton = reset.AttachComponent<ButtonDynamicImpulseTrigger>();
         resetButton.Target.Target = _api;

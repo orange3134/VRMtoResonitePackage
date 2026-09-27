@@ -402,13 +402,15 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<int>(core, "LeftGesture") == 0 && Get<bool>(core, "AllowHandGestures"),
             "gesture and select requests are ignored without a local wearer");
         Set(core, "AllowHandGestures", false);
+        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Hand gestures")
+            .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         AllowInput();
         expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Reset settings")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
         Check(!Get<bool>(core, "AllowHandGestures"),
-            "input-mode and reset requests are ignored without a local wearer");
+            "input-mode, toggle and reset requests are ignored without a local wearer");
         // Sentinel selection state proves wearer-only private stages did no work.
         var outputState = expressions.FindChild("Outputs").Children.Single();
         Set(core, "PairKey", "__unchanged");

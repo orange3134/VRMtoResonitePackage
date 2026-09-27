@@ -134,23 +134,20 @@ internal static class ImportedGestureAvatarChecks
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.RightTag, true, (heldRight + 1) % 8);
         Check(Get<int>(core, "LeftGesture") == heldLeft && Get<int>(core, "RightGesture") == heldRight,
             "Saved menu-only mode ignores normal input");
-        var enable = menu.FindChild("Allow hand gestures").GetComponent<ButtonDynamicImpulseTriggerWithValue<bool>>();
-        Check(enable.PressedData.Tag.Value == ExpressionSystemSetup.HandGesturesEnabledTag && enable.PressedData.Value.Value,
-            "Saved allow-input button sends true");
-        enable.Pressed(null, default);
+        var toggle = menu.FindChild("Hand gestures").GetComponent<ButtonDynamicImpulseTrigger>();
+        Check(toggle.PressedTag.Value == ExpressionSystemSetup.ToggleHandGesturesTag,
+            "Saved hand gesture button sends a toggle impulse");
+        toggle.Pressed(null, default);
         Check(Get<bool>(core, "AllowHandGestures") && Get<int>(core, "LeftGesture") == heldLeft && Get<int>(core, "RightGesture") == heldRight,
             "Enabling ordinary input retains the saved menu pair");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.LeftTag, true, 0);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.RightTag, true, 0);
         Check(Get<string>(core, "PairKey") == "L0R0", "Saved normal input works after enabling");
-        var disable = menu.FindChild("Disable hand gestures").GetComponent<ButtonDynamicImpulseTriggerWithValue<bool>>();
-        Check(disable.PressedData.Tag.Value == ExpressionSystemSetup.HandGesturesEnabledTag && !disable.PressedData.Value.Value,
-            "Saved menu-only button sends false");
-        disable.Pressed(null, default);
+        toggle.Pressed(null, default);
         Check(!Get<bool>(core, "AllowHandGestures"), "Saved menu-only button disables ordinary input");
         for (int i = 0; i < 2; i++) await default(NextUpdate);
         ExpressionGraphChecks.CheckMenuColors(root);
-        Console.WriteLine($"PASS: {visible} Catalog direct-menu entries and both input-mode buttons work without Override state");
+        Console.WriteLine($"PASS: {visible} Catalog direct-menu entries and the hand gesture toggle work without Override state");
         var importedMenu = menu.FindChild("Imported menu");
         // All menu items stay enabled; valid Catalog IDs can select an expression.
         var mappedIds = root.FindChild("Catalog").Children.Where(expression => expression.IsActive && Get<bool>(expression, "Enabled"))

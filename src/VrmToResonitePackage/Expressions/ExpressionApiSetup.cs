@@ -17,6 +17,7 @@ internal sealed partial class ExpressionSystemSetup
         BuildHandReceiver(new(logic.AddSlot("KeyboardRight")), "Right", KeyboardRightTag, gestureInput: false);
         BuildSelectReceiver(new(logic.AddSlot("Select")));
         BuildHandGesturesEnabledReceiver(new(logic.AddSlot("AllowHandGestures")));
+        BuildHandGesturesToggleReceiver(new(logic.AddSlot("ToggleHandGestures")));
         var reset = new ExpressionFlux(logic.AddSlot("Reset"));
         ReceiveUpdate(reset, ResetTag, reset.Trigger(reset.Ref(_lifecycle), ResetStateTag));
     }
@@ -71,6 +72,14 @@ internal sealed partial class ExpressionSystemSetup
                 g.Trigger(g.Ref(_playback), PlaybackTickTag)))));
         Link(receiver, "OnTriggered", g.If(g.And(g.AvatarWornLocal,
             g.NotEqual<string>(id, g.Text("")), g.Node("NotNull", typeof(string), ("Instance", id))), select));
+    }
+
+    private void BuildHandGesturesToggleReceiver(ExpressionFlux g)
+    {
+        var core = g.Ref(_core);
+        ReceiveUpdate(g, ToggleHandGesturesTag, ApplyRequest(g,
+            g.Write<bool>(core, SystemSpace, "Core.AllowHandGestures",
+                g.Not(g.Read<bool>(core, SystemSpace, "Core.AllowHandGestures")))));
     }
 
     private void BuildHandGesturesEnabledReceiver(ExpressionFlux g)

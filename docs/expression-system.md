@@ -299,12 +299,12 @@ AllowHandGestures=falseにするが、LeftGesture・RightGesture・PairKeyは変
 表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `Core.CurrentExpression` を参照して駆動する。
 Catalog・Imported menuともに選択中の表情は緑、それ以外は白。null用の白いOptionを先頭に置き、
 参照先の表情を削除した項目が未選択状態で緑にならないようにする。
-ジェスチャー許可・停止のColorは `ValueOptionDescriptionDriver<bool>` が `Core.AllowHandGestures` を読み、
-現在のboolに一致する項目だけ緑にする。両DriverともLabel・Spriteは駆動せず、Enabledの自動制御も追加しない。
+ジェスチャー許可トグルのColorは `ValueOptionDescriptionDriver<bool>` が `Core.AllowHandGestures` を読み、
+有効（true）なら緑、無効（false）なら赤にする。両DriverともLabel・Spriteは駆動せず、Enabledの自動制御も追加しない。
 参照はアバター複製時に複製先へ再対応し、Catalogテンプレートを複製した項目は自分自身の表情を比較対象にする。
 Catalog の Slot を固定用に保持する Override 変数は生成しない。
 
-`Allow hand gestures` は bool を true に、`Disable hand gestures` は false にする。
+Version 26の `Hand gestures` は単一のトグル項目で、押すたびに現在のboolを反転する。
 モードだけの変更では左右値・CurrentExpressionを変えない。初期値は true。
 メニューから表情を選ぶと再び false になるため、ハンドジェスチャーへ戻すには許可をオンにする。キーボードはそのまま使える。
 直接選択は bool が false でも使える。ハンドジェスチャーを再許可した後も、次の左右入力イベントまでは直接選択を保持する。
@@ -347,7 +347,7 @@ Value に固定値を設定する。変換時は元カーブの最後のキー�
 Value・子レコードを編集した後は、表情を再選択して適用する。
 Bindings の参照自体を変更した場合は、その変更を監視して適用する。
 
-## 外部イベント API（Version 25）
+## 外部イベント API（Version 26）
 
 アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
 左右のGesture入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
@@ -360,6 +360,7 @@ Bindings の参照自体を変更した場合は、その変更を監視して�
 | `ResoPon/Expression/Keyboard/Right` | int（範囲制限なし） | フラグに関係なく右手を更新。フラグ自体は維持 |
 | `ResoPon/Expression/Menu/Select` | string: Catalog の `ExpressionSystem.Catalog.Clip/Id` | Catalogを検索し、boolをfalseにしてCurrentExpressionを直接設定 |
 | `ResoPon/Expression/AllowHandGestures` | bool | ハンドジェスチャーを許可するか設定。左右値・表情は維持 |
+| `ResoPon/Expression/ToggleHandGestures` | なし | 現在のハンドジェスチャー許可を反転。左右値・表情は維持 |
 | `ResoPon/Expression/Reset` | なし | 表情を解除してBaseへ戻し、左右を0、ジェスチャー入力を有効にする |
 
 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp。

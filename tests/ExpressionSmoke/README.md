@@ -31,7 +31,7 @@ feedback cycles, and repeatable arrangement. The synthetic run
 writes keyboard-layout.json for inspecting the generated coordinates and edges.
 Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Catalog ID and AllowHandGestures receives bool; no Command slots may remain.
 Each actual Flux group must stay within one logic board. Core lifecycle, selection,
-playback, the seven public API receivers, and each controller hand have independent
+playback, the eight public API receivers, and each controller hand have independent
 boards. The test reports node/group counts and enforces a 256-node per-board budget,
 including after package reimport. Module diagnostic counts must match the graph.
 Each Output has its own sampling/mixing/fade board and a driven field exposed as Result.

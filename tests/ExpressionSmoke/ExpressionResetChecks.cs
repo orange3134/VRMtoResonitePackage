@@ -29,6 +29,20 @@ internal static class ExpressionResetChecks
             Check(Get<int>(core, "LeftGesture") == 5 && Get<int>(core, "RightGesture") == 6 &&
                 !Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == expression,
                 "reset starts with both hands non-neutral, a selected expression and gestures disabled");
+            var toggle = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Hand gestures")
+                .GetComponent<ButtonDynamicImpulseTrigger>();
+            void Toggle(bool expected)
+            {
+                toggle.Pressed(null, default);
+                Check(Get<bool>(core, "AllowHandGestures") == expected && Get<int>(core, "LeftGesture") == 5 &&
+                    Get<int>(core, "RightGesture") == 6 && Reference<Slot>(core, "CurrentExpression") == expression,
+                    "gesture toggle changes only permission and preserves the selected expression and hands");
+            }
+            await Frames(2); ExpressionGraphChecks.CheckMenuColors(expressions);
+            Toggle(true);
+            await Frames(2); ExpressionGraphChecks.CheckMenuColors(expressions);
+            Toggle(false); Toggle(true); Toggle(false); // Each press reads current state, even in one frame.
+            await Frames(2); ExpressionGraphChecks.CheckMenuColors(expressions);
             button.Pressed(null, default);
             void CheckReset()
             {

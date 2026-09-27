@@ -29,12 +29,15 @@ internal static class ExpressionGraphChecks
                 Check(!driver.Label.IsLinkValid && !driver.Sprite.IsLinkValid,
                     "expression color driver preserves label and sprite bindings");
             }
-            else if (item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithValue<bool>>() is { } toggle)
+            else if (item.Slot.GetComponent<ButtonDynamicImpulseTrigger>() is { } toggle &&
+                toggle.PressedTag.Value == "ResoPon/Expression/ToggleHandGestures")
             {
-                active = allow == toggle.PressedData.Value.Value;
                 var driver = item.Slot.GetComponent<ValueOptionDescriptionDriver<bool>>();
                 Check(driver != null && driver.Color.IsLinkValid && driver.Color.Target == item.Color,
                     "permission menu Color uses ValueOptionDescriptionDriver: " + item.Slot.Name);
+                var red = new colorX(1f, 0f, 0f, 1f, Renderite.Shared.ColorProfile.Linear);
+                Check(item.Color.Value.Equals(allow ? green : red), "hand gesture toggle is green when on and red when off");
+                continue;
             }
             else continue;
             Check(item.Color.Value.Equals(active ? green : colorX.White),
@@ -212,7 +215,7 @@ internal static class ExpressionGraphChecks
         foreach (string path in new[] { "Core/Logic/Lifecycle", "Core/Logic/Selection", "Core/Logic/Playback",
             "API/Receivers/Logic/Left", "API/Receivers/Logic/Right",
             "API/Receivers/Logic/KeyboardLeft", "API/Receivers/Logic/KeyboardRight",
-            "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowHandGestures", "API/Receivers/Logic/Reset" })
+            "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowHandGestures", "API/Receivers/Logic/ToggleHandGestures", "API/Receivers/Logic/Reset" })
         {
             var board = Descendant(expressions, path);
             Check(board != null && boards.Any(g => g.Key == board), "independent logic board exists: " + path);
@@ -240,7 +243,7 @@ internal static class ExpressionGraphChecks
         }
         var publicReceivers = Descendant(expressions, "API/Receivers").GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
-        Check(publicReceivers.Length == 7, "exactly seven public API receivers");
+        Check(publicReceivers.Length == 8, "exactly eight public API receivers");
         foreach (string hand in new[] { "Left", "Right" })
         {
             var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == hand);
@@ -263,8 +266,17 @@ internal static class ExpressionGraphChecks
             "input permission receives a bool");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Reset").GetType().Name == "DynamicImpulseReceiver",
             "reset receives an impulse without a payload");
+        Check(publicReceivers.Single(node => node.Slot.Parent.Name == "ToggleHandGestures").GetType().Name == "DynamicImpulseReceiver",
+            "hand gesture toggle receives an impulse without a payload");
         if (Descendant(expressions, "Inputs/ContextMenu/Items") is { } menuItems)
         {
+            Check(menuItems.FindChild("Allow hand gestures") == null && menuItems.FindChild("Disable hand gestures") == null,
+                "separate allow and disable menu items are absent");
+            var toggle = menuItems.FindChild("Hand gestures")?.GetComponent<ButtonDynamicImpulseTrigger>();
+            Check(toggle?.Target.Target == Descendant(expressions, "API/Receivers") &&
+                toggle.PressedTag.Value == "ResoPon/Expression/ToggleHandGestures" &&
+                menuItems.GetComponentsInChildren<ButtonDynamicImpulseTrigger>().Count(b => b.PressedTag.Value == toggle.PressedTag.Value) == 1,
+                "one toggle menu targets this avatar's gesture permission API");
             var resetButton = menuItems.FindChild("Reset settings")?.GetComponent<ButtonDynamicImpulseTrigger>();
             Check(resetButton?.Target.Target == Descendant(expressions, "API/Receivers") &&
                 resetButton.PressedTag.Value == "ResoPon/Expression/Reset", "reset menu targets this avatar's reset API");

@@ -15,6 +15,7 @@ internal sealed partial class ExpressionSystemSetup
     internal const string KeyboardRightTag = "ResoPon/Expression/Keyboard/Right";
     internal const string SelectTag = "ResoPon/Expression/Menu/Select";
     internal const string ResetTag = "ResoPon/Expression/Reset";
+    internal const string ToggleHandGesturesTag = "ResoPon/Expression/ToggleHandGestures";
     internal const string HandGesturesEnabledTag = "ResoPon/Expression/AllowHandGestures";
     private readonly ExpressionModel _model;
     private readonly Slot _root, _catalog, _core, _outputs, _table, _api, _inputs;
@@ -52,7 +53,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "Core.CurrentExpression", null);
         Data(_root, "Core.PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 25);
+        Data(_root, "Version", 26);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
