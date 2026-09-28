@@ -53,9 +53,8 @@ internal sealed partial class ExpressionSystemSetup
         });
         // Only the wearer writes a pose. The host follows Base on unworn copies.
         var receiver = g.Receiver(PlaybackTickTag, false);
-        Link(receiver, "OnTriggered", g.If(wearer, refresh));
+        Link(receiver, "OnTriggered", g.If(canWrite, refresh));
         g.OnChanged<bool>(canWrite, g.If(canWrite, refresh));
-        g.OnChanged<Slot>(current, g.If(canWrite, refresh));
         g.OnStart(g.If(canWrite, refresh));
         foreach (var output in _outputSlots.Values)
         {
@@ -86,7 +85,7 @@ internal sealed partial class ExpressionSystemSetup
         var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(ClipSpace, BindingPrefix))),
             ("B", g.Read<string>(output, OutputSpace, "Id")));
         var pose = g.Node("ReadDynamicValueVariable", typeof(float), ("Source", expression), ("Path", path));
-        var desired = g.Choose<float>(g.And(worn, g.Active(output), g.Active(expression), Out(pose, "FoundValue")),
+        var desired = g.Choose<float>(g.And(worn, Out(pose, "FoundValue")),
             Out(pose, "Value"), baseValue);
         desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(output, OutputSpace, "TrackingWeight")));
         var blinkMode = g.Read<int>(output, OutputSpace, "BlinkMode");

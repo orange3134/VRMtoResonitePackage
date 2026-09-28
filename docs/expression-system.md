@@ -101,11 +101,11 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → Selection → Playback を同期実行する。
 同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態・固定ポーズ・出力目標が確定する。
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
-表情の無効化・CurrentExpressionの変更は、選択結果の変化を監視して反映する。
+CurrentExpressionの変更直後にResoPon/Expression/Internal/Playbackを送って通常出力を反映する。参照のFireOnLocalObjectChangeは生成しない。表情の有効性は選択時に判定する。
 
-Version 32 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+Version 33 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を 各CatalogエントリーのDV/Binding/Binding.*変数 に保存する。
-Playback は選択時と CurrentExpression 参照の変更時に Outputs を走査し、Binding.と各出力のIdを連結した名前のfloat変数を読み、
+Playback は選択・初期化・リセットで CurrentExpression を設定した直後の DynamicImpulse で Outputs を走査し、Binding.と各出力のIdを連結した名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
 元から瞬き・口パク等のドライバーがある出力だけTrackingボードを生成し、
 CurrentExpressionの名前付き変数と追跡BaseをValueFieldDriveで合成する。アニメーションの途中値は評価しない。
@@ -118,7 +118,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 連続・ループアニメーションも再生しない。Loop / Duration と Core の再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 32 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 33 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -128,10 +128,10 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 | Selection | 受理した左右のGesture APIイベントからの同期呼び出しのみ |
 | キーボード | 左右それぞれの10キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
-| Playback | 選択イベント内で保存済みValueを即時適用。選択参照・書き込み権限の変化でも更新。通常出力へ一括Write |
+| Playback | 選択イベント内で保存済みValueを即時適用。初期化・リセットも設定直後に同期呼び出し。OnStartと書き込み権限の変化でも更新。通常出力へ一括Write |
 | Outputs | 通常出力にはFluxなし。既存の追跡がある出力だけTrackingのDriveで継続合成。変更監視・通知は置かない |
 
-入力・選択・装着状態の変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
+入力・装着状態の変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
 比較用の前回値はローカルな実行状態で、DynamicVariable や同期・保存対象の変数には追加しない。
 初期値の設定だけでは発火しないため、初回に必要な処理には `OnStart` も使う。
 装着者の確認は各処理の入口に残す。
@@ -355,7 +355,7 @@ VariableNameはExpressionSystem.Catalog.Clip/Binding.と対応するOutput.Idを
 例：ExpressionSystem.Catalog.Clip/Binding.Body.Smile。独立したBinding空間やBindings参照は生成しない。
 新しいシェイプを追加する場合は、対応する Outputs とメッシュへの接続も用意する。
 通常出力の名前付き変数・子レコードの編集後は表情を再選択する。追跡出力の名前付き変数の編集は自動反映する。
-CurrentExpressionの参照自体を変更した場合は、その変更を監視して適用する。
+CurrentExpressionの参照自体を変更した場合は、直後にPlaybackスロットへResoPon/Expression/Internal/Playbackを送って適用する。
 
 ## 外部イベント API（Version 26）
 
@@ -1184,3 +1184,14 @@ ExpressionSmokeでClip直下の変数配置と旧空間・参照の不在、直�
 配置はCatalog/<表情>/DV/Binding/Binding.<Output.Id>。BindingスロットにはDynamicVariableSpaceを追加せず、
 変数名ExpressionSystem.Catalog.Clip/Binding.<Output.Id>とCurrentExpressionからの読み取りを維持する。
 ExpressionSmokeの全回帰テストでグループ配置、変数名による読み取り、Base復帰、複製・保存再読込が成功した。
+
+### Version 33: CurrentExpression更新直後のPlayback呼び出し
+
+PlaybackとTrackingの値選択からOutput・選択ClipのGetSlotActive判定を削除した。
+選択時のClip有効性検証は維持し、適用時は変数のFoundValueで値またはBaseを選ぶ。
+CurrentExpressionの変更監視は削除し、ジェスチャー・メニュー・初期化・リセットから設定直後に
+ResoPon/Expression/Internal/Playbackを同期送信する。Lifecycleの個別Base書き戻しはPlaybackへ統合した。
+未装着時のPlaybackはホストがBaseを書き戻す。外部でCurrentExpressionを直接編集する場合も同じImpulseを送る。
+追跡出力は既存のDriveで参照先の値とBaseを継続合成する。
+ExpressionSmokeの全回帰テストで明示Impulseの即時適用、参照編集だけでは通常出力を書かないこと、
+非アクティブなOutput・Clip・Bindingへの適用、Base復帰、リセット・装着解除・保存再読込が成功した。

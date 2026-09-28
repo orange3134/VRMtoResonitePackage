@@ -40,6 +40,9 @@ internal static class ExpressionOutputWriteChecks
             var table = expressions.FindChild("DV").FindChild("GestureTable"); var outputs = expressions.FindChild("Outputs");
             var outputA = outputs.FindChild("A"); var outputB = outputs.FindChild("B");
             var api = expressions.FindChild("API").FindChild("Receivers");
+            void Playback() => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(
+                core.FindChild("Logic").FindChild("Playback"), "ResoPon/Expression/Internal/Playback", true) == 1,
+                "explicit playback impulse reaches the receiver");
             for (int i = 0; i < model.Clips.Count; i++)
             {
                 var entry = catalog.FindChild(model.Clips[i].Name);
@@ -94,14 +97,34 @@ internal static class ExpressionOutputWriteChecks
             Set<Slot>(core, "CurrentExpression", catalog.FindChild("Sparse"));
             await Frames();
             Near(a.Value, 0.7f, "changing CurrentExpression reads values from the new clip");
-            Near(b.Value, 0.3f, "replacement clip restores Base for absent binding names");
+            Near(b.Value, 0, "direct reference edits do not apply static outputs without an impulse");
+            Playback();
+            Near(b.Value, 0.3f, "playback impulse synchronously restores Base for absent binding names");
             Set<Slot>(core, "CurrentExpression", null);
+            Playback();
             await Frames();
             Near(a.Value, 0.4f, "null CurrentExpression restores Base");
             Set<Slot>(core, "CurrentExpression", ramp);
+            Playback();
+            Near(b.Value, 0, "explicit playback applies a reference change synchronously");
             await Frames();
             Near(a.Value, 1, "restored CurrentExpression applies the clip value without a new gesture");
             Near(b.Value, 0, "tracks with different lengths each hold their own final key");
+            var shortClip = catalog.FindChild("Short");
+            Set<Slot>(core, "CurrentExpression", shortClip);
+            var shortB = BindingVariable(shortClip, outputB);
+            outputB.ActiveSelf = false;
+            shortClip.ActiveSelf = false;
+            shortB.Slot.Parent.ActiveSelf = false;
+            shortB.Slot.ActiveSelf = false;
+            await Frames();
+            Playback();
+            Near(b.Value, 0.8f, "inactive Output, Clip and Binding slots do not gate playback values");
+            outputB.ActiveSelf = true;
+            shortClip.ActiveSelf = true;
+            shortB.Slot.Parent.ActiveSelf = true;
+            shortB.Slot.ActiveSelf = true;
+            await Frames();
             Set(ramp, "Binding." + Get<string>(outputA, "Id"), 0.9f);
             Select(4);
             Near(SelectedValue(outputA), 0.9f, "reselection immediately resolves the edited binding");

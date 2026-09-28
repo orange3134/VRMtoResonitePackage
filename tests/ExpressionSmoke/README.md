@@ -290,3 +290,5 @@ Version 30 uses readable mesh/shape keys for named float variables in one Bindin
 Version 31 stores Binding.<Output.Id> floats directly in each Clip's DV container. No separate Binding space or Bindings Slot/reference is generated. Checks cover clip-scoped names, direct CurrentExpression changes, missing values, clones and reload; snapshot readers retain support for v30 and earlier layouts.
 
 Version 32 groups Binding.* variable slots under each Clip's DV/Binding slot. Variable names and the owning Clip space stay the same. Placement checks cover generation, cloning and package reload.
+
+Version 33 removes CurrentExpression change detection and slot-activity gates from playback mixing. Static outputs require an explicit Playback impulse after a direct reference edit. Checks cover synchronous selection/reset, inactive output/clip/binding slots, missing values, tracking and dequip cleanup.

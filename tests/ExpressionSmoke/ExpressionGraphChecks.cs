@@ -311,6 +311,11 @@ internal static class ExpressionGraphChecks
             "Core has no playback clocks");
         var playback = Descendant(expressions, "Core/Logic/Playback").GetComponentsInChildren<ProtoFluxNode>();
         Check(playback.All(n => n.GetType().Name is not "WorldTimeFloat" and not "ValueMod"), "pose application has no time or loop evaluation");
+        Check(playback.All(n => n.GetType().Name != "FireOnLocalObjectChange`1"),
+            "CurrentExpression changes require an explicit playback impulse");
+        Check(playback.Concat(expressions.FindChild("Outputs").GetComponentsInChildren<ProtoFluxNode>())
+            .All(n => n.GetType().Name != "GetSlotActive"),
+            "playback and tracking do not gate values on slot activity");
         foreach (var entry in expressions.FindChild("Catalog").Children)
             Check(!entry.ExpressionVariables<DynamicValueVariable<bool>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Loop") &&
                 !entry.ExpressionVariables<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Duration"),

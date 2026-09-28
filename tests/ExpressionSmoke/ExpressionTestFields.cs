@@ -50,7 +50,7 @@ internal static class ExpressionTestFields
     {
         value = 0;
         var current = Reference<Slot>(output.Parent.Parent.FindChild("Core"), "CurrentExpression");
-        if (current == null || !current.IsActive) return false;
+        if (current == null) return false;
         string id = output.ExpressionVariables<DynamicValueVariable<string>>()
             .Single(v => v.VariableName.Value == VariablePath(output, "Id")).Value.Value;
         return current.GetComponent<DynamicVariableSpace>().TryReadValue("Binding." + id, out value);

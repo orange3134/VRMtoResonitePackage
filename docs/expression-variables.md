@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 32`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 33`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -99,7 +99,7 @@ PlaybackはOutputsを1回走査し、CurrentExpression自身をSourceとして
 値が0であることと、変数が存在しないことを区別する。表情値の子スロットを走査する処理はない。
 通常出力の値・名前・子レコードの編集後は表情を再選択する。
 追跡出力は同じ名前を継続的に読み、値・追加・削除・名前変更をDynamicVariable更新後に反映する。
-CurrentExpression参照の変更は通常出力にも自動反映する。
+CurrentExpressionの変更直後にResoPon/Expression/Internal/PlaybackのDynamicImpulseをPlaybackスロットへ送る。通常出力は参照の直接編集だけでは更新されない。Playbackの値選択ではClip・Binding・Outputスロットのアクティブ状態を判定しない。
 
 ### 読めるキーと禁止文字の変換（Version 30）
 

@@ -14,7 +14,7 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildLifecycle()
     {
-        // Only the looped output records below need runtime Source reads.
+        // Clearing the selected expression invokes the shared playback operation.
         var g = new ExpressionFlux(_lifecycle);
         var core = g.Ref(_core);
         // Local, unserialized state: no User reference survives cloning or loading.
@@ -26,10 +26,8 @@ internal sealed partial class ExpressionSystemSetup
         }
         cleanup.Add(g.Write<bool>(core, SystemSpace, "Core.AllowHandGestures", g.Constant(true)));
         cleanup.Add(g.Write<Slot>(core, SystemSpace, "Core.CurrentExpression", g.Ref<Slot>(null)));
+        cleanup.Add(g.Trigger(g.Ref(_playback), PlaybackTickTag));
         cleanup.Add(g.Write<string>(core, SystemSpace, "Core.PairKey", g.Text("L0R0")));
-        cleanup.Add(g.Each(g.Ref(_outputs), output =>
-            g.If(g.IsNull<ISyncRef>(g.Read<ISyncRef>(output, OutputSpace, "OriginalDriver")),
-                g.Write<float>(output, OutputSpace, "Result", g.Read<float>(output, OutputSpace, "Base")))));
 
         var clear = g.Sequence(cleanup.ToArray());
         var reset = g.Sequence(clear, g.Set<bool>(initialized, g.Constant(true)));
