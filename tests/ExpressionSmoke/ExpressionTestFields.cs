@@ -38,6 +38,28 @@ internal static class ExpressionTestFields
                 .Value.StartsWith(prefix, StringComparison.Ordinal)).ToList();
     }
 
+    public static DynamicValueVariable<float> BindingVariable(Slot bindings, Slot output)
+    {
+        string id = output.ExpressionVariables<DynamicValueVariable<string>>()
+            .Single(v => v.VariableName.Value == VariablePath(output, "Id")).Value.Value;
+        return bindings.ExpressionVariables<DynamicValueVariable<float>>()
+            .Single(v => v.VariableName.Value == VariablePath(bindings, id));
+    }
+
+    public static bool TryReadSelectedValue(Slot output, out float value)
+    {
+        value = 0;
+        var current = Reference<Slot>(output.Parent.Parent.FindChild("Core"), "CurrentExpression");
+        var bindings = current == null ? null : Reference<Slot>(current, "Bindings");
+        if (bindings == null || !bindings.IsActive) return false;
+        string id = output.ExpressionVariables<DynamicValueVariable<string>>()
+            .Single(v => v.VariableName.Value == VariablePath(output, "Id")).Value.Value;
+        return bindings.GetComponent<DynamicVariableSpace>().TryReadValue(id, out value);
+    }
+
+    public static float SelectedValue(Slot output) => TryReadSelectedValue(output, out float value) ? value :
+        output.ExpressionVariables<DynamicValueVariable<float>>()
+            .Single(v => v.VariableName.Value == VariablePath(output, "Base")).Value.Value;
     public static T Reference<T>(Slot slot, string name) where T : class, IWorldElement =>
         slot.ExpressionVariables<DynamicReferenceVariable<T>>()
             .Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Reference.Target;

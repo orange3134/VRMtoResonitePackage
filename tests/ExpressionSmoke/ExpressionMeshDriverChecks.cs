@@ -119,6 +119,10 @@ internal static class ExpressionMeshDriverChecks
         var eye = avatar.GetComponent<EyeLinearDriver>().Eyes[0];
         Slot Output(IField<float> target) => expressions.FindChild("Outputs").Children.Single(o => Reference<IField<float>>(o, "Target") == target);
         var smile = Output(first.GetBlendShape("ActualSmile")); var blink = Output(first.GetBlendShape("ActualBlink"));
+        string Id(Slot output) => output.ExpressionVariables<DynamicValueVariable<string>>()
+            .Single(v => v.VariableName.Value == "ExpressionSystem.Output/Id").Value.Value;
+        Check(Id(smile) == "Face.ActualSmile" && Id(Output(second.GetBlendShape("ActualSmile"))) == "Face.ActualSmile.2" &&
+            Id(blink) == "Face.ActualBlink", "keys use actual mesh shape names and distinguish same-named renderers");
         var baseValue = blink.ExpressionVariables<DynamicValueVariable<float>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Base").Value;
         Check(eye.OpenCloseTarget.Target == baseValue && eye.OpenCloseTarget.IsLinkValid, "blink still drives its independent Base");
         var dynamicResult = smile.ExpressionVariables<DynamicField<float>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Result");

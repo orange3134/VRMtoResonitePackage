@@ -87,7 +87,7 @@ internal static class ImportedGestureAvatarChecks
                 foreach (var output in root.FindChild("Outputs").Children)
                 {
                     float baseValue = Get<float>(output, "Base");
-                    float expected = pose.TryGetValue(Get<string>(output, "Id"), out float fixedValue) ? fixedValue : baseValue;
+                    float expected = pose.TryGetValue(ExpressionPackageSnapshot.OutputIdentity(output), out float fixedValue) ? fixedValue : baseValue;
                     expected += (baseValue - expected) * Math.Clamp(Get<float>(output, "TrackingWeight"), 0, 1);
                     expected = Get<int>(output, "BlinkMode") switch
                     {

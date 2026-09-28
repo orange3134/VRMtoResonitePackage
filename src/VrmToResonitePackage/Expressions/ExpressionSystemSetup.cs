@@ -53,7 +53,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "Core.CurrentExpression", null);
         Data(_root, "Core.PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 29);
+        Data(_root, "Version", 30);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -134,6 +134,19 @@ internal sealed partial class ExpressionSystemSetup
             .Where(c => mapped.Contains(c.Id) || c.Id == neutral.Id)
             .Concat(_model.DetectedExpressions.Where(c => definitions.Any(d => d.Id == c.Id)))
             .Where(c => c.Curves.Count > 0).DistinctBy(c => c.Id).ToList();
+        // Allocate readable keys across all clips before creating any drives. Sorting
+        // source bindings makes collision suffixes independent of clip/curve ordering.
+        var outputNames = new Dictionary<string, string>();
+        var usedNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var binding in catalog.SelectMany(c => c.Curves).Select(c => c.Binding).Distinct()
+            .OrderBy(b => b.Path, StringComparer.Ordinal).ThenBy(b => b.Shape, StringComparer.Ordinal))
+        {
+            var field = resolve(binding);
+            if (field == null) continue;
+            var (renderer, shape) = ResolveShape(field);
+            string mesh = renderer?.Slot.Name ?? binding.Path?.Split('/').LastOrDefault();
+            outputNames.Add(binding.Id, ExpressionBindingNames.Create(mesh, shape ?? binding.Shape, usedNames));
+        }
         foreach (var clip in catalog)
         {
             foreach (var curve in clip.Curves)
@@ -152,10 +165,9 @@ internal sealed partial class ExpressionSystemSetup
                 if (field.InheritedLink != null || (field.ActiveLink != null && field.ActiveLink is not ISyncRef))
                 { UniLog.Warning($"Expression binding has an unsupported inherited drive: {curve.Binding}"); continue; }
                 var output = Record(_outputs, UniqueChildName(_outputs, curve.Binding.Shape), OutputSpace);
-                Data(output, "Id", id); Data(output, "Path", curve.Binding.Path); Data(output, "Shape", curve.Binding.Shape);
+                Data(output, "Id", outputNames[id]); Data(output, "Path", curve.Binding.Path); Data(output, "Shape", curve.Binding.Shape);
                 Data(output, "Baseline", initialWeight?.Invoke(field) ?? field.Value);
                 Data(output, "TrackingWeight", 0f);
-                Reference<Slot>(output, "Binding", null);
                 // Only eyelid openness uses a closing-side union. Other tracking drivers
                 // (visemes, gaze, etc.) retain their existing TrackingWeight behavior.
                 var eye = field.ActiveLink?.Parent as EyeLinearDriver.Eye;
@@ -182,14 +194,12 @@ internal sealed partial class ExpressionSystemSetup
             Slot entry = Record(_catalog, clip.Name, ClipSpace);
             Data(entry, "Id", clip.Id); Data(entry, "DisplayName", clip.Name); Data(entry, "Enabled", true);
             Data(entry, "Source", clip.Source ?? "");
-            var bindings = entry.AddSlot("Bindings");
+            var bindings = Record(entry, "Bindings", BindingSpace);
             Reference(entry, "Bindings", bindings);
             foreach (var curve in clip.Curves)
             {
                 string id = curve.Binding.Id;
-                var record = Record(bindings, curve.Binding.Shape, BindingSpace);
-                Reference(record, "Output", _outputSlots[id]);
-                Data(record, "Value", curve.Keys[^1].Value);
+                Data(bindings, outputNames[id], curve.Keys[^1].Value);
             }
             _clips[clip.Id] = entry;
         }

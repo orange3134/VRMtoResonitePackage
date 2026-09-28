@@ -50,7 +50,7 @@ internal static class ExpressionResetChecks
                     Get<string>(core, "PairKey") == "L0R0" && Get<bool>(core, "AllowHandGestures") &&
                     Reference<Slot>(core, "CurrentExpression") == null,
                     "reset button synchronously clears expression and hands and enables hand gestures");
-                Check(outputs.All(o => Reference<Slot>(o, "Binding") == null), "reset clears every resolved output binding");
+                Check(outputs.All(o => !TryReadSelectedValue(o, out _)), "reset clears every resolved output binding");
             }
             CheckReset();
             button.Pressed(null, default); // Repeated reset also works while gestures are already enabled.

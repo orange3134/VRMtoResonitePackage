@@ -16,17 +16,23 @@ internal sealed partial class ExpressionSystemSetup
         return candidate;
     }
 
-    private IField<float> BuildOutputTarget(IField<float> field, float initialValue)
+    private static (SkinnedMeshRenderer Renderer, string Name) ResolveShape(IField<float> field)
     {
         var renderer = field.FindNearestParent<SkinnedMeshRenderer>();
-        // The generic resolver also supports standalone fields. Write those directly;
-        // all mesh outputs are grouped by renderer identity, never by slot name.
-        if (renderer == null) return field;
+        if (renderer == null) return (null, null);
         int index = Enumerable.Range(0, renderer.BlendShapeWeights.Count)
             .Single(i => renderer.BlendShapeWeights.GetElement(i) == field);
         string name = renderer.BlendShapeName(index);
         if (string.IsNullOrEmpty(name) || renderer.TryGetBlendShape(name) != field)
             throw new InvalidOperationException($"Cannot resolve a unique blendshape name: {renderer.Slot.Name}[{index}]");
+        return (renderer, name);
+    }
+
+    private IField<float> BuildOutputTarget(IField<float> field, float initialValue)
+    {
+        var (renderer, name) = ResolveShape(field);
+        // Standalone fields are written directly; meshes remain grouped by identity.
+        if (renderer == null) return field;
         if (!_meshDrivers.TryGetValue(renderer, out var driver))
         {
             _drivers ??= _root.AddSlot("Drivers");

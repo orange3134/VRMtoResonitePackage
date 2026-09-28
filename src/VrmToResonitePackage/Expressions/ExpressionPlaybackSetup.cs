@@ -44,20 +44,13 @@ internal sealed partial class ExpressionSystemSetup
             g.Node("IsLocalUser", null, ("User", g.Node("HostUser")))));
         var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, SystemSpace, "Core.CurrentExpression"), g.Ref<Slot>(null));
         var bindings = g.Read<Slot>(current, ClipSpace, "Bindings");
-        var selectedBinding = g.Local<Slot>();
         var refresh = g.Each(g.Ref(_outputs), output =>
         {
-            var result = MixOutput(g, output, wearer);
-            return g.Sequence(
-                g.Set<Slot>(selectedBinding, g.Ref<Slot>(null)),
-                g.If(g.Active(output), g.Each(bindings, binding =>
-                    g.If(g.And(g.Active(binding), g.Equal<Slot>(output, g.Read<Slot>(binding, BindingSpace, "Output"))),
-                        g.Set<Slot>(selectedBinding, binding)))),
-                g.Write<Slot>(output, OutputSpace, "Binding", selectedBinding),
-                g.If(g.IsNull<ISyncRef>(g.Read<ISyncRef>(output, OutputSpace, "OriginalDriver")), g.Sequence(
-                    g.Set<float>(value, result),
-                    g.If(g.NotEqual<float>(value, g.Read<float>(output, OutputSpace, "Result")),
-                        g.Write<float>(output, OutputSpace, "Result", value)))));
+            var result = MixOutput(g, output, wearer, bindings);
+            return g.If(g.IsNull<ISyncRef>(g.Read<ISyncRef>(output, OutputSpace, "OriginalDriver")), g.Sequence(
+                g.Set<float>(value, result),
+                g.If(g.NotEqual<float>(value, g.Read<float>(output, OutputSpace, "Result")),
+                    g.Write<float>(output, OutputSpace, "Result", value))));
         });
         // Only the wearer writes a pose. The host follows Base on unworn copies.
         var receiver = g.Receiver(PlaybackTickTag, false);
@@ -77,24 +70,27 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildLiveTracking(Slot output)
     {
         // Only shapes already driven by blink/viseme/etc. need continuous mixing.
-        // Selection resolves the binding; a missing binding follows the live Base.
-        // Tracking never searches bindings or resamples a clip
-        // and never sends synchronized per-frame Write impulses.
+        // Read the selected expression by name; missing variables follow live Base.
+        // No per-shape state, binding scans or synchronized per-frame impulses.
         var g = new ExpressionFlux(output.AddSlot("Tracking"));
+        var current = g.Read<Slot>(g.Ref(_core), SystemSpace, "Core.CurrentExpression");
+        var bindings = g.Read<Slot>(current, ClipSpace, "Bindings");
         var target = output.FindChild("DV").GetComponentsInChildren<DynamicField<float>>()
             .Single(v => v.VariableName.Value == Path(OutputSpace, "Result")).TargetField.Target;
         var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>)
             g.Node("ValueFieldDrive", typeof(float), ("Value", MixOutput(g, g.Ref(output),
-                g.AvatarWorn)));
+                g.AvatarWorn, bindings)));
         driver.GetRootProxy(addIfMissing: true).Drive.Target = target;
     }
 
-    private static IWorldElement MixOutput(ExpressionFlux g, IWorldElement output, IWorldElement worn)
+    private static IWorldElement MixOutput(ExpressionFlux g, IWorldElement output, IWorldElement worn, IWorldElement bindings)
     {
         var baseValue = g.Read<float>(output, OutputSpace, "Base");
-        var binding = g.Read<Slot>(output, OutputSpace, "Binding");
-        var desired = g.Choose<float>(g.And(worn, g.Active(binding)),
-            g.Read<float>(binding, BindingSpace, "Value"), baseValue);
+        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(BindingSpace, ""))),
+            ("B", g.Read<string>(output, OutputSpace, "Id")));
+        var pose = g.Node("ReadDynamicValueVariable", typeof(float), ("Source", bindings), ("Path", path));
+        var desired = g.Choose<float>(g.And(worn, g.Active(output), g.Active(bindings), Out(pose, "FoundValue")),
+            Out(pose, "Value"), baseValue);
         desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(output, OutputSpace, "TrackingWeight")));
         var blinkMode = g.Read<int>(output, OutputSpace, "BlinkMode");
         return g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(1)), g.Binary<float>("ValueMax", desired, baseValue),

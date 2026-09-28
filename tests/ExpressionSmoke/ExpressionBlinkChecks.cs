@@ -99,11 +99,11 @@ internal static class ExpressionBlinkChecks
         Set(mouth, "BlinkMode", 1); await Frames(); Near(Result(mouth), 0.9f, "manual max mode uses routed Base");
         Set(mouth, "BlinkMode", 0); await Frames(); Near(Result(mouth), 0.25f, "manual mode can be disabled");
         Blink(0, 0); Select(1); await Frames();
-        Select(2); Near(Get<float>(Reference<Slot>(close, "Binding"), "Value"), 0.6f, "expression binding changes synchronously");
+        Select(2); Near(SelectedValue(close), 0.6f, "expression binding changes synchronously");
         await Frames(); Near(Get<float>(close, "Result"), 0.6f, "live mixing applies the new pose without a fade");
         Blink(1, 1); await Frames(); Near(Result(close), 1, "immediate expression retains full blink"); Near(Result(reverse), 0, "reverse blink remains independent");
         Blink(0, 0); await Frames(); Near(Result(close), 0.6f, "reopening reveals the selected pose");
-        Select(0); Check(Reference<Slot>(close, "Binding") == null, "clearing immediately removes the pose");
+        Select(0); Check(!TryReadSelectedValue(close, out _), "clearing immediately removes the pose");
         await Frames(); Near(Get<float>(close, "Result"), 0, "clearing restores live Base without a fade");
         Blink(1, 1); await Frames(); Near(Result(close), 1, "blink works while CurrentExpression is null");
         Blink(0, 0); await Frames(); Near(Result(close), 0, "blink returns to open base");

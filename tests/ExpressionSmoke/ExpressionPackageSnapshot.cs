@@ -9,7 +9,7 @@ internal static class ExpressionPackageSnapshot
     {
         Directory.CreateDirectory(artifacts);
         var outputs = root.FindChild("Outputs").Children.ToDictionary(
-            output => Value<string>(output, "Id"), output => new
+            output => OutputIdentity(output), output => new
             {
                 Path = Value<string>(output, "Path"), Shape = Value<string>(output, "Shape"),
                 Baseline = Value<float>(output, "Baseline"), TrackingWeight = Value<float>(output, "TrackingWeight")
@@ -22,9 +22,7 @@ internal static class ExpressionPackageSnapshot
             {
                 Name = Value<string>(entry, "DisplayName"), Enabled = Value<bool>(entry, "Enabled"),
                 Values = Pose(entry),
-                Bindings = entry.FindChild("Bindings").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-                    .Where(v => v.VariableName.Value == ExpressionTestFields.VariablePath(v.Slot, "Output"))
-                    .Select(v => Value<string>(v.Reference.Target, "Id")).OrderBy(v => v, StringComparer.Ordinal).ToArray()
+                Bindings = Pose(entry).Keys.ToArray()
             });
         }
         var tableSlot = root.FindChild("DV")?.FindChild("GestureTable") ?? root.FindChild("GestureTable");
@@ -49,6 +47,17 @@ internal static class ExpressionPackageSnapshot
     public static SortedDictionary<string, float> Pose(Slot entry)
     {
         var values = new SortedDictionary<string, float>(StringComparer.Ordinal);
+        var bindings = entry.FindChild("Bindings");
+        if (bindings.GetComponent<DynamicVariableSpace>()?.SpaceName.Value == "ExpressionSystem.Catalog.Clip.Binding")
+        {
+            var outputs = entry.Parent.Parent.FindChild("Outputs").Children.ToDictionary(o => Value<string>(o, "Id"));
+            foreach (var variable in bindings.ExpressionVariables<DynamicValueVariable<float>>())
+            {
+                string key = variable.VariableName.Value[(variable.VariableName.Value.IndexOf('/') + 1)..];
+                values.Add(OutputIdentity(outputs[key]), variable.Value.Value);
+            }
+            return values;
+        }
         // Reading legacy AnimX is only for old/new regression comparisons, never generation.
         var legacy = entry.GetComponent<StaticAnimationProvider>();
         foreach (var binding in entry.FindChild("Bindings").Children)
@@ -64,6 +73,9 @@ internal static class ExpressionPackageSnapshot
         }
         return values;
     }
+
+    public static string OutputIdentity(Slot output) => new VrmToResonitePackage.Expressions.ExpressionBinding(
+        Value<string>(output, "Path"), Value<string>(output, "Shape")).Id;
 
     // Baseline snapshots also accept pre-v22 numeric keys; generated avatars use only L/R keys.
     private static string NormalizePairKey(string key) => int.TryParse(key, out int index)

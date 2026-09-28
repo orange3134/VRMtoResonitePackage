@@ -124,8 +124,8 @@ internal static class ExpressionGraphChecks
             Check(!output.ExpressionVariables<DynamicValueVariable<bool>>().Any(v => v.VariableName.Value == "ExpressionSystem.Output/HasPose") &&
                 !output.ExpressionVariables<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionSystem.Output/Pose"),
                 "outputs keep no presence flag or copied pose value");
-            Check(output.ExpressionVariables<DynamicReferenceVariable<Slot>>().Count(v => v.VariableName.Value == "ExpressionSystem.Output/Binding") == 1,
-                "outputs retain only the resolved binding reference");
+            Check(output.ExpressionVariables<DynamicReferenceVariable<Slot>>().Count(v => v.VariableName.Value == "ExpressionSystem.Output/Binding") == 0,
+                "outputs retain no per-shape binding references");
             bool tracked = output.ExpressionVariables<DynamicReferenceVariable<ISyncRef>>()
                 .Any(v => v.VariableName.Value == "ExpressionSystem.Output/OriginalDriver");
             var outputNodes = output.GetComponentsInChildren<ProtoFluxNode>();
@@ -177,9 +177,15 @@ internal static class ExpressionGraphChecks
         {
             Check(ExpressionTestFields.Reference<Slot>(entry, "Bindings") == entry.FindChild("Bindings"),
                 "Catalog directly references its pose records");
-            foreach (var binding in entry.FindChild("Bindings").Children)
-                Check(binding.ExpressionVariables<DynamicValueVariable<float>>().Count(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip.Binding/Value") == 1,
-                    "each binding stores one final float value");
+            var bindings = entry.FindChild("Bindings");
+            var keys = expressions.FindChild("Outputs").Children.Select(o =>
+                o.ExpressionVariables<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Id").Value.Value).ToHashSet();
+            Check(bindings.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Count == 0,
+                "named float bindings contain no Output references");
+            foreach (var binding in bindings.ExpressionVariables<DynamicValueVariable<float>>())
+                Check(binding.VariableName.Value == "ExpressionSystem.Catalog.Clip.Binding/" + binding.Slot.Name &&
+                    keys.Contains(binding.Slot.Name) && DynamicVariableHelper.IsValidName(binding.Slot.Name),
+                    "each named binding matches a readable output key");
         }
         var boards = nodes.GroupBy(Board).ToArray();
         var keyboard = Descendant(expressions, "Inputs/Keyboard");

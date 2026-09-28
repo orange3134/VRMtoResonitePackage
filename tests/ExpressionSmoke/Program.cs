@@ -45,6 +45,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await FaceExpressionDetectionChecks.RunCatalog(world.LocalUser.Root.Slot);
         if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage, artifacts, baselinePackage); return; }
         await GeneratedAvatarChecks.Run(world.LocalUser.Root.Slot, artifacts);
+        await ExpressionBindingNameChecks.Run(world.LocalUser.Root.Slot, artifacts);
         await ExpressionOutputWriteChecks.Run(world.LocalUser.Root.Slot);
         await ExpressionBlinkChecks.Run(world.LocalUser.Root.Slot, artifacts);
         await ExpressionMeshDriverChecks.Run(world.LocalUser.Root.Slot, artifacts);
@@ -253,14 +254,14 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "unmapped expression keeps its menu item enabled");
 
         Select("Animated");
-        Check(Math.Abs(Get<float>(Reference<Slot>(expressions.FindChild("Outputs").FindChild("Smile"), "Binding"), "Value") - 1) < 0.001f,
+        Check(Math.Abs(SelectedValue(expressions.FindChild("Outputs").FindChild("Smile")) - 1) < 0.001f,
             "animated clip stores its final key before the next frame");
         await Frames(40);
         Check(Math.Abs(field.Value - 1) < 0.001f, "animated clip remains fixed without playback");
         Set(catalog.FindChild("Animated"), "Enabled", false);
         Set(table, "L0R2", catalog.FindChild("Animated"));
         AllowInput(); Gesture(1, 2);
-        Check(Reference<Slot>(core, "CurrentExpression") == null && Reference<Slot>(expressions.FindChild("Outputs").FindChild("Smile"), "Binding") == null,
+        Check(Reference<Slot>(core, "CurrentExpression") == null && !TryReadSelectedValue(expressions.FindChild("Outputs").FindChild("Smile"), out _),
             "invalid selection immediately clears the tracked pose");
         await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "disabled mapped expression restores base output");
@@ -347,8 +348,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         addedButton.Pressed(null, default);
         Check(!Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == addedExpression,
             "copied template is directly selectable without a GestureTable mapping");
-        var addedBinding = addedExpression.FindChild("Bindings").Children.First();
-        Set(addedBinding, "Value", 0.65f);
+        var addedBinding = addedExpression.FindChild("Bindings").ExpressionVariables<DynamicValueVariable<float>>().First();
+        Check(addedBinding.Slot.WriteDynamicVariable(addedBinding.VariableName.Value, 0.65f) == DynamicVariableWriteResult.Success, "write the named template value");
         addedButton.Pressed(null, default); await Frames();
         Check(Math.Abs(field.Value - 0.65f) < 0.01, "reselecting the same expression refreshes edited bindings");
         ExpressionGraphChecks.CheckMenuColors(expressions);
@@ -384,7 +385,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Math.Abs(field.Value - 0.4f) < 0.01, "existing tracking driver continues through proxy");
         Set(table, "L0R2", catalog.FindChild("Angry"));
         Select("Angry");
-        Check(Math.Abs(Get<float>(Reference<Slot>(expressions.FindChild("Outputs").FindChild("Smile"), "Binding"), "Value") - 0.7f) < 0.001f,
+        Check(Math.Abs(SelectedValue(expressions.FindChild("Outputs").FindChild("Smile")) - 0.7f) < 0.001f,
             "selection immediately writes the tracked pose");
         await Frames();
         Check(Math.Abs(field.Value - 0.7f) < 0.001f, "tracking applies the final pose without interpolation");

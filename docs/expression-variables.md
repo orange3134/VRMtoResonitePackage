@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 29`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 30`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -16,7 +16,7 @@
 | Core | `ExpressionSystem`（変数名 `Core.*`） | 入力・選択・再生状態 |
 | DV/GestureTable | `ExpressionSystem`（変数名 `GestureTable.*`） | 左右64通りの表情参照 |
 | Catalog/各表情、API/Templates/各表情 | `ExpressionSystem.Catalog.Clip` | 表情の設定と固定値一覧への参照 |
-| 各表情/Bindings/各項目 | `ExpressionSystem.Catalog.Clip.Binding` | 出力レコードへの参照と固定値 |
+| 各表情/Bindings | `ExpressionSystem.Catalog.Clip.Binding` | メッシュ名・BlendShape名をキーにした固定値一覧 |
 | Outputs/各項目 | `ExpressionSystem.Output` | BlendShape の基礎入力・混合・最終出力 |
 | Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と10キーの割当 |
 | Inputs/HandGestures/Modules/各機種 | `ExpressionSystem.Input.HandGestures` | しきい値と安定待ち時間 |
@@ -30,7 +30,7 @@ DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot
 子 Slot 名は `/` 以降の変数名。対応表の子 Slot 名は `LnRm`。例：`Expressions/DV/Core.LeftGesture`、`Expressions/DV/GestureTable/L0R0`、
 `Catalog/各表情/DV/Id`、`Outputs/各項目/DV/Result`。
 以下の配置先は論理的な所属を示し、変数の実体は各空間の `DV/変数名`（対応表は `DV/GestureTable/LnRm`）に置く。
-単なる整理用の Catalog・Outputs・Bindings・Diagnostics には空間を追加しない。
+単なる整理用の Catalog・Outputs・Diagnostics には空間を追加しない。Bindingsは表情ごとに1つの名前付き空間を持つ。
 名前の定義は [ExpressionSpaces.cs](../src/VrmToResonitePackage/Expressions/ExpressionSpaces.cs) に集約する。
 ProtoFlux の読み書きは対象の空間名と変数名を明示し、変数生成は配置先の空間名を使う。単一モジュールの接頭辞は Slot 表示名から推測せず、明示的に付ける。
 固定の読み取り先がノード自身の祖先と同じ名前付き空間を指す場合は Dynamic Variable Input にする。
@@ -51,7 +51,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 29 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 30 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
@@ -86,15 +86,46 @@ Version 21ではメニュー項目の Enabled を対応表の参照有無や表�
 Select APIはGestureTableへの割り当てを条件にせず、Catalogの有効な表情を選択する。
 無効な表情や存在しないIDでは選択状態を変更しない。左右値は直接選択では常に保持する。
 
-Bindings の子には ExpressionSystem.Catalog.Clip.Binding 空間で次の2項目を保存する。
+Bindings 自身に `ExpressionSystem.Catalog.Clip.Binding` 空間を置き、DVの各子に
+`DynamicValueVariable<float>` を1つずつ保存する。旧Output参照・Valueレコードは生成しない。
 
-| 名前 | 型 | 初期値 | 区分・役割 |
-|---|---|---|---|
-| `Output` | Slot | 対応するOutputsレコード | 定義。値の適用先 |
-| `Value` | float | コンパイル済みカーブの最後のキー値 | 設定。表情の固定値。元カーブや接線は保存しない |
+| VariableName の例 | 型 | 値 |
+|---|---|---|
+| `ExpressionSystem.Catalog.Clip.Binding/Body.Smile` | float | 対応するカーブの最後のキー値 |
+| `ExpressionSystem.Catalog.Clip.Binding/Body.Blink_L` | float | 対応するカーブの最後のキー値 |
 
-選択時はOutputsを1回走査し、各OutputについてCurrentExpressionのBindingsからOutput参照が一致する有効な項目を探す。見つかった参照をOutputのBindingへ設定し、欠落時はnullにしてBaseを使う。同じOutputを参照する項目が複数あれば最後の有効な項目を使う。
-子レコードの追加・Output参照の編集後は表情を再選択する。通常出力のValue編集も再選択で反映する。追跡出力は選択済みBindingのValueを直接読み、編集・無効化・削除を自動反映する。Bindings参照自体の変更は自動反映する。
+`Outputs/各項目/DV/Id` はスラッシュ以降のキー（例：`Body.Smile`）。
+PlaybackはOutputsを1回走査し、CurrentExpressionのBindingsをSourceとして
+`ExpressionSystem.Catalog.Clip.Binding/` + Output.Id を読む。FoundValue=falseならBaseを使う。
+値が0であることと、変数が存在しないことを区別する。Bindingsの子を走査する処理はない。
+通常出力の値・名前・子レコードの編集後は表情を再選択する。
+追跡出力は同じ名前を継続的に読み、値・追加・削除・名前変更をDynamicVariable更新後に反映する。
+Bindings参照自体の変更は通常出力にも自動反映する。
+
+### 読めるキーと禁止文字の変換（Version 30）
+
+生成キーは `メッシュ名.BlendShape名`。メッシュ名にはSkinnedMeshRendererのSlot名を使い、
+BlendShape名は対象ウェイトから実メッシュの名前を解決する。元bindingが数値インデックスでも数値キーにはしない。
+メッシュ以外のテスト用IFieldは元bindingのパス末尾とShapeを使う。
+
+- 両方の名前の前後の空白を除去する。空名はそれぞれ `Mesh`・`Shape` にする。
+- 半角スペース・`-`・`.`・`_` は保持する。日本語・英数字も保持する。
+- それ以外のUnicode記号・句読点・空白文字は `_` に置換する。
+  制御文字・書式文字・UTF-16サロゲートも `_` にする。
+- 例：`Body/Face` と `Smile(1)` → `Body_Face.Smile_1_`。
+- 全表情で使う出力をまとめ、元bindingのPath・ShapeのOrdinal順で名前を割り当てる。
+  置換後の同名、同名メッシュ、区切りの曖昧さは `.2`・`.3` … の末尾番号で区別する。
+  元から末尾番号を含む名前とも衝突しないよう、割り当て済みの名前を確認する。
+- キーは生成時に固定する。生成後にSlotの表示名を変えてもキーは変わらない。
+  Output.Idを編集する場合は各表情のVariableNameも一致させる。同一空間に重複名の変数を作らない。
+
+2026-09-28にインストール済みFrooxEngine.dllのDynamicVariableHelperを逆コンパイルし、
+IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
+名前は最初の `/` で空間と項目に分割され、それぞれを検証してからTrimする。
+従って変数名内部の `/`・`\`・`:`・括弧・改行・タブ・全角スペースは使えない。
+名前は大文字小文字を区別し、空名・空白のみは変数として登録されない。
+実DLLはUTF-16のchar単位で判定するため制御文字や一部の絵文字を通すが、上記の生成規則では置換する。
+公開仕様は[Resonite Wikiの命名制限](https://wiki.resonite.com/Dynamic_variables#Naming_restrictions)も参照。
 
 `API/Templates/Expression (copy into Catalog)` は最初の表情の複製で、Id を空文字、Enabled を false に変更する。
 コピー後は一意の ID、Bindings、必要な定義を整え、有効にして Pair へ割り当てる。表にない ID は Select API で選べない。
@@ -121,7 +152,7 @@ Lifecycle は OnStart とローカル装着状態の変更時に動き、現在�
 公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、装着状態の変更イベントより早い左右入力も保持する。
 
 初期化時は左右値を 0、PairKey を L0R0、AllowHandGestures を true、
-CurrentExpression と全OutputsのBindingをnullにし、通常出力のResultをBaseに書き戻す。追跡出力は専用DriveがBaseを反映する。
+CurrentExpressionをnullにし、通常出力のResultをBaseに書き戻す。追跡出力は専用DriveがBaseを反映する。
 その後の Selection と Playback の同期Writeで現在の対応表に応じた状態になる。
 
 装着が終了すると、初期化済みのクライアントだけが一度このクリア処理を実行し、フラグを false に戻す。
@@ -134,12 +165,11 @@ CurrentExpression と全OutputsのBindingをnullにし、通常出力のResult�
 
 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|
-| `Id` | string | binding キーの SHA-256 の先頭24桁（小文字16進数） | 定義。出力の安定した識別子。実行時はOutput参照を使う |
+| `Id` | string | 禁止文字を変換したメッシュ名.BlendShape名。衝突時は末尾番号付き | 定義。選択表情のDynamicVariableを読むキー |
 | `Path` | string | 元 binding のパス | 定義。出力の由来・識別情報 |
 | `Shape` | string | BlendShape 名 | 定義。出力の由来・識別情報 |
 | `Baseline` | float | initialWeight があればその値、なければ元フィールド値 | 定義。生成時の基準値の記録。Playback は読まない。編集しても生成済み Neutral の固定値 は変わらない |
 | `Base` | float | 元フィールド値 | 状態／基礎入力。既存の瞬き・viseme ドライバーがあれば出力先をここへ移す。表情にトラックがない場合の値でもある |
-| `Binding` | Slot | null | 状態。選択中の表情から解決したBinding参照。Valueを直接使い、参照なし・無効・削除時は現在のBaseを使用 |
 | `TrackingWeight` | float | 0 | 設定。表情値から Base へ寄せる割合。使用時に 0〜1 に制限。0=表情値、1=Base。自動更新処理はない |
 | `BlinkMode` | int | 通常0、既存の OpenCloseTarget は1または2 | 設定。0=通常の混合、1=max(追跡混合値, Base)、2=min(追跡混合値, Base)。生成時の Eye.ClosedState が OpenState より小さい場合は2。それ以外の瞬きは1 |
 | `Result` | float | 元フィールド値 | 状態。DynamicField<float> が DynamicBlendShapeDriver の該当 BlendShapes[].Value を参照する。通常出力は共有PlaybackがWriteし、既存の追跡がある出力だけTrackingのDriveが駆動する |
@@ -151,13 +181,13 @@ DynamicVariable としてのパスと float 型は同じなので、Read Dynamic
 メッシュ以外の単独 IField を使う内部テスト等では、そのフィールドをWriteまたは追跡用Driveの対象とし Result から参照する。
 
 表情なし・該当トラックなしの場合は sample の代わりに Base を使う。
-選択イベント内で各出力のBindingを解決して同期更新し、通常出力にはResultをWriteする。HasPoseとPoseのコピーは生成しない。
+選択イベント内で各出力のIdを変数名として通常出力のResultをWriteする。Binding参照・HasPose・Poseコピーは生成しない。
 元から追跡ドライバーがある出力だけTrackingのValueFieldDriveで継続合成する。
 出力ごとのFireOnLocalChange・通知イベント、LocalUpdate・アセット検索・サンプリング・切り替え補間は生成しない。
 未装着時は Result=Base とする。装着中は以下の式で評価する。通常出力のWriteは値が異なる場合だけ行う。
 
 ```text
-sample  = Bindingが有効 ? Binding.Value : Base
+sample  = 選択表情のBindingsにId名のfloat変数がある ? その値 : Base
 desired = lerp(sample, Base, clamp01(TrackingWeight))
 Result  = BlinkMode == 1 ? max(desired, Base) : BlinkMode == 2 ? min(desired, Base) : desired
 通常出力: Playback → WriteDynamicValueVariable(Result) → DynamicBlendShapeDriver.BlendShapes[].Value → BlendShape
@@ -168,9 +198,9 @@ Trackingボードのある出力で EyeLinearDriver の OpenCloseTarget を変�
 BlinkMode を閉じる方向に合わせて1または2にする。TrackingWeight=0でも瞬きが合成される。
 同じ BlendShape を DynamicBlendShapeDriver と EyeLinearDriver の両方から直接 Drive しない。
 BlinkMode は生成時に閉じる方向を設定する。後から OpenState／ClosedState を反転した場合は BlinkMode も変更する。
-表情は選択イベントでBinding参照を保持し、瞬きは追跡用DriveがBinding.Valueと最新のBaseを合成し続ける。
-通常出力のBase・TrackingWeight・BlinkMode・Bindings/Value編集は再選択で反映する。
-追跡対象ではBase・TrackingWeight・BlinkModeと選択済みBinding.Valueの変更が自動反映される。
+追跡用DriveはCurrentExpressionのBindingsからId名の値を読み、最新のBaseと合成し続ける。
+通常出力のBase・TrackingWeight・BlinkMode・Bindingsの名前付き変数の編集は再選択で反映する。
+追跡対象ではBase・TrackingWeight・BlinkModeと選択中の表情の名前付き変数の変更が自動反映される。
 Trackingのない出力に追跡を後付けする場合、Baseに接続するだけでは足りず、追跡元を設定してシステムを再生成する。
 OriginalDriverは生成時の経路の記録であり、編集して追跡の有効・無効を切り替える設定ではない。
 
@@ -289,4 +319,5 @@ Internal の3つは公開操作用ではない。メニューボタンの送信�
 - [ExpressionLifecycleSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionLifecycleSetup.cs)：装着状態による初期化・終了処理。
 - [ExpressionPlaybackSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionPlaybackSetup.cs)：選択検証、終端ポーズの取得・通常出力のWrite・追跡専用Drive。
 - [ExpressionInputSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionInputSetup.cs)：メニュー、キー割当、機種別入力。
+- [ExpressionBindingNames.cs](../src/VrmToResonitePackage/Expressions/ExpressionBindingNames.cs)：読みやすいキーの禁止文字変換と衝突回避。
 - [ExpressionModel.cs](../src/VrmToResonitePackage/Expressions/ExpressionModel.cs)：変換用の中間カーブと安定した出力 ID。
