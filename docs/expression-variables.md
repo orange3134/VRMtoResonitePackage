@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 31`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 32`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -25,10 +25,10 @@
 
 `Record()` は空間名を必須引数で受け取り、`OnlyDirectBinding=true` の空間を作る。
 例外は Expressions 自身（false）で、Core と GestureTable には空間を追加せず、Expressions/DV の `ExpressionSystem/Core.*` と `ExpressionSystem/GestureTable.LnRm` を共有空間へ登録する。
-DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot 直下の `DV` に、1変数1子 Slot で配置する。対応表だけは `DV/GestureTable` の子へまとめる。
+DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot 直下の `DV` に、1変数1子 Slot で配置する。対応表は `DV/GestureTable`、Clip の `Binding.*` は `DV/Binding` の子へまとめる。
 子 Slot 名は `/` 以降の変数名。対応表の子 Slot 名は `LnRm`。例：`Expressions/DV/Core.LeftGesture`、`Expressions/DV/GestureTable/L0R0`、
 `Catalog/各表情/DV/Id`、`Outputs/各項目/DV/Result`。
-以下の配置先は論理的な所属を示し、変数の実体は各空間の `DV/変数名`（対応表は `DV/GestureTable/LnRm`）に置く。
+以下の配置先は論理的な所属を示し、変数の実体は各空間の `DV/変数名`（対応表は `DV/GestureTable/LnRm`、Clip の固定値は `DV/Binding/Binding.<Output.Id>`）に置く。
 単なる整理用の Catalog・Outputs・Diagnostics には空間を追加しない。表情値はClip空間のBinding.*変数として配置する。
 名前の定義は [ExpressionSpaces.cs](../src/VrmToResonitePackage/Expressions/ExpressionSpaces.cs) に集約する。
 ProtoFlux の読み書きは対象の空間名と変数名を明示し、変数生成は配置先の空間名を使う。単一モジュールの接頭辞は Slot 表示名から推測せず、明示的に付ける。
@@ -85,7 +85,7 @@ Select APIはGestureTableへの割り当てを条件にせず、Catalogの有効
 無効な表情や存在しないIDでは選択状態を変更しない。左右値は直接選択では常に保持する。
 
 各表情の `ExpressionSystem.Catalog.Clip` 空間に、`Binding.` 接頭辞の
-`DynamicValueVariable<float>` を保存する。配置先は各表情の `DV/Binding.<Output.Id>`。
+`DynamicValueVariable<float>` を保存する。配置先は各表情の `DV/Binding/Binding.<Output.Id>`。
 独立したBinding空間、Bindingsスロット・参照、旧Output参照・Valueレコードは生成しない。
 
 | VariableName の例 | 型 | 値 |

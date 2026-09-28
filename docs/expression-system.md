@@ -42,7 +42,8 @@ Expressions/
   Catalog/                         表情ごとの定義と最終値の一覧
     各表情/DV/                     Clip空間の変数
       Id・DisplayName・Enabled     表情の設定
-      Binding.Body.Smile           Body.Smileの固定値（float）
+      Binding/                    シェイプごとの変数スロット
+        Binding.Body.Smile         Body.Smileの固定値（float）
   Core/                            入力・選択・再生ロジック
     Logic/
       Lifecycle/                   初期化、装着状態の変更監視
@@ -102,8 +103,8 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
 表情の無効化・CurrentExpressionの変更は、選択結果の変化を監視して反映する。
 
-Version 31 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
-変換時に各トラックの最後のキー値を 各CatalogエントリーのDV/Binding.*変数 に保存する。
+Version 32 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+変換時に各トラックの最後のキー値を 各CatalogエントリーのDV/Binding/Binding.*変数 に保存する。
 Playback は選択時と CurrentExpression 参照の変更時に Outputs を走査し、Binding.と各出力のIdを連結した名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
 元から瞬き・口パク等のドライバーがある出力だけTrackingボードを生成し、
@@ -117,7 +118,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 連続・ループアニメーションも再生しない。Loop / Duration と Core の再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 31 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 32 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -349,7 +350,7 @@ Select APIはCatalogを直接検索するため、ジェスチャーの値・表
 直接選択ボタンからの適用にGestureTableの割り当ては不要。対応表の編集でメニュー項目の Enabled は変更しない。直接選択は即時に反映する。削除は表情スロットごと行える。
 テンプレートから複製したメニューの表示名・送信する ID は複製先の変数に追従する。項目の Enabled は駆動しない。
 
-各表情のExpressionSystem.Catalog.Clip空間のDV配下にBinding.*のfloat変数を並べる。
+各表情のExpressionSystem.Catalog.Clip空間のDV/Binding配下にBinding.*のfloat変数スロットを並べる。
 VariableNameはExpressionSystem.Catalog.Clip/Binding.と対応するOutput.Idを連結した名前、値は元カーブの最後のキー値。
 例：ExpressionSystem.Catalog.Clip/Binding.Body.Smile。独立したBinding空間やBindings参照は生成しない。
 新しいシェイプを追加する場合は、対応する Outputs とメッシュへの接続も用意する。
@@ -1176,3 +1177,10 @@ ExpressionSmokeで禁止文字・置換後の衝突・同名メッシュ・実Bl
 BindingsスロットとそのSlot参照も廃止し、PlaybackとTrackingはCurrentExpressionを直接Sourceにする。
 命名・禁止文字変換・欠落時のBase復帰はVersion 30と同じ。表情の有効性はSlotの有効状態とEnabledで判定する。
 ExpressionSmokeでClip直下の変数配置と旧空間・参照の不在、直接選択・欠落値・瞬き・複製・保存再読込を含む全回帰テストが成功した。
+
+### Version 32: Binding変数スロットの整理
+
+各ClipのDV配下にBindingスロットを作り、Binding.*の変数スロットをその子へまとめる。
+配置はCatalog/<表情>/DV/Binding/Binding.<Output.Id>。BindingスロットにはDynamicVariableSpaceを追加せず、
+変数名ExpressionSystem.Catalog.Clip/Binding.<Output.Id>とCurrentExpressionからの読み取りを維持する。
+ExpressionSmokeの全回帰テストでグループ配置、変数名による読み取り、Base復帰、複製・保存再読込が成功した。

@@ -177,7 +177,9 @@ internal static class ExpressionGraphChecks
         {
             Check(entry.FindChild("Bindings") == null &&
                 !entry.ExpressionVariables<DynamicReferenceVariable<Slot>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Bindings"),
-                "Clip owns binding values directly without a separate container or reference");
+                "Clip owns binding values without a separate space or reference");
+            Check(entry.FindChild("DV").FindChild("Binding") != null,
+                "each clip has a Binding group under DV");
             var keys = expressions.FindChild("Outputs").Children.Select(o =>
                 o.ExpressionVariables<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Id").Value.Value).ToHashSet();
             const string prefix = "ExpressionSystem.Catalog.Clip/Binding.";

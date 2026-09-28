@@ -288,3 +288,5 @@ Version 29 removes HasPose and copied Pose values. Playback resolves each output
 Version 30 uses readable mesh/shape keys for named float variables in one Binding space per expression. Tests cover invalid characters against the installed DLL, replacement and renderer-name collisions, stable ordering, actual names for numeric source bindings, direct lookup, missing variables, live tracking, clone and reload. Snapshot comparisons normalize new readable keys to source binding identities for legacy package comparison.
 
 Version 31 stores Binding.<Output.Id> floats directly in each Clip's DV container. No separate Binding space or Bindings Slot/reference is generated. Checks cover clip-scoped names, direct CurrentExpression changes, missing values, clones and reload; snapshot readers retain support for v30 and earlier layouts.
+
+Version 32 groups Binding.* variable slots under each Clip's DV/Binding slot. Variable names and the owning Clip space stay the same. Placement checks cover generation, cloning and package reload.

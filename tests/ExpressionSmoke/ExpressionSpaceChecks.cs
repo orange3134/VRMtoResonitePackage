@@ -48,9 +48,10 @@ internal static class ExpressionSpaceChecks
             var space = variable.Slot.GetComponentInParents<DynamicVariableSpace>();
             var data = space.Slot.FindChild("DV");
             bool tableRow = path.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal);
-            var container = tableRow ? data?.FindChild("GestureTable") : data;
+            bool binding = path.StartsWith("ExpressionSystem.Catalog.Clip/Binding.", StringComparison.Ordinal);
+            var container = tableRow ? data?.FindChild("GestureTable") : binding ? data?.FindChild("Binding") : data;
             Check(data != null && data.Parent == space.Slot && variable.Slot.Parent == container,
-                "variable lives in its DV container or GestureTable group: " + path);
+                "variable lives in its DV container, GestureTable group or Binding group: " + path);
             Check(variable.Slot.Name == (tableRow ? path["ExpressionSystem/GestureTable.".Length..] : path[(path.IndexOf('/') + 1)..]),
                 "variable slot is named after its key: " + path);
             Check(occupied.Add(variable.Slot), "one variable per slot: " + path);
@@ -77,8 +78,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 31,
-            "clip-scoped Binding keys are identified by package version 31");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 32,
+            "grouped clip Binding slots are identified by package version 32");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Core.LeftGesture", out _),
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),
