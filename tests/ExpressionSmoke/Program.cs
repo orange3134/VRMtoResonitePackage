@@ -253,14 +253,14 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "unmapped expression keeps its menu item enabled");
 
         Select("Animated");
-        Check(Math.Abs(Get<float>(expressions.FindChild("Outputs").FindChild("Smile"), "Pose") - 1) < 0.001f,
+        Check(Math.Abs(Get<float>(Reference<Slot>(expressions.FindChild("Outputs").FindChild("Smile"), "Binding"), "Value") - 1) < 0.001f,
             "animated clip stores its final key before the next frame");
         await Frames(40);
         Check(Math.Abs(field.Value - 1) < 0.001f, "animated clip remains fixed without playback");
         Set(catalog.FindChild("Animated"), "Enabled", false);
         Set(table, "L0R2", catalog.FindChild("Animated"));
         AllowInput(); Gesture(1, 2);
-        Check(Reference<Slot>(core, "CurrentExpression") == null && !Get<bool>(expressions.FindChild("Outputs").FindChild("Smile"), "HasPose"),
+        Check(Reference<Slot>(core, "CurrentExpression") == null && Reference<Slot>(expressions.FindChild("Outputs").FindChild("Smile"), "Binding") == null,
             "invalid selection immediately clears the tracked pose");
         await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "disabled mapped expression restores base output");
@@ -384,7 +384,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Math.Abs(field.Value - 0.4f) < 0.01, "existing tracking driver continues through proxy");
         Set(table, "L0R2", catalog.FindChild("Angry"));
         Select("Angry");
-        Check(Math.Abs(Get<float>(expressions.FindChild("Outputs").FindChild("Smile"), "Pose") - 0.7f) < 0.001f,
+        Check(Math.Abs(Get<float>(Reference<Slot>(expressions.FindChild("Outputs").FindChild("Smile"), "Binding"), "Value") - 0.7f) < 0.001f,
             "selection immediately writes the tracked pose");
         await Frames();
         Check(Math.Abs(field.Value - 0.7f) < 0.001f, "tracking applies the final pose without interpolation");

@@ -53,7 +53,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "Core.CurrentExpression", null);
         Data(_root, "Core.PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 28);
+        Data(_root, "Version", 29);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -155,8 +155,7 @@ internal sealed partial class ExpressionSystemSetup
                 Data(output, "Id", id); Data(output, "Path", curve.Binding.Path); Data(output, "Shape", curve.Binding.Shape);
                 Data(output, "Baseline", initialWeight?.Invoke(field) ?? field.Value);
                 Data(output, "TrackingWeight", 0f);
-                Data(output, "HasPose", false);
-                Data(output, "Pose", 0f);
+                Reference<Slot>(output, "Binding", null);
                 // Only eyelid openness uses a closing-side union. Other tracking drivers
                 // (visemes, gaze, etc.) retain their existing TrackingWeight behavior.
                 var eye = field.ActiveLink?.Parent as EyeLinearDriver.Eye;

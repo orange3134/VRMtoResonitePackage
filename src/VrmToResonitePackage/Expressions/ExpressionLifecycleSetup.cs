@@ -28,7 +28,7 @@ internal sealed partial class ExpressionSystemSetup
         cleanup.Add(g.Write<Slot>(core, SystemSpace, "Core.CurrentExpression", g.Ref<Slot>(null)));
         cleanup.Add(g.Write<string>(core, SystemSpace, "Core.PairKey", g.Text("L0R0")));
         cleanup.Add(g.Each(g.Ref(_outputs), output => g.Sequence(
-            g.Write<bool>(output, OutputSpace, "HasPose", g.Constant(false)),
+            g.Write<Slot>(output, OutputSpace, "Binding", g.Ref<Slot>(null)),
             g.If(g.IsNull<ISyncRef>(g.Read<ISyncRef>(output, OutputSpace, "OriginalDriver")),
                 g.Write<float>(output, OutputSpace, "Result", g.Read<float>(output, OutputSpace, "Base"))))));
 

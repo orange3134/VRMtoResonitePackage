@@ -44,23 +44,21 @@ internal sealed partial class ExpressionSystemSetup
             g.Node("IsLocalUser", null, ("User", g.Node("HostUser")))));
         var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, SystemSpace, "Core.CurrentExpression"), g.Ref<Slot>(null));
         var bindings = g.Read<Slot>(current, ClipSpace, "Bindings");
-        var update = g.Each(g.Ref(_outputs), output =>
+        var selectedBinding = g.Local<Slot>();
+        var refresh = g.Each(g.Ref(_outputs), output =>
         {
             var result = MixOutput(g, output, wearer);
-            return g.If(g.IsNull<ISyncRef>(g.Read<ISyncRef>(output, OutputSpace, "OriginalDriver")), g.Sequence(
-                g.Set<float>(value, result),
-                g.If(g.NotEqual<float>(value, g.Read<float>(output, OutputSpace, "Result")),
-                    g.Write<float>(output, OutputSpace, "Result", value))));
+            return g.Sequence(
+                g.Set<Slot>(selectedBinding, g.Ref<Slot>(null)),
+                g.If(g.Active(output), g.Each(bindings, binding =>
+                    g.If(g.And(g.Active(binding), g.Equal<Slot>(output, g.Read<Slot>(binding, BindingSpace, "Output"))),
+                        g.Set<Slot>(selectedBinding, binding)))),
+                g.Write<Slot>(output, OutputSpace, "Binding", selectedBinding),
+                g.If(g.IsNull<ISyncRef>(g.Read<ISyncRef>(output, OutputSpace, "OriginalDriver")), g.Sequence(
+                    g.Set<float>(value, result),
+                    g.If(g.NotEqual<float>(value, g.Read<float>(output, OutputSpace, "Result")),
+                        g.Write<float>(output, OutputSpace, "Result", value)))));
         });
-        var bindingOutput = g.Local<Slot>();
-        var refresh = g.Sequence(
-            g.Each(g.Ref(_outputs), record => g.Write<bool>(record, OutputSpace, "HasPose", g.Constant(false))),
-            g.Each(bindings, binding => g.Sequence(
-                g.Set<Slot>(bindingOutput, g.Read<Slot>(binding, BindingSpace, "Output")),
-                g.If(g.And(g.Active(binding), g.Active(bindingOutput)), g.Sequence(
-                    g.Write<float>(bindingOutput, OutputSpace, "Pose", g.Read<float>(binding, BindingSpace, "Value")),
-                    g.Write<bool>(bindingOutput, OutputSpace, "HasPose", g.Constant(true)))))),
-            update);
         // Only the wearer writes a pose. The host follows Base on unworn copies.
         var receiver = g.Receiver(PlaybackTickTag, false);
         Link(receiver, "OnTriggered", g.If(wearer, refresh));
@@ -79,7 +77,8 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildLiveTracking(Slot output)
     {
         // Only shapes already driven by blink/viseme/etc. need continuous mixing.
-        // Pose and HasPose are written by selection; tracking never resamples a clip
+        // Selection resolves the binding; a missing binding follows the live Base.
+        // Tracking never searches bindings or resamples a clip
         // and never sends synchronized per-frame Write impulses.
         var g = new ExpressionFlux(output.AddSlot("Tracking"));
         var target = output.FindChild("DV").GetComponentsInChildren<DynamicField<float>>()
@@ -93,8 +92,9 @@ internal sealed partial class ExpressionSystemSetup
     private static IWorldElement MixOutput(ExpressionFlux g, IWorldElement output, IWorldElement worn)
     {
         var baseValue = g.Read<float>(output, OutputSpace, "Base");
-        var desired = g.Choose<float>(g.And(worn, g.Read<bool>(output, OutputSpace, "HasPose")),
-            g.Read<float>(output, OutputSpace, "Pose"), baseValue);
+        var binding = g.Read<Slot>(output, OutputSpace, "Binding");
+        var desired = g.Choose<float>(g.And(worn, g.Active(binding)),
+            g.Read<float>(binding, BindingSpace, "Value"), baseValue);
         desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(output, OutputSpace, "TrackingWeight")));
         var blinkMode = g.Read<int>(output, OutputSpace, "BlinkMode");
         return g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(1)), g.Binary<float>("ValueMax", desired, baseValue),

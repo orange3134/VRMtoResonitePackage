@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 28`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 29`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -51,7 +51,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 28 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 29 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
@@ -93,8 +93,8 @@ Bindings の子には ExpressionSystem.Catalog.Clip.Binding 空間で次の2項�
 | `Output` | Slot | 対応するOutputsレコード | 定義。値の適用先 |
 | `Value` | float | コンパイル済みカーブの最後のキー値 | 設定。表情の固定値。元カーブや接線は保存しない |
 
-選択時は全出力のHasPoseをfalseにしてから、有効なBindingsの子を列挙し、各OutputのPoseへValueを書き込んでHasPose=trueにする。
-値や子レコードの編集後は表情を再選択する。Bindings参照自体の変更は自動反映する。
+選択時はOutputsを1回走査し、各OutputについてCurrentExpressionのBindingsからOutput参照が一致する有効な項目を探す。見つかった参照をOutputのBindingへ設定し、欠落時はnullにしてBaseを使う。同じOutputを参照する項目が複数あれば最後の有効な項目を使う。
+子レコードの追加・Output参照の編集後は表情を再選択する。通常出力のValue編集も再選択で反映する。追跡出力は選択済みBindingのValueを直接読み、編集・無効化・削除を自動反映する。Bindings参照自体の変更は自動反映する。
 
 `API/Templates/Expression (copy into Catalog)` は最初の表情の複製で、Id を空文字、Enabled を false に変更する。
 コピー後は一意の ID、Bindings、必要な定義を整え、有効にして Pair へ割り当てる。表にない ID は Select API で選べない。
@@ -121,7 +121,7 @@ Lifecycle は OnStart とローカル装着状態の変更時に動き、現在�
 公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、装着状態の変更イベントより早い左右入力も保持する。
 
 初期化時は左右値を 0、PairKey を L0R0、AllowHandGestures を true、
-CurrentExpression を null、全OutputsのHasPoseをfalseにし、通常出力のResultをBaseに書き戻す。追跡出力は専用DriveがBaseを反映する。
+CurrentExpression と全OutputsのBindingをnullにし、通常出力のResultをBaseに書き戻す。追跡出力は専用DriveがBaseを反映する。
 その後の Selection と Playback の同期Writeで現在の対応表に応じた状態になる。
 
 装着が終了すると、初期化済みのクライアントだけが一度このクリア処理を実行し、フラグを false に戻す。
@@ -139,8 +139,7 @@ CurrentExpression を null、全OutputsのHasPoseをfalseにし、通常出力�
 | `Shape` | string | BlendShape 名 | 定義。出力の由来・識別情報 |
 | `Baseline` | float | initialWeight があればその値、なければ元フィールド値 | 定義。生成時の基準値の記録。Playback は読まない。編集しても生成済み Neutral の固定値 は変わらない |
 | `Base` | float | 元フィールド値 | 状態／基礎入力。既存の瞬き・viseme ドライバーがあれば出力先をここへ移す。表情にトラックがない場合の値でもある |
-| `Pose` | float | 0 | 状態。選択時に取得したトラック終端値。時間で変化しない |
-| `HasPose` | bool | false | 状態。選択した表情に該当トラックがある場合はtrue。falseなら現在のBaseを使用 |
+| `Binding` | Slot | null | 状態。選択中の表情から解決したBinding参照。Valueを直接使い、参照なし・無効・削除時は現在のBaseを使用 |
 | `TrackingWeight` | float | 0 | 設定。表情値から Base へ寄せる割合。使用時に 0〜1 に制限。0=表情値、1=Base。自動更新処理はない |
 | `BlinkMode` | int | 通常0、既存の OpenCloseTarget は1または2 | 設定。0=通常の混合、1=max(追跡混合値, Base)、2=min(追跡混合値, Base)。生成時の Eye.ClosedState が OpenState より小さい場合は2。それ以外の瞬きは1 |
 | `Result` | float | 元フィールド値 | 状態。DynamicField<float> が DynamicBlendShapeDriver の該当 BlendShapes[].Value を参照する。通常出力は共有PlaybackがWriteし、既存の追跡がある出力だけTrackingのDriveが駆動する |
@@ -152,13 +151,13 @@ DynamicVariable としてのパスと float 型は同じなので、Read Dynamic
 メッシュ以外の単独 IField を使う内部テスト等では、そのフィールドをWriteまたは追跡用Driveの対象とし Result から参照する。
 
 表情なし・該当トラックなしの場合は sample の代わりに Base を使う。
-選択イベントで全出力のPose・HasPoseを同期更新し、通常出力にはResultをWriteする。
+選択イベント内で各出力のBindingを解決して同期更新し、通常出力にはResultをWriteする。HasPoseとPoseのコピーは生成しない。
 元から追跡ドライバーがある出力だけTrackingのValueFieldDriveで継続合成する。
 出力ごとのFireOnLocalChange・通知イベント、LocalUpdate・アセット検索・サンプリング・切り替え補間は生成しない。
 未装着時は Result=Base とする。装着中は以下の式で評価する。通常出力のWriteは値が異なる場合だけ行う。
 
 ```text
-sample  = HasPose ? Pose : Base
+sample  = Bindingが有効 ? Binding.Value : Base
 desired = lerp(sample, Base, clamp01(TrackingWeight))
 Result  = BlinkMode == 1 ? max(desired, Base) : BlinkMode == 2 ? min(desired, Base) : desired
 通常出力: Playback → WriteDynamicValueVariable(Result) → DynamicBlendShapeDriver.BlendShapes[].Value → BlendShape
@@ -169,9 +168,9 @@ Trackingボードのある出力で EyeLinearDriver の OpenCloseTarget を変�
 BlinkMode を閉じる方向に合わせて1または2にする。TrackingWeight=0でも瞬きが合成される。
 同じ BlendShape を DynamicBlendShapeDriver と EyeLinearDriver の両方から直接 Drive しない。
 BlinkMode は生成時に閉じる方向を設定する。後から OpenState／ClosedState を反転した場合は BlinkMode も変更する。
-表情は選択イベントで固定値を保持し、瞬きは追跡用Driveが合成し続ける。
+表情は選択イベントでBinding参照を保持し、瞬きは追跡用DriveがBinding.Valueと最新のBaseを合成し続ける。
 通常出力のBase・TrackingWeight・BlinkMode・Bindings/Value編集は再選択で反映する。
-追跡対象ではBase・TrackingWeight・BlinkModeの変更が自動反映される。
+追跡対象ではBase・TrackingWeight・BlinkModeと選択済みBinding.Valueの変更が自動反映される。
 Trackingのない出力に追跡を後付けする場合、Baseに接続するだけでは足りず、追跡元を設定してシステムを再生成する。
 OriginalDriverは生成時の経路の記録であり、編集して追跡の有効・無効を切り替える設定ではない。
 

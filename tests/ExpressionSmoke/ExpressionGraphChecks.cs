@@ -121,6 +121,11 @@ internal static class ExpressionGraphChecks
             "keyboard edge state is local to its change detector");
         foreach (var output in expressions.FindChild("Outputs").Children)
         {
+            Check(!output.ExpressionVariables<DynamicValueVariable<bool>>().Any(v => v.VariableName.Value == "ExpressionSystem.Output/HasPose") &&
+                !output.ExpressionVariables<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionSystem.Output/Pose"),
+                "outputs keep no presence flag or copied pose value");
+            Check(output.ExpressionVariables<DynamicReferenceVariable<Slot>>().Count(v => v.VariableName.Value == "ExpressionSystem.Output/Binding") == 1,
+                "outputs retain only the resolved binding reference");
             bool tracked = output.ExpressionVariables<DynamicReferenceVariable<ISyncRef>>()
                 .Any(v => v.VariableName.Value == "ExpressionSystem.Output/OriginalDriver");
             var outputNodes = output.GetComponentsInChildren<ProtoFluxNode>();

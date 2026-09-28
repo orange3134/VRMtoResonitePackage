@@ -282,3 +282,5 @@ removes the empty Expressions/GestureTable slot, and reads
 ExpressionSystem/GestureTable.L{0}R{1} with FormatString. Placement, runtime
 selection, external rows (including keypad 8/9), clone, save and reload checks
 use the new layout. Snapshot comparison can still read older table layouts.
+
+Version 29 removes HasPose and copied Pose values. Playback resolves each output's Binding by Output reference and uses Base when absent. Regression checks cover explicit zero values, sparse live tracking, disabled/deleted bindings, duplicate binding precedence, reset, clone and package reload.

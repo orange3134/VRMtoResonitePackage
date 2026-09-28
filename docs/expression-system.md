@@ -99,22 +99,22 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
 表の編集・表情の無効化・Bindings参照の変更は、選択結果の変化を監視して反映する。
 
-Version 16 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+Version 29 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を Catalog/Bindings の Value に保存する。
-Playback は選択時と Bindings 参照の変更時にその値を Outputs の Pose / HasPose へコピーし、
+Playback は選択時と Bindings 参照の変更時に Outputs を走査して各出力の Binding を解決し、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
 元から瞬き・口パク等のドライバーがある出力だけTrackingボードを生成し、
-保存済みPoseと追跡BaseをValueFieldDriveで合成する。アニメーションの途中値は評価しない。
+選択済みBinding.Valueと追跡BaseをValueFieldDriveで合成する。アニメーションの途中値は評価しない。
 AnimX・AnimationProvider・AssetLoader・トラック検索・サンプラーも生成しない。
 メッシュ出力のResultはSmoothValue<float>.TargetValueを参照するDynamicField<float>。
 SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、標準ドライバーが実メッシュへ反映する。
 通常出力は装着者だけが値をWriteし、未装着時はホストがBaseを適用する。
-追跡対象は各クライアントで同期されたPoseと各自のBaseを合成し、未装着時はBaseを使う。
+追跡対象は各クライアントで同期されたBinding参照のValueと各自のBaseを合成し、未装着時はBaseを使う。
 切り替え補間はSmoothValueに任せ、FadeIn / FadeOut / FadeDuration / FadeWeight / Snapshot は生成しない。
 連続・ループアニメーションも再生しない。Loop / Duration と Core の再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 16 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 29 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -192,7 +192,7 @@ Inspector 上の Core の変数名には `ExpressionSystem/Core.` が付く。Ge
 `AllowHandGestures` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
 変換時の警告は引き続き `Diagnostics` に残る。
 `Diagnostics/Graph modules` の各レコードには `ExpressionSystem.Diagnostics.GraphModule/Path` と `ExpressionSystem.Diagnostics.GraphModule/NodeCount` があり、モジュールの場所と規模を確認できる。
-Outputs の `Pose` は取得した終端値、`HasPose` は対応するトラックがあるかを示す。再生時計は持たない。
+Outputs の `Binding` は選択時に解決したトラックへの参照。参照なし・無効・削除時はBaseを使う。Pose・HasPose・再生時計は持たない。
 反映が止まっている場合は、アバターの装着状態、該当モジュールの有効状態と `Outputs/Result`・`Target` を確認する。
 
 
@@ -349,7 +349,7 @@ Select APIはCatalogを直接検索するため、ジェスチャーの値・表
 Bindings の子には ExpressionSystem.Catalog.Clip.Binding 空間を置き、Output に対応する Outputs レコード、
 Value に固定値を設定する。変換時は元カーブの最後のキー値を保存する。
 新しいシェイプを追加する場合は、対応する Outputs とメッシュへの接続も用意する。
-Value・子レコードを編集した後は、表情を再選択して適用する。
+通常出力のValue・子レコードの編集後は表情を再選択する。追跡出力の選択済みBinding.Valueの編集は自動反映する。
 Bindings の参照自体を変更した場合は、その変更を監視して適用する。
 
 ## 外部イベント API（Version 26）
@@ -377,7 +377,7 @@ Tag は大文字・小文字を含めて完全一致。引数型違い、無効�
 直接選択ではSelectionを経由せず、Playbackが固定ポーズと通常出力を同期更新する。追跡対象は通常のドライバー更新で反映する。
 boolの変更だけでは左右値も表情も変更しない。
 Version 25のコンテキストメニュー「Reset settings」は引数なしのReset APIを送る。
-CurrentExpression=null、左右のGesture=0、PairKey=L0R0、AllowHandGestures=trueへ一括で戻し、各出力のHasPoseを解除してBaseを反映する。
+CurrentExpression=null、左右のGesture=0、PairKey=L0R0、AllowHandGestures=trueへ一括で戻し、各出力のBindingをnullにしてBaseを反映する。
 GestureTableの割り当てやCatalog、キー設定は変更しない。L0R0に表情が割り当てられていてもリセットでは再選択せず、次の左右入力イベントで再評価する。
 Resetもローカル装着者限定で、ジェスチャー無効時にも受け付ける。
 初期化は入力許可の判定より前に行い、複製・再ロード・再装着時には bool=true、左右=0 に戻す。
@@ -499,16 +499,17 @@ FaceEmoのIsFaceMotionに合わせ、BlendTreeの候補判定は直下の最初�
 最後に開始姿勢へ戻るループ素材は、その戻った姿勢を採用する。途中の最大値や任意フレームは推測しない。
 変換後は出力先と最終値だけを保存する。元カーブ・キー列・接線・AnimXは含めない。
 
-Playback は選択イベント・表情参照または Bindings 参照の変化時に、全出力の HasPose をfalseにし、
-Bindings の各 Output へ Value をコピーして HasPose=true にする。記録の順序には依存せず、欠落時はBaseを使う。
+Playback は選択イベント・表情参照または Bindings 参照の変化時に、Outputsを1回走査する。
+各Outputについて選択中のBindingsを走査し、Output参照が一致する有効な項目をBindingへ設定する。該当なしはnullにしてBaseを使う。
+名前・並び順で対応付けず、重複時は最後の有効な項目を使う。探索量は出力数×選択中のBinding数。
 続いて通常出力を合成し、Resultと違う場合だけ書き込む。追跡用Driveの対象にはWriteしない。
 無変化時の全出力巡回も出力ごとの変更監視もない。通常出力のBase・TrackingWeight・BlinkMode編集は再選択で適用する。
-Bindings/Valueの編集も再選択で適用する。表情選択・初期化・権限取得で固定ポーズと通常出力を更新する。
+通常出力のBindings/Valueの編集も再選択で適用する。追跡出力は選択済みBinding.Valueを直接読むため、その編集は自動反映する。表情選択・初期化・権限取得で固定ポーズと通常出力を更新する。
 装着者または未装着時のホストだけが共有Writerを実行する。追跡用Driveは全クライアントでローカル評価する。
 未装着時は、保存・複製で選択状態が残っていてもResultはBaseとなる。
 
 既存の瞬き・口パク等のドライバーは Outputs の `Base` に接続し直す。
-表情にトラックがない出力は Base を使い、ある出力は選択時に保存した固定値を使う。
+表情にトラックがない出力は Base を使い、ある出力は選択時に解決したBindingの固定値を使う。
 出力ごとの `TrackingWeight`（0〜1）で Base の混合率を調整できる。
 瞬きは `BlinkMode` で別に合成する。0は通常の混合、1は表情値と Base の最大値、2は最小値を採用する。
 生成時に既存の `EyeLinearDriver.Eyes[].OpenCloseTarget` を検出した出力だけ、閉じる方向に合わせて1または2に初期化する。
@@ -1138,3 +1139,14 @@ UserEdit版でも64組の解析を確認した。ExpressionSmokeの全回帰テ�
 実クライアントでの目視確認は含まない。
 
 2026-09-27: Version 19ではEditor v1.12.1の実物から各機種の判定を再調査し、上記の旧共通判定を置き換えた。現在の仕様は[コントローラー別ジェスチャー判定](controller-gestures.md)を参照。
+
+## Version 29: HasPoseを削除し出力ごとにBindingを解決
+
+2026-09-28: Playbackの全HasPoseリセットとPoseコピーを廃止した。
+Outputsの各レコードに対してCurrentExpressionのBindingsを調べ、Output参照が一致する
+有効なBindingを保持する。該当しない場合はBinding=nullとしてBaseを適用する。
+Poseの値コピーも廃止したため、追跡出力はBinding.Valueと各クライアントの最新Baseを合成できる。
+欠落時のBaseを選択時の値に固定すると瞬き・口パクが止まるため、追跡用Driveでは現在のBaseを読み続ける。
+通常出力の値編集は再選択で反映し、追跡出力の選択済みValue編集は自動反映する。
+追跡出力の選択済みBindingを無効化・削除するとBaseへ戻る。追加・Output参照変更や、選択時に無効だったBindingの再解決は再選択で行う。
+ExpressionSmokeで欠落キーと明示的な0、無効・削除・重複Binding、最新Baseへの追従、瞬き、リセット、複製、保存再読込を検証した。実クライアントでの目視確認は含まない。
