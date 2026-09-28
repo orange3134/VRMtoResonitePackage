@@ -25,7 +25,7 @@ internal static class ExpressionResetChecks
             neutral.Reference.Target = expression;
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.KeyboardLeftTag, true, 5);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.KeyboardRightTag, true, 6);
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, Get<string>(expression, "Id"));
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, expression);
             Check(Get<int>(core, "LeftGesture") == 5 && Get<int>(core, "RightGesture") == 6 &&
                 !Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == expression,
                 "reset starts with both hands non-neutral, a selected expression and gestures disabled");

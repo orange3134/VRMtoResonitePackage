@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 36`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 37`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -58,7 +58,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 Version 22で左右を明示する参照名に変更し、Version 28で `.Pair` を除いた `GestureTable.LnRm` に変更した。例：左1・右2は
 `GestureTable.L1R2`。選択時に左×8＋右の番号へ変換せず、左右を文字列化して直接参照する。
 Core の診断値も数値の `PairIndex` から文字列の `PairKey` へ変更した。
-Version 23のSelect APIはCatalogからIDを検索してCurrentExpressionを直接設定する。左右値とPairKeyは維持する。
+Version 37のSelect APIは表情Slotを受け取り、自身のCatalog直下で有効な表情かを検証してPlaybackへ渡す。CurrentExpressionの設定はPlaybackが担当する。左右値とPairKeyは維持する。
 生成アバターは旧 `Pair.0`〜`Pair.63` を参照しない。旧パッケージの変更には再変換が必要。
 
 Version 20から `SmoothingSpeed` を共有する。各SmoothValueと同じSlotの
@@ -72,7 +72,7 @@ Version 20から `SmoothingSpeed` を共有する。各SmoothValueと同じSlot�
 
 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|
-| `Id` | string | 元・生成表情の ID | 定義。Select API の検索キー。直接選択メニューの送信値も追従する。Pair は ID ではなく Slot を参照 |
+| `Id` | string | 元・生成表情の ID | 記録。元・生成表情の識別子。Select API・メニュー・PairはSlot参照を使い、実行時にIdを検索しない |
 | `DisplayName` | string | 表情名 | 設定。直接選択メニューの表示名 |
 | `Enabled` | bool | true | 設定。false は表情の選択対象外。メニュー項目の Enabled は変更しない |
 | `Source` | string | 元データの説明、または空文字 | 定義。由来の記録。再生判定には使わない |
@@ -81,7 +81,7 @@ Version 21ではメニュー項目の Enabled を対応表の参照有無や表�
 `MenuAvailable`、`GestureTable/Logic`、`Inputs/ContextMenu/Logic`、内部 `MenuRefresh` を生成しない。
 直接選択と Imported menu の項目には自動の選択可否制御を付けず、表の変更を監視してメニューを走査しない。
 Select APIはGestureTableへの割り当てを条件にせず、Catalogの有効な表情を選択する。
-無効な表情や存在しないIDでは選択状態を変更しない。左右値は直接選択では常に保持する。
+null・無効な表情・自身のCatalog直下ではないSlotは受理せず、選択状態を変更しない。左右値は直接選択では常に保持する。
 
 各表情の `ExpressionSystem.Catalog.Clip` 空間に、`Binding.` 接頭辞の
 `DynamicValueVariable<float>` を保存する。配置先は各表情の `DV/Binding/Binding.<Output.Id>`。
@@ -98,7 +98,7 @@ PlaybackはOutputsを1回走査し、CurrentExpression自身をSourceとして
 値が0であることと、変数が存在しないことを区別する。表情値の子スロットを走査する処理はない。
 通常出力の値・名前・子レコードの編集後は表情を再選択する。
 追跡出力は同じ名前を継続的に読み、値・追加・削除・名前変更をDynamicVariable更新後に反映する。
-CurrentExpressionの変更直後にResoPon/Expression/Internal/PlaybackのDynamicImpulseをPlaybackスロットへ送る。通常出力は参照の直接編集だけでは更新されない。Playbackの値選択ではClip・Binding・Outputスロットのアクティブ状態を判定しない。
+表情Slotを引数としてResoPon/Expression/Internal/Playbackを送る。Playbackが受信SlotをCurrentExpressionへ設定してから通常出力へ適用する。nullは表情解除。通常出力は参照の直接編集だけでは更新されない。Playbackの値選択ではClip・Binding・Outputスロットのアクティブ状態を判定しない。
 
 ### 読めるキーと禁止文字の変換（Version 30）
 
@@ -126,7 +126,7 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 公開仕様は[Resonite Wikiの命名制限](https://wiki.resonite.com/Dynamic_variables#Naming_restrictions)も参照。
 
 `API/Templates/Expression (copy into Catalog)` は最初の表情の複製で、Id を空文字、Enabled を false に変更する。
-コピー後は一意の ID、Binding.*の値、必要な定義を整え、有効にして Pair へ割り当てる。表にない ID は Select API で選べない。
+コピー後はBinding.*の値や表示名を整えて有効にする。Select APIには複製先のSlotを送る。GestureTableへの割り当ては任意。Idは記録用で、選択条件ではない。
 
 ## Core：入力・選択・再生
 
@@ -135,10 +135,10 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 | `AllowHandGestures` | bool | true | **設定**。ハンドジェスチャーとGesture APIだけの受付可否。キーボード・メニューは常に受け付ける。メニュー操作で false、初期化で true。許可 API でも変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューでは変更しない |
 | `PairKey` | string | L0R0 | 最後の左右入力イベントでSelectionが組み立てたキー。直接選択中の表情を示すものではない |
-| `CurrentExpression` | Slot | null | Slot 有効・Enabled=trueの候補。それ以外は null |
+| `CurrentExpression` | Slot | null | Playbackが受信した表情Slot。Selection・Select APIが候補の有効性を検証する。解除はnull |
 
 Core の DynamicVariable に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取った参照を検証し、
-切替前後の比較後に CurrentExpression へ直接渡す。
+そのSlot（無効・未割当ならnull）をPlaybackへ送り、PlaybackがCurrentExpressionへ設定する。
 MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
 左右入力の参照先確認にはPairKeyとGestureTableの行を使う。直接選択の確認にはCurrentExpressionを使う。
 
@@ -150,7 +150,7 @@ Lifecycle は OnStart とローカル装着状態の変更時に動き、現在�
 公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、装着状態の変更イベントより早い左右入力も保持する。
 
 初期化時は左右値を 0、PairKey を L0R0、AllowHandGestures を true、
-CurrentExpressionをnullにし、通常出力のResultをBaseに書き戻す。追跡出力は専用DriveがBaseを反映する。
+Playbackへnullを送り、CurrentExpressionの解除と通常出力のBase復帰をまとめて実行する。追跡出力は専用DriveがBaseを反映する。
 その後の Selection と Playback の同期Writeで現在の対応表に応じた状態になる。
 
 装着が終了すると、初期化済みのクライアントだけが一度このクリア処理を実行し、フラグを false に戻す。
@@ -297,12 +297,12 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 |---|---|---|
 | `LeftTag` / `RightTag` | `ResoPon/Expression/Gesture/Left` / `ResoPon/Expression/Gesture/Right` | int（範囲制限なし）。ハンドジェスチャー入力。AllowHandGestures に従う |
 | `KeyboardLeftTag` / `KeyboardRightTag` | `ResoPon/Expression/Keyboard/Left` / `ResoPon/Expression/Keyboard/Right` | int（範囲制限なし）。AllowHandGesturesに関係なく左右値を更新。フラグは維持 |
-| `SelectTag` | `ResoPon/Expression/Menu/Select` | string。Catalogの有効な表情IDを検索し、CurrentExpressionを直接変更してメニュー専用にする |
+| `SelectTag` | `ResoPon/Expression/Menu/Select` | Slot。自身のCatalog直下の有効な表情を受け取り、ハンドジェスチャーを停止してPlaybackへ渡す。null・無効・範囲外は無視 |
 | `HandGesturesEnabledTag` | `ResoPon/Expression/AllowHandGestures` | bool。ハンドジェスチャーだけの許可・停止。左右値と表情は維持 |
 | `ToggleHandGesturesTag` | `ResoPon/Expression/ToggleHandGestures` | 引数なし。現在のハンドジェスチャー許可を反転。左右値と表情は維持 |
 | `InitializeTag` | `ResoPon/Expression/Internal/Initialize` | 引数なし。Lifecycle の初期化確認 |
 | `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。左右入力イベントから選択更新を同期実行 |
-| `PlaybackTickTag` | `ResoPon/Expression/Internal/Playback` | 引数なし。終端ポーズの取得・適用を同期実行 |
+| `PlaybackTickTag` | `ResoPon/Expression/Internal/Playback` | Slot。受信SlotをCurrentExpressionへ設定し、終端ポーズを同期適用。nullは解除。非nullはローカル装着者だけが受理し、未装着時もnullは受理する |
 
 Internal の3つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
 選択中の一時候補、Catalog検索で見つけた表情参照は LocalObject、初期化済みフラグは StoredValue<bool> を使う。
@@ -315,7 +315,7 @@ Internal の3つは公開操作用ではない。メニューボタンの送信�
 
 - [ExpressionSystemSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionSystemSetup.cs)：Core、Catalog、Outputs、対応表の生成と診断ログ出力。
 - [ExpressionFlux.cs](../src/VrmToResonitePackage/Expressions/ExpressionFlux.cs)：スコープ、変数・定数ノード、読み書き。
-- [ExpressionApiSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionApiSetup.cs)：入力検証、左右値の更新、モード変更、IDからCatalogを直接選択。
+- [ExpressionApiSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionApiSetup.cs)：入力検証、左右値の更新、モード変更、受信した表情Slotの検証。
 - [ExpressionLifecycleSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionLifecycleSetup.cs)：装着状態による初期化・終了処理。
 - [ExpressionPlaybackSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionPlaybackSetup.cs)：選択検証、終端ポーズの取得・通常出力のWrite・追跡専用Drive。
 - [ExpressionInputSetup.cs](../src/VrmToResonitePackage/Expressions/ExpressionInputSetup.cs)：メニュー、キー割当、機種別入力。

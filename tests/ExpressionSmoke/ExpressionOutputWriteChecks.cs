@@ -40,8 +40,8 @@ internal static class ExpressionOutputWriteChecks
             var table = expressions.FindChild("DV").FindChild("GestureTable"); var outputs = expressions.FindChild("Outputs");
             var outputA = outputs.FindChild("A"); var outputB = outputs.FindChild("B");
             var api = expressions.FindChild("API").FindChild("Receivers");
-            void Playback() => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(
-                core.FindChild("Logic").FindChild("Playback"), "ResoPon/Expression/Internal/Playback", true) == 1,
+            void Playback(Slot expression) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(
+                core.FindChild("Logic").FindChild("Playback"), "ResoPon/Expression/Internal/Playback", true, expression) == 1,
                 "explicit playback impulse reaches the receiver");
             for (int i = 0; i < model.Clips.Count; i++)
             {
@@ -118,14 +118,14 @@ internal static class ExpressionOutputWriteChecks
             await Frames();
             Near(a.Value, 0.7f, "changing CurrentExpression reads values from the new clip");
             Near(b.Value, 0, "direct reference edits do not apply static outputs without an impulse");
-            Playback();
+            Playback(Reference<Slot>(core, "CurrentExpression"));
             Near(b.Value, 0.3f, "playback impulse synchronously restores Base for absent binding names");
-            Set<Slot>(core, "CurrentExpression", null);
-            Playback();
+            Playback(null);
+            Check(Reference<Slot>(core, "CurrentExpression") == null, "null playback payload synchronously clears selection");
             await Frames();
             Near(a.Value, 0.4f, "null CurrentExpression restores Base");
-            Set<Slot>(core, "CurrentExpression", ramp);
-            Playback();
+            Playback(ramp);
+            Check(Reference<Slot>(core, "CurrentExpression") == ramp, "playback payload synchronously sets selection");
             Near(b.Value, 0, "explicit playback applies a reference change synchronously");
             await Frames();
             Near(a.Value, 1, "restored CurrentExpression applies the clip value without a new gesture");
@@ -138,7 +138,7 @@ internal static class ExpressionOutputWriteChecks
             shortB.Slot.Parent.ActiveSelf = false;
             shortB.Slot.ActiveSelf = false;
             await Frames();
-            Playback();
+            Playback(Reference<Slot>(core, "CurrentExpression"));
             Near(b.Value, 0.8f, "inactive Output, Clip and Binding slots do not gate playback values");
             outputB.ActiveSelf = true;
             shortClip.ActiveSelf = true;
@@ -204,10 +204,15 @@ internal static class ExpressionOutputWriteChecks
                 "identification dequip clears selection without a hierarchy change");
             Near(a.Value, 0.8f, "dequip restores tracked output Base");
             Near(b.Value, 0.3f, "dequip restores static output Base");
+            Playback(ramp);
+            Check(Reference<Slot>(core, "CurrentExpression") == null, "unworn Playback rejects non-null payloads");
+            Set<Slot>(core, "CurrentExpression", ramp);
+            Playback(null);
+            Check(Reference<Slot>(core, "CurrentExpression") == null, "unworn Playback accepts explicit clearing");
             Select(1);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.KeyboardRightTag, true, 1);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true,
-                Get<string>(catalog.FindChild("Short"), "Id"));
+                catalog.FindChild("Short"));
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, false);
             await Frames();
             Check(Get<int>(core, "RightGesture") == 0 && Get<bool>(core, "AllowHandGestures") &&

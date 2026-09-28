@@ -19,15 +19,12 @@ internal sealed partial class ExpressionSystemSetup
         var candidate = ReadGesturePair(g, left, right);
         // Capture validation for this update without persisting intermediate references in Core.
         var selected = g.Local<Slot>();
-        var current = g.Read<Slot>(core, SystemSpace, "Core.CurrentExpression");
         var noExpression = g.Ref<Slot>(null);
         var resolved = g.Choose<Slot>(ValidExpression(g, candidate), candidate, noExpression);
         actions.Add(g.Set<Slot>(selected, resolved));
         actions.Add(g.Write<string>(core, SystemSpace, "Core.PairKey", key));
 
-        actions.Add(g.If(g.NotEqual<Slot>(selected, current),
-            g.Write<Slot>(core, SystemSpace, "Core.CurrentExpression", selected)));
-        actions.Add(g.Trigger(g.Ref(_playback), PlaybackTickTag));
+        actions.Add(g.Trigger<Slot>(g.Ref(_playback), g.Text(PlaybackTickTag), selected));
         var select = g.Sequence(actions.ToArray());
         ReceiveUpdate(g, SelectionTickTag, select);
     }
@@ -52,8 +49,14 @@ internal sealed partial class ExpressionSystemSetup
                     g.Write<float>(output, OutputSpace, "Result", value))));
         });
         // Only the wearer writes a pose. The host follows Base on unworn copies.
-        var receiver = g.Receiver(PlaybackTickTag, false);
-        Link(receiver, "OnTriggered", g.If(canWrite, refresh));
+        var receiver = g.Receiver<Slot>(PlaybackTickTag);
+        var selected = Out(receiver, "Value");
+        // A departing wearer may clear state even after losing write authority.
+        // Non-null selections require the local wearer; unworn instances accept only clearing.
+        var accept = g.Or(wearer, g.And(g.Not(g.AvatarWorn), g.IsNull<Slot>(selected)));
+        Link(receiver, "OnTriggered", g.If(accept, g.Sequence(
+            g.Write<Slot>(core, SystemSpace, "Core.CurrentExpression", selected),
+            g.If(canWrite, refresh))));
         g.OnChanged<bool>(canWrite, g.If(canWrite, refresh));
         g.OnStart(g.If(canWrite, refresh));
         foreach (var output in _outputSlots.Values)

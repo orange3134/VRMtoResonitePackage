@@ -50,7 +50,7 @@ internal static class ExpressionBindingNameChecks
                 else Check(names.All(p => firstNames[p.Key] == p.Value), "keys are stable when source curve order changes");
                 var api = root.FindChild("API").FindChild("Receivers");
                 Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-                    ExpressionSystemSetup.SelectTag, true, "named") == 1, "select named expression");
+                    ExpressionSystemSetup.SelectTag, true, root.FindChild("Catalog").FindChild("Named")) == 1, "select named expression");
                 for (int i = 0; i < bindings.Length; i++)
                     Check(Math.Abs(fields[bindings[i]].Value - (0.2f + i * 0.15f)) < 0.001f, "colliding names drive their own output");
                 var values = root.FindChild("Catalog").FindChild("Named");
@@ -60,7 +60,7 @@ internal static class ExpressionBindingNameChecks
                 variable.Value.Value = 0.91f;
                 await Frames(3);
                 Check(Math.Abs(fields[bindings[0]].Value - 0.2f) < 0.001f, "static edits wait for selection");
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, "named");
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, root.FindChild("Catalog").FindChild("Named"));
                 Check(Math.Abs(fields[bindings[0]].Value - 0.91f) < 0.001f, "variable name binds independently of slot label");
                 variable.Slot.Name = "Binding." + Text(firstOutput, "Id");
                 Check(ExpressionPackageSnapshot.Pose(root.FindChild("Catalog").FindChild("Named")).Count == bindings.Length,

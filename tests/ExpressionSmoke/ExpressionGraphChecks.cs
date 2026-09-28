@@ -18,10 +18,9 @@ internal static class ExpressionGraphChecks
         foreach (var item in expressions.GetComponentsInChildren<ContextMenuItemSource>())
         {
             bool active;
-            if (item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>() is { } select)
+            if (item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>() is { } select)
             {
-                var expected = expressions.FindChild("Catalog").Children
-                    .SingleOrDefault(c => Value<string>(c, "Id") == select.PressedData.Value.Value);
+                var expected = select.PressedData.Reference.Target;
                 active = current != null && current == expected;
                 var driver = item.Slot.GetComponent<ReferenceOptionDescriptionDriver<Slot>>();
                 Check(driver != null && driver.Color.IsLinkValid && driver.Color.Target == item.Color,
@@ -273,8 +272,8 @@ internal static class ExpressionGraphChecks
                 receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/Keyboard/" + hand,
                 "keyboard has a separate int receiver: " + hand);
         }
-        Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Select").GetType().GetGenericArguments().Single() == typeof(string),
-            "direct Catalog selection receives an ID");
+        Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Select").GetType().GetGenericArguments().Single() == typeof(Slot),
+            "direct Catalog selection receives a Slot");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "AllowHandGestures").GetType().GetGenericArguments().Single() == typeof(bool),
             "input permission receives a bool");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Reset").GetType().Name == "DynamicImpulseReceiver",
@@ -310,6 +309,16 @@ internal static class ExpressionGraphChecks
         Check(!core.ExpressionVariables<DynamicValueVariable<float>>().Any(),
             "Core has no playback clocks");
         var playback = Descendant(expressions, "Core/Logic/Playback").GetComponentsInChildren<ProtoFluxNode>();
+        Check(playback.Single(n => n.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal))
+            .GetType().GetGenericArguments().SequenceEqual(new[] { typeof(Slot) }), "Playback receives a Slot");
+        Check(Descendant(expressions, "API/Receivers/Logic/Select").GetComponentsInChildren<ProtoFluxNode>()
+            .All(n => n.GetType().Name != "Children" && !n.GetType().Name.StartsWith("ForEachObject", StringComparison.Ordinal)),
+            "Select validates the supplied Slot without scanning Catalog");
+        var currentWrites = nodes.Where(n => n.GetType().Name == "WriteDynamicObjectVariable`1" &&
+            n.Slot.Parent.GetComponentsInChildren<Nodes.ValueObjectInput<string>>().Any(v =>
+                v.Value.Value == "ExpressionSystem/Core.CurrentExpression")).ToArray();
+        Check(currentWrites.Length == 1 && currentWrites[0].Slot.Parent.Name == "Playback",
+            "Playback is the sole writer of CurrentExpression");
         Check(playback.All(n => n.GetType().Name is not "WorldTimeFloat" and not "ValueMod"), "pose application has no time or loop evaluation");
         Check(playback.All(n => n.GetType().Name != "FireOnLocalObjectChange`1"),
             "CurrentExpression changes require an explicit playback impulse");

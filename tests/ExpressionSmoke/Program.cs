@@ -103,7 +103,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         }
         void Gesture(int hand, int gesture) => Request(hand == 0 ? ExpressionSystemSetup.LeftTag : ExpressionSystemSetup.RightTag, gesture);
         void Select(string name) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-            ExpressionSystemSetup.SelectTag, true, Get<string>(catalog.FindChild(name), "Id"));
+            ExpressionSystemSetup.SelectTag, true, catalog.FindChild(name));
         void AllowInput(bool enabled = true) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
             ExpressionSystemSetup.HandGesturesEnabledTag, true, enabled);
         async Task Frames(int count = 30) { for (int i = 0; i < count; i++) await default(NextUpdate); }
@@ -213,12 +213,23 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Math.Abs(field.Value - 1) < 0.01 && !Get<bool>(core, "AllowHandGestures") &&
             Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 && Get<string>(core, "PairKey") == "L1R1",
             "direct selection disables ordinary input without changing either gesture");
-        foreach (string invalidId in new string[] { null, "", "Missing expression", "smile", "Left.Fist" })
+        var foreignParent = avatar.AddSlot("Foreign catalog");
+        var foreign = catalog.FindChild("Smile").Duplicate(foreignParent);
+        var disabled = catalog.FindChild("Smile").Duplicate(catalog); Set(disabled, "Enabled", false);
+        var inactive = catalog.FindChild("Smile").Duplicate(catalog); inactive.ActiveSelf = false;
+        try
         {
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, invalidId);
-            Check(!Get<bool>(core, "AllowHandGestures") && Get<string>(core, "PairKey") == "L1R1" &&
-                Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"), "invalid ID preserves menu selection");
+            await Frames(3);
+            foreach (Slot invalid in new[] { null, avatar, catalog, foreign, disabled, inactive })
+            {
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, ExpressionSystemSetup.SelectTag, true, invalid);
+                Check(!Get<bool>(core, "AllowHandGestures") && Get<string>(core, "PairKey") == "L1R1" &&
+                    Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"), "invalid Slot preserves menu selection");
+            }
+            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, "Smile") == 0,
+                "Select API no longer accepts string payloads");
         }
+        finally { foreignParent.Destroy(); disabled.Destroy(); inactive.Destroy(); }
         Gesture(0, 0); Gesture(1, 0); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01 && Get<string>(core, "PairKey") == "L1R1" &&
             Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
@@ -306,7 +317,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var menu = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null,
             "context menu has no hand submenus");
-        var menuButton = catalog.FindChild("Smile").GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>();
+        var menuButton = catalog.FindChild("Smile").GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
         Gesture(0, 0);
         menuButton.Pressed(null, default);
         Check(Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 1 &&
@@ -325,25 +336,25 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<int>(core, "RightGesture") == 7, "keyboard binding works after enabling ordinary input");
 
         var directExpression = catalog.FindChild("Smile");
-        var directButton = directExpression.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>();
+        var directButton = directExpression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
         string originalId = Get<string>(directExpression, "Id");
         Set(directExpression, "Id", "Smoke.RenamedSmile"); await Frames(2);
-        Check(directButton.PressedData.Value.Value == "Smoke.RenamedSmile", "direct menu payload follows the expression's edited ID");
+        Check(directButton.PressedData.Reference.Target == directExpression, "direct menu retains its Slot reference after an ID edit");
         AllowInput();
         directButton.Pressed(null, default);
         Check(!Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == directExpression,
-            "direct menu selects the expression by its edited ID without renaming the Slot");
+            "direct menu selects by Slot independently of its ID");
         Set(directExpression, "Id", originalId); await Frames(2);
-        Check(directButton.PressedData.Value.Value == originalId, "direct menu payload follows the restored expression ID");
+        Check(directButton.PressedData.Reference.Target == directExpression, "restoring an ID preserves the menu Slot reference");
 
         var template = expressions.FindChild("API").FindChild("Templates").Children.Single();
         var addedExpression = template.Duplicate(catalog);
         addedExpression.Name = "Added expression from template";
         Set(addedExpression, "Id", "Smoke.AddedTemplate"); Set(addedExpression, "Enabled", true);
         await Frames(30);
-        var addedButton = addedExpression.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>();
-        Check(addedButton.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && addedButton.PressedData.Value.Value == "Smoke.AddedTemplate",
-            "copied template menu payload follows the new Catalog entry's unique ID");
+        var addedButton = addedExpression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
+        Check(addedButton.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && addedButton.PressedData.Reference.Target == addedExpression,
+            "copied template menu reference remaps to the new Catalog entry");
         AllowInput();
         addedButton.Pressed(null, default);
         Check(!Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == addedExpression,

@@ -120,7 +120,7 @@ internal static class ImportedGestureAvatarChecks
             visible++;
             int leftBefore = Get<int>(core, "LeftGesture"), rightBefore = Get<int>(core, "RightGesture");
             string pairBefore = Get<string>(core, "PairKey");
-            expression.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>().Pressed(null, default);
+            expression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().Pressed(null, default);
             Check(!Get<bool>(core, "AllowHandGestures") && Get<string>(core, "PairKey") == pairBefore &&
                 Get<int>(core, "LeftGesture") == leftBefore && Get<int>(core, "RightGesture") == rightBefore &&
                 Reference<Slot>(core, "CurrentExpression") == expression,
@@ -149,35 +149,35 @@ internal static class ImportedGestureAvatarChecks
         ExpressionGraphChecks.CheckMenuColors(root);
         Console.WriteLine($"PASS: {visible} Catalog direct-menu entries and the hand gesture toggle work without Override state");
         var importedMenu = menu.FindChild("Imported menu");
-        // All menu items stay enabled; valid Catalog IDs can select an expression.
-        var mappedIds = root.FindChild("Catalog").Children.Where(expression => expression.IsActive && Get<bool>(expression, "Enabled"))
-            .Select(expression => Get<string>(expression, "Id")).ToHashSet();
+        // All menu items stay enabled; valid Catalog Slots can select an expression.
+        var mappedExpressions = root.FindChild("Catalog").Children.Where(expression => expression.IsActive && Get<bool>(expression, "Enabled"))
+            .ToHashSet();
         if (importedMenu != null && !importedMenu.GetComponentsInChildren<ContextMenuItemSource>().Any(item =>
-            item.Enabled && mappedIds.Contains(item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>()?.PressedData.Value.Value)))
+            item.Enabled && mappedExpressions.Contains(item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>()?.PressedData.Reference.Target)))
             importedMenu = null;
         if (importedMenu != null)
         {
-            var importedButton = importedMenu.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithValue<string>>()
-                .FirstOrDefault(button => button.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && mappedIds.Contains(button.PressedData.Value.Value) &&
+            var importedButton = importedMenu.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithReference<Slot>>()
+                .FirstOrDefault(button => button.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && mappedExpressions.Contains(button.PressedData.Reference.Target) &&
                     button.Slot.GetComponent<ContextMenuItemSource>().Enabled);
-            Check(importedButton != null, "Imported menu contains an actual string selection button");
+            Check(importedButton != null, "Imported menu contains an actual Slot selection button");
             var catalog = root.FindChild("Catalog");
-            string originalId = importedButton.PressedData.Value.Value;
-            var selected = catalog.Children.Single(entry => Get<string>(entry, "Id") == originalId);
+            var selected = importedButton.PressedData.Reference.Target;
+            string originalId = Get<string>(selected, "Id");
             const string editedId = "Smoke.RenamedImportedExpression";
             Check(catalog.Children.All(entry => Get<string>(entry, "Id") != editedId), "Edited test ID is unique");
             Check(selected.WriteDynamicVariable("ExpressionSystem.Catalog.Clip/Id", editedId) == DynamicVariableWriteResult.Success, "Can edit imported expression ID");
             try
             {
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
-                Check(importedButton.PressedData.Value.Value == editedId, "Saved imported-menu payload did not follow its expression's edited ID");
+                Check(importedButton.PressedData.Reference.Target == selected, "Saved imported-menu Slot reference survives an ID edit");
                 var api = root.FindChild("API").FindChild("Receivers");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
                 Check(Get<bool>(core, "AllowHandGestures"), "Ordinary input is enabled before imported button verification");
                 importedButton.Pressed(null, default);
                 Check(!Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == selected,
-                    "Saved imported-menu button did not select the expression by its edited ID");
-                Console.WriteLine("PASS: saved imported-menu button follows edited expression ID and selects it synchronously");
+                    "Saved imported-menu button selects by Slot independently of its ID");
+                Console.WriteLine("PASS: saved imported-menu button selects its Slot synchronously despite ID edits");
             }
             finally
             {
@@ -186,7 +186,7 @@ internal static class ImportedGestureAvatarChecks
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(root.FindChild("API").FindChild("Receivers"),
                     ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
             }
-            Check(importedButton.PressedData.Value.Value == originalId, "Imported-menu payload follows the restored expression ID");
+            Check(importedButton.PressedData.Reference.Target == selected, "Imported-menu Slot reference survives restoring its expression ID");
         }
         Check(root.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "Invalid imported Flux group");
         await ExpressionResetChecks.Run(root);

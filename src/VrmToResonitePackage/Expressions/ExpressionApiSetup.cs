@@ -58,20 +58,14 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildSelectReceiver(ExpressionFlux g)
     {
-        var receiver = g.Receiver(SelectTag);
-        var id = Out(receiver, "Value");
-        var selected = g.Local<Slot>();
-        var find = g.Each(g.Ref(_catalog), expression => g.If(g.And(
-            g.IsNull<Slot>(selected), ValidExpression(g, expression),
-            g.Equal<string>(id, g.Read<string>(expression, ClipSpace, "Id"))),
-            g.Set<Slot>(selected, expression)));
-        var select = g.Sequence(g.Set<Slot>(selected, g.Ref<Slot>(null)), find,
-            g.If(g.Not(g.IsNull<Slot>(selected)), ApplyRequest(g, g.Sequence(
-                g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures", g.Constant(false)),
-                g.Write<Slot>(g.Ref(_core), SystemSpace, "Core.CurrentExpression", selected),
-                g.Trigger(g.Ref(_playback), PlaybackTickTag)))));
-        Link(receiver, "OnTriggered", g.If(g.And(g.AvatarWornLocal,
-            g.NotEqual<string>(id, g.Text("")), g.Node("NotNull", typeof(string), ("Instance", id))), select));
+        var receiver = g.Receiver<Slot>(SelectTag);
+        var selected = Out(receiver, "Value");
+        var valid = g.And(ValidExpression(g, selected),
+            g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", selected)), g.Ref(_catalog)));
+        var select = ApplyRequest(g, g.Sequence(
+            g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures", g.Constant(false)),
+            g.Trigger<Slot>(g.Ref(_playback), g.Text(PlaybackTickTag), selected)));
+        Link(receiver, "OnTriggered", g.If(g.And(g.AvatarWornLocal, valid), select));
     }
 
     private void BuildHandGesturesToggleReceiver(ExpressionFlux g)

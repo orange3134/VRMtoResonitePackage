@@ -65,10 +65,12 @@ internal sealed partial class ExpressionSystemSetup
 
     private void SelectMenuTrigger(Slot item, Slot expression)
     {
-        var id = expression.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Id")).Value;
-        MenuTrigger(item, _api, SelectTag, id.Value);
+        var trigger = item.AttachComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
+        trigger.Target.Target = _api;
+        trigger.ExcludeDisabled.Value = true;
+        trigger.PressedData.Tag.Value = SelectTag;
+        trigger.PressedData.Reference.Target = expression;
         SelectMenuColor(item, expression);
-        item.GetComponent<ButtonDynamicImpulseTriggerWithValue<string>>().PressedData.Value.DriveFrom(id);
     }
     private void BuildMenus()
     {
