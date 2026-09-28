@@ -115,7 +115,11 @@ internal static class ExpressionDynamicInputChecks
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) ||
                 v.VariableName.Value.StartsWith("ExpressionSystem.Input.HandGestures/References.", StringComparison.Ordinal) ||
                 v.VariableName.Value is "ExpressionSystem/Receiver" or "ExpressionSystem/Catalog").ToArray();
+        Check(references.All(v => v.VariableName.Value != "ExpressionSystem/References.None"),
+            "null constants generate no reference variable");
         var inputs = root.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>();
+        Check(inputs.All(n => Name(n) != "ExpressionSystem/References.None"),
+            "null constants generate no dynamic input node");
         foreach (var variable in references)
         {
             var space = variable.Slot.GetComponentInParents<DynamicVariableSpace>();

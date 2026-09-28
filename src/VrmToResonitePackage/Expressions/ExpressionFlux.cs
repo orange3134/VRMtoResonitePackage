@@ -53,15 +53,19 @@ internal sealed class ExpressionFlux
             .Where(v => v.VariableName.Value is "ExpressionSystem/Receiver" or "ExpressionSystem/Catalog").ToArray();
         var references = existing.ToDictionary(v => v.Reference.Target, v => v.VariableName.Value);
         var usedNames = new Dictionary<Slot, HashSet<string>>();
-        string nullPath = null;
         foreach (var literal in nodes.OfType<Nodes.RefObjectInput<Slot>>().ToArray())
         {
             var consumers = literalConsumers[literal];
             if (consumers.Length == 0) { literal.Slot.Destroy(); continue; }
             var target = literal.Target.Target;
-            string path;
-            if (target == null) path = nullPath ??= CreateReference(expressions, null, "None");
-            else if (!references.TryGetValue(target, out path))
+            if (target == null)
+            {
+                // Unconnected object inputs already evaluate to null.
+                foreach (var consumer in consumers) ((ISyncRef)consumer).Target = null;
+                literal.Slot.Destroy();
+                continue;
+            }
+            if (!references.TryGetValue(target, out var path))
             {
                 var owner = owners[target];
                 var names = new Stack<string>();

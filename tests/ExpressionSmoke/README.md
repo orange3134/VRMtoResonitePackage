@@ -304,3 +304,5 @@ Version 37 sends expression Slots to Select and Playback. Playback alone writes 
 Version 38 scopes hand-module references to each module's ExpressionSystem.Input.HandGestures space as References.Left/Right. Checks verify no global module references remain, local reference edits do not affect other modules, and bindings stay local across cloning and package reload.
 
 Version 39 leaves Target unconnected for writes to the same named ancestor space. Checks require implicit targets for Core and hand state, explicit targets for traversed Output.Result, and no unused Core or hand reference variables. Existing runtime tests exercise API and controller writes, cloning, and package reload.
+
+Version 40 represents null constants with unconnected object inputs. Checks reject References.None definitions and input nodes; runtime cases cover empty selections, reset/dequip, unworn Base fallback, cloning and package reload.
