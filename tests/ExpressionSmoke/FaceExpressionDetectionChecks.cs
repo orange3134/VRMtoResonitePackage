@@ -102,9 +102,9 @@ internal static class FaceExpressionDetectionChecks
                 initialWeight: field => field == smileField ? 0.25f : 0.3f);
             var catalog = expressions.FindChild("Catalog");
             Check(catalog.FindChild("HiddenToggle") == null, "excluded candidate does not leak back into Catalog through internal routing clips");
-            Check(catalog.FindChild("Unassigned").FindChild("Bindings").FindChild("DV").ChildrenCount == 1, "unmapped catalog candidates contain only baseline differences");
-            Check(catalog.FindChild("Smile").FindChild("Bindings").FindChild("DV").ChildrenCount == 2 &&
-                catalog.FindChild("Reset").FindChild("Bindings").FindChild("DV").ChildrenCount == 2, "mapped expressions preserve explicit baseline reset curves");
+            Check(catalog.FindChild("Unassigned").ExpressionVariables<FrooxEngine.DynamicValueVariable<float>>().Count == 1, "unmapped catalog candidates contain only baseline differences");
+            Check(catalog.FindChild("Smile").ExpressionVariables<FrooxEngine.DynamicValueVariable<float>>().Count == 2 &&
+                catalog.FindChild("Reset").ExpressionVariables<FrooxEngine.DynamicValueVariable<float>>().Count == 2, "mapped expressions preserve explicit baseline reset curves");
             var mappings = expressions.FindChild("DV").FindChild("GestureTable").ExpressionVariables<FrooxEngine.DynamicReferenceVariable<FrooxEngine.Slot>>()
                 .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal)).ToArray();
             Check(mappings.Length == 64 && mappings.All(v => v.Reference.Target != null), "all gesture combinations retain an assigned table entry");

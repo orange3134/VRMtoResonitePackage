@@ -43,18 +43,17 @@ internal static class ExpressionTestFields
         string id = output.ExpressionVariables<DynamicValueVariable<string>>()
             .Single(v => v.VariableName.Value == VariablePath(output, "Id")).Value.Value;
         return bindings.ExpressionVariables<DynamicValueVariable<float>>()
-            .Single(v => v.VariableName.Value == VariablePath(bindings, id));
+            .Single(v => v.VariableName.Value == VariablePath(bindings, "Binding." + id));
     }
 
     public static bool TryReadSelectedValue(Slot output, out float value)
     {
         value = 0;
         var current = Reference<Slot>(output.Parent.Parent.FindChild("Core"), "CurrentExpression");
-        var bindings = current == null ? null : Reference<Slot>(current, "Bindings");
-        if (bindings == null || !bindings.IsActive) return false;
+        if (current == null || !current.IsActive) return false;
         string id = output.ExpressionVariables<DynamicValueVariable<string>>()
             .Single(v => v.VariableName.Value == VariablePath(output, "Id")).Value.Value;
-        return bindings.GetComponent<DynamicVariableSpace>().TryReadValue(id, out value);
+        return current.GetComponent<DynamicVariableSpace>().TryReadValue("Binding." + id, out value);
     }
 
     public static float SelectedValue(Slot output) => TryReadSelectedValue(output, out float value) ? value :

@@ -48,12 +48,15 @@ internal static class ExpressionPackageSnapshot
     {
         var values = new SortedDictionary<string, float>(StringComparer.Ordinal);
         var bindings = entry.FindChild("Bindings");
-        if (bindings.GetComponent<DynamicVariableSpace>()?.SpaceName.Value == "ExpressionSystem.Catalog.Clip.Binding")
+        // Version 31 reads directly from Clip; retain v30 and earlier snapshot support.
+        if (bindings == null || bindings.GetComponent<DynamicVariableSpace>()?.SpaceName.Value == "ExpressionSystem.Catalog.Clip.Binding")
         {
+            string prefix = bindings == null ? "ExpressionSystem.Catalog.Clip/Binding." : "ExpressionSystem.Catalog.Clip.Binding/";
             var outputs = entry.Parent.Parent.FindChild("Outputs").Children.ToDictionary(o => Value<string>(o, "Id"));
-            foreach (var variable in bindings.ExpressionVariables<DynamicValueVariable<float>>())
+            foreach (var variable in (bindings ?? entry).ExpressionVariables<DynamicValueVariable<float>>()
+                .Where(v => v.VariableName.Value.StartsWith(prefix, StringComparison.Ordinal)))
             {
-                string key = variable.VariableName.Value[(variable.VariableName.Value.IndexOf('/') + 1)..];
+                string key = variable.VariableName.Value[prefix.Length..];
                 values.Add(OutputIdentity(outputs[key]), variable.Value.Value);
             }
             return values;

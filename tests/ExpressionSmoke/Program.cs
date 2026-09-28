@@ -348,7 +348,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         addedButton.Pressed(null, default);
         Check(!Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == addedExpression,
             "copied template is directly selectable without a GestureTable mapping");
-        var addedBinding = addedExpression.FindChild("Bindings").ExpressionVariables<DynamicValueVariable<float>>().First();
+        var addedBinding = addedExpression.ExpressionVariables<DynamicValueVariable<float>>().First();
         Check(addedBinding.Slot.WriteDynamicVariable(addedBinding.VariableName.Value, 0.65f) == DynamicVariableWriteResult.Success, "write the named template value");
         addedButton.Pressed(null, default); await Frames();
         Check(Math.Abs(field.Value - 0.65f) < 0.01, "reselecting the same expression refreshes edited bindings");

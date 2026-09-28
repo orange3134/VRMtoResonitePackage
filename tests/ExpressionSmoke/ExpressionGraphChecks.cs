@@ -175,17 +175,17 @@ internal static class ExpressionGraphChecks
             "expressions contain no animation providers, loaders or asset references");
         foreach (var entry in expressions.FindChild("Catalog").Children)
         {
-            Check(ExpressionTestFields.Reference<Slot>(entry, "Bindings") == entry.FindChild("Bindings"),
-                "Catalog directly references its pose records");
-            var bindings = entry.FindChild("Bindings");
+            Check(entry.FindChild("Bindings") == null &&
+                !entry.ExpressionVariables<DynamicReferenceVariable<Slot>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Bindings"),
+                "Clip owns binding values directly without a separate container or reference");
             var keys = expressions.FindChild("Outputs").Children.Select(o =>
                 o.ExpressionVariables<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Id").Value.Value).ToHashSet();
-            Check(bindings.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Count == 0,
-                "named float bindings contain no Output references");
-            foreach (var binding in bindings.ExpressionVariables<DynamicValueVariable<float>>())
-                Check(binding.VariableName.Value == "ExpressionSystem.Catalog.Clip.Binding/" + binding.Slot.Name &&
-                    keys.Contains(binding.Slot.Name) && DynamicVariableHelper.IsValidName(binding.Slot.Name),
-                    "each named binding matches a readable output key");
+            const string prefix = "ExpressionSystem.Catalog.Clip/Binding.";
+            foreach (var binding in entry.ExpressionVariables<DynamicValueVariable<float>>())
+                Check(binding.VariableName.Value.StartsWith(prefix, StringComparison.Ordinal) &&
+                    binding.Slot.Name == binding.VariableName.Value["ExpressionSystem.Catalog.Clip/".Length..] &&
+                    keys.Contains(binding.VariableName.Value[prefix.Length..]) && DynamicVariableHelper.IsValidName(binding.Slot.Name),
+                    "each clip-scoped binding matches a readable output key");
         }
         var boards = nodes.GroupBy(Board).ToArray();
         var keyboard = Descendant(expressions, "Inputs/Keyboard");

@@ -43,10 +43,9 @@ internal sealed partial class ExpressionSystemSetup
         var canWrite = g.Or(wearer, g.And(g.Not(g.AvatarWorn),
             g.Node("IsLocalUser", null, ("User", g.Node("HostUser")))));
         var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, SystemSpace, "Core.CurrentExpression"), g.Ref<Slot>(null));
-        var bindings = g.Read<Slot>(current, ClipSpace, "Bindings");
         var refresh = g.Each(g.Ref(_outputs), output =>
         {
-            var result = MixOutput(g, output, wearer, bindings);
+            var result = MixOutput(g, output, wearer, current);
             return g.If(g.IsNull<ISyncRef>(g.Read<ISyncRef>(output, OutputSpace, "OriginalDriver")), g.Sequence(
                 g.Set<float>(value, result),
                 g.If(g.NotEqual<float>(value, g.Read<float>(output, OutputSpace, "Result")),
@@ -57,7 +56,6 @@ internal sealed partial class ExpressionSystemSetup
         Link(receiver, "OnTriggered", g.If(wearer, refresh));
         g.OnChanged<bool>(canWrite, g.If(canWrite, refresh));
         g.OnChanged<Slot>(current, g.If(canWrite, refresh));
-        g.OnChanged<Slot>(bindings, g.If(canWrite, refresh));
         g.OnStart(g.If(canWrite, refresh));
         foreach (var output in _outputSlots.Values)
         {
@@ -74,22 +72,21 @@ internal sealed partial class ExpressionSystemSetup
         // No per-shape state, binding scans or synchronized per-frame impulses.
         var g = new ExpressionFlux(output.AddSlot("Tracking"));
         var current = g.Read<Slot>(g.Ref(_core), SystemSpace, "Core.CurrentExpression");
-        var bindings = g.Read<Slot>(current, ClipSpace, "Bindings");
         var target = output.FindChild("DV").GetComponentsInChildren<DynamicField<float>>()
             .Single(v => v.VariableName.Value == Path(OutputSpace, "Result")).TargetField.Target;
         var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>)
             g.Node("ValueFieldDrive", typeof(float), ("Value", MixOutput(g, g.Ref(output),
-                g.AvatarWorn, bindings)));
+                g.AvatarWorn, current)));
         driver.GetRootProxy(addIfMissing: true).Drive.Target = target;
     }
 
-    private static IWorldElement MixOutput(ExpressionFlux g, IWorldElement output, IWorldElement worn, IWorldElement bindings)
+    private static IWorldElement MixOutput(ExpressionFlux g, IWorldElement output, IWorldElement worn, IWorldElement expression)
     {
         var baseValue = g.Read<float>(output, OutputSpace, "Base");
-        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(BindingSpace, ""))),
+        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(ClipSpace, BindingPrefix))),
             ("B", g.Read<string>(output, OutputSpace, "Id")));
-        var pose = g.Node("ReadDynamicValueVariable", typeof(float), ("Source", bindings), ("Path", path));
-        var desired = g.Choose<float>(g.And(worn, g.Active(output), g.Active(bindings), Out(pose, "FoundValue")),
+        var pose = g.Node("ReadDynamicValueVariable", typeof(float), ("Source", expression), ("Path", path));
+        var desired = g.Choose<float>(g.And(worn, g.Active(output), g.Active(expression), Out(pose, "FoundValue")),
             Out(pose, "Value"), baseValue);
         desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(output, OutputSpace, "TrackingWeight")));
         var blinkMode = g.Read<int>(output, OutputSpace, "BlinkMode");
@@ -98,6 +95,5 @@ internal sealed partial class ExpressionSystemSetup
     }
 
     private static IWorldElement ValidExpression(ExpressionFlux g, IWorldElement expression) =>
-        g.And(g.Active(expression), g.Read<bool>(expression, ClipSpace, "Enabled"),
-            g.Active(g.Read<Slot>(expression, ClipSpace, "Bindings")));
+        g.And(g.Active(expression), g.Read<bool>(expression, ClipSpace, "Enabled"));
 }

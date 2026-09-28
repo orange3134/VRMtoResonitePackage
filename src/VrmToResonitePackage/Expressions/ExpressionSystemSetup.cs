@@ -53,7 +53,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "Core.CurrentExpression", null);
         Data(_root, "Core.PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 30);
+        Data(_root, "Version", 31);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -194,12 +194,10 @@ internal sealed partial class ExpressionSystemSetup
             Slot entry = Record(_catalog, clip.Name, ClipSpace);
             Data(entry, "Id", clip.Id); Data(entry, "DisplayName", clip.Name); Data(entry, "Enabled", true);
             Data(entry, "Source", clip.Source ?? "");
-            var bindings = Record(entry, "Bindings", BindingSpace);
-            Reference(entry, "Bindings", bindings);
             foreach (var curve in clip.Curves)
             {
                 string id = curve.Binding.Id;
-                Data(bindings, outputNames[id], curve.Keys[^1].Value);
+                Data(entry, BindingPrefix + outputNames[id], curve.Keys[^1].Value);
             }
             _clips[clip.Id] = entry;
         }

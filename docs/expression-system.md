@@ -40,6 +40,9 @@ Expressions/
       L0R0〜L7R7                   64個の Catalog 参照
     Version・Receiver・Catalog      バージョンと入口への参照
   Catalog/                         表情ごとの定義と最終値の一覧
+    各表情/DV/                     Clip空間の変数
+      Id・DisplayName・Enabled     表情の設定
+      Binding.Body.Smile           Body.Smileの固定値（float）
   Core/                            入力・選択・再生ロジック
     Logic/
       Lifecycle/                   初期化、装着状態の変更監視
@@ -97,11 +100,11 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → Selection → Playback を同期実行する。
 同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態・固定ポーズ・出力目標が確定する。
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
-表の編集・表情の無効化・Bindings参照の変更は、選択結果の変化を監視して反映する。
+表情の無効化・CurrentExpressionの変更は、選択結果の変化を監視して反映する。
 
-Version 30 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
-変換時に各トラックの最後のキー値を Catalog/Bindings の Value に保存する。
-Playback は選択時と Bindings 参照の変更時に Outputs を走査し、各出力のIdと一致する名前のfloat変数を読み、
+Version 31 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+変換時に各トラックの最後のキー値を 各CatalogエントリーのDV/Binding.*変数 に保存する。
+Playback は選択時と CurrentExpression 参照の変更時に Outputs を走査し、Binding.と各出力のIdを連結した名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
 元から瞬き・口パク等のドライバーがある出力だけTrackingボードを生成し、
 CurrentExpressionの名前付き変数と追跡BaseをValueFieldDriveで合成する。アニメーションの途中値は評価しない。
@@ -114,7 +117,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 連続・ループアニメーションも再生しない。Loop / Duration と Core の再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 30 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 31 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -124,7 +127,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 | Selection | 受理した左右のGesture APIイベントからの同期呼び出しのみ |
 | キーボード | 左右それぞれの10キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
-| Playback | 選択イベント内で保存済みValueを即時適用。選択参照・Bindings参照・書き込み権限の変化でも更新。通常出力へ一括Write |
+| Playback | 選択イベント内で保存済みValueを即時適用。選択参照・書き込み権限の変化でも更新。通常出力へ一括Write |
 | Outputs | 通常出力にはFluxなし。既存の追跡がある出力だけTrackingのDriveで継続合成。変更監視・通知は置かない |
 
 入力・選択・装着状態の変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
@@ -186,7 +189,7 @@ Inspector 上の Core の変数名には `ExpressionSystem/Core.` が付く。Ge
 
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
 2. キーが正しく表情が違う場合は、`PairKey` に対応する `GestureTable` の参照と `AllowHandGestures` を確認し、`Selection` を調べる。
-3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（末尾の LnRm は PairKey）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`、`Bindings` の有効な参照を確認する。
+3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（末尾の LnRm は PairKey）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`を確認する。
 4. 選択が正しく見た目が違う場合は、`Core/Logic/Playback` と該当出力の `Base`、`TrackingWeight`、`Result`、`Target` を調べる。
 
 `AllowHandGestures` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
@@ -214,7 +217,7 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
 
 Core に保存する表情参照は `CurrentExpression` だけ。`MappedExpression` と `CandidateExpression` は生成しない。
 Selection は受理した左右入力イベントのときだけ実行する。左右値や表の編集・装着・入力許可の変更だけでは再評価しない。
-Selection は左・右を文字列化して `L{左}R{右}` を組み立て、`Expressions/DV/GestureTable/LnRm` を読み、Slot 有効・Enabled=true・Bindings参照先が有効を確認する。
+Selection は左・右を文字列化して `L{左}R{右}` を組み立て、`Expressions/DV/GestureTable/LnRm` を読み、Slot 有効・Enabled=trueを確認する。
 通過した参照（無効なら null）をその更新中のローカル値として確定し、CurrentExpression と比較する。
 異なる場合は CurrentExpression を設定する。Playback を同期呼び出しし、終端値を即時にWriteする。
 同じ参照なら同じ固定ポーズになる。解除・無効化も補間せず Base へ戻す。
@@ -337,20 +340,21 @@ Select APIはCatalogを直接検索するため、ジェスチャーの値・表
 
 表は変数名で引くので、スロットの並び替え・表示名の変更・別の行の削除で対応がずれることはない。
 変数名は固定し、同じ名前を重複させない。削除した行を戻す場合は同じ変数名で再作成する。
-行が未設定、参照先が削除・無効化、またはBindings参照先が無効なら Outputs のベース入力を使う。
+行が未設定、または表情の参照先が削除・無効化されている場合は Outputs のベース入力を使う。
 表の参照の編集は次の左右入力イベントで反映される。異なる行でも同じ表情を指す場合は同じ固定値を適用する。
 
 表情の追加は `API/Templates` または既存の Catalog エントリーを Catalog へ複製し、
-`Enabled` を有効にして `Id`、`DisplayName`、`Bindings` を設定する。Bindings はその表情の値一覧への Slot 参照。
+`Enabled` を有効にして `Id`、`DisplayName`、`Binding.*`の値を設定する。
 `Id` は空でない一意の文字列にする。外部からの直接選択にはこの ID を使う。
 直接選択ボタンからの適用にGestureTableの割り当ては不要。対応表の編集でメニュー項目の Enabled は変更しない。直接選択は即時に反映する。削除は表情スロットごと行える。
 テンプレートから複製したメニューの表示名・送信する ID は複製先の変数に追従する。項目の Enabled は駆動しない。
 
-Bindings自身にExpressionSystem.Catalog.Clip.Binding空間を置き、DV配下にfloat変数を並べる。
-VariableNameはExpressionSystem.Catalog.Clip.Binding/と対応するOutput.Idを連結した名前、値は元カーブの最後のキー値。
+各表情のExpressionSystem.Catalog.Clip空間のDV配下にBinding.*のfloat変数を並べる。
+VariableNameはExpressionSystem.Catalog.Clip/Binding.と対応するOutput.Idを連結した名前、値は元カーブの最後のキー値。
+例：ExpressionSystem.Catalog.Clip/Binding.Body.Smile。独立したBinding空間やBindings参照は生成しない。
 新しいシェイプを追加する場合は、対応する Outputs とメッシュへの接続も用意する。
 通常出力の名前付き変数・子レコードの編集後は表情を再選択する。追跡出力の名前付き変数の編集は自動反映する。
-Bindings の参照自体を変更した場合は、その変更を監視して適用する。
+CurrentExpressionの参照自体を変更した場合は、その変更を監視して適用する。
 
 ## 外部イベント API（Version 26）
 
@@ -499,17 +503,17 @@ FaceEmoのIsFaceMotionに合わせ、BlendTreeの候補判定は直下の最初�
 最後に開始姿勢へ戻るループ素材は、その戻った姿勢を採用する。途中の最大値や任意フレームは推測しない。
 変換後は出力先と最終値だけを保存する。元カーブ・キー列・接線・AnimXは含めない。
 
-Playback は選択イベント・表情参照または Bindings 参照の変化時に、Outputsを1回走査する。
-各OutputのIdから変数名を組み立て、選択中のBindingsからfloat値を直接読む。FoundValue=falseの場合だけBaseを使い、0の値は有効な表情値として適用する。
-Bindingsの子の走査やOutput参照との比較はない。同名変数を同一空間に複数作ると値を共有するため、生成時に衝突しない名前を割り当てる。
+Playback は選択イベント・表情参照の変化時に、Outputsを1回走査する。
+Binding.と各OutputのIdから変数名を組み立て、CurrentExpressionのClip空間からfloat値を直接読む。FoundValue=falseの場合だけBaseを使い、0の値は有効な表情値として適用する。
+表情値の子スロットの走査やOutput参照との比較はない。同名変数を同一空間に複数作ると値を共有するため、生成時に衝突しない名前を割り当てる。
 続いて通常出力を合成し、Resultと違う場合だけ書き込む。追跡用Driveの対象にはWriteしない。
 無変化時の全出力巡回も出力ごとの変更監視もない。通常出力のBase・TrackingWeight・BlinkMode編集は再選択で適用する。
-通常出力のBindingsの名前付き変数の編集も再選択で適用する。追跡出力は名前で直接読むため、値・名前・変数の追加削除は自動反映する。表情選択・初期化・権限取得で固定ポーズと通常出力を更新する。
+通常出力のBinding.*変数の編集も再選択で適用する。追跡出力は名前で直接読むため、値・名前・変数の追加削除は自動反映する。表情選択・初期化・権限取得で固定ポーズと通常出力を更新する。
 装着者または未装着時のホストだけが共有Writerを実行する。追跡用Driveは全クライアントでローカル評価する。
 未装着時は、保存・複製で選択状態が残っていてもResultはBaseとなる。
 
 既存の瞬き・口パク等のドライバーは Outputs の `Base` に接続し直す。
-表情にトラックがない出力は Base を使い、ある出力はId名の変数の固定値を使う。
+表情にトラックがない出力は Base を使い、ある出力はBinding.<Output.Id>名の変数の固定値を使う。
 出力ごとの `TrackingWeight`（0〜1）で Base の混合率を調整できる。
 瞬きは `BlinkMode` で別に合成する。0は通常の混合、1は表情値と Base の最大値、2は最小値を採用する。
 生成時に既存の `EyeLinearDriver.Eyes[].OpenCloseTarget` を検出した出力だけ、閉じる方向に合わせて1または2に初期化する。
@@ -1163,3 +1167,12 @@ ReadDynamicValueVariableのFoundValueを使い、欠落時は最新のBase、有
 旧Binding.Output参照・Output.Bindingキャッシュ・Bindingsの子の走査は廃止した。
 名前の制約と編集方法は[変数リファレンス](expression-variables.md#読めるキーと禁止文字の変換version-30)を参照。
 ExpressionSmokeで禁止文字・置換後の衝突・同名メッシュ・実BlendShape名・順序変更を検証し、欠落時のBase復帰、瞬き、リセット、複製、保存再読込を含む全回帰テストが成功した。
+
+## Version 31: Binding変数をClip空間に統合
+
+2026-09-28: ExpressionSystem.Catalog.Clip.Binding空間を削除し、
+各表情のClip空間に `ExpressionSystem.Catalog.Clip/Binding.<Output.Id>` を保存する。
+各変数の配置は `Catalog/<表情>/DV/Binding.<Output.Id>`。
+BindingsスロットとそのSlot参照も廃止し、PlaybackとTrackingはCurrentExpressionを直接Sourceにする。
+命名・禁止文字変換・欠落時のBase復帰はVersion 30と同じ。表情の有効性はSlotの有効状態とEnabledで判定する。
+ExpressionSmokeでClip直下の変数配置と旧空間・参照の不在、直接選択・欠落値・瞬き・複製・保存再読込を含む全回帰テストが成功した。

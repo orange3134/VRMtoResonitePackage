@@ -16,7 +16,6 @@ internal static class ExpressionSpaceChecks
         void Clips(Slot parent)
         {
             Records(parent, "ExpressionSystem.Catalog.Clip");
-            foreach (var clip in parent.Children) expected.Add(clip.FindChild("Bindings"), "ExpressionSystem.Catalog.Clip.Binding");
         }
         Clips(root.FindChild("Catalog"));
         Clips(root.FindChild("API").FindChild("Templates"));
@@ -78,8 +77,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 30,
-            "named output bindings are identified by package version 30");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 31,
+            "clip-scoped Binding keys are identified by package version 31");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Core.LeftGesture", out _),
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),

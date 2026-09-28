@@ -53,7 +53,7 @@ internal static class ExpressionBindingNameChecks
                     ExpressionSystemSetup.SelectTag, true, "named") == 1, "select named expression");
                 for (int i = 0; i < bindings.Length; i++)
                     Check(Math.Abs(fields[bindings[i]].Value - (0.2f + i * 0.15f)) < 0.001f, "colliding names drive their own output");
-                var values = root.FindChild("Catalog").FindChild("Named").FindChild("Bindings");
+                var values = root.FindChild("Catalog").FindChild("Named");
                 var firstOutput = outputs.Single(o => Text(o, "Path") == bindings[0].Path);
                 var variable = BindingVariable(values, firstOutput);
                 variable.Slot.Name = "Display label is independent";
@@ -62,7 +62,7 @@ internal static class ExpressionBindingNameChecks
                 Check(Math.Abs(fields[bindings[0]].Value - 0.2f) < 0.001f, "static edits wait for selection");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, "named");
                 Check(Math.Abs(fields[bindings[0]].Value - 0.91f) < 0.001f, "variable name binds independently of slot label");
-                variable.Slot.Name = Text(firstOutput, "Id");
+                variable.Slot.Name = "Binding." + Text(firstOutput, "Id");
                 Check(ExpressionPackageSnapshot.Pose(root.FindChild("Catalog").FindChild("Named")).Count == bindings.Length,
                     "snapshot comparisons retain every source binding");
                 ExpressionGraphChecks.CheckLayout(root);

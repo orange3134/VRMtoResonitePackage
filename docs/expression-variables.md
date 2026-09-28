@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 30`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 31`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -15,8 +15,7 @@
 | Expressions 自身 | `ExpressionSystem` | バージョンと入口への参照 |
 | Core | `ExpressionSystem`（変数名 `Core.*`） | 入力・選択・再生状態 |
 | DV/GestureTable | `ExpressionSystem`（変数名 `GestureTable.*`） | 左右64通りの表情参照 |
-| Catalog/各表情、API/Templates/各表情 | `ExpressionSystem.Catalog.Clip` | 表情の設定と固定値一覧への参照 |
-| 各表情/Bindings | `ExpressionSystem.Catalog.Clip.Binding` | メッシュ名・BlendShape名をキーにした固定値一覧 |
+| Catalog/各表情、API/Templates/各表情 | `ExpressionSystem.Catalog.Clip` | 表情の設定とBinding.*の固定値 |
 | Outputs/各項目 | `ExpressionSystem.Output` | BlendShape の基礎入力・混合・最終出力 |
 | Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と10キーの割当 |
 | Inputs/HandGestures/Modules/各機種 | `ExpressionSystem.Input.HandGestures` | しきい値と安定待ち時間 |
@@ -30,7 +29,7 @@ DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot
 子 Slot 名は `/` 以降の変数名。対応表の子 Slot 名は `LnRm`。例：`Expressions/DV/Core.LeftGesture`、`Expressions/DV/GestureTable/L0R0`、
 `Catalog/各表情/DV/Id`、`Outputs/各項目/DV/Result`。
 以下の配置先は論理的な所属を示し、変数の実体は各空間の `DV/変数名`（対応表は `DV/GestureTable/LnRm`）に置く。
-単なる整理用の Catalog・Outputs・Diagnostics には空間を追加しない。Bindingsは表情ごとに1つの名前付き空間を持つ。
+単なる整理用の Catalog・Outputs・Diagnostics には空間を追加しない。表情値はClip空間のBinding.*変数として配置する。
 名前の定義は [ExpressionSpaces.cs](../src/VrmToResonitePackage/Expressions/ExpressionSpaces.cs) に集約する。
 ProtoFlux の読み書きは対象の空間名と変数名を明示し、変数生成は配置先の空間名を使う。単一モジュールの接頭辞は Slot 表示名から推測せず、明示的に付ける。
 固定の読み取り先がノード自身の祖先と同じ名前付き空間を指す場合は Dynamic Variable Input にする。
@@ -51,7 +50,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 30 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 31 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先 |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
@@ -78,7 +77,6 @@ Version 20から `SmoothingSpeed` を共有する。各SmoothValueと同じSlot�
 | `DisplayName` | string | 表情名 | 設定。直接選択メニューの表示名 |
 | `Enabled` | bool | true | 設定。false は表情の選択対象外。メニュー項目の Enabled は変更しない |
 | `Source` | string | 元データの説明、または空文字 | 定義。由来の記録。再生判定には使わない |
-| `Bindings` | Slot | 直下の Bindings | 定義。固定ポーズの値一覧への参照。null・削除・無効化時は選択無効 |
 
 Version 21ではメニュー項目の Enabled を対応表の参照有無や表情の Active・Enabled から駆動しない。
 `MenuAvailable`、`GestureTable/Logic`、`Inputs/ContextMenu/Logic`、内部 `MenuRefresh` を生成しない。
@@ -86,21 +84,22 @@ Version 21ではメニュー項目の Enabled を対応表の参照有無や表�
 Select APIはGestureTableへの割り当てを条件にせず、Catalogの有効な表情を選択する。
 無効な表情や存在しないIDでは選択状態を変更しない。左右値は直接選択では常に保持する。
 
-Bindings 自身に `ExpressionSystem.Catalog.Clip.Binding` 空間を置き、DVの各子に
-`DynamicValueVariable<float>` を1つずつ保存する。旧Output参照・Valueレコードは生成しない。
+各表情の `ExpressionSystem.Catalog.Clip` 空間に、`Binding.` 接頭辞の
+`DynamicValueVariable<float>` を保存する。配置先は各表情の `DV/Binding.<Output.Id>`。
+独立したBinding空間、Bindingsスロット・参照、旧Output参照・Valueレコードは生成しない。
 
 | VariableName の例 | 型 | 値 |
 |---|---|---|
-| `ExpressionSystem.Catalog.Clip.Binding/Body.Smile` | float | 対応するカーブの最後のキー値 |
-| `ExpressionSystem.Catalog.Clip.Binding/Body.Blink_L` | float | 対応するカーブの最後のキー値 |
+| `ExpressionSystem.Catalog.Clip/Binding.Body.Smile` | float | 対応するカーブの最後のキー値 |
+| `ExpressionSystem.Catalog.Clip/Binding.Body.Blink_L` | float | 対応するカーブの最後のキー値 |
 
-`Outputs/各項目/DV/Id` はスラッシュ以降のキー（例：`Body.Smile`）。
-PlaybackはOutputsを1回走査し、CurrentExpressionのBindingsをSourceとして
-`ExpressionSystem.Catalog.Clip.Binding/` + Output.Id を読む。FoundValue=falseならBaseを使う。
-値が0であることと、変数が存在しないことを区別する。Bindingsの子を走査する処理はない。
+`Outputs/各項目/DV/Id` はBinding.接頭辞を除いたキー（例：`Body.Smile`）。
+PlaybackはOutputsを1回走査し、CurrentExpression自身をSourceとして
+`ExpressionSystem.Catalog.Clip/Binding.` + Output.Id を読む。FoundValue=falseならBaseを使う。
+値が0であることと、変数が存在しないことを区別する。表情値の子スロットを走査する処理はない。
 通常出力の値・名前・子レコードの編集後は表情を再選択する。
 追跡出力は同じ名前を継続的に読み、値・追加・削除・名前変更をDynamicVariable更新後に反映する。
-Bindings参照自体の変更は通常出力にも自動反映する。
+CurrentExpression参照の変更は通常出力にも自動反映する。
 
 ### 読めるキーと禁止文字の変換（Version 30）
 
@@ -128,7 +127,7 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 公開仕様は[Resonite Wikiの命名制限](https://wiki.resonite.com/Dynamic_variables#Naming_restrictions)も参照。
 
 `API/Templates/Expression (copy into Catalog)` は最初の表情の複製で、Id を空文字、Enabled を false に変更する。
-コピー後は一意の ID、Bindings、必要な定義を整え、有効にして Pair へ割り当てる。表にない ID は Select API で選べない。
+コピー後は一意の ID、Binding.*の値、必要な定義を整え、有効にして Pair へ割り当てる。表にない ID は Select API で選べない。
 
 ## Core：入力・選択・再生
 
@@ -137,7 +136,7 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 | `AllowHandGestures` | bool | true | **設定**。ハンドジェスチャーとGesture APIだけの受付可否。キーボード・メニューは常に受け付ける。メニュー操作で false、初期化で true。許可 API でも変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューでは変更しない |
 | `PairKey` | string | L0R0 | 最後の左右入力イベントでSelectionが組み立てたキー。直接選択中の表情を示すものではない |
-| `CurrentExpression` | Slot | null | Slot 有効・Enabled=true・Bindings参照先が有効な候補。それ以外は null |
+| `CurrentExpression` | Slot | null | Slot 有効・Enabled=trueの候補。それ以外は null |
 
 Core の DynamicVariable に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取った参照を検証し、
 切替前後の比較後に CurrentExpression へ直接渡す。
@@ -181,13 +180,13 @@ DynamicVariable としてのパスと float 型は同じなので、Read Dynamic
 メッシュ以外の単独 IField を使う内部テスト等では、そのフィールドをWriteまたは追跡用Driveの対象とし Result から参照する。
 
 表情なし・該当トラックなしの場合は sample の代わりに Base を使う。
-選択イベント内で各出力のIdを変数名として通常出力のResultをWriteする。Binding参照・HasPose・Poseコピーは生成しない。
+選択イベント内でBinding.と各出力のIdを連結した変数名を読み、通常出力のResultをWriteする。Binding参照・HasPose・Poseコピーは生成しない。
 元から追跡ドライバーがある出力だけTrackingのValueFieldDriveで継続合成する。
 出力ごとのFireOnLocalChange・通知イベント、LocalUpdate・アセット検索・サンプリング・切り替え補間は生成しない。
 未装着時は Result=Base とする。装着中は以下の式で評価する。通常出力のWriteは値が異なる場合だけ行う。
 
 ```text
-sample  = 選択表情のBindingsにId名のfloat変数がある ? その値 : Base
+sample  = 選択表情にBinding.<Output.Id>名のfloat変数がある ? その値 : Base
 desired = lerp(sample, Base, clamp01(TrackingWeight))
 Result  = BlinkMode == 1 ? max(desired, Base) : BlinkMode == 2 ? min(desired, Base) : desired
 通常出力: Playback → WriteDynamicValueVariable(Result) → DynamicBlendShapeDriver.BlendShapes[].Value → BlendShape
@@ -198,8 +197,8 @@ Trackingボードのある出力で EyeLinearDriver の OpenCloseTarget を変�
 BlinkMode を閉じる方向に合わせて1または2にする。TrackingWeight=0でも瞬きが合成される。
 同じ BlendShape を DynamicBlendShapeDriver と EyeLinearDriver の両方から直接 Drive しない。
 BlinkMode は生成時に閉じる方向を設定する。後から OpenState／ClosedState を反転した場合は BlinkMode も変更する。
-追跡用DriveはCurrentExpressionのBindingsからId名の値を読み、最新のBaseと合成し続ける。
-通常出力のBase・TrackingWeight・BlinkMode・Bindingsの名前付き変数の編集は再選択で反映する。
+追跡用DriveはCurrentExpressionからBinding.<Output.Id>名の値を読み、最新のBaseと合成し続ける。
+通常出力のBase・TrackingWeight・BlinkMode・Binding.*変数の編集は再選択で反映する。
 追跡対象ではBase・TrackingWeight・BlinkModeと選択中の表情の名前付き変数の変更が自動反映される。
 Trackingのない出力に追跡を後付けする場合、Baseに接続するだけでは足りず、追跡元を設定してシステムを再生成する。
 OriginalDriverは生成時の経路の記録であり、編集して追跡の有効・無効を切り替える設定ではない。

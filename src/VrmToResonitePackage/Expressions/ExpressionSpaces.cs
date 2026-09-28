@@ -6,7 +6,7 @@ internal static class ExpressionSpaces
 {
     public const string SystemSpace = "ExpressionSystem";
     public const string ClipSpace = "ExpressionSystem.Catalog.Clip";
-    public const string BindingSpace = "ExpressionSystem.Catalog.Clip.Binding";
+    public const string BindingPrefix = "Binding.";
     public const string OutputSpace = "ExpressionSystem.Output";
     public const string KeyboardSpace = "ExpressionSystem.Input.Keyboard";
     public const string GestureSettingsSpace = "ExpressionSystem.Input.HandGestures";
