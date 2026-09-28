@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 38`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 39`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -48,10 +48,10 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 38 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 39 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
-| Expressions | `References.*` | Slot | 対応する内部Slot、Noneはnull | 定義。Core、Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
+| Expressions | `References.*` | Slot | 対応する内部Slot、Noneはnull | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
 | Expressions/DV/GestureTable/LnRm | `L0R0`〜`L7R7` | Slot | コンパイルした表情、または null | 設定。n は左、m は右の int 値（生成時は各0〜7）。`FormatString` の `ExpressionSystem/GestureTable.L{0}R{1}` に左・右の順で渡し、変数名を直接検索する |
 
@@ -230,14 +230,13 @@ Held や前回マスクなどの DynamicVariable は作らず、変更検出の�
 
 ## Inputs/HandGestures/Modules：機種別入力
 
-Touch・Index・Vive・WindowsMR・Cosmosの各モジュールに、使用する設定と内部Slot参照を置く。
-Version 38では各モジュールのDV/References.Left・DV/References.Rightに左右SlotへのDynamicReferenceVariable<Slot>を生成する。
-変数名はExpressionSystem.Input.HandGestures/References.Left・References.Rightで、同じ名前でも各モジュールの空間へ個別にバインドする。
+Touch・Index・Vive・WindowsMR・Cosmosの各モジュールに、使用する設定を置く。
+Version 39では各手のCandidate・Since・Stableを、WriteDynamicVariableのTarget未接続で更新する。
+ノード位置からExpressionSystem.Input.HandGestures.Hand空間を解決するため、Version 38のDV/References.Left・DV/References.Rightは生成しない。
 
 | 名前 | 型 | 初期値 | 役割 |
 |---|---|---|---|
 | `StabilitySeconds` | float | 0.05 | 全機種。候補が変わらず続く必要時間（秒） |
-| `References.Left` / `References.Right` | Slot | モジュール内のLeft / Right | 左右のCandidate・Since・Stableを書き込む参照先。モジュール内だけで使用 |
 | `FingerThreshold` | float | 40 | Indexの人差し指〜小指の近位関節X角度。以上なら曲げた指 |
 | `ThumbThreshold` | float | 25 | Indexの親指Y角度。左はこの値以下、右は符号を反転した値以下 |
 | `Direction.0`〜`Direction.7` | int | 各添字の0〜7 | Vive・WindowsMRの下・左下・左・左上・上・右上・右・右下への割り当て |
@@ -280,7 +279,7 @@ Version 35以降はアバター内にDiagnosticsスロット・診断用DynamicV
 ## DynamicVariable 以外の定数・一時値
 
 ExpressionFluxのConstant<T>()はValueInput、Text()はValueObjectInputを生成する。Ref<Slot>()で組み立てた仮の入力は、生成の最後にDynamicReferenceVariable<Slot>とDynamicVariableObjectInput<Slot>へ置換する。保存するグラフにRefObjectInput<Slot>は残さない。
-数値・文字列の定数はグラフ内の固定入力で、DynamicVariableの変数一覧には現れない。共有Slot参照はExpressions/DVのReceiver・Catalog・References.*、手入力モジュール内だけの参照は各モジュールのDV/References.*に保存する。
+数値・文字列の定数はグラフ内の固定入力で、DynamicVariableの変数一覧には現れない。使用中のSlot参照はExpressions/DVのReceiver・Catalog・References.*に保存する。同じ空間内の読み書きだけに使う参照にはDVを生成しない。
 Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> も使う。
 同じセクション内の定数は共有するが、ロジックボードは独立している。
 
@@ -328,8 +327,8 @@ Internal の3つは公開操作用ではない。メニューボタンの送信�
 ### 固定Slot参照の動的入力（Version 36）
 
 実行対象のResonite DLLでの型名はDynamicVariableObjectInput<Slot>で、DynamicReferenceInput<Slot>という型は存在しない。
-固定の参照先はDynamicReferenceVariable<Slot>へ移し、各ボードの入力はその変数名を読む。共有参照はExpressionSystem空間、手入力モジュール内だけの参照はExpressionSystem.Input.HandGestures空間を使う。
-ReceiverとCatalogは既存の変数を再利用する。それ以外はReferences.Core、References.Outputs、References.Core.Logic.PlaybackなどをExpressions/DV配下に生成する。
+固定の参照先はDynamicReferenceVariable<Slot>へ移し、各ボードの入力はその変数名を読む。共有参照はExpressionSystem空間を使う。
+ReceiverとCatalogは既存の変数を再利用する。それ以外はReferences.Outputs、References.Core.Logic.PlaybackなどをExpressions/DV配下に生成する。
 null定数もReferences.None（初期値null）から読む。同じ参照先は1つのDVを共有し、参照名の禁止文字は置換して衝突時は連番を付ける。
 祖先空間を直接読むDynamicVariable入力は維持し、使われなくなった仮の参照にDVは作らない。
 保存・複製時は通常のSlot参照としてリマップされる。参照を編集すると、DynamicVariableの更新後に参照先の走査・書き込み・Impulse送信へ反映される。
@@ -337,3 +336,10 @@ null定数もReferences.None（初期値null）から読む。同じ参照先は
 Version 38の生成時点では、手入力モジュール配下を指す参照は各モジュール内からのみ使用している。
 全消費先を確認して内部参照をモジュール空間へ移し、外部からも使われる参照がある場合は共有空間へ残す。
 参照変数の命名・重複回避も空間ごとに行う。モジュールを削除すると、その内部参照変数も一緒に削除される。
+
+### 書き込み先の空間解決（Version 39）
+
+WriteDynamicValueVariable / WriteDynamicObjectVariableはTarget未接続ならノードのSlotから名前付き空間を解決する。
+生成時に固定Targetとノードの同名祖先空間が同一の場合だけ接続を省く。Coreの状態と各手のCandidate・Since・Stableが対象となる。
+Playbackが走査中のOutput.Resultへ書き込む場合は別空間なので、取得したOutput SlotをTargetに接続する。
+不要になった仮のSlot入力は参照変数生成前に除去するため、References.Coreと各モジュールのReferences.Left/Rightは生成しない。

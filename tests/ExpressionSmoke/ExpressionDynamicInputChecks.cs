@@ -67,13 +67,10 @@ internal static class ExpressionDynamicInputChecks
         float original = field.Value.Value;
         var receiver = root.FindChild("DV").FindChild("Receiver").GetComponent<DynamicReferenceVariable<Slot>>();
         var originalReceiver = receiver.Reference.Target;
-        var handReference = module.FindChild("DV").FindChild("References.Left").GetComponent<DynamicReferenceVariable<Slot>>();
-        var originalHandReference = handReference.Reference.Target;
         var alternateReceiver = root.FindChild("Core");
         try
         {
             receiver.Reference.Target = alternateReceiver;
-            handReference.Reference.Target = module.FindChild("Right");
             key.Value.Value = Renderite.Shared.Key.Keypad7;
             Check(module.WriteDynamicVariable("ExpressionSystem.Input.HandGestures/StabilitySeconds", original + 0.137f) == DynamicVariableWriteResult.Success,
                 "can edit ancestor setting");
@@ -83,7 +80,6 @@ internal static class ExpressionDynamicInputChecks
         finally
         {
             receiver.Reference.Target = originalReceiver;
-            handReference.Reference.Target = originalHandReference;
             field.Value.Value = original;
             key.Value.Value = originalKey;
         }
@@ -102,9 +98,18 @@ internal static class ExpressionDynamicInputChecks
         foreach (var module in root.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules").Children)
         {
             var local = module.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>();
-            Check(local.Select(v => v.VariableName.Value).Order().SequenceEqual(new[] {
-                "ExpressionSystem.Input.HandGestures/References.Left", "ExpressionSystem.Input.HandGestures/References.Right" }),
-                "each module owns its left/right references: " + module.Name);
+            Check(local.Count == 0, "local writes need no hand references: " + module.Name);
+        }
+        Check(!root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Any(v =>
+            v.VariableName.Value == "ExpressionSystem/References.Core"), "local Core writes need no Core reference");
+        foreach (var write in root.GetComponentsInChildren<ProtoFluxNode>().Where(n =>
+            n.GetType().Name is "WriteDynamicValueVariable`1" or "WriteDynamicObjectVariable`1"))
+        {
+            var path = (FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueObjectInput<string>)
+                ((ISyncRef)VrmToResonitePackage.Expressions.ExpressionFlux.Member(write, "Path")).Target;
+            var target = (ISyncRef)VrmToResonitePackage.Expressions.ExpressionFlux.Member(write, "Target");
+            Check((target.Target != null) == (path.Value.Value == "ExpressionSystem.Output/Result"),
+                "only traversed Output writes require a Target: " + path.Value.Value);
         }
         var references = root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) ||

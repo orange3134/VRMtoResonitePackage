@@ -218,8 +218,14 @@ internal sealed class ExpressionFlux
             ("Source", source), ("Path", path));
         return _reads[(typeof(T), source, path)] = Out(node, "Value");
     }
-    public Component Write<T>(IWorldElement target, string spaceName, string key, IWorldElement value) =>
-        Write<T>(target, Text(Path(spaceName, key)), value);
+    public Component Write<T>(IWorldElement target, string spaceName, string key, IWorldElement value)
+    {
+        // An unconnected Target resolves the named space from the write node's Slot.
+        if (target is Nodes.RefObjectInput<Slot> reference && reference.Target.Target is Slot slot &&
+            NamedSpace(slot, spaceName) is { } space && space == NamedSpace(_root, spaceName))
+            target = null;
+        return Write<T>(target, Text(Path(spaceName, key)), value);
+    }
     public Component Write<T>(IWorldElement target, IWorldElement path, IWorldElement value) =>
         Node(typeof(T).IsValueType ? "WriteDynamicValueVariable" : "WriteDynamicObjectVariable", typeof(T),
             ("Target", target), ("Path", path), ("Value", value));

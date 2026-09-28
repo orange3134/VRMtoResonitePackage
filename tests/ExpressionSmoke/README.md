@@ -302,3 +302,5 @@ Version 36 exports fixed Slot references through DynamicReferenceVariable<Slot> 
 Version 37 sends expression Slots to Select and Playback. Playback alone writes CurrentExpression; null clears it, including dequip cleanup. Tests cover invalid/foreign/disabled Slots, rejection of string selection, synchronous null/non-null playback, same-Slot reselection, reference menu buttons, copied templates and package reloads.
 
 Version 38 scopes hand-module references to each module's ExpressionSystem.Input.HandGestures space as References.Left/Right. Checks verify no global module references remain, local reference edits do not affect other modules, and bindings stay local across cloning and package reload.
+
+Version 39 leaves Target unconnected for writes to the same named ancestor space. Checks require implicit targets for Core and hand state, explicit targets for traversed Output.Result, and no unused Core or hand reference variables. Existing runtime tests exercise API and controller writes, cloning, and package reload.
