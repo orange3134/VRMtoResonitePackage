@@ -266,11 +266,13 @@ Core は左右それぞれで最後に受理した値を保持し、更新番号
 
 | 配置先 | 名前 | 型 | 役割 |
 |---|---|---|---|
-| Import warning/各レコード | `Message` | string | 変換時の警告・自動設定できなかった理由 |
+| Import warning/各レコード | `Message` | string | 変換時の警告・自動設定できなかった理由・インポート結果やキーボード割当の案内 |
 | Graph modules/各レコード | `Path` | string | Expressions からのボードの相対パス |
 | Graph modules/各レコード | `NodeCount` | int | 生成時のボード内 ProtoFlux ノード数 |
 
-いずれも定義・記録であり、実行時に更新するカウンターではない。
+いずれも生成時の記録で、表情選択・Playback・Trackingは読み取らない。値を編集しても動作は変わらず、実行時に更新するカウンターではない。
+Import warningはメッセージごとに同名のレコードを作り、各DV/Messageに格納する。警告以外の案内もこの名前で格納する。
+Graph modulesはボードごとにレコードを作り、DV/PathとDV/NodeCountに生成時点の情報を保存する。後からFluxを編集しても自動更新しない。
 
 ## DynamicVariable 以外の定数・一時値
 
