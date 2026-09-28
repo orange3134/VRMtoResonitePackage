@@ -300,3 +300,5 @@ Version 35 writes diagnostic messages and per-board paths/node counts to convers
 Version 36 exports fixed Slot references through DynamicReferenceVariable<Slot> and the installed DLL's DynamicVariableObjectInput<Slot>. Checks reject exported RefObjectInput<Slot>, verify all reference inputs bind locally after cloning/reload, and exercise edits to Receiver and Outputs references. Unused source literals generate no variables; shared targets reuse one variable, including a null reference for clearing selections.
 
 Version 37 sends expression Slots to Select and Playback. Playback alone writes CurrentExpression; null clears it, including dequip cleanup. Tests cover invalid/foreign/disabled Slots, rejection of string selection, synchronous null/non-null playback, same-Slot reselection, reference menu buttons, copied templates and package reloads.
+
+Version 38 scopes hand-module references to each module's ExpressionSystem.Input.HandGestures space as References.Left/Right. Checks verify no global module references remain, local reference edits do not affect other modules, and bindings stay local across cloning and package reload.

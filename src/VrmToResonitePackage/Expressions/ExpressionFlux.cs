@@ -39,27 +39,38 @@ internal sealed class ExpressionFlux
     {
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
         var ports = nodes.SelectMany(node => node.AllInputs.Concat(node.NodeReferences)).ToArray();
+        var literalConsumers = nodes.OfType<Nodes.RefObjectInput<Slot>>().ToDictionary(literal => literal,
+            literal => ports.Where(port => OwningNode(port.Target) == literal).ToArray());
+        // Scope hand-module references locally only when every actual consumer is inside it.
+        var owners = literalConsumers.Where(p => p.Value.Length > 0 && p.Key.Target.Target != null)
+            .GroupBy(p => p.Key.Target.Target).ToDictionary(group => group.Key, group =>
+            {
+                var module = NamedSpace(group.Key, ExpressionSpaces.GestureSettingsSpace)?.Slot;
+                return module != null && group.SelectMany(p => p.Value).All(port =>
+                    OwningNode(port)?.Slot.IsChildOf(module) == true) ? module : expressions;
+            });
         var existing = expressions.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value is "ExpressionSystem/Receiver" or "ExpressionSystem/Catalog").ToArray();
         var references = existing.ToDictionary(v => v.Reference.Target, v => v.VariableName.Value);
-        var usedNames = new HashSet<string>(expressions.FindChild("DV").Children.Select(s => s.Name), StringComparer.Ordinal);
+        var usedNames = new Dictionary<Slot, HashSet<string>>();
         string nullPath = null;
         foreach (var literal in nodes.OfType<Nodes.RefObjectInput<Slot>>().ToArray())
         {
-            var consumers = ports.Where(port => OwningNode(port.Target) == literal).ToArray();
+            var consumers = literalConsumers[literal];
             if (consumers.Length == 0) { literal.Slot.Destroy(); continue; }
             var target = literal.Target.Target;
             string path;
-            if (target == null) path = nullPath ??= CreateReference(null, "None");
+            if (target == null) path = nullPath ??= CreateReference(expressions, null, "None");
             else if (!references.TryGetValue(target, out path))
             {
+                var owner = owners[target];
                 var names = new Stack<string>();
-                for (var slot = target; slot != expressions; slot = slot.Parent)
+                for (var slot = target; slot != owner; slot = slot.Parent)
                 {
                     if (slot == null) throw new InvalidOperationException("Expression Slot reference is outside the system");
                     names.Push(slot.Name);
                 }
-                path = CreateReference(target, names.Count == 0 ? "Self" : string.Join(".", names));
+                path = CreateReference(owner, target, names.Count == 0 ? "Self" : string.Join(".", names));
                 references.Add(target, path);
             }
             var input = literal.Slot.AttachComponent<Nodes.FrooxEngine.Variables.DynamicVariableObjectInput<Slot>>();
@@ -71,10 +82,12 @@ internal sealed class ExpressionFlux
             literal.Destroy();
         }
 
-        string CreateReference(Slot target, string name)
+        string CreateReference(Slot owner, Slot target, string name)
         {
-            string key = ExpressionBindingNames.Create("References", name, usedNames);
-            return Reference(expressions, key, target).VariableName.Value;
+            if (!usedNames.TryGetValue(owner, out var names))
+                usedNames.Add(owner, names = new HashSet<string>(owner.FindChild("DV").Children.Select(s => s.Name), StringComparer.Ordinal));
+            string key = ExpressionBindingNames.Create("References", name, names);
+            return Reference(owner, key, target).VariableName.Value;
         }
     }
 

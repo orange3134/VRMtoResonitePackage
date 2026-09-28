@@ -103,7 +103,7 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
 表情Slotを引数としてResoPon/Expression/Internal/Playbackを送る。PlaybackがCurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情の有効性は選択時に判定する。
 
-Version 37 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+Version 38 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を 各CatalogエントリーのDV/Binding/Binding.*変数 に保存する。
 Playbackは表情Slot付きDynamicImpulseを受信し、CurrentExpressionへ設定してからOutputsを走査する。Binding.と各出力のIdを連結した名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
@@ -118,7 +118,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 連続・ループアニメーションも再生しない。Loop / Duration と Core の再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 37 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 38 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -1231,3 +1231,11 @@ Selection・Select APIは表情Slot、Lifecycleはnullを送る。非nullはロ�
 外部送信側もSelectをSlot型、PlaybackをSlot型（解除はnull）へ変更する必要がある。旧string選択・引数なしPlaybackは受理しない。
 ExpressionSmokeの全回帰テストでSlot受信・即時設定と解除・無効Slotの拒否・string送信の拒否、
 再選択・ID編集・メニュー参照の複製・装着解除・保存再読込が成功した。
+
+### Version 38: 手入力モジュールの参照を各空間へ集約
+
+References.Inputs.HandGestures.Modules.*は各モジュール内の左右状態の更新だけで使用しているため、共有ExpressionSystem空間への生成を廃止した。
+各Inputs/HandGestures/Modules/<機種>/DVへReferences.Left・References.Rightを置き、ExpressionSystem.Input.HandGestures空間へ登録する。
+全消費先が対象モジュール内にあることを生成時に判定する。外部からも使われる参照は共有空間へ残す。
+各機種と複製アバターは同じ変数名を使っても、自分の空間のSlot参照にバインドする。
+ExpressionSmokeの全回帰テストで、共有空間の旧参照の不在、モジュール内参照の編集、機種間の分離、複製・保存再読込後のバインドが成功した。

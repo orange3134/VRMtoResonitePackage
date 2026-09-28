@@ -67,10 +67,13 @@ internal static class ExpressionDynamicInputChecks
         float original = field.Value.Value;
         var receiver = root.FindChild("DV").FindChild("Receiver").GetComponent<DynamicReferenceVariable<Slot>>();
         var originalReceiver = receiver.Reference.Target;
+        var handReference = module.FindChild("DV").FindChild("References.Left").GetComponent<DynamicReferenceVariable<Slot>>();
+        var originalHandReference = handReference.Reference.Target;
         var alternateReceiver = root.FindChild("Core");
         try
         {
             receiver.Reference.Target = alternateReceiver;
+            handReference.Reference.Target = module.FindChild("Right");
             key.Value.Value = Renderite.Shared.Key.Keypad7;
             Check(module.WriteDynamicVariable("ExpressionSystem.Input.HandGestures/StabilitySeconds", original + 0.137f) == DynamicVariableWriteResult.Success,
                 "can edit ancestor setting");
@@ -80,6 +83,7 @@ internal static class ExpressionDynamicInputChecks
         finally
         {
             receiver.Reference.Target = originalReceiver;
+            handReference.Reference.Target = originalHandReference;
             field.Value.Value = original;
             key.Value.Value = originalKey;
         }
@@ -92,13 +96,26 @@ internal static class ExpressionDynamicInputChecks
     {
         Check(root.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.RefObjectInput<Slot>>().Count == 0,
             "no fixed Slot reference inputs are exported");
-        var references = root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+        Check(!root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Any(v =>
+            v.VariableName.Value.StartsWith("ExpressionSystem/References.Inputs.HandGestures.Modules.", StringComparison.Ordinal)),
+            "hand-module references are absent from the system space");
+        foreach (var module in root.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules").Children)
+        {
+            var local = module.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>();
+            Check(local.Select(v => v.VariableName.Value).Order().SequenceEqual(new[] {
+                "ExpressionSystem.Input.HandGestures/References.Left", "ExpressionSystem.Input.HandGestures/References.Right" }),
+                "each module owns its left/right references: " + module.Name);
+        }
+        var references = root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) ||
+                v.VariableName.Value.StartsWith("ExpressionSystem.Input.HandGestures/References.", StringComparison.Ordinal) ||
                 v.VariableName.Value is "ExpressionSystem/Receiver" or "ExpressionSystem/Catalog").ToArray();
         var inputs = root.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>();
         foreach (var variable in references)
         {
-            var consumers = inputs.Where(n => Name(n) == variable.VariableName.Value).ToArray();
+            var space = variable.Slot.GetComponentInParents<DynamicVariableSpace>();
+            var consumers = inputs.Where(n => Name(n) == variable.VariableName.Value &&
+                n.Slot.GetComponentInParents<DynamicVariableSpace>(s => s.SpaceName.Value == space.SpaceName.Value) == space).ToArray();
             // Editing a generated avatar may delete a module and all its consumers.
             Check(consumers.Length > 0 || variable.Reference.Target == null,
                 "only deleted targets may leave an unused reference: " + variable.VariableName.Value);
