@@ -165,15 +165,15 @@ CurrentExpressionをnullにし、通常出力のResultをBaseに書き戻す。�
 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|
 | `Id` | string | 禁止文字を変換したメッシュ名.BlendShape名。衝突時は末尾番号付き | 定義。選択表情のDynamicVariableを読むキー |
-| `Path` | string | 元 binding のパス | 定義。出力の由来・識別情報 |
-| `Shape` | string | BlendShape 名 | 定義。出力の由来・識別情報 |
+| `Path` | string | 元 binding のパス | 記録。Playbackは読まない。回帰比較ではShapeと組み合わせて元出力を識別する |
+| `Shape` | string | 元 binding のシェイプ識別子（名前またはインデックス文字列） | 記録。Playbackは読まない。回帰比較に使う。実メッシュへの接続名は生成時に別途解決する |
 | `Baseline` | float | initialWeight があればその値、なければ元フィールド値 | 定義。生成時の基準値の記録。Playback は読まない。編集しても生成済み Neutral の固定値 は変わらない |
 | `Base` | float | 元フィールド値 | 状態／基礎入力。既存の瞬き・viseme ドライバーがあれば出力先をここへ移す。表情にトラックがない場合の値でもある |
 | `TrackingWeight` | float | 0 | 設定。表情値から Base へ寄せる割合。使用時に 0〜1 に制限。0=表情値、1=Base。自動更新処理はない |
 | `BlinkMode` | int | 通常0、既存の OpenCloseTarget は1または2 | 設定。0=通常の混合、1=max(追跡混合値, Base)、2=min(追跡混合値, Base)。生成時の Eye.ClosedState が OpenState より小さい場合は2。それ以外の瞬きは1 |
-| `Result` | float | 元フィールド値 | 状態。DynamicField<float> が DynamicBlendShapeDriver の該当 BlendShapes[].Value を参照する。通常出力は共有PlaybackがWriteし、既存の追跡がある出力だけTrackingのDriveが駆動する |
+| `Result` | float | 元フィールド値 | 状態。DynamicField<float> が SmoothValue<float>.TargetValue を参照する。通常出力は共有PlaybackがWriteし、既存の追跡がある出力だけTrackingのDriveが駆動する |
 | `Target` | IField&lt;float&gt; | 元の BlendShape フィールド | 定義。出力先の記録。DynamicBlendShapeDriver の Renderer・シェイプ名は生成時に別途設定するため、この参照だけ変更しても送信先は変わらない |
-| `OriginalDriver` | ISyncRef | 元のドライバー | 定義。既存 ActiveLink が ISyncRef の場合だけ作成。Base へ付け替えたドライバーの記録 |
+| `OriginalDriver` | ISyncRef | 元のドライバー | 定義。既存 ActiveLink が ISyncRef の場合だけ作成。Baseへ付け替えた駆動参照の記録。生成時は変数の存在でTrackingを作り、実行時は参照がnullでない出力をPlaybackのWrite対象から除外する |
 
 Result 以外の数値レコードは DynamicValueVariable、Result だけは外部フィールドを参照する DynamicField。
 DynamicVariable としてのパスと float 型は同じなので、Read Dynamic Variable で引き続き読み取れる。
@@ -189,8 +189,8 @@ DynamicVariable としてのパスと float 型は同じなので、Read Dynamic
 sample  = 選択表情にBinding.<Output.Id>名のfloat変数がある ? その値 : Base
 desired = lerp(sample, Base, clamp01(TrackingWeight))
 Result  = BlinkMode == 1 ? max(desired, Base) : BlinkMode == 2 ? min(desired, Base) : desired
-通常出力: Playback → WriteDynamicValueVariable(Result) → DynamicBlendShapeDriver.BlendShapes[].Value → BlendShape
-Result (DynamicField<float>) ──参照──> 同じ BlendShapes[].Value
+通常出力: Playback → WriteDynamicValueVariable(Result) → SmoothValue.TargetValue → SmoothValue.Value → DynamicBlendShapeDriver.BlendShapes[].Value → BlendShape
+Result (DynamicField<float>) ──参照──> SmoothValue.TargetValue
 ```
 
 Trackingボードのある出力で EyeLinearDriver の OpenCloseTarget を変更する場合は、該当 Output の Base の Value フィールドへ接続し、
@@ -201,7 +201,7 @@ BlinkMode は生成時に閉じる方向を設定する。後から OpenState／
 通常出力のBase・TrackingWeight・BlinkMode・Binding.*変数の編集は再選択で反映する。
 追跡対象ではBase・TrackingWeight・BlinkModeと選択中の表情の名前付き変数の変更が自動反映される。
 Trackingのない出力に追跡を後付けする場合、Baseに接続するだけでは足りず、追跡元を設定してシステムを再生成する。
-OriginalDriverは生成時の経路の記録であり、編集して追跡の有効・無効を切り替える設定ではない。
+OriginalDriverは元コンポーネント自体ではなく、元のActiveLink（出力先を保持するISyncRef）への参照。生成時にそのTargetをBase.Valueへ付け替える。実行時にも通常Writeを除外する判定で読むが、編集してもTrackingグラフの作成・削除や駆動先の再接続は行わないため、追跡の切り替え設定としては使わない。Path・Shape・TargetのDV値を編集しても、Idや生成済みのメッシュ接続は変更されない。
 
 ## Inputs/Keyboard/Left・Right
 
