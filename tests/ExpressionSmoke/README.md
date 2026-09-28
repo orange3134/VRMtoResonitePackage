@@ -294,3 +294,5 @@ Version 32 groups Binding.* variable slots under each Clip's DV/Binding slot. Va
 Version 33 removes CurrentExpression change detection and slot-activity gates from playback mixing. Static outputs require an explicit Playback impulse after a direct reference edit. Checks cover synchronous selection/reset, inactive output/clip/binding slots, missing values, tracking and dequip cleanup.
 
 Version 34 omits unused Output Path, Shape, Target and Baseline variables. Wiring checks follow Result through SmoothValue and DynamicBlendShapeDriver to the actual field. Snapshots identify targets by relative hierarchy, component and shape, and read authored values from the Neutral clip; legacy Target/Baseline records remain readable for comparisons.
+
+Version 35 writes diagnostic messages and per-board paths/node counts to conversion logs. Space/layout checks verify that no Diagnostics slot or diagnostic spaces are exported, including clones and package reloads. The synthetic diagnostic message exercises the log output.

@@ -13,7 +13,7 @@ VRChatのカスタムFXからFaceEmo基準で最初の表情パターンを読�
 変換済みポーズの格納先である `Catalog` と、選択先を決める `GestureTable` は別である。
 Version 23ではメニューからCatalogの表情を直接選択できる。GestureTableへの割り当ては不要。
 自動割り当てが0/64なら左右入力では `CurrentExpression` が null になるが、メニューからは有効なCatalog表情を選択できる。
-その場合は `Expressions/Diagnostics` と変換ログのレイヤー・Clip の除外理由を確認する。
+その場合は 変換ログのレイヤー・Clip の除外理由を確認する。
 
 ```mermaid
 flowchart LR
@@ -72,7 +72,6 @@ Expressions/
     AllowHandGestures/            boolによるハンドジェスチャーの許可・停止
   API/Examples/                    左右の int イベントを送るボタンの例
   API/Templates/                   Catalog に複製する表情テンプレート
-  Diagnostics/                     自動設定できなかった理由
 ```
 
 Core に入力元の一覧・優先順位・有効期限・汎用 Animator パラメーターは持たない。
@@ -103,7 +102,7 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
 CurrentExpressionの変更直後にResoPon/Expression/Internal/Playbackを送って通常出力を反映する。参照のFireOnLocalObjectChangeは生成しない。表情の有効性は選択時に判定する。
 
-Version 34 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+Version 35 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を 各CatalogエントリーのDV/Binding/Binding.*変数 に保存する。
 Playback は選択・初期化・リセットで CurrentExpression を設定した直後の DynamicImpulse で Outputs を走査し、Binding.と各出力のIdを連結した名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
@@ -118,7 +117,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 連続・ループアニメーションも再生しない。Loop / Duration と Core の再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 34 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 35 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -194,8 +193,8 @@ Inspector 上の Core の変数名には `ExpressionSystem/Core.` が付く。Ge
 4. 選択が正しく見た目が違う場合は、`Core/Logic/Playback` と該当出力の `Base`、`TrackingWeight`、`Result` と、Resultの参照先からメッシュまでの駆動接続を調べる。
 
 `AllowHandGestures` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
-変換時の警告は引き続き `Diagnostics` に残る。
-`Diagnostics/Graph modules` の各レコードには `ExpressionSystem.Diagnostics.GraphModule/Path` と `ExpressionSystem.Diagnostics.GraphModule/NodeCount` があり、モジュールの場所と規模を確認できる。
+変換時の警告・案内はログの `Expression diagnostics:` に記録する。
+`Expression graph:` にはボードの相対パスとノード数を記録する。アバター内にはDiagnosticsを生成しない。
 Outputs の `Id` はメッシュ名.BlendShape名から作る変数キー。選択表情に対応するfloat変数がなければBaseを使う。Binding参照・Pose・HasPose・再生時計は持たない。
 反映が止まっている場合は、アバターの装着状態、該当モジュールの有効状態と `Outputs/Result`と、その参照先からメッシュまでの駆動接続を確認する。
 
@@ -283,7 +282,7 @@ Version 23では左右ジェスチャーのコンテキストメニューと専�
   Clip IDが別でも全出力の最終値が同じなら同じ表情として扱う。両手専用表情・同じ表情・未解決の組は勝敗に数えない。
   同数なら片手で選べる異なる非Neutralポーズが多い手、それも同数なら左手を採用する。
   これは生成時のキー設定であり、Catalog・GestureTable・元FXの読み込み規則は変更しない。
-  優先側はDiagnosticsに記録する。保存後にGestureTableを編集してもショートカットは自動変更しない。
+  優先側は変換ログに記録する。保存後にGestureTableを編集してもショートカットは自動変更しない。
   `Left/DV` と `Right/DV` の `Key.0`〜`Key.9`、共通の `Shift`・`Control`、送信先の `Tag` を編集できる。
   各手は `ExpressionSystem.Input.Keyboard` 空間を持ち、Enabled とキーごとの Gesture は作らない。
   Flux は `Keyboard/Left/Logic` と `Right/Logic` の2つに生成する。
@@ -763,7 +762,7 @@ Kipfel 1.2.0 の Face レイヤーは、空 Clip の初期ステートから条�
 
 対応表は毎回初期ステートの遷移順から選ぶ。VRChat で先に入った表情を維持する履歴依存の
 挙動、接触反応、耳・尻尾などへの Parameter Driver の副作用、遷移割り込みの時間経過は再現しない。
-この近似は変換ログと Expressions/Diagnostics に明示する。名前による表情の推測や、
+この近似は変換ログに明示する。名前による表情の推測や、
 未対応レイヤー全般の検証緩和は行わない。合成テストは全64通り、条件順、欠けた経路、
 部分的なポーズ、選択を書き換える Driver、未知 Behaviour、Gesture の Any State を検証する。
 
@@ -788,7 +787,7 @@ Transform 要素が空の Humanoid マスクと、既知の目・口のみの Tr
 空状態の Write Defaults=false による過去の値の保持は再現せず、下位レイヤーまたは Base へ戻す。
 この例外は検証済みレイヤーの `EmptyStatesUseBaseStream` に限定する。TrackingControl による
 目・口の追跡切替と遷移時間も再現せず、ResoPon の瞬き・リップシンク合成を使う。
-近似内容はログと Diagnostics に記録する。Facial パラメーターによる別レイヤーの状態遷移は
+近似内容は変換ログに記録する。Facial パラメーターによる別レイヤーの状態遷移は
 引き続き自動対応表の対象外で、対応可能な Clip は直接選択用 Catalog に残す。
 [VRChat のレイヤーとマスク](https://creators.vrchat.com/avatars/playable-layers/) および
 [TrackingControl](https://creators.vrchat.com/avatars/state-behaviors/) も参照。
@@ -812,7 +811,7 @@ Fyuett_All_Hina の Face_Right / Face_Left (Priority) は AFK 条件付き Entry
 左手が0以外なら右手側を Idle に戻す。さらに R Gun / L Thumbsup の Clip が重み付き接線を
 含むため、従来はレイヤー全体を除外し、CurrentExpression が参照する対応表が0/64だった。
 Entry/Exit の検証では AFK=false の通常状態を明示的に投影する。Gesture/AFK を変更しない
-既知の Parameter Driver だけを許容し、その副作用は取り込まないことを Diagnostics に残す。
+既知の Parameter Driver だけを許容し、その副作用は取り込まないことを 変換ログに残す。
 未知の条件パラメーター、選択を変更する Driver、循環・ラッチ・時間待ちは引き続き拒否する。
 Write Defaults が全状態で有効なら異なる binding 集合を許容し、未指定の曲線は従来の
 下位レイヤー/Base 合成を使う。無効な場合は空状態以外の完全な binding 集合を要求する。
@@ -854,7 +853,7 @@ Entry と構造上到達可能な全状態から元の遷移順でたどり、�
 ラッチは拒否する。追加条件があるレイヤーは従来どおり既定値に固定し、Entry から評価する近似である。
 循環内が同じ Clip・再生指定の顔ポーズと空中継だけなら、その顔ポーズを静的に抽出する。
 異なる Clip・再生指定、未知 Motion を含む循環や、空状態だけの循環は拒否する。
-抽出した循環は Diagnostics に記録し、再入場時のアニメーション再開始や遷移時間を再現しない。
+抽出した循環は 変換ログに記録し、再入場時のアニメーション再開始や遷移時間を再現しない。
 
 解析したコントローラーのレイヤー順を保持して、VRC Expression Parameters を読み終えた後に評価する。
 これにより、初期値0という決め打ちや、コントローラー側の古い値で先に表を作ることを避ける。
@@ -878,7 +877,7 @@ Write Defaults off の組み合わせで両レイヤー全体が除外され、7
 外部 GUID のアセット自体が存在しない Motion に限り、選択状態が元の Default State で、
 そのレイヤーが参照する手の値がすべて0の場合、空 Motion として下位レイヤー／Baseへ戻す。
 この条件は状態キャッシュ後も64組それぞれで検証する。通常状態に手動で戻る不足ルートを
-有効なハンド表情として扱わない。欠落 GUID と代替処理は Diagnostics に記録する。
+有効なハンド表情として扱わない。欠落 GUID と代替処理は 変換ログに記録する。
 存在する未対応 Clip、未解決ローカル Motion、通常状態以外の欠落はこの代替処理の対象外。
 元の欠落アニメーションを復元したわけではなく、以前の表情の保持も再現しない。
 
@@ -1202,3 +1201,11 @@ ExpressionSmokeの全回帰テストで明示Impulseの即時適用、参照編�
 元の基準値はCatalogのresopon:neutral表情に保持し、実メッシュへの接続はResult → SmoothValue → DynamicBlendShapeDriverで辿れる。
 回帰テストもDVの記録ではなく実際の駆動接続で出力を識別し、Neutralの値を基準値として比較する。旧形式の比較読み取りは維持する。
 ExpressionSmokeの全回帰テストで未使用DVの不在、実駆動接続、Neutralの基準値、表情選択・瞬き・複製・保存再読込が成功した。
+
+### Version 35: Diagnosticsは変換ログへ出力
+
+アバター内のDiagnosticsスロットと診断用の空間・DVを廃止した。
+MessageはExpression diagnostics:、各ボードのPath・NodeCountはExpression graph:として変換ログへ出力する。
+Expression logic:のボード総数・最大ノード数も維持する。既存のConsole出力のログ転記を通じてLogs/convert_*.logへ保存する。
+ExpressionSmokeの全回帰テストで生成・複製・保存再読込後のDiagnostics不在を確認した。
+警告・キーボード割当・ボード別パスとノード数・全体集計のログ出力も確認した。

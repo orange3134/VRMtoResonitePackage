@@ -25,10 +25,7 @@ internal static class ExpressionSpaceChecks
         var modules = inputs.FindChild("HandGestures").FindChild("Modules");
         Records(modules, "ExpressionSystem.Input.HandGestures");
         foreach (var module in modules.Children) Records(module, "ExpressionSystem.Input.HandGestures.Hand");
-        var diagnostics = root.FindChild("Diagnostics");
-        Records(diagnostics.FindChild("Graph modules"), "ExpressionSystem.Diagnostics.GraphModule");
-        foreach (var warning in diagnostics.Children.Where(s => s.Name == "Import warning"))
-            expected.Add(warning, "ExpressionSystem.Diagnostics.ImportWarning");
+        Check(root.FindChild("Diagnostics") == null, "diagnostics are logged rather than exported into the avatar");
 
         var spaces = root.GetComponentsInChildren<DynamicVariableSpace>();
         Check(spaces.Count == expected.Count, "every record has exactly one explicit schema space");
@@ -78,8 +75,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 34,
-            "outputs without unused metadata are identified by package version 34");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 35,
+            "log-only diagnostics are identified by package version 35");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Core.LeftGesture", out _),
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),

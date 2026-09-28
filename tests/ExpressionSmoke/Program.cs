@@ -56,7 +56,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var trackingDriver = avatar.AttachComponent<ValueCopy<float>>();
         trackingDriver.Source.Target = tracking.Value; trackingDriver.Target.Target = field;
         var model = new ExpressionModel();
-        model.Diagnostics.Add("Synthetic warning for expression record scope coverage.");
+        model.Diagnostics.Add("Synthetic warning for expression diagnostics logging coverage.");
         foreach (string hand in new[] { "Left", "Right" })
         {
             model.Parameters["Gesture" + hand] = new("Gesture" + hand, 3, 0);

@@ -53,10 +53,9 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "Core.CurrentExpression", null);
         Data(_root, "Core.PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 34);
+        Data(_root, "Version", 35);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
-        _root.AddSlot("Diagnostics");
     }
 
     public static Task<Slot> BuildAsync(Slot avatar, ExpressionModel model, Func<ExpressionBinding, IField<float>> resolve,
@@ -81,8 +80,7 @@ internal sealed partial class ExpressionSystemSetup
         setup.BuildPlayback();
         setup.BuildLifecycle();
         ExpressionFlux.Arrange(setup._root);
-        setup.DescribeGraphs();
-        foreach (string message in model.Diagnostics) Data(Record(setup._root.FindChild("Diagnostics"), "Import warning", WarningSpace), "Message", message);
+        setup.LogDiagnostics();
         if (setup._clips.Count > 0)
         {
             var template = setup._clips.Values.First().Duplicate(setup._root.FindChild("API").AddSlot("Templates"));
@@ -208,18 +206,17 @@ internal sealed partial class ExpressionSystemSetup
             _compiled.Pairs.Select(id => id == null ? null : exported.GetValueOrDefault(id)).ToArray(), neutral);
     }
 
-    private void DescribeGraphs()
+    private void LogDiagnostics()
     {
-        var modules = _root.FindChild("Diagnostics").AddSlot("Graph modules");
+        foreach (string message in _model.Diagnostics.Distinct(StringComparer.Ordinal))
+            Console.WriteLine("Expression diagnostics: " + message);
         var boards = _root.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent).ToArray();
         foreach (var board in boards)
         {
             var names = new Stack<string>();
             for (var slot = board.Key; slot != _root; slot = slot.Parent) names.Push(slot.Name);
             string path = string.Join("/", names);
-            var record = Record(modules, path, GraphModuleSpace);
-            Data(record, "Path", path);
-            Data(record, "NodeCount", board.Count());
+            Console.WriteLine($"Expression graph: {path}: {board.Count()} nodes");
         }
         Console.WriteLine($"Expression logic: {boards.Length} independent boards, largest {boards.Max(b => b.Count())} nodes");
     }

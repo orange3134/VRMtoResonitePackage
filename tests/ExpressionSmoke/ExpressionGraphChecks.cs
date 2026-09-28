@@ -242,9 +242,7 @@ internal static class ExpressionGraphChecks
             Check(board.Key.Children.All(child => child.GetComponents<ProtoFluxNode>().Count == 1),
                 "logic boards contain node slots directly without section slots: " + path);
             Check(board.Count() <= MaximumBoardNodes, $"board node budget ({MaximumBoardNodes}): {path} has {board.Count()}");
-            var diagnostics = Descendant(expressions, "Diagnostics/Graph modules");
-            var record = diagnostics?.Children.SingleOrDefault(s => Value<string>(s, "Path") == path);
-            Check(record != null && Value<int>(record, "NodeCount") == board.Count(), "module diagnostics match the actual board: " + path);
+
         }
         foreach (var module in Descendant(expressions, "Inputs/HandGestures/Modules").Children)
             foreach (string hand in new[] { "Left", "Right" })

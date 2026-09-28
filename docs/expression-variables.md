@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 34`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 35`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -20,8 +20,6 @@
 | Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と10キーの割当 |
 | Inputs/HandGestures/Modules/各機種 | `ExpressionSystem.Input.HandGestures` | しきい値と安定待ち時間 |
 | 各機種/Left、Right | `ExpressionSystem.Input.HandGestures.Hand` | 片手の入力判定状態 |
-| Diagnostics/Import warning | `ExpressionSystem.Diagnostics.ImportWarning` | 変換時の警告文 |
-| Diagnostics/Graph modules/各項目 | `ExpressionSystem.Diagnostics.GraphModule` | ボードのパスとノード数 |
 
 `Record()` は空間名を必須引数で受け取り、`OnlyDirectBinding=true` の空間を作る。
 例外は Expressions 自身（false）で、Core と GestureTable には空間を追加せず、Expressions/DV の `ExpressionSystem/Core.*` と `ExpressionSystem/GestureTable.LnRm` を共有空間へ登録する。
@@ -29,7 +27,7 @@ DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot
 子 Slot 名は `/` 以降の変数名。対応表の子 Slot 名は `LnRm`。例：`Expressions/DV/Core.LeftGesture`、`Expressions/DV/GestureTable/L0R0`、
 `Catalog/各表情/DV/Id`、`Outputs/各項目/DV/Result`。
 以下の配置先は論理的な所属を示し、変数の実体は各空間の `DV/変数名`（対応表は `DV/GestureTable/LnRm`、Clip の固定値は `DV/Binding/Binding.<Output.Id>`）に置く。
-単なる整理用の Catalog・Outputs・Diagnostics には空間を追加しない。表情値はClip空間のBinding.*変数として配置する。
+単なる整理用の Catalog・Outputs には空間を追加しない。表情値はClip空間のBinding.*変数として配置する。
 名前の定義は [ExpressionSpaces.cs](../src/VrmToResonitePackage/Expressions/ExpressionSpaces.cs) に集約する。
 ProtoFlux の読み書きは対象の空間名と変数名を明示し、変数生成は配置先の空間名を使う。単一モジュールの接頭辞は Slot 表示名から推測せず、明示的に付ける。
 固定の読み取り先がノード自身の祖先と同じ名前付き空間を指す場合は Dynamic Variable Input にする。
@@ -262,17 +260,18 @@ Core は左右それぞれで最後に受理した値を保持し、更新番号
 モジュール自体の削除・無効化でも手の状態は残る。明示的な Neutral（0）で解除できる。
 アバターの装着解除・再装着・複製に伴う Core の初期化は、機器の切断とは別に行う。
 
-## Diagnostics
+## Diagnostics（変換ログのみ）
 
-| 配置先 | 名前 | 型 | 役割 |
-|---|---|---|---|
-| Import warning/各レコード | `Message` | string | 変換時の警告・自動設定できなかった理由・インポート結果やキーボード割当の案内 |
-| Graph modules/各レコード | `Path` | string | Expressions からのボードの相対パス |
-| Graph modules/各レコード | `NodeCount` | int | 生成時のボード内 ProtoFlux ノード数 |
+Version 35以降はアバター内にDiagnosticsスロット・診断用DynamicVariableSpace・DVを生成しない。
+従来の記録は変換ログ（EXEと同じディレクトリのLogs/convert_*.log）へ出力する。
 
-いずれも生成時の記録で、表情選択・Playback・Trackingは読み取らない。値を編集しても動作は変わらず、実行時に更新するカウンターではない。
-Import warningはメッセージごとに同名のレコードを作り、各DV/Messageに格納する。警告以外の案内もこの名前で格納する。
-Graph modulesはボードごとにレコードを作り、DV/PathとDV/NodeCountに生成時点の情報を保存する。後からFluxを編集しても自動更新しない。
+| ログの接頭辞 | 内容 |
+|---|---|
+| `Expression diagnostics:` | 警告・インポート結果・自動設定できなかった理由・キーボード割当の案内 |
+| `Expression graph:` | Expressionsからのボードの相対パスと生成時点のProtoFluxノード数 |
+| `Expression logic:` | ボード総数と最大ノード数 |
+
+いずれも変換時点の情報で、Resonite上で編集した後の状態を監視するログではない。
 
 ## DynamicVariable 以外の定数・一時値
 
