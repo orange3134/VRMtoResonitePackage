@@ -33,6 +33,51 @@ internal sealed class ExpressionFlux
         return _root.AddSlot($"{_nodeIndex++:D3} {name}");
     }
 
+    // Resolve fixed Slot literals after namespace-local reads have been optimized.
+    // Only references that remain connected become exported dynamic variables.
+    public static void BindSlotReferences(Slot expressions)
+    {
+        var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
+        var ports = nodes.SelectMany(node => node.AllInputs.Concat(node.NodeReferences)).ToArray();
+        var existing = expressions.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+            .Where(v => v.VariableName.Value is "ExpressionSystem/Receiver" or "ExpressionSystem/Catalog").ToArray();
+        var references = existing.ToDictionary(v => v.Reference.Target, v => v.VariableName.Value);
+        var usedNames = new HashSet<string>(expressions.FindChild("DV").Children.Select(s => s.Name), StringComparer.Ordinal);
+        string nullPath = null;
+        foreach (var literal in nodes.OfType<Nodes.RefObjectInput<Slot>>().ToArray())
+        {
+            var consumers = ports.Where(port => OwningNode(port.Target) == literal).ToArray();
+            if (consumers.Length == 0) { literal.Slot.Destroy(); continue; }
+            var target = literal.Target.Target;
+            string path;
+            if (target == null) path = nullPath ??= CreateReference(null, "None");
+            else if (!references.TryGetValue(target, out path))
+            {
+                var names = new Stack<string>();
+                for (var slot = target; slot != expressions; slot = slot.Parent)
+                {
+                    if (slot == null) throw new InvalidOperationException("Expression Slot reference is outside the system");
+                    names.Push(slot.Name);
+                }
+                path = CreateReference(target, names.Count == 0 ? "Self" : string.Join(".", names));
+                references.Add(target, path);
+            }
+            var input = literal.Slot.AttachComponent<Nodes.FrooxEngine.Variables.DynamicVariableObjectInput<Slot>>();
+            var name = literal.Slot.AddSlot("VariableName").AttachComponent<GlobalValue<string>>();
+            name.Value.Value = path;
+            Link(input, "VariableName", name);
+            foreach (var consumer in consumers) ((ISyncRef)consumer).Target = input.Value;
+            literal.Slot.Name = literal.Slot.Name.Split(' ')[0] + " DynamicVariableObjectInput<Slot> : " + path;
+            literal.Destroy();
+        }
+
+        string CreateReference(Slot target, string name)
+        {
+            string key = ExpressionBindingNames.Create("References", name, usedNames);
+            return Reference(expressions, key, target).VariableName.Value;
+        }
+    }
+
     /// <summary>Lay out each logic board without changing its functional parent hierarchy.</summary>
     public static void Arrange(Slot expressions)
     {

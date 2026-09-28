@@ -6,6 +6,7 @@ internal static class ExpressionDynamicInputChecks
 {
     public static void CheckBindings(Slot root)
     {
+        CheckSlotReferences(root);
         var modules = root.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");
         foreach (var module in modules.Children)
         {
@@ -55,6 +56,7 @@ internal static class ExpressionDynamicInputChecks
 
     public static async Task CheckEdits(Slot root)
     {
+        CheckSlotReferences(root);
         var modules = root.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");
         var module = modules.Children.First();
         var field = module.ExpressionVariables<DynamicValueVariable<float>>()
@@ -63,8 +65,12 @@ internal static class ExpressionDynamicInputChecks
             .GetComponent<DynamicValueVariable<Renderite.Shared.Key>>();
         var originalKey = key.Value.Value;
         float original = field.Value.Value;
+        var receiver = root.FindChild("DV").FindChild("Receiver").GetComponent<DynamicReferenceVariable<Slot>>();
+        var originalReceiver = receiver.Reference.Target;
+        var alternateReceiver = root.FindChild("Core");
         try
         {
+            receiver.Reference.Target = alternateReceiver;
             key.Value.Value = Renderite.Shared.Key.Keypad7;
             Check(module.WriteDynamicVariable("ExpressionSystem.Input.HandGestures/StabilitySeconds", original + 0.137f) == DynamicVariableWriteResult.Success,
                 "can edit ancestor setting");
@@ -73,12 +79,38 @@ internal static class ExpressionDynamicInputChecks
         }
         finally
         {
+            receiver.Reference.Target = originalReceiver;
             field.Value.Value = original;
             key.Value.Value = originalKey;
         }
         for (int i = 0; i < 3; i++) await default(NextUpdate);
         CheckBindings(root);
         Console.WriteLine("INPUTS: ancestor edits update both hands without affecting other modules; Core object inputs are bound");
+    }
+
+    private static void CheckSlotReferences(Slot root)
+    {
+        Check(root.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.RefObjectInput<Slot>>().Count == 0,
+            "no fixed Slot reference inputs are exported");
+        var references = root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+            .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) ||
+                v.VariableName.Value is "ExpressionSystem/Receiver" or "ExpressionSystem/Catalog").ToArray();
+        var inputs = root.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>();
+        foreach (var variable in references)
+        {
+            var consumers = inputs.Where(n => Name(n) == variable.VariableName.Value).ToArray();
+            // Editing a generated avatar may delete a module and all its consumers.
+            Check(consumers.Length > 0 || variable.Reference.Target == null,
+                "only deleted targets may leave an unused reference: " + variable.VariableName.Value);
+            Check(variable.Reference.Target == null || variable.Reference.Target == root || variable.Reference.Target.IsChildOf(root),
+                "fixed references stay inside their own avatar after clone/reload");
+            foreach (var input in consumers)
+            {
+                var proxy = input.Slot.GetComponent<global::ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Variables.DynamicVariableInputProxy<Slot>>();
+                Check(proxy != null && proxy.HasValue && proxy.DynamicValue == variable.Reference.Target,
+                    "Slot input binds to its own variable: " + variable.VariableName.Value);
+            }
+        }
     }
 
     private static string Name(ProtoFluxNode node) => node.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value;

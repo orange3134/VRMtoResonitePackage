@@ -93,6 +93,26 @@ internal static class ExpressionOutputWriteChecks
             await Frames(90);
             Near(a.Value, 1, "looping ramp stays at its final pose");
             Near(b.Value, 0, "time does not restart or advance the fixed pose");
+            var outputReference = expressions.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+                .Single(v => v.VariableName.Value == "ExpressionSystem/References.Outputs");
+            var emptyOutputs = expressions.AddSlot("Temporary empty outputs");
+            try
+            {
+                outputReference.Reference.Target = emptyOutputs;
+                await Frames();
+                Select(1);
+                Near(b.Value, 0, "changing the Outputs reference redirects the playback traversal");
+                outputReference.Reference.Target = outputs;
+                await Frames();
+                Select(1);
+                Near(b.Value, 0.8f, "restoring the Outputs reference resumes static output writes");
+            }
+            finally
+            {
+                outputReference.Reference.Target = outputs;
+                emptyOutputs.Destroy();
+            }
+            await Frames(); Select(4); await Frames();
             var ramp = catalog.FindChild("Ramp");
             Set<Slot>(core, "CurrentExpression", catalog.FindChild("Sparse"));
             await Frames();

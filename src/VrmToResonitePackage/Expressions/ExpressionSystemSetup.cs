@@ -53,7 +53,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "Core.CurrentExpression", null);
         Data(_root, "Core.PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 35);
+        Data(_root, "Version", 36);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
     }
@@ -79,6 +79,7 @@ internal sealed partial class ExpressionSystemSetup
         setup.BuildSelection();
         setup.BuildPlayback();
         setup.BuildLifecycle();
+        ExpressionFlux.BindSlotReferences(setup._root);
         ExpressionFlux.Arrange(setup._root);
         setup.LogDiagnostics();
         if (setup._clips.Count > 0)

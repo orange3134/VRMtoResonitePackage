@@ -39,6 +39,7 @@ Expressions/
     GestureTable/                  対応表の変数をまとめるスロット
       L0R0〜L7R7                   64個の Catalog 参照
     Version・Receiver・Catalog      バージョンと入口への参照
+    References.*                   内部Slotの共有参照（Noneはnull）
   Catalog/                         表情ごとの定義と最終値の一覧
     各表情/DV/                     Clip空間の変数
       Id・DisplayName・Enabled     表情の設定
@@ -102,7 +103,7 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
 CurrentExpressionの変更直後にResoPon/Expression/Internal/Playbackを送って通常出力を反映する。参照のFireOnLocalObjectChangeは生成しない。表情の有効性は選択時に判定する。
 
-Version 35 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+Version 36 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を 各CatalogエントリーのDV/Binding/Binding.*変数 に保存する。
 Playback は選択・初期化・リセットで CurrentExpression を設定した直後の DynamicImpulse で Outputs を走査し、Binding.と各出力のIdを連結した名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
@@ -117,7 +118,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 連続・ループアニメーションも再生しない。Loop / Duration と Core の再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 35 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 36 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -1209,3 +1210,11 @@ MessageはExpression diagnostics:、各ボードのPath・NodeCountはExpression
 Expression logic:のボード総数・最大ノード数も維持する。既存のConsole出力のログ転記を通じてLogs/convert_*.logへ保存する。
 ExpressionSmokeの全回帰テストで生成・複製・保存再読込後のDiagnostics不在を確認した。
 警告・キーボード割当・ボード別パスとノード数・全体集計のログ出力も確認した。
+
+### Version 36: 固定Slot参照をDynamicVariableへ移行
+
+生成済みグラフのRefObjectInput<Slot>を廃止し、DynamicReferenceVariable<Slot>とDynamicVariableObjectInput<Slot>で参照する。
+既存のReceiver・Catalogを再利用し、Core・Outputs・内部Impulse宛先・各入力状態・追跡出力は必要なReferences.*だけを生成する。
+null参照はReferences.Noneへまとめる。DVはExpressions/DV配下に置き、各ボードの入力ノードは独立したまま同じ変数を読む。
+ExpressionSmokeの全回帰テストでRefObjectInput<Slot>の不在、ReceiverとOutputs参照の編集追従、
+複製・保存再読込後の参照の独立性、モジュール削除後の空参照を確認した。

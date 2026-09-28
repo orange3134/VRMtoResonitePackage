@@ -296,3 +296,5 @@ Version 33 removes CurrentExpression change detection and slot-activity gates fr
 Version 34 omits unused Output Path, Shape, Target and Baseline variables. Wiring checks follow Result through SmoothValue and DynamicBlendShapeDriver to the actual field. Snapshots identify targets by relative hierarchy, component and shape, and read authored values from the Neutral clip; legacy Target/Baseline records remain readable for comparisons.
 
 Version 35 writes diagnostic messages and per-board paths/node counts to conversion logs. Space/layout checks verify that no Diagnostics slot or diagnostic spaces are exported, including clones and package reloads. The synthetic diagnostic message exercises the log output.
+
+Version 36 exports fixed Slot references through DynamicReferenceVariable<Slot> and the installed DLL's DynamicVariableObjectInput<Slot>. Checks reject exported RefObjectInput<Slot>, verify all reference inputs bind locally after cloning/reload, and exercise edits to Receiver and Outputs references. Unused source literals generate no variables; shared targets reuse one variable, including a null reference for clearing selections.
