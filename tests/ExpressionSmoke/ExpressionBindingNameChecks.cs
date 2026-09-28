@@ -44,7 +44,7 @@ internal static class ExpressionBindingNameChecks
                 EquipAvatar(avatar);
                 await Frames(60);
                 var outputs = root.FindChild("Outputs").Children;
-                var names = outputs.ToDictionary(o => Text(o, "Path"), o => Text(o, "Id"));
+                var names = outputs.ToDictionary(o => fields.Single(p => p.Value == OutputTarget(o)).Key.Path, o => Text(o, "Id"));
                 Check(names.Values.Distinct().Count() == bindings.Length, "all colliding sources get distinct keys");
                 if (firstNames == null) firstNames = names;
                 else Check(names.All(p => firstNames[p.Key] == p.Value), "keys are stable when source curve order changes");
@@ -54,7 +54,7 @@ internal static class ExpressionBindingNameChecks
                 for (int i = 0; i < bindings.Length; i++)
                     Check(Math.Abs(fields[bindings[i]].Value - (0.2f + i * 0.15f)) < 0.001f, "colliding names drive their own output");
                 var values = root.FindChild("Catalog").FindChild("Named");
-                var firstOutput = outputs.Single(o => Text(o, "Path") == bindings[0].Path);
+                var firstOutput = outputs.Single(o => OutputTarget(o) == fields[bindings[0]]);
                 var variable = BindingVariable(values, firstOutput);
                 variable.Slot.Name = "Display label is independent";
                 variable.Value.Value = 0.91f;

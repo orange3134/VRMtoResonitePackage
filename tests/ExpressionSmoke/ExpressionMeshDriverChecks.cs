@@ -117,7 +117,7 @@ internal static class ExpressionMeshDriverChecks
         var second = avatar.FindChild("Second").FindChild("Face").GetComponent<SkinnedMeshRenderer>();
         var manager = avatar.GetComponent<EyeManager>();
         var eye = avatar.GetComponent<EyeLinearDriver>().Eyes[0];
-        Slot Output(IField<float> target) => expressions.FindChild("Outputs").Children.Single(o => Reference<IField<float>>(o, "Target") == target);
+        Slot Output(IField<float> target) => expressions.FindChild("Outputs").Children.Single(o => OutputTarget(o) == target);
         var smile = Output(first.GetBlendShape("ActualSmile")); var blink = Output(first.GetBlendShape("ActualBlink"));
         string Id(Slot output) => output.ExpressionVariables<DynamicValueVariable<string>>()
             .Single(v => v.VariableName.Value == "ExpressionSystem.Output/Id").Value.Value;

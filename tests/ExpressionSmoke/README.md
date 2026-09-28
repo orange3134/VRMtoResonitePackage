@@ -198,7 +198,7 @@ retained weights, aliases, missing names, ambiguous paths and idempotence.
 
 For real avatars, the optional imported-package check saves `current-expressions/expressions.json`
 and replays all 64 gesture API pairs against actual mesh output fields. OriginalDriver inputs are
-stabilized at the authored Baseline while the exported tracking mixer stays enabled.
+stabilized at the authored Neutral pose while the exported tracking mixer stays enabled.
 Independent source-clip checks can use the snapshot without assuming runtime slot IDs.
 Native blink/viseme behavior is covered separately by synthetic tracking tests.
 
@@ -292,3 +292,5 @@ Version 31 stores Binding.<Output.Id> floats directly in each Clip's DV containe
 Version 32 groups Binding.* variable slots under each Clip's DV/Binding slot. Variable names and the owning Clip space stay the same. Placement checks cover generation, cloning and package reload.
 
 Version 33 removes CurrentExpression change detection and slot-activity gates from playback mixing. Static outputs require an explicit Playback impulse after a direct reference edit. Checks cover synchronous selection/reset, inactive output/clip/binding slots, missing values, tracking and dequip cleanup.
+
+Version 34 omits unused Output Path, Shape, Target and Baseline variables. Wiring checks follow Result through SmoothValue and DynamicBlendShapeDriver to the actual field. Snapshots identify targets by relative hierarchy, component and shape, and read authored values from the Neutral clip; legacy Target/Baseline records remain readable for comparisons.

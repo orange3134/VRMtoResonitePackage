@@ -38,6 +38,18 @@ internal static class ExpressionTestFields
                 .Value.StartsWith(prefix, StringComparison.Ordinal)).ToList();
     }
 
+    // Inspect actual output wiring; legacy packages also expose a Target reference.
+    public static IField<float> OutputTarget(Slot output)
+    {
+        var legacy = output.ExpressionVariables<DynamicReferenceVariable<IField<float>>>()
+            .SingleOrDefault(v => v.VariableName.Value == VariablePath(output, "Target"));
+        if (legacy != null) return legacy.Reference.Target;
+        var result = output.ExpressionVariables<DynamicField<float>>()
+            .Single(v => v.VariableName.Value == VariablePath(output, "Result")).TargetField.Target;
+        if (result.Parent is not SmoothValue<float> smooth) return result;
+        return ((DynamicBlendShapeDriver.BlendShape)smooth.Value.Target.Parent)._drive.Target;
+    }
+
     public static DynamicValueVariable<float> BindingVariable(Slot bindings, Slot output)
     {
         string id = output.ExpressionVariables<DynamicValueVariable<string>>()

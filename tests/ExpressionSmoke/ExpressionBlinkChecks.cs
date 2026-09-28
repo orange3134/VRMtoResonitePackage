@@ -78,7 +78,7 @@ internal static class ExpressionBlinkChecks
         void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             expressions.FindChild("API").FindChild("Receivers"), ExpressionSystemSetup.RightTag, true, index) == 1, "select blink test expression");
         void Blink(float l, float r) { manager.LeftEyeCloseOverride.Value = l; manager.RightEyeCloseOverride.Value = r; }
-        float Result(Slot output) => Reference<IField<float>>(output, "Target").Value;
+        float Result(Slot output) => OutputTarget(output).Value;
         Blink(0, 0); Select(1); await Frames();
         Near(Result(close), 0, "open expression opens left eye"); Near(Result(reverse), 1, "open expression opens reversed eye");
         Blink(0.8f, 0.3f); await Frames();

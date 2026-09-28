@@ -53,7 +53,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "Core.CurrentExpression", null);
         Data(_root, "Core.PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 33);
+        Data(_root, "Version", 34);
         Reference(_root, "Receiver", _api);
         Reference(_root, "Catalog", _catalog);
         _root.AddSlot("Diagnostics");
@@ -165,8 +165,7 @@ internal sealed partial class ExpressionSystemSetup
                 if (field.InheritedLink != null || (field.ActiveLink != null && field.ActiveLink is not ISyncRef))
                 { UniLog.Warning($"Expression binding has an unsupported inherited drive: {curve.Binding}"); continue; }
                 var output = Record(_outputs, UniqueChildName(_outputs, curve.Binding.Shape), OutputSpace);
-                Data(output, "Id", outputNames[id]); Data(output, "Path", curve.Binding.Path); Data(output, "Shape", curve.Binding.Shape);
-                Data(output, "Baseline", initialWeight?.Invoke(field) ?? field.Value);
+                Data(output, "Id", outputNames[id]);
                 Data(output, "TrackingWeight", 0f);
                 // Only eyelid openness uses a closing-side union. Other tracking drivers
                 // (visemes, gaze, etc.) retain their existing TrackingWeight behavior.
@@ -176,7 +175,6 @@ internal sealed partial class ExpressionSystemSetup
                 Data(output, "BlinkMode", blinkMode);
                 var baseValue = Data(output, "Base", field.Value);
                 float initialValue = field.Value;
-                Reference<IField<float>>(output, "Target", field);
                 // Move the existing blink/viseme driver onto its own proxy; never ForceLink it away.
                 if (field.ActiveLink is ISyncRef oldDriver)
                 {

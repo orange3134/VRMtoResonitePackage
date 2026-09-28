@@ -11,8 +11,7 @@ internal static class ExpressionPackageSnapshot
         var outputs = root.FindChild("Outputs").Children.ToDictionary(
             output => OutputIdentity(output), output => new
             {
-                Path = Value<string>(output, "Path"), Shape = Value<string>(output, "Shape"),
-                Baseline = Value<float>(output, "Baseline"), TrackingWeight = Value<float>(output, "TrackingWeight")
+                Baseline = AuthoredBase(output), TrackingWeight = Value<float>(output, "TrackingWeight")
             }, StringComparer.Ordinal);
         var clips = new SortedDictionary<string, object>(StringComparer.Ordinal);
         foreach (var entry in root.FindChild("Catalog").Children)
@@ -65,20 +64,47 @@ internal static class ExpressionPackageSnapshot
         var legacy = entry.GetComponent<StaticAnimationProvider>();
         foreach (var binding in entry.FindChild("Bindings").Children)
         {
-            string id = Value<string>(ExpressionTestFields.Reference<Slot>(binding, "Output"), "Id");
-            if (legacy == null) values.Add(id, Value<float>(binding, "Value"));
+            var output = ExpressionTestFields.Reference<Slot>(binding, "Output");
+            string id = Value<string>(output, "Id");
+            string identity = OutputIdentity(output);
+            if (legacy == null) values.Add(identity, Value<float>(binding, "Value"));
             else
             {
                 var data = legacy.Asset?.Data ?? throw new InvalidOperationException("Legacy asset not loaded");
                 int index = data.FindTrackIndex("Expression", id);
-                values.Add(id, ((Elements.Assets.IAnimationTrack<float>)data[index]).Sample(float.MaxValue));
+                values.Add(identity, ((Elements.Assets.IAnimationTrack<float>)data[index]).Sample(float.MaxValue));
             }
         }
         return values;
     }
 
-    public static string OutputIdentity(Slot output) => new VrmToResonitePackage.Expressions.ExpressionBinding(
-        Value<string>(output, "Path"), Value<string>(output, "Shape")).Id;
+    public static string OutputIdentity(Slot output)
+    {
+        var target = ExpressionTestFields.OutputTarget(output);
+        var renderer = target.FindNearestParent<SkinnedMeshRenderer>();
+        var owner = renderer ?? target.FindNearestParent<Component>();
+        var avatar = output.Parent.Parent.Parent;
+        var path = new Stack<string>();
+        for (var slot = owner.Slot; slot != avatar; slot = slot.Parent)
+        {
+            if (slot == null) throw new InvalidOperationException("Output target is outside the avatar");
+            int sibling = slot.Parent.Children.Where(s => s.Name == slot.Name).ToList().IndexOf(slot);
+            path.Push(JsonSerializer.Serialize(new { Name = slot.Name, Sibling = sibling }));
+        }
+        int component = owner.Slot.GetComponents<Component>().Where(c => c.GetType() == owner.GetType()).ToList().IndexOf(owner);
+        string shape = renderer == null ? "Value" : renderer.BlendShapeName(Enumerable.Range(0, renderer.BlendShapeWeights.Count)
+            .Single(i => renderer.BlendShapeWeights.GetElement(i) == target));
+        return JsonSerializer.Serialize(new { Path = path.ToArray(), Component = owner.GetType().FullName, Index = component, Shape = shape });
+    }
+
+    public static float AuthoredBase(Slot output)
+    {
+        var legacy = output.ExpressionVariables<DynamicValueVariable<float>>()
+            .SingleOrDefault(v => v.VariableName.Value == ExpressionTestFields.VariablePath(output, "Baseline"));
+        if (legacy != null) return legacy.Value.Value;
+        var neutral = output.Parent.Parent.FindChild("Catalog").Children.Single(c => Value<string>(c, "Id") == "resopon:neutral");
+        return Pose(neutral)[OutputIdentity(output)];
+    }
 
     // Baseline snapshots also accept pre-v22 numeric keys; generated avatars use only L/R keys.
     private static string NormalizePairKey(string key) => int.TryParse(key, out int index)

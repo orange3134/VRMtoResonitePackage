@@ -103,7 +103,7 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
 CurrentExpressionの変更直後にResoPon/Expression/Internal/Playbackを送って通常出力を反映する。参照のFireOnLocalObjectChangeは生成しない。表情の有効性は選択時に判定する。
 
-Version 33 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+Version 34 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を 各CatalogエントリーのDV/Binding/Binding.*変数 に保存する。
 Playback は選択・初期化・リセットで CurrentExpression を設定した直後の DynamicImpulse で Outputs を走査し、Binding.と各出力のIdを連結した名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
@@ -118,7 +118,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 連続・ループアニメーションも再生しない。Loop / Duration と Core の再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 33 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 34 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -191,13 +191,13 @@ Inspector 上の Core の変数名には `ExpressionSystem/Core.` が付く。Ge
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
 2. キーが正しく表情が違う場合は、`PairKey` に対応する `GestureTable` の参照と `AllowHandGestures` を確認し、`Selection` を調べる。
 3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（末尾の LnRm は PairKey）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`を確認する。
-4. 選択が正しく見た目が違う場合は、`Core/Logic/Playback` と該当出力の `Base`、`TrackingWeight`、`Result`、`Target` を調べる。
+4. 選択が正しく見た目が違う場合は、`Core/Logic/Playback` と該当出力の `Base`、`TrackingWeight`、`Result` と、Resultの参照先からメッシュまでの駆動接続を調べる。
 
 `AllowHandGestures` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
 変換時の警告は引き続き `Diagnostics` に残る。
 `Diagnostics/Graph modules` の各レコードには `ExpressionSystem.Diagnostics.GraphModule/Path` と `ExpressionSystem.Diagnostics.GraphModule/NodeCount` があり、モジュールの場所と規模を確認できる。
 Outputs の `Id` はメッシュ名.BlendShape名から作る変数キー。選択表情に対応するfloat変数がなければBaseを使う。Binding参照・Pose・HasPose・再生時計は持たない。
-反映が止まっている場合は、アバターの装着状態、該当モジュールの有効状態と `Outputs/Result`・`Target` を確認する。
+反映が止まっている場合は、アバターの装着状態、該当モジュールの有効状態と `Outputs/Result`と、その参照先からメッシュまでの駆動接続を確認する。
 
 
 resoloop を使う場合は、リポジトリ直下から次の読み取り専用スクリプトで Core の状態を一覧にできる。
@@ -1195,3 +1195,10 @@ ResoPon/Expression/Internal/Playbackを同期送信する。Lifecycleの個別Ba
 追跡出力は既存のDriveで参照先の値とBaseを継続合成する。
 ExpressionSmokeの全回帰テストで明示Impulseの即時適用、参照編集だけでは通常出力を書かないこと、
 非アクティブなOutput・Clip・Bindingへの適用、Base復帰、リセット・装着解除・保存再読込が成功した。
+
+### Version 34: Outputsの未使用DVを削除
+
+実行時に使わないPath・Shape・Target・Baselineを生成しない。OriginalDriverはPlaybackの通常Writeを除外する判定に使うため維持する。
+元の基準値はCatalogのresopon:neutral表情に保持し、実メッシュへの接続はResult → SmoothValue → DynamicBlendShapeDriverで辿れる。
+回帰テストもDVの記録ではなく実際の駆動接続で出力を識別し、Neutralの値を基準値として比較する。旧形式の比較読み取りは維持する。
+ExpressionSmokeの全回帰テストで未使用DVの不在、実駆動接続、Neutralの基準値、表情選択・瞬き・複製・保存再読込が成功した。

@@ -30,7 +30,7 @@ internal static class ImportedGestureAvatarChecks
                 .SingleOrDefault(v => v.VariableName.Value == "ExpressionSystem.Output/OriginalDriver")?.Reference.Target;
             if (original == null) continue;
             original.Target = null;
-            Check(output.WriteDynamicVariable("ExpressionSystem.Output/Base", Get<float>(output, "Baseline")) == DynamicVariableWriteResult.Success,
+            Check(output.WriteDynamicVariable("ExpressionSystem.Output/Base", ExpressionPackageSnapshot.AuthoredBase(output)) == DynamicVariableWriteResult.Success,
                 "can stabilize tracking Base for fixed-pose comparison");
         }
         for (int i = 0; i < 6; i++) await default(NextUpdate);
@@ -93,8 +93,8 @@ internal static class ImportedGestureAvatarChecks
                     {
                         1 => Math.Max(expected, baseValue), 2 => Math.Min(expected, baseValue), _ => expected
                     };
-                    float actual = Reference<IField<float>>(output, "Target").Value;
-                    Check(Math.Abs(expected - actual) < 0.001f, $"Pair {l},{r}: output {Get<string>(output, "Shape")} expected {expected}, got {actual}");
+                    float actual = ExpressionTestFields.OutputTarget(output).Value;
+                    Check(Math.Abs(expected - actual) < 0.001f, $"Pair {l},{r}: output {Get<string>(output, "Id")} expected {expected}, got {actual}");
                     values.Add(actual);
                 }
                 ExpressionGraphChecks.CheckMenuColors(root);

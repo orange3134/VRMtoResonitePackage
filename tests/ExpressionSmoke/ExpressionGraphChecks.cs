@@ -141,7 +141,9 @@ internal static class ExpressionGraphChecks
                 "outputs use no ValueCopy: " + output.Name);
             Check(!output.ExpressionVariables<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionSystem.Output/Result"),
                 "Result is a field view, not duplicate stored state: " + output.Name);
-            var target = ExpressionTestFields.Reference<IField<float>>(output, "Target");
+            Check(output.FindChild("DV").Children.All(s => s.Name is not ("Path" or "Shape" or "Target" or "Baseline")),
+                "outputs do not generate unused metadata variables");
+            var target = ExpressionTestFields.OutputTarget(output);
             var renderer = target.FindNearestParent<SkinnedMeshRenderer>();
             if (renderer != null)
             {
@@ -158,7 +160,7 @@ internal static class ExpressionGraphChecks
         }
         var meshDrivers = expressions.GetComponentsInChildren<DynamicBlendShapeDriver>();
         var meshOutputs = expressions.FindChild("Outputs").Children
-            .Select(o => ExpressionTestFields.Reference<IField<float>>(o, "Target").FindNearestParent<SkinnedMeshRenderer>())
+            .Select(o => ExpressionTestFields.OutputTarget(o).FindNearestParent<SkinnedMeshRenderer>())
             .Where(r => r != null).ToArray();
         Check(meshDrivers.Select(d => d.Renderer.Target).Distinct().Count() == meshDrivers.Count &&
             meshDrivers.Count == meshOutputs.Distinct().Count(), "exactly one driver per output renderer");
