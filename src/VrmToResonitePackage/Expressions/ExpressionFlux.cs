@@ -276,7 +276,6 @@ internal sealed class ExpressionFlux
     public IWorldElement Lerp(IWorldElement a, IWorldElement b, IWorldElement t) =>
         Node("ValueLerpUnclamped", typeof(float), ("From", a), ("To", b), ("Lerp", t));
     public IWorldElement Clamp01(IWorldElement value) => Node("Clamp01_Float", null, ("N", value));
-    public IWorldElement Active(IWorldElement slot) => Node("GetSlotActive", null, ("Instance", slot));
     public Component Each(IWorldElement parent, Func<IWorldElement, IWorldElement> body)
     {
         // None of these loop bodies change the collection; preserve direct-child order.

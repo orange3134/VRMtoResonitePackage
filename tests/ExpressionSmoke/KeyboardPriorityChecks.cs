@@ -77,7 +77,7 @@ internal static class KeyboardPriorityChecks
             Key(InputKey.Keypad9, false); await Frames();
             Check(GestureValue(0) == 8 && GestureValue(1) == 9 && Get<string>(core, "PairKey") == "L8R9" &&
                 Reference<Slot>(core, "CurrentExpression") == null, "keypad 8/9 produce an unmapped L8R9 without truncation");
-            var expression = expressions.FindChild("Catalog").Children.First(c => Get<bool>(c, "Enabled"));
+            var expression = expressions.FindChild("Catalog").Children.First();
             extendedRow = expressions.FindChild("DV").FindChild("GestureTable").AddSlot("L8R9");
             var mapping = extendedRow.AttachComponent<DynamicReferenceVariable<Slot>>();
             mapping.VariableName.Value = "ExpressionSystem/GestureTable.L8R9";

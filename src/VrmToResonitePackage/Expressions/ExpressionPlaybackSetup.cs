@@ -17,11 +17,9 @@ internal sealed partial class ExpressionSystemSetup
         var right = g.Read<int>(core, SystemSpace, "RightGesture");
         var key = FormatGesturePair(g, "L{0}R{1}", left, right);
         var candidate = ReadGesturePair(g, left, right);
-        // Capture validation for this update without persisting intermediate references in the system state.
+        // Capture the mapped Slot for this update regardless of its active state.
         var selected = g.Local<Slot>();
-        var noExpression = g.Ref<Slot>(null);
-        var resolved = g.Choose<Slot>(ValidExpression(g, candidate), candidate, noExpression);
-        actions.Add(g.Set<Slot>(selected, resolved));
+        actions.Add(g.Set<Slot>(selected, candidate));
         actions.Add(g.Write<string>(core, SystemSpace, "PairKey", key));
 
         actions.Add(g.Trigger<Slot>(g.Ref(_internal), g.Text(PlaybackTickTag), selected));
@@ -95,7 +93,4 @@ internal sealed partial class ExpressionSystemSetup
         return g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(1)), g.Binary<float>("ValueMax", desired, baseValue),
             g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(2)), g.Binary<float>("ValueMin", desired, baseValue), desired));
     }
-
-    private static IWorldElement ValidExpression(ExpressionFlux g, IWorldElement expression) =>
-        g.And(g.Active(expression), g.Read<bool>(expression, ClipSpace, "Enabled"));
 }

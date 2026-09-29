@@ -215,21 +215,32 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "direct selection disables ordinary input without changing either gesture");
         var foreignParent = avatar.AddSlot("Foreign catalog");
         var foreign = catalog.FindChild("Smile").Duplicate(foreignParent);
-        var disabled = catalog.FindChild("Smile").Duplicate(catalog); Set(disabled, "Enabled", false);
         var inactive = catalog.FindChild("Smile").Duplicate(catalog); inactive.ActiveSelf = false;
         try
         {
             await Frames(3);
-            foreach (Slot invalid in new[] { null, avatar, catalog, foreign, disabled, inactive })
+            foreach (Slot invalid in new[] { null, avatar, catalog, foreign })
             {
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, ExpressionSystemSetup.SelectTag, true, invalid);
                 Check(!Get<bool>(core, "AllowHandGestures") && Get<string>(core, "PairKey") == "L1R1" &&
                     Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"), "invalid Slot preserves menu selection");
             }
+            foreach (bool catalogActive in new[] { true, false })
+            {
+                catalog.ActiveSelf = catalogActive;
+                await Frames(3);
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, ExpressionSystemSetup.SelectTag, true, inactive);
+                Check(Reference<Slot>(core, "CurrentExpression") == inactive && !Get<bool>(core, "AllowHandGestures") &&
+                    Get<string>(core, "PairKey") == "L1R1", "direct selection accepts an inactive clip even under an inactive Catalog");
+                await Frames();
+                Check(Math.Abs(field.Value - 1) < 0.01, "inactive direct selection applies its pose");
+            }
+            catalog.ActiveSelf = true;
+            Select("Smile");
             Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, "Smile") == 0,
                 "Select API no longer accepts string payloads");
         }
-        finally { foreignParent.Destroy(); disabled.Destroy(); inactive.Destroy(); }
+        finally { catalog.ActiveSelf = true; foreignParent.Destroy(); inactive.Destroy(); }
         Gesture(0, 0); Gesture(1, 0); await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01 && Get<string>(core, "PairKey") == "L1R1" &&
             Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
@@ -269,16 +280,20 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "animated clip stores its final key before the next frame");
         await Frames(40);
         Check(Math.Abs(field.Value - 1) < 0.001f, "animated clip remains fixed without playback");
-        Set(catalog.FindChild("Animated"), "Enabled", false);
+        catalog.FindChild("Animated").ActiveSelf = false;
         Set(table, "L0R2", catalog.FindChild("Animated"));
         AllowInput(); Gesture(1, 2);
-        Check(Reference<Slot>(core, "CurrentExpression") == null && !TryReadSelectedValue(expressions.FindChild("Outputs").FindChild("Smile"), out _),
-            "invalid selection immediately clears the tracked pose");
+        Check(Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Animated") &&
+            Math.Abs(SelectedValue(expressions.FindChild("Outputs").FindChild("Smile")) - 1) < 0.001f,
+            "inactive mapped expression is selected synchronously");
         await Frames();
-        Check(Math.Abs(field.Value - 0.2f) < 0.01, "disabled mapped expression restores base output");
-        Set(table, "L0R2", (Slot)null); await Frames();
+        Check(Math.Abs(field.Value - 1) < 0.01, "inactive mapped expression applies its pose");
+        Set(table, "L0R2", (Slot)null); Gesture(1, 2); await Frames();
+        Check(Reference<Slot>(core, "CurrentExpression") == null && Math.Abs(field.Value - 0.2f) < 0.01,
+            "unassigned mapping still clears the expression and restores Base");
+        catalog.FindChild("Animated").ActiveSelf = true;
         Check(catalog.FindChild("Animated").GetComponent<ContextMenuItemSource>().Enabled,
-            "removing the last mapping keeps a disabled expression menu item enabled");
+            "removing the last mapping keeps the expression menu item enabled");
         AllowInput(); Gesture(0, 1); Gesture(1, 1);
 
         // Table keys are stable dynamic names; deleting/reordering rows cannot shift other mappings.
@@ -350,7 +365,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var template = expressions.FindChild("API").FindChild("Templates").Children.Single();
         var addedExpression = template.Duplicate(catalog);
         addedExpression.Name = "Added expression from template";
-        Set(addedExpression, "Id", "Smoke.AddedTemplate"); Set(addedExpression, "Enabled", true);
+        Set(addedExpression, "Id", "Smoke.AddedTemplate");
         await Frames(30);
         var addedButton = addedExpression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
         Check(addedButton.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && addedButton.PressedData.Reference.Target == addedExpression,

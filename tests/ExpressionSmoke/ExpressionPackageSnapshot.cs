@@ -19,7 +19,7 @@ internal static class ExpressionPackageSnapshot
             string id = Value<string>(entry, "Id");
             clips.Add(id, new
             {
-                Name = Value<string>(entry, "DisplayName"), Enabled = Value<bool>(entry, "Enabled"),
+                Name = Value<string>(entry, "DisplayName"),
                 Values = Pose(entry),
                 Bindings = Pose(entry).Keys.ToArray()
             });

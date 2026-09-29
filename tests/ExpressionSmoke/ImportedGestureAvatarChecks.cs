@@ -112,11 +112,9 @@ internal static class ImportedGestureAvatarChecks
         int visible = 0;
         foreach (var expression in root.FindChild("Catalog").Children)
         {
-            bool available = Get<bool>(expression, "Enabled") && expression.IsActive;
             Check(expression.GetComponent<ContextMenuItemSource>().EnabledField.Value &&
                 expression.GetComponent<ContextMenuItemSource>().EnabledField.ActiveLink == null,
                 "Saved direct menu is enabled independently of table membership and expression state");
-            if (!available) continue;
             visible++;
             int leftBefore = Get<int>(core, "LeftGesture"), rightBefore = Get<int>(core, "RightGesture");
             string pairBefore = Get<string>(core, "PairKey");
@@ -150,7 +148,7 @@ internal static class ImportedGestureAvatarChecks
         Console.WriteLine($"PASS: {visible} Catalog direct-menu entries and the hand gesture toggle work without Override state");
         var importedMenu = menu.FindChild("Imported menu");
         // All menu items stay enabled; valid Catalog Slots can select an expression.
-        var mappedExpressions = root.FindChild("Catalog").Children.Where(expression => expression.IsActive && Get<bool>(expression, "Enabled"))
+        var mappedExpressions = root.FindChild("Catalog").Children
             .ToHashSet();
         if (importedMenu != null && !importedMenu.GetComponentsInChildren<ContextMenuItemSource>().Any(item =>
             item.Enabled && mappedExpressions.Contains(item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>()?.PressedData.Reference.Target)))

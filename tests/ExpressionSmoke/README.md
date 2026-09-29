@@ -103,8 +103,7 @@ The sensor-event fixture replaces hardware outputs temporarily and executes the 
 both hands must wait for stability, fire when the timer expires without more sensor changes,
 use device-specific pose classification, reset on gate/disconnect transitions, and redetect on reconnect.
 All 20 keyboard shortcuts (keypad 0 through 9 for each hand) are checked, including an externally added L8R9 expression. Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends only the left hand; Ctrl+Shift+keypad sends only the right. Keypad alone and Ctrl+keypad without Shift must leave both hands unchanged.
-Idle sentinels prove Selection does not run on unchanged frames. Table edits and
-clip enable/disable changes wait for the next gesture event, while menu Enabled fields remain unchanged.
+Idle sentinels prove Selection does not run on unchanged frames. Table edits wait for the next gesture event. Inactive clips remain selectable, and menu Enabled fields remain unchanged.
 Keyboard Flux consists of exactly two boards, Left/Logic and Right/Logic, with one
 bool change detector, IndexOfFirstValueMatch<bool>, and sender per hand. Settings
 live under each hand's DV in the ExpressionSystem.Input.Keyboard space, with Tag,
@@ -312,3 +311,5 @@ Version 41 removes Core. from system state keys, renames fixed Slot references t
 Version 42 routes all internal impulses through References.Internal targeting the shared Internal parent. Reference checks reject per-board references and inspect internal triggers' TargetHierarchy. Runtime checks send Selection/Initialize/Playback to the parent, verify exactly one receiver, and cover API operations, cloning and package reload.
 
 Version 43 renames the public impulse reference to References.API. Existing reference-edit and binding checks use this name before and after cloning and package reload.
+
+Version 44 removes Clip/Enabled and unused Clip/Source metadata. Graph checks reject both definitions and references, including templates, and reject GetSlotActive gates. Runtime checks cover inactive clips in gesture mappings and direct selection under an inactive Catalog, null mapping reset, copied templates, cloning and package reload. Pose snapshots no longer include the removed Enabled field.

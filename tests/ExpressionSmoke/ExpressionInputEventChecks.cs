@@ -48,21 +48,17 @@ internal static class ExpressionInputEventChecks
             Set(core, "PairKey", pair);
             var smile = catalog.FindChild("Smile");
             var menuItem = smile.GetComponent<ContextMenuItemSource>();
-            Set(smile, "Enabled", false);
+            smile.ActiveSelf = false;
             await Frames(30);
-            Check(Reference<Slot>(core, "CurrentExpression") == smile, "clip edits do not reevaluate the gesture pair");
+            Check(Reference<Slot>(core, "CurrentExpression") == smile, "clip state edits do not reevaluate the gesture pair");
             Gesture("Left", 1);
-            Check(Reference<Slot>(core, "CurrentExpression") == null, "next gesture rejects the disabled clip");
-            Check(menuItem.EnabledField.Value, "disabled expression keeps its menu item enabled");
-            smile.ActiveSelf = false; await Frames(10);
+            Check(Reference<Slot>(core, "CurrentExpression") == smile, "next gesture accepts the inactive clip");
             Check(menuItem.EnabledField.Value, "inactive expression does not change the menu Enabled field");
             smile.ActiveSelf = true;
-            Set(smile, "Enabled", true);
             await Frames(30);
-            Check(Reference<Slot>(core, "CurrentExpression") == null, "enabling a clip waits for a gesture event");
             Gesture("Left", 1);
             Check(Reference<Slot>(core, "CurrentExpression") == smile && menuItem.EnabledField.Value,
-                "gesture event selects the enabled clip");
+                "gesture event selects the restored clip");
 
             foreach (var module in modules.Children)
             foreach (string side in new[] { "Left", "Right" })

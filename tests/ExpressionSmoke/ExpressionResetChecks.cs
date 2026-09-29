@@ -12,7 +12,7 @@ internal static class ExpressionResetChecks
         var table = expressions.FindChild("DV").FindChild("GestureTable");
         var outputs = expressions.FindChild("Outputs").Children.ToArray();
         var expression = expressions.FindChild("Catalog").Children.First(c =>
-            c.IsActive && Get<bool>(c, "Enabled") && c.ExpressionVariables<DynamicValueVariable<float>>().Any(v => v.VariableName.Value.StartsWith("ExpressionSystem.Catalog.Clip/Binding.", StringComparison.Ordinal)));
+            c.ExpressionVariables<DynamicValueVariable<float>>().Any(v => v.VariableName.Value.StartsWith("ExpressionSystem.Catalog.Clip/Binding.", StringComparison.Ordinal)));
         var mappings = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal))
             .ToDictionary(v => v, v => v.Reference.Target);

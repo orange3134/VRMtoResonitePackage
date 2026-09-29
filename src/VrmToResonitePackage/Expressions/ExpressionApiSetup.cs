@@ -60,7 +60,7 @@ internal sealed partial class ExpressionSystemSetup
     {
         var receiver = g.Receiver<Slot>(SelectTag);
         var selected = Out(receiver, "Value");
-        var valid = g.And(ValidExpression(g, selected),
+        var valid = g.And(g.Not(g.IsNull<Slot>(selected)),
             g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", selected)), g.Ref(_catalog)));
         var select = ApplyRequest(g, g.Sequence(
             g.Write<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures", g.Constant(false)),

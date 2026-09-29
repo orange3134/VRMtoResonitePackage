@@ -168,6 +168,15 @@ internal static class ExpressionGraphChecks
         foreach (var meshDriver in meshDrivers)
             Check(meshDriver.BlendShapes.Count == meshOutputs.Count(r => r == meshDriver.Renderer.Target),
                 "mesh driver contains only required shape entries");
+        Check(nodes.All(n => n.GetType().Name != "GetSlotActive"), "clip state never gates selection or playback");
+        Check(!expressions.GetComponentsInChildren<DynamicValueVariable<bool>>().Any(v =>
+            v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Enabled") &&
+            !expressions.GetComponentsInChildren<DynamicValueVariable<string>>().Any(v =>
+                v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Source"),
+            "clips and templates contain neither Enabled nor unused Source metadata");
+        Check(expressions.GetComponentsInChildren<Nodes.ValueObjectInput<string>>().All(v =>
+            v.Value.Value is not "ExpressionSystem.Catalog.Clip/Enabled" and not "ExpressionSystem.Catalog.Clip/Source"),
+            "graphs do not read or write removed clip fields");
         Check(nodes.All(n => n.GetType().Name is not "SampleValueAnimationTrack`1" and not "FindAnimationTrackIndex"),
             "no runtime animation samplers or track lookup");
         Check(expressions.GetComponentsInChildren<StaticAnimationProvider>().Count == 0 &&

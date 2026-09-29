@@ -12,7 +12,7 @@ VRChatのカスタムFXからFaceEmo基準で最初の表情パターンを読�
 
 変換済みポーズの格納先である `Catalog` と、選択先を決める `GestureTable` は別である。
 Version 23ではメニューからCatalogの表情を直接選択できる。GestureTableへの割り当ては不要。
-自動割り当てが0/64なら左右入力では `CurrentExpression` が null になるが、メニューからは有効なCatalog表情を選択できる。
+自動割り当てが0/64なら左右入力では `CurrentExpression` が null になるが、メニューからはCatalog表情を選択できる。
 その場合は 変換ログのレイヤー・Clip の除外理由を確認する。
 
 ```mermaid
@@ -44,7 +44,7 @@ Expressions/
     References.*                   API・Catalog・内部Slotの固定参照
   Catalog/                         表情ごとの定義と最終値の一覧
     各表情/DV/                     Clip空間の変数
-      Id・DisplayName・Enabled     表情の設定
+      Id・DisplayName             表情の設定
       Binding/                    シェイプごとの変数スロット
         Binding.Body.Smile         Body.Smileの固定値（float）
   Internal/                        入力・選択・再生ロジック
@@ -102,9 +102,9 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → Selection → Playback を同期実行する。
 同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態・固定ポーズ・出力目標が確定する。
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
-表情Slotを引数としてResoPon/Expression/Internal/Playbackを送る。PlaybackがCurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情の有効性は選択時に判定する。
+表情Slotを引数としてResoPon/Expression/Internal/Playbackを送る。PlaybackがCurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情のアクティブ状態は選択条件にしない。
 
-Version 43 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+Version 44 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を 各CatalogエントリーのDV/Binding/Binding.*変数 に保存する。
 Playbackは表情Slot付きDynamicImpulseを受信し、CurrentExpressionへ設定してからOutputsを走査する。Binding.と各出力のIdを連結した名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
@@ -119,7 +119,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 連続・ループアニメーションも再生しない。Loop / Duration と再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 43 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 44 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -187,11 +187,11 @@ Inspector 上の状態変数名は `ExpressionSystem/LeftGesture` などで、Co
 | `LeftGesture` / `RightGesture` | 各入力から届いた int の状態（範囲制限なし） |
 | `PairKey` | `L{左}R{右}` 形式の対応表キー（例：L1R2） |
 | AllowHandGestures | true=ハンドジェスチャーを許可、false=停止。キーボード・表情メニューは常に使用可能 |
-| `CurrentExpression` | Selection の検証を通過した再生対象。無効・未割当なら null |
+| `CurrentExpression` | 対応表または直接選択から渡された再生対象。未割当・削除済みなら null |
 
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
 2. キーが正しく表情が違う場合は、`PairKey` に対応する `GestureTable` の参照と `AllowHandGestures` を確認し、`Selection` を調べる。
-3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（末尾の LnRm は PairKey）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`を確認する。
+3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（末尾の LnRm は PairKey）の参照があるか確認する。表情Slotのアクティブ状態は選択に影響しない。参照先が削除されていないか確認する。
 4. 選択が正しく見た目が違う場合は、`Internal/Playback` と該当出力の `Base`、`TrackingWeight`、`Result` と、Resultの参照先からメッシュまでの駆動接続を調べる。
 
 `AllowHandGestures` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
@@ -219,13 +219,13 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
 
 Core に保存する表情参照は `CurrentExpression` だけ。`MappedExpression` と `CandidateExpression` は生成しない。
 Selection は受理した左右入力イベントのときだけ実行する。左右値や表の編集・装着・入力許可の変更だけでは再評価しない。
-Selection は左・右を文字列化して `L{左}R{右}` を組み立て、`Expressions/DV/GestureTable/LnRm` を読み、Slot 有効・Enabled=trueを確認する。
-通過した参照（無効ならnull）をその更新中のローカル値として確定し、Playbackへ同期送信する。
+Selection は左・右を文字列化して `L{左}R{右}` を組み立て、`Expressions/DV/GestureTable/LnRm` を読み取る。
+取得した参照（未割当・削除済みならnull）をその更新中のローカル値として確定し、Playbackへ同期送信する。
 PlaybackがCurrentExpressionへ設定し、終端値を即時にWriteする。同じ表情でも再適用する。
-同じ参照なら同じ固定ポーズになる。解除・無効化も補間せず Base へ戻す。
-未検証の対応表の参照を調べたい場合は、PairKey に対応する行を直接見る。
+同じ参照なら同じ固定ポーズになる。nullでの解除時は出力目標をBaseへ戻す。Slotの無効化では解除しない。
+対応表の参照を調べたい場合は、PairKey に対応する行を直接見る。
 SelectionStatus は生成・計算しない。入力モードは AllowHandGestures、再生対象は CurrentExpression で確認する。
-未割当と無効・未ロードはどちらも CurrentExpression=null となり、理由は対応表と参照先を調べる。
+未割当・参照先の削除は CurrentExpression=null となる。表情SlotやCatalogが非アクティブでも選択・適用できる。
 
 ## 装着状態と Lifecycle
 
@@ -342,11 +342,11 @@ Select APIは表情Slotを直接受け取るため、ジェスチャーの値・
 
 表は変数名で引くので、スロットの並び替え・表示名の変更・別の行の削除で対応がずれることはない。
 変数名は固定し、同じ名前を重複させない。削除した行を戻す場合は同じ変数名で再作成する。
-行が未設定、または表情の参照先が削除・無効化されている場合は Outputs のベース入力を使う。
+行が未設定、または表情の参照先が削除されている場合は Outputs のベース入力を使う。
 表の参照の編集は次の左右入力イベントで反映される。異なる行でも同じ表情を指す場合は同じ固定値を適用する。
 
 表情の追加は `API/Templates` または既存の Catalog エントリーを Catalog へ複製し、
-`Enabled` を有効にして `Id`、`DisplayName`、`Binding.*`の値を設定する。
+`Id`、`DisplayName`、`Binding.*`の値を設定する。
 Idは記録用で、選択条件ではない。外部からの直接選択には表情Slotを送る。
 直接選択ボタンからの適用にGestureTableの割り当ては不要。対応表の編集でメニュー項目の Enabled は変更しない。直接選択は即時に反映する。削除は表情スロットごと行える。
 テンプレートから複製したメニューの表示名は複製先の変数に追従し、送信するSlot参照は複製先自身へリマップされる。項目の Enabled は駆動しない。
@@ -1276,3 +1276,12 @@ Core スロットを Internal に変更し、Logic を挟まず Lifecycle・Sele
 
 ExpressionSystem/References.Receiver を ExpressionSystem/References.API に変更した。
 変数スロット名も References.API とし、参照先の Expressions/API/Receivers と公開タグ・引数は維持する。
+
+## Version 44：Clip状態による選択制限と未使用メタデータを削除
+
+Clip/Enabledを生成せず、Selection・Select APIのEnabled読み取りとSlotのアクティブ状態チェックを削除する。
+選択した表情Slotは非アクティブでもCurrentExpressionへ設定し、Binding.*を適用する。
+GestureTableは取得した参照をそのまま送信し、Select APIはnull・自身のCatalog直下ではないSlotだけを除外する。
+nullの対応表行は選択解除となり、値が見つからない出力は従来どおりBaseへ戻る。装着状態の受付制御は維持する。
+Clip/Sourceは実行時に読み取る箇所がないため、CatalogとTemplatesの生成から削除した。
+非アクティブな表情・Catalog、ジェスチャー選択と直接選択、テンプレート複製、保存再読込を回帰検証する。

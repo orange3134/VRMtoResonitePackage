@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 43`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 44`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -48,7 +48,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 43 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 44 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -74,14 +74,12 @@ Version 20から `SmoothingSpeed` を共有する。各SmoothValueと同じSlot�
 |---|---|---|---|
 | `Id` | string | 元・生成表情の ID | 記録。元・生成表情の識別子。Select API・メニュー・PairはSlot参照を使い、実行時にIdを検索しない |
 | `DisplayName` | string | 表情名 | 設定。直接選択メニューの表示名 |
-| `Enabled` | bool | true | 設定。false は表情の選択対象外。メニュー項目の Enabled は変更しない |
-| `Source` | string | 元データの説明、または空文字 | 定義。由来の記録。再生判定には使わない |
 
 Version 21ではメニュー項目の Enabled を対応表の参照有無や表情の Active・Enabled から駆動しない。
 `MenuAvailable`、`GestureTable/Logic`、`Inputs/ContextMenu/Logic`、内部 `MenuRefresh` を生成しない。
 直接選択と Imported menu の項目には自動の選択可否制御を付けず、表の変更を監視してメニューを走査しない。
-Select APIはGestureTableへの割り当てを条件にせず、Catalogの有効な表情を選択する。
-null・無効な表情・自身のCatalog直下ではないSlotは受理せず、選択状態を変更しない。左右値は直接選択では常に保持する。
+Select APIはGestureTableへの割り当てを条件にせず、Catalogの表情をSlotのアクティブ状態に関わらず選択する。
+null・自身のCatalog直下ではないSlotは受理せず、選択状態を変更しない。左右値は直接選択では常に保持する。
 
 各表情の `ExpressionSystem.Catalog.Clip` 空間に、`Binding.` 接頭辞の
 `DynamicValueVariable<float>` を保存する。配置先は各表情の `DV/Binding/Binding.<Output.Id>`。
@@ -125,8 +123,8 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 実DLLはUTF-16のchar単位で判定するため制御文字や一部の絵文字を通すが、上記の生成規則では置換する。
 公開仕様は[Resonite Wikiの命名制限](https://wiki.resonite.com/Dynamic_variables#Naming_restrictions)も参照。
 
-`API/Templates/Expression (copy into Catalog)` は最初の表情の複製で、Id を空文字、Enabled を false に変更する。
-コピー後はBinding.*の値や表示名を整えて有効にする。Select APIには複製先のSlotを送る。GestureTableへの割り当ては任意。Idは記録用で、選択条件ではない。
+`API/Templates/Expression (copy into Catalog)` は最初の表情の複製で、Id を空文字に変更する。
+コピー後はBinding.*の値や表示名を整える。Select APIには複製先のSlotを送る。GestureTableへの割り当ては任意。Idは記録用で、選択条件ではない。
 
 ## 入力・選択・再生の状態（Expressions/DV）
 
@@ -135,14 +133,13 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 | `AllowHandGestures` | bool | true | **設定**。ハンドジェスチャーとGesture APIだけの受付可否。キーボード・メニューは常に受け付ける。メニュー操作で false、初期化で true。許可 API でも変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューでは変更しない |
 | `PairKey` | string | L0R0 | 最後の左右入力イベントでSelectionが組み立てたキー。直接選択中の表情を示すものではない |
-| `CurrentExpression` | Slot | null | Playbackが受信した表情Slot。Selection・Select APIが候補の有効性を検証する。解除はnull |
+| `CurrentExpression` | Slot | null | Playbackが受信した表情Slot。Selectionは対応表の参照をそのまま渡し、Select APIは自身のCatalog直下かだけ確認する。解除はnull |
 
-状態の DynamicVariable に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取った参照を検証し、
-そのSlot（無効・未割当ならnull）をPlaybackへ送り、PlaybackがCurrentExpressionへ設定する。
+状態の DynamicVariable に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取ったSlot（未割当・削除済みならnull）をそのままPlaybackへ送り、PlaybackがCurrentExpressionへ設定する。
 MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
 左右入力の参照先確認にはPairKeyとGestureTableの行を使う。直接選択の確認にはCurrentExpressionを使う。
 
-AllowHandGestures 以外は状態として扱う。SelectionStatus は生成しない。入力モードは AllowHandGestures、再生対象は CurrentExpression で確認する。未割当と無効はいずれも CurrentExpression=null となる。
+AllowHandGestures 以外は状態として扱う。SelectionStatus は生成しない。入力モードは AllowHandGestures、再生対象は CurrentExpression で確認する。未割当・参照先の削除は CurrentExpression=null となる。非アクティブな表情も選択できる。
 PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の時間再生は行わない。
 
 Lifecycle は OnStart とローカル装着状態の変更時に動き、現在の装着者がローカルユーザーの場合だけ、初期化確認 → Selection を実行する。
@@ -299,7 +296,7 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 |---|---|---|
 | `LeftTag` / `RightTag` | `ResoPon/Expression/Gesture/Left` / `ResoPon/Expression/Gesture/Right` | int（範囲制限なし）。ハンドジェスチャー入力。AllowHandGestures に従う |
 | `KeyboardLeftTag` / `KeyboardRightTag` | `ResoPon/Expression/Keyboard/Left` / `ResoPon/Expression/Keyboard/Right` | int（範囲制限なし）。AllowHandGesturesに関係なく左右値を更新。フラグは維持 |
-| `SelectTag` | `ResoPon/Expression/Menu/Select` | Slot。自身のCatalog直下の有効な表情を受け取り、ハンドジェスチャーを停止してPlaybackへ渡す。null・無効・範囲外は無視 |
+| `SelectTag` | `ResoPon/Expression/Menu/Select` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してPlaybackへ渡す。null・範囲外は無視 |
 | `HandGesturesEnabledTag` | `ResoPon/Expression/AllowHandGestures` | bool。ハンドジェスチャーだけの許可・停止。左右値と表情は維持 |
 | `ToggleHandGesturesTag` | `ResoPon/Expression/ToggleHandGestures` | 引数なし。現在のハンドジェスチャー許可を反転。左右値と表情は維持 |
 | `InitializeTag` | `ResoPon/Expression/Internal/Initialize` | 引数なし。Lifecycle の初期化確認 |
@@ -371,3 +368,11 @@ Initialize・Reset・Selection・Playbackの既存タグで子階層の受信処
 
 公開Impulseの送信先変数を `References.Receiver` から `References.API` に変更した。
 参照先は引き続き Expressions/API/Receivers。外部から直接参照する場合は変数名を更新する。
+
+## Version 44：ClipのEnabled・Sourceを削除
+
+`ExpressionSystem.Catalog.Clip/Enabled` と `ExpressionSystem.Catalog.Clip/Source` は生成しない。
+Enabledの読み取りとSlotのアクティブ状態による選択判定も削除した。
+GestureTableから取得したSlotはそのままPlaybackへ送る。Select APIはnullでないことと自身のCatalog直下であることだけを確認する。
+表情SlotやCatalogが非アクティブでも選択・適用される。装着状態によるAPI受付制御は維持する。
+Sourceは生成物の説明用メタデータで実行処理には使われていなかったため、Catalog・Templatesの両方から省く。

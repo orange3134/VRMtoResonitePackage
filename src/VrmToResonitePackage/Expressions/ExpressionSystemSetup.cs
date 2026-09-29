@@ -52,7 +52,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "CurrentExpression", null);
         Data(_root, "PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 43);
+        Data(_root, "Version", 44);
         Reference(_root, "References.API", _api);
         Reference(_root, "References.Catalog", _catalog);
     }
@@ -86,7 +86,6 @@ internal sealed partial class ExpressionSystemSetup
             var template = setup._clips.Values.First().Duplicate(setup._root.FindChild("API").AddSlot("Templates"));
             template.Name = "Expression (copy into Catalog)";
             template.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Id")).Value.Value = "";
-            template.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>().Single(v => v.VariableName.Value == Path(ClipSpace, "Enabled")).Value.Value = false;
         }
         int assigned = setup._compiled.Pairs.Count(id => id != null && setup._clips.ContainsKey(id));
         Console.WriteLine($"Expression system: {setup._clips.Count} clips, {setup._outputSlots.Count} outputs, {assigned}/64 gesture pairs assigned, " +
@@ -188,8 +187,7 @@ internal sealed partial class ExpressionSystemSetup
             if (clip.Curves.Any(c => !_outputSlots.ContainsKey(c.Binding.Id)))
             { UniLog.Warning($"Expression '{clip.Name}' omitted: one or more output bindings were not resolved"); continue; }
             Slot entry = Record(_catalog, clip.Name, ClipSpace);
-            Data(entry, "Id", clip.Id); Data(entry, "DisplayName", clip.Name); Data(entry, "Enabled", true);
-            Data(entry, "Source", clip.Source ?? "");
+            Data(entry, "Id", clip.Id); Data(entry, "DisplayName", clip.Name);
             var bindings = entry.FindChild("DV").AddSlot("Binding");
             foreach (var curve in clip.Curves)
             {
