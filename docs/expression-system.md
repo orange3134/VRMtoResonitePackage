@@ -148,8 +148,7 @@ Version 21では `GestureTable/Logic` のメニュー用監視を生成しない
 `DynamicVariableValueInput<T>`／`DynamicVariableObjectInput<T>` で読む。
 間に別名の空間があっても、要求した空間名で祖先を検索する。
 
-- 各手の Candidate・Stable・Since：`ExpressionSystem.Input.HandGestures.Hand`。
-- 機種ごとの Grip/Trigger しきい値・StabilitySeconds：親モジュールの `ExpressionSystem.Input.HandGestures`。
+- 機種ごとの指角度しきい値・パッド方向割当・StabilitySeconds：親モジュールの `ExpressionSystem.Input.HandGestures`。
 - Selection の左右値：`ExpressionSystem/LeftGesture`・`ExpressionSystem/RightGesture`。
 - Playback の CurrentExpression：`ExpressionSystem/CurrentExpression` の Object Input。
 - 各 Output の Id・Base・TrackingWeight・Result：`ExpressionSystem.Output`。
@@ -1306,3 +1305,11 @@ Touch・Index・Cosmosでは、複数コードの手形をIndexOfFirstValueMatch
 判定ノードのSlot名へ手形名と番号を付ける。CosmosのRockNRollはfalse行を残し、一致なしはNeutralとする。
 参照したワールド実装と一致コード表は[コントローラー別ジェスチャー判定](controller-gestures.md)を参照。
 全センサーコード、方向入力、同一手形の別コード、未一致、複製・保存再読込を既存の回帰テストで確認する。
+
+## 手入力状態のFlux内保持（Version 48）
+
+各機種のLeft/RightのCandidateとStableはLogic内のStoredValue<int>へ移し、DVと手ごとのDynamicVariableSpaceを生成しない。
+Stableは最後の送信値を保持して再送を抑えるために残す。短時間別の候補になって元へ戻っても、手動選択を上書きしない。
+SinceはElapsedTimeFloatで置き換え、候補変更時にReset、StabilitySeconds経過時に送信する。0秒は即時送信する。
+候補変更イベントでは変更前の経過時間を採用しない。入力禁止・切断時はStoreを初期化し、再装着でも候補から計測し直す。
+ElapsedTimeFloatの内部時計はSyncTime Proxyであり、独自の時刻DVを廃止しても時計そのものは同期される。

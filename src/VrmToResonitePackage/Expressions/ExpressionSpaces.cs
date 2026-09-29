@@ -9,5 +9,4 @@ internal static class ExpressionSpaces
     public const string OutputSpace = "ExpressionSystem.Output";
     public const string KeyboardSpace = "ExpressionSystem.Input.Keyboard";
     public const string GestureSettingsSpace = "ExpressionSystem.Input.HandGestures";
-    public const string GestureHandSpace = "ExpressionSystem.Input.HandGestures.Hand";
 }

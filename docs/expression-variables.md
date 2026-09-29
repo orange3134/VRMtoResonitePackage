@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 47`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 48`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -8,7 +8,7 @@
 例えば状態変数の `LeftGesture` は `ExpressionSystem/LeftGesture`、Catalog の表情値 `Body.Smile` は `ExpressionSystem.Catalog.Clip/Body.Smile`。
 システム内で単一のモジュールは ExpressionSystem 空間を共有する。状態変数に接頭辞は付けず、固定参照には References.、対応表には GestureTable. を付ける。
 複数インスタンスを持つレコードだけに別の空間を作り、空間名もドットで階層を表す。
-左右の手や各表情は、それぞれ独立した DynamicVariableSpace を持つため、同じ名前でも値は別になる。
+キーボードの左右の手や各表情は、それぞれ独立した DynamicVariableSpace を持つため、同じ名前でも値は別になる。ハンドジェスチャーの各手の処理状態はFlux内に保持する。
 
 | 配置先（Expressions からの相対位置） | 空間名 | 定義の役割 |
 |---|---|---|
@@ -19,7 +19,6 @@
 | Outputs/各項目 | `ExpressionSystem.Output` | BlendShape の基礎入力・混合・最終出力 |
 | Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と10キーの割当 |
 | Inputs/HandGestures/Modules/各機種 | `ExpressionSystem.Input.HandGestures` | しきい値と安定待ち時間 |
-| 各機種/Left、Right | `ExpressionSystem.Input.HandGestures.Hand` | 片手の入力判定状態 |
 
 `Record()` は空間名を必須引数で受け取り、`OnlyDirectBinding=true` の空間を作る。
 例外は Expressions 自身（false）で、Internal と GestureTable には空間を追加せず、Expressions/DV の状態変数と `ExpressionSystem/GestureTable.LnRm` を共有空間へ登録する。
@@ -226,8 +225,8 @@ Held や前回マスクなどの DynamicVariable は作らず、変更検出の�
 ## Inputs/HandGestures/Modules：機種別入力
 
 Touch・Index・Vive・WindowsMR・Cosmosの各モジュールに、使用する設定を置く。
-Version 39では各手のCandidate・Since・Stableを、WriteDynamicVariableのTarget未接続で更新する。
-ノード位置からExpressionSystem.Input.HandGestures.Hand空間を解決するため、Version 38のDV/References.Left・DV/References.Rightは生成しない。
+Version 48では各手の状態用DynamicVariableを廃止し、Left/RightのLogic内で判定・保持する。
+各手のDV・ExpressionSystem.Input.HandGestures.Hand空間・References.Left/Rightは生成しない。
 
 | 名前 | 型 | 初期値 | 役割 |
 |---|---|---|---|
@@ -239,20 +238,24 @@ Version 39では各手のCandidate・Since・Stableを、WriteDynamicVariableの
 Version 19でGrip/Triggerの押下・解放しきい値とGripHeld/TriggerHeldを廃止した。
 Touch／CosmosはControllerの接触とClick出力、Indexは指の姿勢、Vive／MRはパッド方向を使う。
 詳細は[コントローラー別ジェスチャー判定](controller-gestures.md)を参照。
-各モジュールの Left / Right は独立した ExpressionSystem.Input.HandGestures.Hand スコープを持つ。
-機種別入力もローカルな `StoredValue<bool>` で初期化済みかを管理し、User 参照は保持しない。
-ローカルユーザーが装着者でなくなるとフラグを false に戻し、次の装着時に候補・安定値を初期化する。
+各モジュールの Left / Right は独立したLogicを持ち、次の状態をFlux内で扱う。
 
-| 名前 | 型 | 初期値 | 更新元・役割 |
-|---|---|---|---|
-| `Candidate` | int | -1 | 最新の入力判定候補。変化すると Since を更新 |
-| `Since` | float | 0 | Candidate が変わった WorldTimeFloat（秒）。安定待ちの起点 |
-| `Stable` | int | -1 | 安定判定後に送信したジェスチャー。変化時だけ再送するための比較値 |
+| ノード・状態 | 初期化時の値 | 役割 |
+|---|---|---|
+| `Store<int> : Candidate`（実型 `StoredValue<int>`） | -1 | 最新の入力判定候補。候補が変わると更新し、ElapsedTimeFloatのResetを呼ぶ |
+| `ElapsedTimeFloat` | 候補変更時に0秒へリセット | 現在の候補が続いた秒数。StabilitySeconds以上で安定と判定。Since変数は生成しない |
+| `Store<int> : Stable (last sent)` | -1 | 最後に送信した手形。同じ手形の再送を抑えるために維持する |
+| `Store<bool>` | false | ローカル装着時に状態を一度だけ初期化するフラグ。非装着時はfalseへ戻す |
 
--1 は未確定・未送信で、公開左右 API の有効値ではない。
-判定した手形・受付状態の変化時に処理する。
-Since + StabilitySeconds に時刻が達して安定判定が変化したときも処理するため、指を止めたままでも確定入力を送れる。
-切断・非アクティブ時や入力禁止中は Candidate・Stable を -1 に戻し、入力イベントは送らない。
+Storeは別のインパルス実行にも値を保持するが、状態値はDVとして同期・保存しない。
+LocalValueは実行コンテキスト内の一時値なので、候補のフレーム間保持には使わない。
+ElapsedTimeFloatは実DLL上でSyncTimeを持つProxyを使用する。候補の時刻を保持する独自DVはなくなるが、ノード内部の時計は同期される。
+-1は未確定・未送信で、公開左右APIの有効値ではない。
+判定した手形・受付状態の変化時に処理し、経過時間がStabilitySecondsに達した際も処理するため、指を止めたまま確定できる。
+候補を変えたイベントでは古い経過時間を使わず待ち直す。StabilitySecondsが0以下ならその場で送信する。
+候補が一瞬変わって元の手形へ戻っても、最後の送信値と同じなら再送せず、後から行った手動選択を維持する。
+機器の非アクティブ時や入力禁止中は、ローカル装着者のCandidate・Stableを-1に戻し、入力イベントは送らない。
+再装着時もStoreを初期化し、現在の候補から計測をやり直す。User参照は保持しない。
 Core は左右それぞれで最後に受理した値を保持し、更新番号は保持しない。
 再接続・入力再許可後に安定した手形を検出すると、その手の値を新しい入力で更新する。
 モジュール自体の削除・無効化でも手の状態は残る。明示的な Neutral（0）で解除できる。
@@ -335,7 +338,7 @@ Version 38の生成時点では、手入力モジュール配下を指す参照�
 ### 書き込み先の空間解決（Version 39）
 
 WriteDynamicValueVariable / WriteDynamicObjectVariableはTarget未接続ならノードのSlotから名前付き空間を解決する。
-生成時に固定Targetとノードの同名祖先空間が同一の場合だけ接続を省く。Coreの状態と各手のCandidate・Since・Stableが対象となる。
+生成時に固定Targetとノードの同名祖先空間が同一の場合だけ接続を省く。導入当時はCoreの状態と各手のCandidate・Since・Stableが対象だった。Version 48では各手の状態DVを廃止し、StoreとElapsedTimeFloatを使う。
 Playbackが走査中のOutput.Resultへ書き込む場合は別空間なので、取得したOutput SlotをTargetに接続する。
 不要になった仮のSlot入力は参照変数生成前に除去するため、References.Coreと各モジュールのReferences.Left/Rightは生成しない。
 

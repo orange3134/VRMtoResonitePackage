@@ -181,30 +181,36 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildGestureHand(Slot module, string device, Chirality side, int kind)
     {
-        var hand = Record(module, side.ToString(), GestureHandSpace);
+        var hand = module.AddSlot(side.ToString());
         var g = new ExpressionFlux(hand.AddSlot("Logic"));
-        var handRef = g.Ref(hand); var modRef = g.Ref(module);
-        Data(hand, "Candidate", -1); Data(hand, "Since", 0f); Data(hand, "Stable", -1);
+        var modRef = g.Ref(module);
+        // Store survives separate impulses on this client; LocalValue does not.
+        var candidate = g.Node("StoredValue", typeof(int));
+        candidate.Slot.Name += " : Candidate";
+        var lastSent = g.Node("StoredValue", typeof(int));
+        lastSent.Slot.Name += " : Stable (last sent)";
+        var elapsed = g.Node("ElapsedTimeFloat");
         var initialized = g.Node("StoredValue", typeof(bool));
         var reset = g.If(g.Not(initialized), g.Sequence(
-            g.Write<int>(handRef, GestureHandSpace, "Candidate", g.Constant(-1)), g.Write<int>(handRef, GestureHandSpace, "Stable", g.Constant(-1)),
+            g.Set<int>(candidate, g.Constant(-1)), g.Set<int>(lastSent, g.Constant(-1)),
             g.Set<bool>(initialized, g.Constant(true))));
         var controller = g.Node(device, null, ("User", g.Owner(_root)), ("Node", g.Constant(side)));
         var active = Out(controller, "IsActive");
         var gesture = BuildControllerGesture(g, controller, device, side, module);
-        var changed = g.NotEqual<int>(gesture, g.Read<int>(handRef, GestureHandSpace, "Candidate"));
-        var stable = g.Not(g.Greater(g.Add(g.Read<float>(handRef, GestureHandSpace, "Since"), g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds")), g.Now));
-        var send = g.Sequence(SendHandInput(g, g.Text(GestureTag(kind)), gesture),
-            g.Write<int>(handRef, GestureHandSpace, "Stable", gesture));
+        var changed = g.NotEqual<int>(gesture, candidate);
+        var delay = g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds");
+        var stable = g.Not(g.Greater(delay, elapsed));
+        var send = g.If(g.NotEqual<int>(lastSent, gesture), g.Sequence(
+            SendHandInput(g, g.Text(GestureTag(kind)), gesture), g.Set<int>(lastSent, gesture)));
         var enabled = g.And(active, g.Read<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures"));
-        var update = g.If(g.AvatarWornLocal, g.Sequence(reset, g.If(enabled, g.Sequence(
-            g.If(changed, g.Sequence(g.Write<int>(handRef, GestureHandSpace, "Candidate", gesture), g.Write<float>(handRef, GestureHandSpace, "Since", g.Now))),
-            g.If(g.And(stable, g.NotEqual<int>(g.Read<int>(handRef, GestureHandSpace, "Stable"), gesture)), send)),
-            g.Sequence(
-                g.Write<int>(handRef, GestureHandSpace, "Candidate", g.Constant(-1)),
-                g.Write<int>(handRef, GestureHandSpace, "Stable", g.Constant(-1))))),
+        // A changed candidate starts a fresh interval. Never use the old elapsed
+        // value in the same event; a zero delay still sends immediately.
+        var update = g.If(g.AvatarWornLocal, g.Sequence(reset, g.If(enabled,
+            g.If(changed, g.Sequence(g.Set<int>(candidate, gesture), Out(elapsed, "Reset"),
+                g.If(g.Not(g.Greater(delay, g.Constant(0f))), send)), g.If(stable, send)),
+            g.Sequence(g.Set<int>(candidate, g.Constant(-1)), g.Set<int>(lastSent, g.Constant(-1))))),
             g.Set<bool>(initialized, g.Constant(false)));
-        // The stable predicate changes when the waiting time expires, even at rest.
+        // The elapsed-time predicate changes when the wait expires, even at rest.
         var accepting = g.And(g.AvatarWornLocal, enabled);
         g.OnChanged<int>(g.Choose<int>(accepting, gesture, g.Constant(-1)), update);
         g.OnChanged<bool>(g.And(accepting, stable), update);
