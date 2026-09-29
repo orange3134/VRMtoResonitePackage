@@ -27,6 +27,20 @@ internal static class ExpressionSpaceChecks
         foreach (var module in modules.Children) Records(module, "ExpressionSystem.Input.HandGestures.Hand");
         Check(root.FindChild("Diagnostics") == null, "diagnostics are logged rather than exported into the avatar");
 
+        var internalSlot = root.FindChild("Internal");
+        Check(root.FindChild("Core") == null && internalSlot != null &&
+            internalSlot.Children.Select(child => child.Name).OrderBy(name => name)
+                .SequenceEqual(new[] { "Lifecycle", "Playback", "Selection" }),
+            "Internal directly contains exactly the three logic boards");
+        Check(root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+            .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/", StringComparison.Ordinal))
+            .All(v => v.VariableName.Value == "ExpressionSystem/CurrentExpression" ||
+                v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal) ||
+                v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal)),
+            "fixed system Slot references use References; current expression and gesture mappings retain their keys");
+        Check(root.FindChild("DV").Children.All(child => !child.Name.StartsWith("Core.", StringComparison.Ordinal)),
+            "state variable slots have no Core prefix");
+
         var spaces = root.GetComponentsInChildren<DynamicVariableSpace>();
         Check(spaces.Count == expected.Count, "every record has exactly one explicit schema space");
         foreach (var space in spaces)
@@ -75,13 +89,13 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 40,
-            "unconnected null inputs are identified by package version 40");
-        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Core.LeftGesture", out _),
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 41,
+            "flattened state and internal hierarchy are identified by package version 41");
+        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("LeftGesture", out _),
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),
             "table rows are readable from the system root");
-        var core = root.FindChild("Core");
+        var core = root.FindChild("Internal");
         Check(core.WriteDynamicVariable("Expr/AllowExternalInput", false) != DynamicVariableWriteResult.Success,
             "legacy shared-space writes cannot modify the new Core");
         Console.WriteLine("SPACES: explicit record schemas and variable prefixes verified");

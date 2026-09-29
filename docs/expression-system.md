@@ -35,21 +35,22 @@ flowchart LR
 ```text
 Expressions/
   DV/                              システム共通の変数（1変数1子 Slot）
-    Core.*                         左右の状態、現在の表情
+    LeftGesture・RightGesture      左右の入力状態
+    AllowHandGestures・PairKey      入力許可と最後の組み合わせ
+    CurrentExpression              現在の表情（Slot参照）
     GestureTable/                  対応表の変数をまとめるスロット
       L0R0〜L7R7                   64個の Catalog 参照
-    Version・Receiver・Catalog      バージョンと入口への参照
-    References.*                   内部Slotの共有参照（Noneはnull）
+    Version・SmoothingSpeed        バージョンと補間速度
+    References.*                   Receiver・Catalog・内部Slotの固定参照
   Catalog/                         表情ごとの定義と最終値の一覧
     各表情/DV/                     Clip空間の変数
       Id・DisplayName・Enabled     表情の設定
       Binding/                    シェイプごとの変数スロット
         Binding.Body.Smile         Body.Smileの固定値（float）
-  Core/                            入力・選択・再生ロジック
-    Logic/
-      Lifecycle/                   初期化、装着状態の変更監視
-      Selection/                   対応表からの選択と切り替え
-      Playback/                    終端ポーズの取得・通常出力へのWrite
+  Internal/                        入力・選択・再生ロジック
+    Lifecycle/                     初期化、装着状態の変更監視
+    Selection/                     対応表からの選択と切り替え
+    Playback/                      終端ポーズの取得・通常出力へのWrite
   Outputs/                         BlendShape ごとのベース入力と最終出力
     各 BlendShape/                 出力定義・Base・Result
       Tracking/                    既存の追跡がある出力だけ自動合成するDrive
@@ -75,8 +76,8 @@ Expressions/
   API/Templates/                   Catalog に複製する表情テンプレート
 ```
 
-Core に入力元の一覧・優先順位・有効期限・汎用 Animator パラメーターは持たない。
-入力内容は `ResoPon/Expression/Gesture/Left`／`ResoPon/Expression/Gesture/Right` タグと int 引数で渡す。Core は入力元の Slot 参照を保持しない。
+Internal に入力元の一覧・優先順位・有効期限・汎用 Animator パラメーターは持たない。
+入力内容は `ResoPon/Expression/Gesture/Left`／`ResoPon/Expression/Gesture/Right` タグと int 引数で渡す。Internal は入力元の Slot 参照を保持しない。
 各手は最後に受理した入力値を保持し、コントローラーが切断されても変更しない。更新番号は保持しない。
 
 Flux は1スロット1ノードで、各モジュール直下にノードを置き、モジュール全体の接続関係で整列する。
@@ -103,7 +104,7 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
 表情Slotを引数としてResoPon/Expression/Internal/Playbackを送る。PlaybackがCurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情の有効性は選択時に判定する。
 
-Version 40 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+Version 41 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を 各CatalogエントリーのDV/Binding/Binding.*変数 に保存する。
 Playbackは表情Slot付きDynamicImpulseを受信し、CurrentExpressionへ設定してからOutputsを走査する。Binding.と各出力のIdを連結した名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
@@ -115,10 +116,10 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 通常出力は装着者だけが値をWriteし、未装着時はホストがBaseを適用する。
 追跡対象は各クライアントで選択中の表情の名前付き変数と各自のBaseを合成し、未装着時はBaseを使う。
 切り替え補間はSmoothValueに任せ、FadeIn / FadeOut / FadeDuration / FadeWeight / Snapshot は生成しない。
-連続・ループアニメーションも再生しない。Loop / Duration と Core の再生時計は生成しない。
+連続・ループアニメーションも再生しない。Loop / Duration と再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 40 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 41 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -140,7 +141,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 物理入力・時刻・実行時の Source を読む DynamicVariable など、連続変化扱いの入力は検出のための評価が残る。
 毎フレームの評価をすべてなくすものではない。監視を独立させるため、グラフのノード数は増える。
 Version 21では `GestureTable/Logic` のメニュー用監視を生成しない。
-現在の組み合わせの選択更新は `Core/Logic/Selection` が担当する。
+現在の組み合わせの選択更新は `Internal/Selection` が担当する。
 
 ## 入力・列挙ノード
 
@@ -150,12 +151,12 @@ Version 21では `GestureTable/Logic` のメニュー用監視を生成しない
 
 - 各手の Candidate・Stable・Since：`ExpressionSystem.Input.HandGestures.Hand`。
 - 機種ごとの Grip/Trigger しきい値・StabilitySeconds：親モジュールの `ExpressionSystem.Input.HandGestures`。
-- Selection の左右値：`ExpressionSystem/Core.LeftGesture`・`ExpressionSystem/Core.RightGesture`。
-- Playback の CurrentExpression：`ExpressionSystem/Core.CurrentExpression` の Object Input。
+- Selection の左右値：`ExpressionSystem/LeftGesture`・`ExpressionSystem/RightGesture`。
+- Playback の CurrentExpression：`ExpressionSystem/CurrentExpression` の Object Input。
 - 各 Output の Id・Base・TrackingWeight・Result：`ExpressionSystem.Output`。
 
-API・機種別入力・各 Output からも、Core.* は祖先の ExpressionSystem 空間へ入力ノードでバインドする。
-Core の入力ノード化は現行の名前付き空間で再検証し、同一フレームの入力、複製、再装着、
+API・機種別入力・各 Output からも、状態変数は祖先の ExpressionSystem 空間へ入力ノードでバインドする。
+状態変数の入力ノード化は現行の名前付き空間で再検証し、同一フレームの入力、複製、再装着、
 保存再読み込み後の選択・再生を確認した。機種別設定の編集も、両手の入力プロキシが該当する
 モジュールの値へ追従し、別機種・複製元と混ざらないことを確認する。
 置換により接続先がなくなった固定 Slot 参照ノードは、配線完了後に除去する。
@@ -177,11 +178,11 @@ User が必要なコントローラー・UserFingerPoseSource だけは `GetActi
 
 ## 不具合の調べ方
 
-まず Expressions/DV の Core.* 変数を見て、入力・選択・再生のどこで期待とずれたかを分ける。
+まず Expressions/DV の状態変数を見て、入力・選択・再生のどこで期待とずれたかを分ける。
 各 Space の Slot 直下に DV を置き、値・参照・DynamicField を含め1変数1子 Slotで生成する。
-Inspector 上の Core の変数名には `ExpressionSystem/Core.` が付く。GestureTable も同じ ExpressionSystem 空間に GestureTable.* として登録する。複数インスタンスを持つレコードだけに、階層をドットで表す別の空間名を使う。
+Inspector 上の状態変数名は `ExpressionSystem/LeftGesture` などで、Core. 接頭辞は付かない。GestureTable も同じ ExpressionSystem 空間に GestureTable.* として登録する。複数インスタンスを持つレコードだけに、階層をドットで表す別の空間名を使う。
 
-| Core の変数 | 確認する内容 |
+| 状態変数 | 確認する内容 |
 |---|---|
 | `LeftGesture` / `RightGesture` | 各入力から届いた int の状態（範囲制限なし） |
 | `PairKey` | `L{左}R{右}` 形式の対応表キー（例：L1R2） |
@@ -191,7 +192,7 @@ Inspector 上の Core の変数名には `ExpressionSystem/Core.` が付く。Ge
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
 2. キーが正しく表情が違う場合は、`PairKey` に対応する `GestureTable` の参照と `AllowHandGestures` を確認し、`Selection` を調べる。
 3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（末尾の LnRm は PairKey）の参照があるか確認する。参照がある場合は、参照先の Slot の有効状態、`Enabled`を確認する。
-4. 選択が正しく見た目が違う場合は、`Core/Logic/Playback` と該当出力の `Base`、`TrackingWeight`、`Result` と、Resultの参照先からメッシュまでの駆動接続を調べる。
+4. 選択が正しく見た目が違う場合は、`Internal/Playback` と該当出力の `Base`、`TrackingWeight`、`Result` と、Resultの参照先からメッシュまでの駆動接続を調べる。
 
 `AllowHandGestures` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
 変換時の警告・案内はログの `Expression diagnostics:` に記録する。
@@ -200,7 +201,7 @@ Outputs の `Id` はメッシュ名.BlendShape名から作る変数キー。選�
 反映が止まっている場合は、アバターの装着状態、該当モジュールの有効状態と `Outputs/Result`と、その参照先からメッシュまでの駆動接続を確認する。
 
 
-resoloop を使う場合は、リポジトリ直下から次の読み取り専用スクリプトで Core の状態を一覧にできる。
+resoloop を使う場合は、リポジトリ直下から次の読み取り専用スクリプトで表情の状態を一覧にできる。
 `-CoreSlot` には `Expressions/DV`（旧パッケージは `Expressions/Core`）の正確なパスまたは現在のスロット ID、
 `-Url` には ResoniteLink に表示される現在のポートを指定する。
 
@@ -211,7 +212,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/inspect-expression.p
 `-Json` を付けると CoreSlot と Values を持つ JSON を返す。SelectionStatus に基づく Selection 要約は出力しない。
 URL を省略した場合は resoloop の環境変数・プロジェクト設定を使う。
 参照値は現在の ResoniteLink 接続での ID として表示するため、保存後の固定 ID として使わない。
-診断スクリプトは旧 `Expr/`・`ExpressionCore/` と現行 `ExpressionSystem/Core.` を読み取れる。新しい空間名・診断項目の反映には再変換・再インポートが必要。
+診断スクリプトは旧 `Expr/`・`ExpressionCore/`・`ExpressionSystem/Core.` と現行 `ExpressionSystem/` を読み取れる。新しい空間名・診断項目の反映には再変換・再インポートが必要。
 
 
 ## Selection と再生対象
@@ -302,10 +303,10 @@ Version 23では左右ジェスチャーのコンテキストメニューと専�
 押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをSelect APIへ送る。自身のCatalog直下で有効な表情かを検証し、PlaybackがCurrentExpressionへ設定して適用する。
 AllowHandGestures=falseにするが、LeftGesture・RightGesture・PairKeyは変更しない。GestureTable未割り当てでも選択できる。
 同じ表情の再選択でもPlaybackを実行するため、名前付きfloat変数の編集も反映できる。
-表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `Core.CurrentExpression` を参照して駆動する。
+表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `CurrentExpression` を参照して駆動する。
 Catalog・Imported menuともに選択中の表情は緑、それ以外は白。null用の白いOptionを先頭に置き、
 参照先の表情を削除した項目が未選択状態で緑にならないようにする。
-ジェスチャー許可トグルのColorは `ValueOptionDescriptionDriver<bool>` が `Core.AllowHandGestures` を読み、
+ジェスチャー許可トグルのColorは `ValueOptionDescriptionDriver<bool>` が `AllowHandGestures` を読み、
 有効（true）なら緑、無効（false）なら赤にする。両DriverともLabel・Spriteは駆動せず、Enabledの自動制御も追加しない。
 参照はアバター複製時に複製先へ再対応し、Catalogテンプレートを複製した項目は自分自身の表情を比較対象にする。
 Catalog の Slot を固定用に保持する Override 変数は生成しない。
@@ -1254,3 +1255,12 @@ ExpressionSystem/References.Noneを生成せず、null固定参照に接続さ�
 選択解除のObjectConditional分岐、未装着時のPlaybackの表情参照、LifecycleのPlayback送信引数が対象となる。
 生成中の仮のnull参照ノードは接続を外して削除する。実行中に更新されるCore.CurrentExpressionなどの参照変数は維持する。
 ExpressionSmokeの全回帰テストで、None変数・入力ノードの不在、選択解除、リセット・装着解除、未装着時のBase復帰、複製・保存再読込が成功した。
+
+## Version 41：状態変数名・固定参照・内部階層の整理
+
+`Core.*` の状態変数から Core. を外した。CurrentExpression と GestureTable.LnRm は
+References 接頭辞を付けず、Receiver・Catalog と各内部処理への固定参照を References.* に統一する。
+Core スロットを Internal に変更し、Logic を挟まず Lifecycle・Selection・Playback を直下に置く。
+例：ExpressionSystem/References.Internal.Playback は Expressions/Internal/Playback を参照する。
+公開 Dynamic Impulse の Tag・引数は変わらない。外部で変数を直接読む処理は新しい名前に更新する。
+既存アバターへの適用には再変換・再インポートが必要。

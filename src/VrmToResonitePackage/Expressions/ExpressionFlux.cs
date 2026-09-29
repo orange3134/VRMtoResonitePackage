@@ -50,7 +50,7 @@ internal sealed class ExpressionFlux
                     OwningNode(port)?.Slot.IsChildOf(module) == true) ? module : expressions;
             });
         var existing = expressions.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Where(v => v.VariableName.Value is "ExpressionSystem/Receiver" or "ExpressionSystem/Catalog").ToArray();
+            .Where(v => v.VariableName.Value is "ExpressionSystem/References.Receiver" or "ExpressionSystem/References.Catalog").ToArray();
         var references = existing.ToDictionary(v => v.Reference.Target, v => v.VariableName.Value);
         var usedNames = new Dictionary<Slot, HashSet<string>>();
         foreach (var literal in nodes.OfType<Nodes.RefObjectInput<Slot>>().ToArray())

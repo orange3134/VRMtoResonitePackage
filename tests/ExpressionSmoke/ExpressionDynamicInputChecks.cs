@@ -41,15 +41,15 @@ internal static class ExpressionDynamicInputChecks
         }
         foreach (string board in new[] { "Playback" })
         {
-            var logic = root.FindChild("Core").FindChild("Logic").FindChild(board);
+            var logic = root.FindChild("Internal").FindChild(board);
             var current = logic.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>()
-                .Single(node => Name(node) == "ExpressionSystem/Core.CurrentExpression");
+                .Single(node => Name(node) == "ExpressionSystem/CurrentExpression");
             var proxy = current.Slot.GetComponent<global::ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Variables.DynamicVariableInputProxy<Slot>>();
-            var field = root.FindChild("Core").ExpressionVariables<DynamicReferenceVariable<Slot>>()
-                .Single(variable => variable.VariableName.Value == "ExpressionSystem/Core.CurrentExpression");
+            var field = root.FindChild("Internal").ExpressionVariables<DynamicReferenceVariable<Slot>>()
+                .Single(variable => variable.VariableName.Value == "ExpressionSystem/CurrentExpression");
             Check(proxy != null && proxy.HasValue && proxy.DynamicValue == field.Reference.Target,
                 "Core object input follows this avatar's selected expression: " + board);
-            Check(root.FindChild("Core").FindChild("Logic").FindChild("Selection").GetComponentsInChildren<DynamicVariableValueInput<int>>().Count > 0,
+            Check(root.FindChild("Internal").FindChild("Selection").GetComponentsInChildren<DynamicVariableValueInput<int>>().Count > 0,
                 "Selection uses Dynamic Inputs for hand values");
         }
     }
@@ -65,9 +65,9 @@ internal static class ExpressionDynamicInputChecks
             .GetComponent<DynamicValueVariable<Renderite.Shared.Key>>();
         var originalKey = key.Value.Value;
         float original = field.Value.Value;
-        var receiver = root.FindChild("DV").FindChild("Receiver").GetComponent<DynamicReferenceVariable<Slot>>();
+        var receiver = root.FindChild("DV").FindChild("References.Receiver").GetComponent<DynamicReferenceVariable<Slot>>();
         var originalReceiver = receiver.Reference.Target;
-        var alternateReceiver = root.FindChild("Core");
+        var alternateReceiver = root.FindChild("Internal");
         try
         {
             receiver.Reference.Target = alternateReceiver;
@@ -101,7 +101,7 @@ internal static class ExpressionDynamicInputChecks
             Check(local.Count == 0, "local writes need no hand references: " + module.Name);
         }
         Check(!root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Any(v =>
-            v.VariableName.Value == "ExpressionSystem/References.Core"), "local Core writes need no Core reference");
+            v.VariableName.Value == "ExpressionSystem/References.Internal"), "local Core writes need no Core reference");
         foreach (var write in root.GetComponentsInChildren<ProtoFluxNode>().Where(n =>
             n.GetType().Name is "WriteDynamicValueVariable`1" or "WriteDynamicObjectVariable`1"))
         {
@@ -113,8 +113,7 @@ internal static class ExpressionDynamicInputChecks
         }
         var references = root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) ||
-                v.VariableName.Value.StartsWith("ExpressionSystem.Input.HandGestures/References.", StringComparison.Ordinal) ||
-                v.VariableName.Value is "ExpressionSystem/Receiver" or "ExpressionSystem/Catalog").ToArray();
+                v.VariableName.Value.StartsWith("ExpressionSystem.Input.HandGestures/References.", StringComparison.Ordinal)).ToArray();
         Check(references.All(v => v.VariableName.Value != "ExpressionSystem/References.None"),
             "null constants generate no reference variable");
         var inputs = root.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>();

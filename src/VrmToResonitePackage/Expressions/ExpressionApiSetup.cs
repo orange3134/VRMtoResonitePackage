@@ -29,7 +29,7 @@ internal sealed partial class ExpressionSystemSetup
         g.If(allowed ?? g.Constant(true), mutation));
 
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
-        g.Write<int>(g.Ref(_core), SystemSpace, "Core." + hand + "Gesture", gesture);
+        g.Write<int>(g.Ref(_internal), SystemSpace, hand + "Gesture", gesture);
 
     private void BuildHandReceiver(ExpressionFlux g, string hand, string tag, bool gestureInput)
     {
@@ -38,7 +38,7 @@ internal sealed partial class ExpressionSystemSetup
             g.Trigger(g.Ref(_selection), SelectionTickTag));
         Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal,
             ApplyRequest(g, mutation, gestureInput
-                ? g.Read<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures") : null)));
+                ? g.Read<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures") : null)));
     }
 
     private static IWorldElement FormatGesturePair(ExpressionFlux g, string format, IWorldElement left, IWorldElement right)
@@ -63,23 +63,23 @@ internal sealed partial class ExpressionSystemSetup
         var valid = g.And(ValidExpression(g, selected),
             g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", selected)), g.Ref(_catalog)));
         var select = ApplyRequest(g, g.Sequence(
-            g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures", g.Constant(false)),
+            g.Write<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures", g.Constant(false)),
             g.Trigger<Slot>(g.Ref(_playback), g.Text(PlaybackTickTag), selected)));
         Link(receiver, "OnTriggered", g.If(g.And(g.AvatarWornLocal, valid), select));
     }
 
     private void BuildHandGesturesToggleReceiver(ExpressionFlux g)
     {
-        var core = g.Ref(_core);
+        var core = g.Ref(_internal);
         ReceiveUpdate(g, ToggleHandGesturesTag, ApplyRequest(g,
-            g.Write<bool>(core, SystemSpace, "Core.AllowHandGestures",
-                g.Not(g.Read<bool>(core, SystemSpace, "Core.AllowHandGestures")))));
+            g.Write<bool>(core, SystemSpace, "AllowHandGestures",
+                g.Not(g.Read<bool>(core, SystemSpace, "AllowHandGestures")))));
     }
 
     private void BuildHandGesturesEnabledReceiver(ExpressionFlux g)
     {
         var receiver = g.Receiver<bool>(HandGesturesEnabledTag);
         Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal,
-            ApplyRequest(g, g.Write<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures", Out(receiver, "Value")))));
+            ApplyRequest(g, g.Write<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures", Out(receiver, "Value")))));
     }
 }

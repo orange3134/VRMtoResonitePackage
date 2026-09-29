@@ -8,21 +8,21 @@ internal sealed partial class ExpressionSystemSetup
 {
     private void BuildSelection()
     {
-        // Fixed Core state binds to the named ancestor space; selected clips stay dynamic.
+        // Fixed system state binds to the named ancestor space; selected clips stay dynamic.
         var g = new ExpressionFlux(_selection);
-        var core = g.Ref(_core);
+        var core = g.Ref(_internal);
         var actions = new List<IWorldElement>();
 
-        var left = g.Read<int>(core, SystemSpace, "Core.LeftGesture");
-        var right = g.Read<int>(core, SystemSpace, "Core.RightGesture");
+        var left = g.Read<int>(core, SystemSpace, "LeftGesture");
+        var right = g.Read<int>(core, SystemSpace, "RightGesture");
         var key = FormatGesturePair(g, "L{0}R{1}", left, right);
         var candidate = ReadGesturePair(g, left, right);
-        // Capture validation for this update without persisting intermediate references in Core.
+        // Capture validation for this update without persisting intermediate references in the system state.
         var selected = g.Local<Slot>();
         var noExpression = g.Ref<Slot>(null);
         var resolved = g.Choose<Slot>(ValidExpression(g, candidate), candidate, noExpression);
         actions.Add(g.Set<Slot>(selected, resolved));
-        actions.Add(g.Write<string>(core, SystemSpace, "Core.PairKey", key));
+        actions.Add(g.Write<string>(core, SystemSpace, "PairKey", key));
 
         actions.Add(g.Trigger<Slot>(g.Ref(_playback), g.Text(PlaybackTickTag), selected));
         var select = g.Sequence(actions.ToArray());
@@ -32,14 +32,14 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildPlayback()
     {
         var g = new ExpressionFlux(_playback);
-        var core = g.Ref(_core);
+        var core = g.Ref(_internal);
         // Apply static outputs as one selection operation. Tracking outputs have a
         // separate live driver, without per-shape change detectors or impulses.
         var value = g.Local<float>();
         var wearer = g.AvatarWornLocal;
         var canWrite = g.Or(wearer, g.And(g.Not(g.AvatarWorn),
             g.Node("IsLocalUser", null, ("User", g.Node("HostUser")))));
-        var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, SystemSpace, "Core.CurrentExpression"), g.Ref<Slot>(null));
+        var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, SystemSpace, "CurrentExpression"), g.Ref<Slot>(null));
         var refresh = g.Each(g.Ref(_outputs), output =>
         {
             var result = MixOutput(g, output, wearer, current);
@@ -55,7 +55,7 @@ internal sealed partial class ExpressionSystemSetup
         // Non-null selections require the local wearer; unworn instances accept only clearing.
         var accept = g.Or(wearer, g.And(g.Not(g.AvatarWorn), g.IsNull<Slot>(selected)));
         Link(receiver, "OnTriggered", g.If(accept, g.Sequence(
-            g.Write<Slot>(core, SystemSpace, "Core.CurrentExpression", selected),
+            g.Write<Slot>(core, SystemSpace, "CurrentExpression", selected),
             g.If(canWrite, refresh))));
         g.OnChanged<bool>(canWrite, g.If(canWrite, refresh));
         g.OnStart(g.If(canWrite, refresh));
@@ -73,7 +73,7 @@ internal sealed partial class ExpressionSystemSetup
         // Read the selected expression by name; missing variables follow live Base.
         // No per-shape state, binding scans or synchronized per-frame impulses.
         var g = new ExpressionFlux(output.AddSlot("Tracking"));
-        var current = g.Read<Slot>(g.Ref(_core), SystemSpace, "Core.CurrentExpression");
+        var current = g.Read<Slot>(g.Ref(_internal), SystemSpace, "CurrentExpression");
         var target = output.FindChild("DV").GetComponentsInChildren<DynamicField<float>>()
             .Single(v => v.VariableName.Value == Path(OutputSpace, "Result")).TargetField.Target;
         var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>)

@@ -52,7 +52,7 @@ internal static class ImportedGestureAvatarChecks
         }
         string expectedHand = Environment.GetEnvironmentVariable("RESOPON_TEST_KEYBOARD_PRIMARY_HAND");
         await KeyboardPriorityChecks.Run(root, expectedHand == null ? null : int.Parse(expectedHand));
-        var core = root.FindChild("Core"); var table = root.FindChild("DV").FindChild("GestureTable");
+        var core = root.FindChild("Internal"); var table = root.FindChild("DV").FindChild("GestureTable");
         var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null, "Saved menu has no hand submenus");
         var receiverRoot = root.FindChild("API").FindChild("Receivers");

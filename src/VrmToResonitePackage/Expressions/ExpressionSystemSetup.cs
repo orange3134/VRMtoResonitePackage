@@ -18,7 +18,7 @@ internal sealed partial class ExpressionSystemSetup
     internal const string ToggleHandGesturesTag = "ResoPon/Expression/ToggleHandGestures";
     internal const string HandGesturesEnabledTag = "ResoPon/Expression/AllowHandGestures";
     private readonly ExpressionModel _model;
-    private readonly Slot _root, _catalog, _core, _outputs, _table, _api, _inputs;
+    private readonly Slot _root, _catalog, _internal, _outputs, _table, _api, _inputs;
     private readonly Slot _lifecycle, _selection, _playback;
     private const string PlaybackTickTag = "ResoPon/Expression/Internal/Playback";
     private const string SelectionTickTag = "ResoPon/Expression/Internal/Selection";
@@ -34,28 +34,27 @@ internal sealed partial class ExpressionSystemSetup
         _model = model;
         _root = Record(avatar, "Expressions", SystemSpace);
         _catalog = _root.AddSlot("Catalog");
-        _core = _root.AddSlot("Core");
+        _internal = _root.AddSlot("Internal");
         _outputs = _root.AddSlot("Outputs");
         _table = _root.AddSlot("DV").AddSlot("GestureTable");
-        // Core fields and table rows bind to the single system space.
+        // State fields and table rows bind to the single system space.
         _root.GetComponent<DynamicVariableSpace>().OnlyDirectBinding.Value = false;
         _inputs = _root.AddSlot("Inputs");
         _api = _root.AddSlot("API").AddSlot("Receivers");
-        var logic = _core.AddSlot("Logic");
-        _lifecycle = logic.AddSlot("Lifecycle");
-        _selection = logic.AddSlot("Selection");
-        _playback = logic.AddSlot("Playback");
+        _lifecycle = _internal.AddSlot("Lifecycle");
+        _selection = _internal.AddSlot("Selection");
+        _playback = _internal.AddSlot("Playback");
         foreach (string hand in new[] { "Left", "Right" })
         {
-            Data(_root, "Core." + hand + "Gesture", 0);
+            Data(_root, hand + "Gesture", 0);
         }
-        Data(_root, "Core.AllowHandGestures", true);
-        Reference<Slot>(_root, "Core.CurrentExpression", null);
-        Data(_root, "Core.PairKey", "L0R0");
+        Data(_root, "AllowHandGestures", true);
+        Reference<Slot>(_root, "CurrentExpression", null);
+        Data(_root, "PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 40);
-        Reference(_root, "Receiver", _api);
-        Reference(_root, "Catalog", _catalog);
+        Data(_root, "Version", 41);
+        Reference(_root, "References.Receiver", _api);
+        Reference(_root, "References.Catalog", _catalog);
     }
 
     public static Task<Slot> BuildAsync(Slot avatar, ExpressionModel model, Func<ExpressionBinding, IField<float>> resolve,

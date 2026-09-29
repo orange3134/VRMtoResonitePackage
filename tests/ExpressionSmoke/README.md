@@ -306,3 +306,5 @@ Version 38 scopes hand-module references to each module's ExpressionSystem.Input
 Version 39 leaves Target unconnected for writes to the same named ancestor space. Checks require implicit targets for Core and hand state, explicit targets for traversed Output.Result, and no unused Core or hand reference variables. Existing runtime tests exercise API and controller writes, cloning, and package reload.
 
 Version 40 represents null constants with unconnected object inputs. Checks reject References.None definitions and input nodes; runtime cases cover empty selections, reset/dequip, unworn Base fallback, cloning and package reload.
+
+Version 41 removes Core. from system state keys, renames fixed Slot references to References.* (excluding CurrentExpression and GestureTable.LnRm), and places Lifecycle/Selection/Playback directly under Internal. Space and graph checks assert this layout and reference naming; runtime, clone and package reload checks use the new state paths.

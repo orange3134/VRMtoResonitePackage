@@ -10,7 +10,7 @@ internal static class ExpressionInputEventChecks
 {
     public static async Task Run(Slot expressions)
     {
-        var core = expressions.FindChild("Core");
+        var core = expressions.FindChild("Internal");
         var api = expressions.FindChild("API").FindChild("Receivers");
         var catalog = expressions.FindChild("Catalog");
         var modules = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");

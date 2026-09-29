@@ -41,7 +41,7 @@ internal sealed partial class ExpressionSystemSetup
     {
         var driver = item.AttachComponent<ReferenceOptionDescriptionDriver<Slot>>();
         driver.Reference.Target = _root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Single(v => v.VariableName.Value == Path(SystemSpace, "Core.CurrentExpression")).Reference;
+            .Single(v => v.VariableName.Value == Path(SystemSpace, "CurrentExpression")).Reference;
         driver.DefaultOption.Color.Value = colorX.White;
         // Null must never appear selected, including an imported item whose clip was deleted.
         driver.Options.Add().Color.Value = colorX.White;
@@ -55,7 +55,7 @@ internal sealed partial class ExpressionSystemSetup
     {
         var driver = item.AttachComponent<ValueOptionDescriptionDriver<bool>>();
         driver.Value.Target = _root.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>()
-            .Single(v => v.VariableName.Value == Path(SystemSpace, "Core.AllowHandGestures")).Value;
+            .Single(v => v.VariableName.Value == Path(SystemSpace, "AllowHandGestures")).Value;
         driver.DefaultOption.Color.Value = new colorX(1f, 0f, 0f, 1f, ColorProfile.Linear);
         var selected = driver.Options.Add();
         selected.ReferenceValue.Value = true;
@@ -198,7 +198,7 @@ internal sealed partial class ExpressionSystemSetup
         var stable = g.Not(g.Greater(g.Add(g.Read<float>(handRef, GestureHandSpace, "Since"), g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds")), g.Now));
         var send = g.Sequence(SendHandInput(g, g.Text(GestureTag(kind)), gesture),
             g.Write<int>(handRef, GestureHandSpace, "Stable", gesture));
-        var enabled = g.And(active, g.Read<bool>(g.Ref(_core), SystemSpace, "Core.AllowHandGestures"));
+        var enabled = g.And(active, g.Read<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures"));
         var update = g.If(g.AvatarWornLocal, g.Sequence(reset, g.If(enabled, g.Sequence(
             g.If(changed, g.Sequence(g.Write<int>(handRef, GestureHandSpace, "Candidate", gesture), g.Write<float>(handRef, GestureHandSpace, "Since", g.Now))),
             g.If(g.And(stable, g.NotEqual<int>(g.Read<int>(handRef, GestureHandSpace, "Stable"), gesture)), send)),

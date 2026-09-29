@@ -36,12 +36,12 @@ internal static class ExpressionOutputWriteChecks
             Clip("StaticOnly", 1, Curve("B", 0, 0, 1));
             var expressions = await ExpressionSystemSetup.BuildAsync(avatar, model, binding => binding.Shape == "A" ? a : b, menu: false);
             await Frames(90);
-            var core = expressions.FindChild("Core"); var catalog = expressions.FindChild("Catalog");
+            var core = expressions.FindChild("Internal"); var catalog = expressions.FindChild("Catalog");
             var table = expressions.FindChild("DV").FindChild("GestureTable"); var outputs = expressions.FindChild("Outputs");
             var outputA = outputs.FindChild("A"); var outputB = outputs.FindChild("B");
             var api = expressions.FindChild("API").FindChild("Receivers");
             void Playback(Slot expression) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(
-                core.FindChild("Logic").FindChild("Playback"), "ResoPon/Expression/Internal/Playback", true, expression) == 1,
+                core.FindChild("Playback"), "ResoPon/Expression/Internal/Playback", true, expression) == 1,
                 "explicit playback impulse reaches the receiver");
             for (int i = 0; i < model.Clips.Count; i++)
             {

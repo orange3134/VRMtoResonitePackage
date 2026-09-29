@@ -93,7 +93,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await ExpressionDynamicInputChecks.CheckEdits(expressions);
         await KeyboardPriorityChecks.Run(expressions, 0);
         await ExpressionInputEventChecks.Run(expressions);
-        var core = expressions.FindChild("Core"); var api = expressions.FindChild("API").FindChild("Receivers");
+        var core = expressions.FindChild("Internal"); var api = expressions.FindChild("API").FindChild("Receivers");
         var catalog = expressions.FindChild("Catalog"); var table = expressions.FindChild("DV").FindChild("GestureTable");
         string[] gestureNames = { "Neutral", "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
         void Request(string tag, int gesture)
@@ -110,7 +110,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(core.FindChild("SourceState") == null && core.FindChild("ParameterState") == null && expressions.FindChild("Rules") == null,
             "generic source arbitration and Animator graph are absent");
         Console.WriteLine($"Flux nodes: {expressions.GetComponentsInChildren<ProtoFluxNode>().Count}; Core: {core.GetComponentsInChildren<ProtoFluxNode>().Count}");
-        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value is not "ExpressionSystem/Core.LeftInput" and not "ExpressionSystem/Core.RightInput"),
+        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value is not "ExpressionSystem/LeftInput" and not "ExpressionSystem/RightInput"),
             "int requests retain no input Slot references");
         foreach (string tag in new[] { ExpressionSystemSetup.LeftTag, ExpressionSystemSetup.RightTag })
         {
@@ -375,7 +375,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         ExpressionDynamicInputChecks.CheckBindings(expressions);
         ExpressionGraphChecks.CheckMenuColors(clone.FindChild("Expressions"));
         ExpressionGraphChecks.CheckMenuColors(expressions);
-        var cloneCore = clone.FindChild("Expressions").FindChild("Core");
+        var cloneCore = clone.FindChild("Expressions").FindChild("Internal");
         Check(Get<string>(cloneCore, "PairKey") == "L0R0" && Get<bool>(cloneCore, "AllowHandGestures"),
             "clone diagnostics reflect reset hand inputs and ordinary input enabled");
         var cloneApi = clone.FindChild("Expressions").FindChild("API").FindChild("Receivers");
@@ -428,7 +428,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Set(core, "PairKey", "__unchanged");
         foreach (var (board, tag) in new[] { ("Selection", "ResoPon/Expression/Internal/Selection"),
             ("Lifecycle", "ResoPon/Expression/Internal/Initialize") })
-            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core.FindChild("Logic").FindChild(board), tag, true) == 1,
+            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core.FindChild(board), tag, true) == 1,
                 "private stage receiver remains discoverable: " + board);
         await Frames();
         Check(Get<string>(core, "PairKey") == "__unchanged" &&
@@ -438,7 +438,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         // because its local initialization flag starts false.
         var unwornClone = avatar.Duplicate(world.RootSlot);
         await Frames();
-        var unwornCore = unwornClone.FindChild("Expressions").FindChild("Core");
+        var unwornCore = unwornClone.FindChild("Expressions").FindChild("Internal");
         Check(Get<string>(unwornCore, "PairKey") == "__unchanged" && !Get<bool>(unwornCore, "AllowHandGestures"),
             "an unworn clone does not initialize or repeatedly clear stored state");
         unwornClone.Parent = wearer;
@@ -476,7 +476,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var restoredExpressions = restored.FindChild("Expressions");
         ExpressionGraphChecks.CheckLayout(restoredExpressions);
         await ExpressionDynamicInputChecks.CheckEdits(restoredExpressions);
-        var restoredCore = restoredExpressions.FindChild("Core");
+        var restoredCore = restoredExpressions.FindChild("Internal");
         Check(Get<string>(restoredCore, "PairKey") == "L0R0" &&
             Reference<Slot>(restoredCore, "CurrentExpression") == null && Get<bool>(restoredCore, "AllowHandGestures"),
             "package reload recomputes diagnostics from reset inputs and the edited empty table row");

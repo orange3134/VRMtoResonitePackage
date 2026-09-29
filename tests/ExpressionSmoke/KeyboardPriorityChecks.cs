@@ -16,7 +16,7 @@ internal static class KeyboardPriorityChecks
         int primary = Control(0) ? 1 : 0;
         Check(expectedHand == null || primary == expectedHand, "exported keyboard uses expected hand priority");
         Check(hands.All(h => Get<bool>(h.FindChild("DV").FindChild("Shift"), "Shift")), "both hands require Shift");
-        var core = expressions.FindChild("Core");
+        var core = expressions.FindChild("Internal");
         var api = expressions.FindChild("API").FindChild("Receivers");
         var mocks = expressions.Parent.AddSlot("Keyboard test sensors");
         var ports = new List<(ISyncRef Port, IWorldElement Target)>();

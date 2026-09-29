@@ -1,6 +1,6 @@
 namespace VrmToResonitePackage.Expressions;
 
-// Singleton modules share SystemSpace with dotted variable prefixes (Core.*, GestureTable.*).
+// Singleton modules share SystemSpace with unprefixed state names and grouped keys (References.*, GestureTable.*).
 // Repeated records use hierarchical space names shared by instances of the same schema.
 internal static class ExpressionSpaces
 {
