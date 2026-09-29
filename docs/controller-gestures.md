@@ -153,3 +153,19 @@ FireOnLocalValueChangeが前回評価値と異なる場合だけ発火し、初�
 
 Candidateは毎回の候補変更で更新し、最後の送信値Stableとは分ける必要がある。
 重複抑止はCandidateの更新を止めるのではなく、確定後の送信直前にStableとの比較で行う。
+
+### 書き込み成功後のResetとbool変更からの直接送信
+
+同日の次の修正では、CandidateのValueWrite.OnWrittenからElapsedTimeFloat.Resetへ接続され、
+送信側は「時間満了 AND 入力受付 AND 候補一致」のFireOnLocalValueChange<bool>からTriggerへ直接接続された。
+手形判定の全32コード・ビット順・右手Tagを再照合した。以下は最新配線とオフライン時系列の確認結果。
+
+- Candidateの書き込みを時間満了で制限するIfは残っている。AからBへ変えた20ms後にCへ変えると、
+  CandidateはBのまま、タイマーはBへの変更時点から進む。50msを過ぎてもCと一致せず、Cを送信できない。
+  ResetをOnWrittenへ移しても、待機中の候補を記憶しない問題は解消しない。
+- FireOnLocalValueChange<bool>はfalseへの変化でも発火する。Triggerへの直接接続では、
+  候補変更・タイマーReset・入力停止などによる条件不成立時にも、保持中のCandidateを送信する経路になる。
+  送信前にIfで現在の送信条件がtrueかを確認する必要がある。送信時の値はイベント実行順にも依存する。
+
+候補変更時は毎回Candidateを更新してResetし、満了時には受付条件と最後の送信値との差を確認して送信する。
+送信後だけStableを更新することで、短い揺れの再送抑制と新しい手形の確定を両立する。
