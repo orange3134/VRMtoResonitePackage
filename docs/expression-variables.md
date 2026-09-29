@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 45`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 46`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -48,7 +48,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 45 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 46 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -214,7 +214,7 @@ Version 24ではTagの既定値を `ResoPon/Expression/Keyboard/Left`・`Right` 
 `KeyHeld(Key.Control)` と `KeyHeld(Key.Shift)` で左右どちらの修飾キーも扱い、Alt は判定しない。
 10個の KeyHeld を `IndexOfFirstValueMatch<bool>` に渡し、最初の true の添字をペイロードにする。
 `modular_avatar/AvatarWornLocal`、修飾キーの一致、FoundMatch の AND を
-`FireOnLocalValueChange<bool>` で監視し、true になった時だけ送信する。OnStart も同じ条件を使う。
+`FireOnLocalValueChange<bool>` で監視し、true になった時だけ送信する。Inputs配下にはOnStartを生成しない。
 着用判定は既存の Avatar Root Identification が提供し、FirstPerson 設定がなくても表情生成時に用意する。
 
 条件が成立したまま別キーを追加・解放・切り替えしても再送しない。
@@ -382,3 +382,9 @@ ClipのDVにはOutput.Idと同名のfloat変数だけを並べる。Binding.接�
 例：ExpressionSystem.Catalog.Clip/Body.SmileをCatalog/<表情>/DV/Body.Smileへ置く。
 Playbackと追跡Driveは同じ短い名前を読む。テンプレート複製後の表示名もLabelを直接編集する。
 既存パッケージへの反映には再変換・再インポートが必要。外部処理で変数を直接読む場合も名前を更新する。
+
+## Version 46：InputsのOnStartを削除
+
+Keyboardの左右とHandGesturesの各機種・各手からOnStartを削除した。
+キーボードは受付条件の変化、ハンドジェスチャーは手形・安定待ち・装着状態の変化で処理する。
+LifecycleとPlaybackのOnStartは引き続き初期化・出力適用に使用する。

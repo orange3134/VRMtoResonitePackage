@@ -157,7 +157,6 @@ internal sealed partial class ExpressionSystemSetup
         // matching key index. Changing keys while the condition stays true does not resend.
         var send = g.If(accepting, SendHandInput(g, g.Read<string>(source, KeyboardSpace, "Tag"), Out(match, "Index")));
         g.OnChanged<bool>(accepting, send);
-        g.OnStart(send);
     }
 
     private void BuildGestures()
@@ -210,6 +209,5 @@ internal sealed partial class ExpressionSystemSetup
         g.OnChanged<int>(g.Choose<int>(accepting, gesture, g.Constant(-1)), update);
         g.OnChanged<bool>(g.And(accepting, stable), update);
         g.OnChanged<bool>(g.AvatarWornLocal, update);
-        g.OnStart(update);
     }
 }

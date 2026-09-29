@@ -59,6 +59,8 @@ internal static class ExpressionGraphChecks
         Check(Descendant(expressions, "Inputs/HandGestures").GetComponent<Comment>()?.Text.Value
             .Contains("Copyright (c) 2022-2025 rhenium, kazu0617, orange") == true,
             "controller source license survives generation, clone and package reload");
+        Check(expressions.FindChild("Inputs").GetComponentsInChildren<ProtoFluxNode>().All(n => n.GetType().Name != "OnStart"),
+            "input modules run on changes without OnStart impulses");
         ExpressionDynamicInputChecks.CheckBindings(expressions);
         Report(expressions);
         ExpressionLayoutChecks.CheckDirection(expressions);
