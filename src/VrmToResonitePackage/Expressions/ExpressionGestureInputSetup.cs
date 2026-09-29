@@ -58,19 +58,40 @@ internal sealed partial class ExpressionSystemSetup
                 (4, new byte[] { 1 }), (6, new byte[] { 2 }), (7, new byte[] { 4 }) },
             _ => throw new ArgumentOutOfRangeException(nameof(device))
         };
-        var match = (Nodes.Utility.IndexOfFirstValueMatch<byte>)g.Node("IndexOfFirstValueMatch", typeof(byte),
-            ("Match", bits));
-        var selected = (Nodes.ValueMultiplex<int>)g.Node("ValueMultiplex", typeof(int), ("Index", Out(match, "Index")));
-        // Search the packed code directly. Each code has a corresponding gesture
-        // row, including repeated gestures for poses accepted by multiple codes.
-        foreach (var (gesture, codes) in matches)
-        foreach (byte code in codes)
+        var match = (Nodes.Utility.IndexOfFirstValueMatch<bool>)g.Node("IndexOfFirstValueMatch", typeof(bool),
+            ("Match", g.Constant(true, shared: false)));
+        string[] names = { "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
+        // One bool row per gesture keeps the code groups readable and the output
+        // index stable. Cosmos has no RockNRoll, so that row is always false.
+        for (int gesture = 1; gesture <= names.Length; gesture++)
         {
-            match.Values.Add((INodeValueOutput<byte>)g.Constant(code));
-            selected.Inputs.Add((INodeValueOutput<int>)g.Constant(gesture));
+            byte[] codes = matches.FirstOrDefault(m => m.Gesture == gesture).Codes;
+            IWorldElement found;
+            Component group;
+            if (codes == null)
+            {
+                group = (Component)g.Constant(false, shared: false);
+                found = group;
+            }
+            else if (codes.Length == 1)
+            {
+                group = (Component)g.Equal<byte>(bits, g.Constant(codes[0]));
+                found = group;
+            }
+            else
+            {
+                var codesMatch = (Nodes.Utility.IndexOfFirstValueMatch<byte>)g.Node("IndexOfFirstValueMatch", typeof(byte),
+                    ("Match", bits));
+                foreach (byte code in codes) codesMatch.Values.Add((INodeValueOutput<byte>)g.Constant(code));
+                group = codesMatch;
+                found = Out(codesMatch, "FoundMatch");
+            }
+            group.Slot.Name += $" : {names[gesture - 1]} ({gesture})";
+            match.Values.Add((INodeValueOutput<bool>)found);
         }
-        // No exact match clears all discrete poses in the source tool: Neutral here.
-        return g.Choose<int>(Out(match, "FoundMatch"), Out(selected, "Output"), g.Constant(0));
+        // Rows 0..6 correspond to gestures 1..7; no matching row means Neutral.
+        var selected = g.Node("ValueInc", typeof(int), ("N", Out(match, "Index")));
+        return g.Choose<int>(Out(match, "FoundMatch"), selected, g.Constant(0));
     }
 
     private static IWorldElement BuildPadGesture(ExpressionFlux g, Component controller, Slot module)

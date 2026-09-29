@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 46`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 47`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -48,7 +48,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 46 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 47 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -388,3 +388,9 @@ Playbackと追跡Driveは同じ短い名前を読む。テンプレート複製�
 Keyboardの左右とHandGesturesの各機種・各手からOnStartを削除した。
 キーボードは受付条件の変化、ハンドジェスチャーは手形・安定待ち・装着状態の変化で処理する。
 LifecycleとPlaybackのOnStartは引き続き初期化・出力適用に使用する。
+
+## Version 47：手形ごとに入力コードを整理
+
+Touch・Index・Cosmosの複数コードを手形ごとのIndexOfFirstValueMatch<byte>へまとめ、
+単一コードはValueEquals<byte>で比較する。結果をboolのIndexOfFirstValueMatchに1〜7の順で渡し、Index+1を選択番号にする。
+未対応のCosmos/RockNRollはfalse行、どの手形にも一致しない場合はNeutral（0）。詳細は[コントローラー別ジェスチャー判定](controller-gestures.md)を参照。

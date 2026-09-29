@@ -61,16 +61,44 @@ internal static class ExpressionLayoutChecks
             var nodes = board.GetComponentsInChildren<ProtoFluxNode>();
             bool pad = module.Name is "Vive" or "WindowsMR";
             Check(nodes.Count(n => n.GetType().Name == "ComposeBits_byte") == (pad ? 0 : 1) &&
-                nodes.Count(n => n.GetType().Name == "ValueMultiplex`1") == 1 &&
-                nodes.Count(n => n.GetType().Name == "IndexOfFirstValueMatch`1") == (pad ? 0 : 1),
+                nodes.Count(n => n.GetType().Name == "ValueMultiplex`1") == (pad ? 1 : 0),
                 module.Name + " has one device-specific classifier");
             if (!pad)
             {
-                var match = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<byte>>().Single();
-                Check(match.Match.Target == nodes.Single(n => n.GetType().Name == "ComposeBits_byte") &&
-                    !nodes.Any(n => n is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueEquals<byte> ||
-                        n.GetType().Name == "OR_Multi_Bool"),
-                    "packed codes go directly into a byte first-match lookup without Equal/OR fan-out");
+                var bits = nodes.Single(n => n.GetType().Name == "ComposeBits_byte");
+                var match = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<bool>>().Single();
+                Check(match.Match.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<bool> literal && literal.Value.Value &&
+                    match.Values.Count == 7, "gesture selector has exactly seven rows in gesture-number order");
+                int[] sizes = module.Name switch {
+                    "Touch" => new[] { 4, 1, 4, 4, 3, 1, 1 },
+                    "Index" => new[] { 1, 1, 1, 1, 2, 1, 1 },
+                    "Cosmos" => new[] { 1, 1, 1, 1, 0, 1, 1 },
+                    _ => throw new InvalidOperationException("Unexpected controller")
+                };
+                for (int gesture = 0; gesture < sizes.Length; gesture++)
+                {
+                    var condition = Owner(match.Values[gesture]);
+                    if (sizes[gesture] == 0)
+                        Check(condition is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<bool> absent && !absent.Value.Value,
+                            "missing gesture keeps its false row without shifting later gesture numbers");
+                    else if (sizes[gesture] == 1)
+                        Check(condition is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueEquals<byte> equal && equal.A.Target == bits &&
+                            equal.B.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<byte>,
+                            "single-code gestures compare directly against the packed byte");
+                    else
+                    {
+                        var group = condition as FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<byte>;
+                        Check(group != null && group.Match.Target == bits && group.Values.Count == sizes[gesture] &&
+                            match.Values[gesture] == group.FoundMatch,
+                            "multi-code gesture uses one grouped byte lookup's FoundMatch output");
+                        var constants = group.Values.Select(v => Owner(v)).ToArray();
+                        Check(constants.All(n => n is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<byte>),
+                            "gesture group contains explicit byte codes");
+                        for (int i = 1; i < constants.Length; i++)
+                            Check(constants[i - 1].Slot.LocalPosition.y > constants[i].Slot.LocalPosition.y,
+                                "grouped codes follow port order from top to bottom");
+                    }
+                }
             }
             Check(nodes.Count(n => n.GetType().Name == "FingerPose") == (module.Name == "Index" ? 5 : 0),
                 "only Index reads five finger joint rotations");

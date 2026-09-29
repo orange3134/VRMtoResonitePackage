@@ -46,11 +46,19 @@ IndexControllerのIsActiveで入力機種を限定する。
 | HandGun (6) | 4 | 14 | 2 |
 | ThumbsUp (7) | 20 | 15 | 4 |
 
-原版の各条件は互いに排他的。生成Fluxでは `ComposeBits_byte` を
-`IndexOfFirstValueMatch<byte>.Match` に直結し、`Values` に一致コードを列挙する。
-そのIndexで `ValueMultiplex<int>` の対応するジェスチャーを選ぶ。同じジェスチャーに複数の
-コードがある場合はコードごとに行を置き、個別のEqualやORを生成しない。
-FoundMatchがfalseならNeutralへ戻す。
+原版の各条件は互いに排他的。Version 47では各手形ごとに一致判定をまとめる。
+複数コードの手形は `ComposeBits_byte` を `IndexOfFirstValueMatch<byte>.Match` に接続し、
+`Values` にその手形のコードだけを並べる。単一コードは `ValueEquals<byte>` で比較する。
+各判定ノードのSlot名には `Fist (1)` などの手形名と番号を付ける。
+
+一致結果を `IndexOfFirstValueMatch<bool>`（Match=true）の7行へジェスチャー1〜7の順に接続し、
+Index+1を出力する。CosmosのRockNRoll（5）の行はfalse固定とし、HandGun（6）・ThumbsUp（7）の番号を維持する。
+FoundMatch=falseならNeutral（0）。Vive／Windows MRの方向判定はこの構成の対象外。
+
+2026-09-29にresoloopで現在のワールドの
+`Kipfel/Expressions/Inputs/HandGestures/Modules/Touch/Left/Logic` を読み取り、上記の手形別グループ構成を参照した。
+参考側ではRockNRollのFoundMatchがbool一覧に重複接続されていたため、生成側は各手形1行の7行に揃える。
+Touchの複数コード群はFist=28/22/21/23、FingerPoint=5/6/12/7、Victory=2/8/1/3、RockNRoll=17/18/24。
 Touchの64〜73は原版のデスクトップ入力符号であり、VRセンサー判定には含めない。
 キーボードはResoPonの左右別入力を継続する。
 

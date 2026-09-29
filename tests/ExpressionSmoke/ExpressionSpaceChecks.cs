@@ -88,8 +88,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 46,
-            "input graphs without OnStart are identified by package version 46");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 47,
+            "grouped controller gesture codes are identified by package version 47");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("LeftGesture", out _),
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),

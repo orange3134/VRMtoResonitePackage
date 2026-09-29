@@ -103,7 +103,7 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
 表情Slotを引数としてResoPon/Expression/Internal/Playbackを送る。PlaybackがCurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情のアクティブ状態は選択条件にしない。
 
-Version 46 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+Version 47 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を 各CatalogエントリーのDV直下のfloat変数 に保存する。
 Playbackは表情Slot付きDynamicImpulseを受信し、CurrentExpressionへ設定してからOutputsを走査する。各出力のIdと同じ名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
@@ -118,7 +118,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 連続・ループアニメーションも再生しない。Loop / Duration と再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 46 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 47 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -1298,3 +1298,11 @@ Output側のIdと変換処理内の識別子は維持し、メニュー操作と
 Inputs/Keyboardの左右2つとInputs/HandGestures/Modulesの5機種×左右のOnStartを削除する。
 入力処理は既存の変更検知イベントから実行する。Internal/LifecycleとInternal/PlaybackのOnStartは維持する。
 生成・複製・保存再読込後のInputs配下にOnStartがないことと、キー入力・機種別入力・再装着の動作を検証する。
+
+## Version 47：機種別の入力コードを手形単位にグループ化
+
+Touch・Index・Cosmosでは、複数コードの手形をIndexOfFirstValueMatch<byte>にまとめ、
+単一コードは等値比較にする。boolのIndexOfFirstValueMatchは各手形1行の7行とし、Index+1で既存のジェスチャー番号を返す。
+判定ノードのSlot名へ手形名と番号を付ける。CosmosのRockNRollはfalse行を残し、一致なしはNeutralとする。
+参照したワールド実装と一致コード表は[コントローラー別ジェスチャー判定](controller-gestures.md)を参照。
+全センサーコード、方向入力、同一手形の別コード、未一致、複製・保存再読込を既存の回帰テストで確認する。
