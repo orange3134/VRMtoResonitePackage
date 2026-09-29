@@ -169,3 +169,15 @@ Candidateは毎回の候補変更で更新し、最後の送信値Stableとは�
 
 候補変更時は毎回Candidateを更新してResetし、満了時には受付条件と最後の送信値との差を確認して送信する。
 送信後だけStableを更新することで、短い揺れの再送抑制と新しい手形の確定を両立する。
+
+### Stableを追加したライブグラフ
+
+ユーザーの依頼でTouch/Rightの実グラフへStable用Store<int>とHasStable用Store<bool>を追加した。
+Candidateは変更のたびに更新・Resetし、既存の送信条件Ifの後で「未送信、またはCandidate != Stable」を確認する。
+既存TriggerのNextからStable=Candidate・HasStable=trueを記録し、入力停止時のCandidateリセット後にStable=-1・HasStable=falseへ戻す。
+HasStableは初回のNeutral=0を確実に送信するためのローカル状態であり、DVは追加しない。
+対象グラフは正の固定StabilitySeconds（確認時0.05秒）で運用する。0秒即時送信への変更は含まない。
+
+ソースと再接続手順は[flux/gesture-stable](../flux/gesture-stable/README.md)に保存した。
+SDK check/build、実ワールドの型確認、再読込後の7接続・全32コード照合、再適用時の書き込みなしを確認した。
+これは配線の構造検証であり、実機の手操作・複数ユーザーでの動作確認は含まない。変換器の生成コードは変更していない。
