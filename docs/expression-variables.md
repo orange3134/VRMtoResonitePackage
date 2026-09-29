@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 42`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 43`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -48,8 +48,8 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 42 | 定義。生成システムのバージョン。実行時の分岐には使わない |
-| Expressions | `References.Receiver` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
+| Expressions | `Version` | int | 43 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
@@ -328,7 +328,7 @@ Internal の3つは公開操作用ではない。メニューボタンの送信�
 
 実行対象のResonite DLLでの型名はDynamicVariableObjectInput<Slot>で、DynamicReferenceInput<Slot>という型は存在しない。
 固定の参照先はDynamicReferenceVariable<Slot>へ移し、各ボードの入力はその変数名を読む。共有参照はExpressionSystem空間を使う。
-References.ReceiverとReferences.Catalogは既存の変数を再利用する。それ以外はReferences.Outputs、References.InternalなどをExpressions/DV配下に生成する。
+References.APIとReferences.Catalogは既存の変数を再利用する。それ以外はReferences.Outputs、References.InternalなどをExpressions/DV配下に生成する。
 null定数は入力未接続で表現し、References.Noneも参照入力ノードも生成しない。同じ非null参照先は1つのDVを共有し、参照名の禁止文字は置換して衝突時は連番を付ける。
 祖先空間を直接読むDynamicVariable入力は維持し、使われなくなった仮の参照にDVは作らない。
 保存・複製時は通常のSlot参照としてリマップされる。参照を編集すると、DynamicVariableの更新後に参照先の走査・書き込み・Impulse送信へ反映される。
@@ -366,3 +366,8 @@ Lifecycle・Selection・Playbackへの固定参照はすべてDynamicImpulseTrig
 `ExpressionSystem/References.Internal` の1変数に統合した。参照先は `Expressions/Internal`。
 Initialize・Reset・Selection・Playbackの既存タグで子階層の受信処理を選ぶ。
 `References.Internal.Lifecycle`・`References.Internal.Selection`・`References.Internal.Playback` は生成しない。
+
+## Version 43：公開API参照の名前変更
+
+公開Impulseの送信先変数を `References.Receiver` から `References.API` に変更した。
+参照先は引き続き Expressions/API/Receivers。外部から直接参照する場合は変数名を更新する。

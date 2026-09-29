@@ -65,7 +65,7 @@ internal static class ExpressionDynamicInputChecks
             .GetComponent<DynamicValueVariable<Renderite.Shared.Key>>();
         var originalKey = key.Value.Value;
         float original = field.Value.Value;
-        var receiver = root.FindChild("DV").FindChild("References.Receiver").GetComponent<DynamicReferenceVariable<Slot>>();
+        var receiver = root.FindChild("DV").FindChild("References.API").GetComponent<DynamicReferenceVariable<Slot>>();
         var originalReceiver = receiver.Reference.Target;
         var alternateReceiver = root.FindChild("Internal");
         try

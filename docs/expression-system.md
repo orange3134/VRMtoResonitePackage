@@ -41,7 +41,7 @@ Expressions/
     GestureTable/                  対応表の変数をまとめるスロット
       L0R0〜L7R7                   64個の Catalog 参照
     Version・SmoothingSpeed        バージョンと補間速度
-    References.*                   Receiver・Catalog・内部Slotの固定参照
+    References.*                   API・Catalog・内部Slotの固定参照
   Catalog/                         表情ごとの定義と最終値の一覧
     各表情/DV/                     Clip空間の変数
       Id・DisplayName・Enabled     表情の設定
@@ -104,7 +104,7 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
 表情Slotを引数としてResoPon/Expression/Internal/Playbackを送る。PlaybackがCurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情の有効性は選択時に判定する。
 
-Version 42 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+Version 43 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を 各CatalogエントリーのDV/Binding/Binding.*変数 に保存する。
 Playbackは表情Slot付きDynamicImpulseを受信し、CurrentExpressionへ設定してからOutputsを走査する。Binding.と各出力のIdを連結した名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
@@ -119,7 +119,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 連続・ループアニメーションも再生しない。Loop / Duration と再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 42 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 43 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -1271,3 +1271,8 @@ Core スロットを Internal に変更し、Logic を挟まず Lifecycle・Sele
 参照先は親スロット `Expressions/Internal`。配下のLifecycle・Selection・Playbackは既存タグで振り分け、
 引数・同期実行・装着状態の判定は維持する。各ボードの固定参照3変数は生成しない。
 生成・複製・保存再読込後の参照バインドと、親階層からの送信で該当する受信処理だけが動くことを検証する。
+
+## Version 43：公開API参照の名前変更
+
+ExpressionSystem/References.Receiver を ExpressionSystem/References.API に変更した。
+変数スロット名も References.API とし、参照先の Expressions/API/Receivers と公開タグ・引数は維持する。

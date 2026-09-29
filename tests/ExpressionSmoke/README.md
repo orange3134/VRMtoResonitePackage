@@ -310,3 +310,5 @@ Version 40 represents null constants with unconnected object inputs. Checks reje
 Version 41 removes Core. from system state keys, renames fixed Slot references to References.* (excluding CurrentExpression and GestureTable.LnRm), and places Lifecycle/Selection/Playback directly under Internal. Space and graph checks assert this layout and reference naming; runtime, clone and package reload checks use the new state paths.
 
 Version 42 routes all internal impulses through References.Internal targeting the shared Internal parent. Reference checks reject per-board references and inspect internal triggers' TargetHierarchy. Runtime checks send Selection/Initialize/Playback to the parent, verify exactly one receiver, and cover API operations, cloning and package reload.
+
+Version 43 renames the public impulse reference to References.API. Existing reference-edit and binding checks use this name before and after cloning and package reload.
