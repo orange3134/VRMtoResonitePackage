@@ -43,10 +43,9 @@ Expressions/
     Version・SmoothingSpeed        バージョンと補間速度
     References.*                   API・Catalog・内部Slotの固定参照
   Catalog/                         表情ごとの定義と最終値の一覧
-    各表情/DV/                     Clip空間の変数
-      Id・DisplayName             表情の設定
-      Binding/                    シェイプごとの変数スロット
-        Binding.Body.Smile         Body.Smileの固定値（float）
+    各表情/                        メニューのLabelに名前を直接保存
+      DV/                          Clip空間のfloat変数
+        Body.Smile                 Body.Smileの固定値（float）
   Internal/                        入力・選択・再生ロジック
     Lifecycle/                     初期化、装着状態の変更監視
     Selection/                     対応表からの選択と切り替え
@@ -104,9 +103,9 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
 表情Slotを引数としてResoPon/Expression/Internal/Playbackを送る。PlaybackがCurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情のアクティブ状態は選択条件にしない。
 
-Version 44 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
-変換時に各トラックの最後のキー値を 各CatalogエントリーのDV/Binding/Binding.*変数 に保存する。
-Playbackは表情Slot付きDynamicImpulseを受信し、CurrentExpressionへ設定してからOutputsを走査する。Binding.と各出力のIdを連結した名前のfloat変数を読み、
+Version 45 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
+変換時に各トラックの最後のキー値を 各CatalogエントリーのDV直下のfloat変数 に保存する。
+Playbackは表情Slot付きDynamicImpulseを受信し、CurrentExpressionへ設定してからOutputsを走査する。各出力のIdと同じ名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
 元から瞬き・口パク等のドライバーがある出力だけTrackingボードを生成し、
 CurrentExpressionの名前付き変数と追跡BaseをValueFieldDriveで合成する。アニメーションの途中値は評価しない。
@@ -119,7 +118,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 連続・ループアニメーションも再生しない。Loop / Duration と再生時計は生成しない。
 
 以前の方式の比較資料は [Animator / Drive への移行設計と検証](expression-playback-drive-design.md) を参照。
-これは旧Versionの記録であり、現行の適用方式は本資料の Version 44 に従う。
+これは旧Versionの記録であり、現行の適用方式は本資料の Version 45 に従う。
 
 ## 変更監視と実行タイミング
 
@@ -346,14 +345,14 @@ Select APIは表情Slotを直接受け取るため、ジェスチャーの値・
 表の参照の編集は次の左右入力イベントで反映される。異なる行でも同じ表情を指す場合は同じ固定値を適用する。
 
 表情の追加は `API/Templates` または既存の Catalog エントリーを Catalog へ複製し、
-`Id`、`DisplayName`、`Binding.*`の値を設定する。
-Idは記録用で、選択条件ではない。外部からの直接選択には表情Slotを送る。
+DV直下のfloat値とContextMenuItemSource.Labelを設定する。
+Clipの識別子変数は持たず、外部からの直接選択には表情Slotを送る。
 直接選択ボタンからの適用にGestureTableの割り当ては不要。対応表の編集でメニュー項目の Enabled は変更しない。直接選択は即時に反映する。削除は表情スロットごと行える。
-テンプレートから複製したメニューの表示名は複製先の変数に追従し、送信するSlot参照は複製先自身へリマップされる。項目の Enabled は駆動しない。
+テンプレートから複製したメニューのLabelは直接編集でき、送信するSlot参照は複製先自身へリマップされる。項目の Enabled は駆動しない。
 
-各表情のExpressionSystem.Catalog.Clip空間のDV/Binding配下にBinding.*のfloat変数スロットを並べる。
-VariableNameはExpressionSystem.Catalog.Clip/Binding.と対応するOutput.Idを連結した名前、値は元カーブの最後のキー値。
-例：ExpressionSystem.Catalog.Clip/Binding.Body.Smile。独立したBinding空間やBindings参照は生成しない。
+各表情のExpressionSystem.Catalog.Clip空間のDV直下に、Output.Idと同名のfloat変数スロットを並べる。
+VariableNameはExpressionSystem.Catalog.Clip/と対応するOutput.Idを連結した名前、値は元カーブの最後のキー値。
+例：ExpressionSystem.Catalog.Clip/Body.Smile。独立したBinding空間やBindings参照は生成しない。
 新しいシェイプを追加する場合は、対応する Outputs とメッシュへの接続も用意する。
 通常出力の名前付き変数・子レコードの編集後は表情を再選択する。追跡出力の名前付き変数の編集は自動反映する。
 外部から直接適用する場合は、PlaybackスロットへResoPon/Expression/Internal/Playbackを表情Slot付きで送る。CurrentExpressionを先に編集する必要はない。
@@ -508,16 +507,16 @@ FaceEmoのIsFaceMotionに合わせ、BlendTreeの候補判定は直下の最初�
 変換後は出力先と最終値だけを保存する。元カーブ・キー列・接線・AnimXは含めない。
 
 Playback は選択イベント・表情参照の変化時に、Outputsを1回走査する。
-Binding.と各OutputのIdから変数名を組み立て、CurrentExpressionのClip空間からfloat値を直接読む。FoundValue=falseの場合だけBaseを使い、0の値は有効な表情値として適用する。
+各OutputのIdを変数名に使い、CurrentExpressionのClip空間からfloat値を直接読む。FoundValue=falseの場合だけBaseを使い、0の値は有効な表情値として適用する。
 表情値の子スロットの走査やOutput参照との比較はない。同名変数を同一空間に複数作ると値を共有するため、生成時に衝突しない名前を割り当てる。
 続いて通常出力を合成し、Resultと違う場合だけ書き込む。追跡用Driveの対象にはWriteしない。
 無変化時の全出力巡回も出力ごとの変更監視もない。通常出力のBase・TrackingWeight・BlinkMode編集は再選択で適用する。
-通常出力のBinding.*変数の編集も再選択で適用する。追跡出力は名前で直接読むため、値・名前・変数の追加削除は自動反映する。表情選択・初期化・権限取得で固定ポーズと通常出力を更新する。
+通常出力のClip変数の編集も再選択で適用する。追跡出力は名前で直接読むため、値・名前・変数の追加削除は自動反映する。表情選択・初期化・権限取得で固定ポーズと通常出力を更新する。
 装着者または未装着時のホストだけが共有Writerを実行する。追跡用Driveは全クライアントでローカル評価する。
 未装着時は、保存・複製で選択状態が残っていてもResultはBaseとなる。
 
 既存の瞬き・口パク等のドライバーは Outputs の `Base` に接続し直す。
-表情にトラックがない出力は Base を使い、ある出力はBinding.<Output.Id>名の変数の固定値を使う。
+表情にトラックがない出力は Base を使い、ある出力は<Output.Id>名の変数の固定値を使う。
 出力ごとの `TrackingWeight`（0〜1）で Base の混合率を調整できる。
 瞬きは `BlinkMode` で別に合成する。0は通常の混合、1は表情値と Base の最大値、2は最小値を採用する。
 生成時に既存の `EyeLinearDriver.Eyes[].OpenCloseTarget` を検出した出力だけ、閉じる方向に合わせて1または2に初期化する。
@@ -1285,3 +1284,11 @@ GestureTableは取得した参照をそのまま送信し、Select APIはnull・
 nullの対応表行は選択解除となり、値が見つからない出力は従来どおりBaseへ戻る。装着状態の受付制御は維持する。
 Clip/Sourceは実行時に読み取る箇所がないため、CatalogとTemplatesの生成から削除した。
 非アクティブな表情・Catalog、ジェスチャー選択と直接選択、テンプレート複製、保存再読込を回帰検証する。
+
+## Version 45：Clipのfloat変数をDV直下へ配置
+
+Clip/IdとClip/DisplayNameを生成しない。表情メニューのLabelへ名前を直接書き込み、表示名のDriveを削除する。
+表情値のBinding.接頭辞とDV/Bindingスロットも削除し、各表情のDV直下にOutput.Idと同名の変数を並べる。
+読み取りパスはExpressionSystem.Catalog.Clip/<Output.Id>。通常出力・追跡出力とも同じ形式を使う。
+Output側のIdと変換処理内の識別子は維持し、メニュー操作とGestureTableは従来どおりSlot参照で選択する。
+メニューLabelの編集、変数名・値の編集、同名シェイプの衝突回避、テンプレート複製、保存再読込を検証する。

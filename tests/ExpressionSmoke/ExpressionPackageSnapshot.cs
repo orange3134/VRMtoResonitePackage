@@ -16,10 +16,10 @@ internal static class ExpressionPackageSnapshot
         var clips = new SortedDictionary<string, object>(StringComparer.Ordinal);
         foreach (var entry in root.FindChild("Catalog").Children)
         {
-            string id = Value<string>(entry, "Id");
+            string id = ClipIdentity(entry);
             clips.Add(id, new
             {
-                Name = Value<string>(entry, "DisplayName"),
+                Name = entry.GetComponent<ContextMenuItemSource>()?.Label.Value ?? entry.Name,
                 Values = Pose(entry),
                 Bindings = Pose(entry).Keys.ToArray()
             });
@@ -37,7 +37,7 @@ internal static class ExpressionPackageSnapshot
         {
             Outputs = new SortedDictionary<string, object>(outputs.ToDictionary(p => p.Key, p => (object)p.Value), StringComparer.Ordinal),
             Catalog = clips,
-            Pairs = keys.Select(key => table[key] == null ? null : Value<string>(table[key], "Id")).ToArray()
+            Pairs = keys.Select(key => table[key] == null ? null : ClipIdentity(table[key])).ToArray()
         }, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(Path.Combine(artifacts, "expressions.json"), json);
         return json;
@@ -47,10 +47,12 @@ internal static class ExpressionPackageSnapshot
     {
         var values = new SortedDictionary<string, float>(StringComparer.Ordinal);
         var bindings = entry.FindChild("Bindings");
-        // Version 31 reads directly from Clip; retain v30 and earlier snapshot support.
+        // Version 45 uses unprefixed Clip keys; retain older snapshot layouts.
         if (bindings == null || bindings.GetComponent<DynamicVariableSpace>()?.SpaceName.Value == "ExpressionSystem.Catalog.Clip.Binding")
         {
-            string prefix = bindings == null ? "ExpressionSystem.Catalog.Clip/Binding." : "ExpressionSystem.Catalog.Clip.Binding/";
+            bool flat = entry.Parent.Parent.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Version", out int version) && version >= 45;
+            string prefix = bindings != null ? "ExpressionSystem.Catalog.Clip.Binding/" :
+                flat ? "ExpressionSystem.Catalog.Clip/" : "ExpressionSystem.Catalog.Clip/Binding.";
             var outputs = entry.Parent.Parent.FindChild("Outputs").Children.ToDictionary(o => Value<string>(o, "Id"));
             foreach (var variable in (bindings ?? entry).ExpressionVariables<DynamicValueVariable<float>>()
                 .Where(v => v.VariableName.Value.StartsWith(prefix, StringComparison.Ordinal)))
@@ -78,6 +80,10 @@ internal static class ExpressionPackageSnapshot
         return values;
     }
 
+    private static string ClipIdentity(Slot entry) => JsonSerializer.Serialize(new {
+        Name = entry.Name, Sibling = entry.Parent.Children.Where(c => c.Name == entry.Name).ToList().IndexOf(entry)
+    });
+
     public static string OutputIdentity(Slot output)
     {
         var target = ExpressionTestFields.OutputTarget(output);
@@ -102,7 +108,7 @@ internal static class ExpressionPackageSnapshot
         var legacy = output.ExpressionVariables<DynamicValueVariable<float>>()
             .SingleOrDefault(v => v.VariableName.Value == ExpressionTestFields.VariablePath(output, "Baseline"));
         if (legacy != null) return legacy.Value.Value;
-        var neutral = output.Parent.Parent.FindChild("Catalog").Children.Single(c => Value<string>(c, "Id") == "resopon:neutral");
+        var neutral = output.Parent.Parent.FindChild("Catalog").Children.Last(c => c.Name == "Neutral (authored baseline)");
         return Pose(neutral)[OutputIdentity(output)];
     }
 

@@ -352,20 +352,30 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
 
         var directExpression = catalog.FindChild("Smile");
         var directButton = directExpression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
-        string originalId = Get<string>(directExpression, "Id");
-        Set(directExpression, "Id", "Smoke.RenamedSmile"); await Frames(2);
-        Check(directButton.PressedData.Reference.Target == directExpression, "direct menu retains its Slot reference after an ID edit");
+        var directItem = directExpression.GetComponent<ContextMenuItemSource>();
+        string originalLabel = directItem.Label.Value;
+        string originalName = directExpression.Name;
+        Check(directItem.Label.ActiveLink == null && originalLabel == originalName,
+            "menu label is initialized directly from the expression name");
+        directExpression.Name = "Renamed expression slot";
+        await Frames(2);
+        Check(directItem.Label.Value == originalLabel, "renaming the Slot does not overwrite its menu label");
+        directItem.Label.Value = "Edited expression label";
+        await Frames(2);
+        Check(directItem.Label.Value == "Edited expression label" && directButton.PressedData.Reference.Target == directExpression,
+            "menu label is editable without changing the Slot selection target");
         AllowInput();
         directButton.Pressed(null, default);
         Check(!Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == directExpression,
-            "direct menu selects by Slot independently of its ID");
-        Set(directExpression, "Id", originalId); await Frames(2);
-        Check(directButton.PressedData.Reference.Target == directExpression, "restoring an ID preserves the menu Slot reference");
+            "direct menu selects by Slot without Clip metadata");
+        directExpression.Name = originalName;
+        directItem.Label.Value = originalLabel;
+        await Frames(2);
 
         var template = expressions.FindChild("API").FindChild("Templates").Children.Single();
         var addedExpression = template.Duplicate(catalog);
         addedExpression.Name = "Added expression from template";
-        Set(addedExpression, "Id", "Smoke.AddedTemplate");
+        addedExpression.GetComponent<ContextMenuItemSource>().Label.Value = "Added expression";
         await Frames(30);
         var addedButton = addedExpression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
         Check(addedButton.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && addedButton.PressedData.Reference.Target == addedExpression,

@@ -1,11 +1,11 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 44`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+現行の生成実装（`ExpressionSystem/Version = 45`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
 変数名は `空間名/項目名`。以下の項目一覧では空間名を省略する。
-例えば状態変数の `LeftGesture` は `ExpressionSystem/LeftGesture`、Catalog の `Id` は `ExpressionSystem.Catalog.Clip/Id`。
+例えば状態変数の `LeftGesture` は `ExpressionSystem/LeftGesture`、Catalog の表情値 `Body.Smile` は `ExpressionSystem.Catalog.Clip/Body.Smile`。
 システム内で単一のモジュールは ExpressionSystem 空間を共有する。状態変数に接頭辞は付けず、固定参照には References.、対応表には GestureTable. を付ける。
 複数インスタンスを持つレコードだけに別の空間を作り、空間名もドットで階層を表す。
 左右の手や各表情は、それぞれ独立した DynamicVariableSpace を持つため、同じ名前でも値は別になる。
@@ -15,7 +15,7 @@
 | Expressions 自身 | `ExpressionSystem` | バージョンと入口への参照 |
 | DV | `ExpressionSystem`（状態変数に接頭辞なし） | 入力・選択・再生状態 |
 | DV/GestureTable | `ExpressionSystem`（変数名 `GestureTable.*`） | 左右64通りの表情参照 |
-| Catalog/各表情、API/Templates/各表情 | `ExpressionSystem.Catalog.Clip` | 表情の設定とBinding.*の固定値 |
+| Catalog/各表情、API/Templates/各表情 | `ExpressionSystem.Catalog.Clip` | シェイプごとの固定値 |
 | Outputs/各項目 | `ExpressionSystem.Output` | BlendShape の基礎入力・混合・最終出力 |
 | Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と10キーの割当 |
 | Inputs/HandGestures/Modules/各機種 | `ExpressionSystem.Input.HandGestures` | しきい値と安定待ち時間 |
@@ -23,11 +23,11 @@
 
 `Record()` は空間名を必須引数で受け取り、`OnlyDirectBinding=true` の空間を作る。
 例外は Expressions 自身（false）で、Internal と GestureTable には空間を追加せず、Expressions/DV の状態変数と `ExpressionSystem/GestureTable.LnRm` を共有空間へ登録する。
-DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot 直下の `DV` に、1変数1子 Slot で配置する。対応表は `DV/GestureTable`、Clip の `Binding.*` は `DV/Binding` の子へまとめる。
+DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot 直下の `DV` に、1変数1子 Slot で配置する。対応表だけは `DV/GestureTable` の子へまとめ、Clip の表情値はDV直下に置く。
 子 Slot 名は `/` 以降の変数名。対応表の子 Slot 名は `LnRm`。例：`Expressions/DV/LeftGesture`、`Expressions/DV/GestureTable/L0R0`、
-`Catalog/各表情/DV/Id`、`Outputs/各項目/DV/Result`。
-以下の配置先は論理的な所属を示し、変数の実体は各空間の `DV/変数名`（対応表は `DV/GestureTable/LnRm`、Clip の固定値は `DV/Binding/Binding.<Output.Id>`）に置く。
-単なる整理用の Catalog・Outputs には空間を追加しない。表情値はClip空間のBinding.*変数として配置する。
+`Catalog/各表情/DV/Body.Smile`、`Outputs/各項目/DV/Result`。
+以下の配置先は論理的な所属を示し、変数の実体は各空間の `DV/変数名`（対応表は `DV/GestureTable/LnRm`、Clip の固定値は `DV/<Output.Id>`）に置く。
+単なる整理用の Catalog・Outputs には空間を追加しない。表情値はClip空間へOutput.Idと同じ名前のfloat変数として配置する。
 名前の定義は [ExpressionSpaces.cs](../src/VrmToResonitePackage/Expressions/ExpressionSpaces.cs) に集約する。
 ProtoFlux の読み書きは対象の空間名と変数名を明示し、変数生成は配置先の空間名を使う。単一モジュールの接頭辞は Slot 表示名から推測せず、明示的に付ける。
 固定の読み取り先がノード自身の祖先と同じ名前付き空間を指す場合は Dynamic Variable Input にする。
@@ -48,7 +48,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 44 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 45 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -70,10 +70,8 @@ Version 20から `SmoothingSpeed` を共有する。各SmoothValueと同じSlot�
 
 ## Catalog/各表情
 
-| 名前 | 型 | 初期値 | 区分・役割 |
-|---|---|---|---|
-| `Id` | string | 元・生成表情の ID | 記録。元・生成表情の識別子。Select API・メニュー・PairはSlot参照を使い、実行時にIdを検索しない |
-| `DisplayName` | string | 表情名 | 設定。直接選択メニューの表示名 |
+Clipにはシェイプごとのfloat変数だけを置く。Id・DisplayNameは生成せず、メニューの名前は
+`ContextMenuItemSource.Label` に直接保存する。Labelは直接編集でき、Slot名の変更では自動更新しない。
 
 Version 21ではメニュー項目の Enabled を対応表の参照有無や表情の Active・Enabled から駆動しない。
 `MenuAvailable`、`GestureTable/Logic`、`Inputs/ContextMenu/Logic`、内部 `MenuRefresh` を生成しない。
@@ -81,18 +79,18 @@ Version 21ではメニュー項目の Enabled を対応表の参照有無や表�
 Select APIはGestureTableへの割り当てを条件にせず、Catalogの表情をSlotのアクティブ状態に関わらず選択する。
 null・自身のCatalog直下ではないSlotは受理せず、選択状態を変更しない。左右値は直接選択では常に保持する。
 
-各表情の `ExpressionSystem.Catalog.Clip` 空間に、`Binding.` 接頭辞の
-`DynamicValueVariable<float>` を保存する。配置先は各表情の `DV/Binding/Binding.<Output.Id>`。
-独立したBinding空間、Bindingsスロット・参照、旧Output参照・Valueレコードは生成しない。
+各表情の `ExpressionSystem.Catalog.Clip` 空間に、Output.Idと同名の
+`DynamicValueVariable<float>` を保存する。配置先は各表情の `DV/<Output.Id>`。
+Binding接頭辞・グループスロット、独立したBinding空間・参照、旧Output参照・Valueレコードは生成しない。
 
 | VariableName の例 | 型 | 値 |
 |---|---|---|
-| `ExpressionSystem.Catalog.Clip/Binding.Body.Smile` | float | 対応するカーブの最後のキー値 |
-| `ExpressionSystem.Catalog.Clip/Binding.Body.Blink_L` | float | 対応するカーブの最後のキー値 |
+| `ExpressionSystem.Catalog.Clip/Body.Smile` | float | 対応するカーブの最後のキー値 |
+| `ExpressionSystem.Catalog.Clip/Body.Blink_L` | float | 対応するカーブの最後のキー値 |
 
-`Outputs/各項目/DV/Id` はBinding.接頭辞を除いたキー（例：`Body.Smile`）。
+`Outputs/各項目/DV/Id` は表情値の変数名と同じキー（例：`Body.Smile`）。
 PlaybackはOutputsを1回走査し、CurrentExpression自身をSourceとして
-`ExpressionSystem.Catalog.Clip/Binding.` + Output.Id を読む。FoundValue=falseならBaseを使う。
+`ExpressionSystem.Catalog.Clip/` + Output.Id を読む。FoundValue=falseならBaseを使う。
 値が0であることと、変数が存在しないことを区別する。表情値の子スロットを走査する処理はない。
 通常出力の値・名前・子レコードの編集後は表情を再選択する。
 追跡出力は同じ名前を継続的に読み、値・追加・削除・名前変更をDynamicVariable更新後に反映する。
@@ -123,8 +121,8 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 実DLLはUTF-16のchar単位で判定するため制御文字や一部の絵文字を通すが、上記の生成規則では置換する。
 公開仕様は[Resonite Wikiの命名制限](https://wiki.resonite.com/Dynamic_variables#Naming_restrictions)も参照。
 
-`API/Templates/Expression (copy into Catalog)` は最初の表情の複製で、Id を空文字に変更する。
-コピー後はBinding.*の値や表示名を整える。Select APIには複製先のSlotを送る。GestureTableへの割り当ては任意。Idは記録用で、選択条件ではない。
+`API/Templates/Expression (copy into Catalog)` は最初の表情を複製し、Slot名だけ変更する。
+コピー後はDV直下のfloat値とメニューのLabelを整える。Select APIには複製先のSlotを送る。GestureTableへの割り当ては任意。選択にはSlot参照を使い、識別子変数は持たない。
 
 ## 入力・選択・再生の状態（Expressions/DV）
 
@@ -175,13 +173,13 @@ DynamicVariable としてのパスと float 型は同じなので、Read Dynamic
 メッシュ以外の単独 IField を使う内部テスト等では、そのフィールドをWriteまたは追跡用Driveの対象とし Result から参照する。
 
 表情なし・該当トラックなしの場合は sample の代わりに Base を使う。
-選択イベント内でBinding.と各出力のIdを連結した変数名を読み、通常出力のResultをWriteする。Binding参照・HasPose・Poseコピーは生成しない。
+選択イベント内で各出力のIdと同名のClip変数を読み、通常出力のResultをWriteする。Binding参照・HasPose・Poseコピーは生成しない。
 元から追跡ドライバーがある出力だけTrackingのValueFieldDriveで継続合成する。
 出力ごとのFireOnLocalChange・通知イベント、LocalUpdate・アセット検索・サンプリング・切り替え補間は生成しない。
 未装着時は Result=Base とする。装着中は以下の式で評価する。通常出力のWriteは値が異なる場合だけ行う。
 
 ```text
-sample  = 選択表情にBinding.<Output.Id>名のfloat変数がある ? その値 : Base
+sample  = 選択表情に<Output.Id>名のfloat変数がある ? その値 : Base
 desired = lerp(sample, Base, clamp01(TrackingWeight))
 Result  = BlinkMode == 1 ? max(desired, Base) : BlinkMode == 2 ? min(desired, Base) : desired
 通常出力: Playback → WriteDynamicValueVariable(Result) → SmoothValue.TargetValue → SmoothValue.Value → DynamicBlendShapeDriver.BlendShapes[].Value → BlendShape
@@ -192,8 +190,8 @@ Trackingボードのある出力で EyeLinearDriver の OpenCloseTarget を変�
 BlinkMode を閉じる方向に合わせて1または2にする。TrackingWeight=0でも瞬きが合成される。
 同じ BlendShape を DynamicBlendShapeDriver と EyeLinearDriver の両方から直接 Drive しない。
 BlinkMode は生成時に閉じる方向を設定する。後から OpenState／ClosedState を反転した場合は BlinkMode も変更する。
-追跡用DriveはCurrentExpressionからBinding.<Output.Id>名の値を読み、最新のBaseと合成し続ける。
-通常出力のBase・TrackingWeight・BlinkMode・Binding.*変数の編集は再選択で反映する。
+追跡用DriveはCurrentExpressionから<Output.Id>名の値を読み、最新のBaseと合成し続ける。
+通常出力のBase・TrackingWeight・BlinkMode・Clipのfloat変数の編集は再選択で反映する。
 追跡対象ではBase・TrackingWeight・BlinkModeと選択中の表情の名前付き変数の変更が自動反映される。
 Trackingのない出力に追跡を後付けする場合、Baseに接続するだけでは足りず、追跡元を設定してシステムを再生成する。
 OriginalDriverは元コンポーネント自体ではなく、元のActiveLink（出力先を保持するISyncRef）への参照。生成時にそのTargetをBase.Valueへ付け替える。実行時にも通常Writeを除外する判定で読むが、編集してもTrackingグラフの作成・削除や駆動先の再接続は行わないため、追跡の切り替え設定としては使わない。
@@ -376,3 +374,11 @@ Enabledの読み取りとSlotのアクティブ状態による選択判定も削
 GestureTableから取得したSlotはそのままPlaybackへ送る。Select APIはnullでないことと自身のCatalog直下であることだけを確認する。
 表情SlotやCatalogが非アクティブでも選択・適用される。装着状態によるAPI受付制御は維持する。
 Sourceは生成物の説明用メタデータで実行処理には使われていなかったため、Catalog・Templatesの両方から省く。
+
+## Version 45：ClipメタデータとBinding階層の整理
+
+Clip/Id・Clip/DisplayNameを削除し、メニュー生成時にContextMenuItemSource.Labelへ表情名を直接設定する。
+ClipのDVにはOutput.Idと同名のfloat変数だけを並べる。Binding.接頭辞とDV/Bindingグループは生成しない。
+例：ExpressionSystem.Catalog.Clip/Body.SmileをCatalog/<表情>/DV/Body.Smileへ置く。
+Playbackと追跡Driveは同じ短い名前を読む。テンプレート複製後の表示名もLabelを直接編集する。
+既存パッケージへの反映には再変換・再インポートが必要。外部処理で変数を直接読む場合も名前を更新する。

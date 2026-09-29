@@ -82,8 +82,7 @@ internal sealed partial class ExpressionSystemSetup
         direct.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = _catalog;
         foreach (var expression in _clips.Values)
         {
-            var item = MenuItem(expression, expression.Name);
-            item.Label.DriveFrom(expression.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == Path(ClipSpace, "DisplayName")).Value);
+            MenuItem(expression, expression.Name);
             SelectMenuTrigger(expression, expression);
         }
         var mode = items.AddSlot("Hand gestures"); MenuItem(mode, mode.Name);

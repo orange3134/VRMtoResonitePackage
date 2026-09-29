@@ -172,10 +172,11 @@ internal static class ExpressionGraphChecks
         Check(!expressions.GetComponentsInChildren<DynamicValueVariable<bool>>().Any(v =>
             v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Enabled") &&
             !expressions.GetComponentsInChildren<DynamicValueVariable<string>>().Any(v =>
-                v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Source"),
-            "clips and templates contain neither Enabled nor unused Source metadata");
+                v.VariableName.Value is "ExpressionSystem.Catalog.Clip/Source" or "ExpressionSystem.Catalog.Clip/Id" or "ExpressionSystem.Catalog.Clip/DisplayName"),
+            "clips and templates contain no metadata variables");
         Check(expressions.GetComponentsInChildren<Nodes.ValueObjectInput<string>>().All(v =>
-            v.Value.Value is not "ExpressionSystem.Catalog.Clip/Enabled" and not "ExpressionSystem.Catalog.Clip/Source"),
+            v.Value.Value is not "ExpressionSystem.Catalog.Clip/Enabled" and not "ExpressionSystem.Catalog.Clip/Source" and
+                not "ExpressionSystem.Catalog.Clip/Id" and not "ExpressionSystem.Catalog.Clip/DisplayName"),
             "graphs do not read or write removed clip fields");
         Check(nodes.All(n => n.GetType().Name is not "SampleValueAnimationTrack`1" and not "FindAnimationTrackIndex"),
             "no runtime animation samplers or track lookup");
@@ -183,16 +184,18 @@ internal static class ExpressionGraphChecks
             expressions.GetComponentsInChildren<AssetLoader<Animation>>().Count == 0 &&
             expressions.GetComponentsInChildren<DynamicReferenceVariable<IAssetProvider<Animation>>>().Count == 0,
             "expressions contain no animation providers, loaders or asset references");
-        foreach (var entry in expressions.FindChild("Catalog").Children)
+        foreach (var entry in expressions.FindChild("Catalog").Children.Concat(expressions.FindChild("API").FindChild("Templates").Children))
         {
             Check(entry.FindChild("Bindings") == null &&
                 !entry.ExpressionVariables<DynamicReferenceVariable<Slot>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Bindings"),
                 "Clip owns binding values without a separate space or reference");
-            Check(entry.FindChild("DV").FindChild("Binding") != null,
-                "each clip has a Binding group under DV");
+            Check(entry.FindChild("DV") != null && entry.FindChild("DV").FindChild("Binding") == null,
+                "each clip stores values directly under DV without a Binding group");
+            Check(entry.GetComponent<ContextMenuItemSource>() is not { } menuItem || menuItem.Label.ActiveLink == null,
+                "clip menu labels are directly editable without a variable driver");
             var keys = expressions.FindChild("Outputs").Children.Select(o =>
                 o.ExpressionVariables<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Id").Value.Value).ToHashSet();
-            const string prefix = "ExpressionSystem.Catalog.Clip/Binding.";
+            const string prefix = "ExpressionSystem.Catalog.Clip/";
             foreach (var binding in entry.ExpressionVariables<DynamicValueVariable<float>>())
                 Check(binding.VariableName.Value.StartsWith(prefix, StringComparison.Ordinal) &&
                     binding.Slot.Name == binding.VariableName.Value["ExpressionSystem.Catalog.Clip/".Length..] &&

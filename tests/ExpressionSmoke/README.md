@@ -16,7 +16,7 @@ serialized VRChat menu enum values, gesture conditions, Hermite curves, public
 impulse validation, all 64 compiled gesture pairs, layer composition and history rejection,
 all eight int values on each of the ResoPon/Expression/Gesture/Left and ResoPon/Expression/Gesture/Right Tags, immediate evaluation of each
 received hand pair (including back-to-back events before the next frame), unchanged-expression
-playback, unrestricted integers (including externally added table rows and missing rows), invalid/null selection IDs, argument-type mismatches, last-input retention across controller
+playback, unrestricted integers (including externally added table rows and missing rows), invalid/null selection Slots, argument-type mismatches, last-input retention across controller
 inactivity and removable modules, editable table references, original tracking drivers, same-wearer clones,
 and saving/reimporting/replaying an actual `.resonitepackage`.
 It also verifies one Flux node per slot, node slots directly under each logic board, and distinct node
@@ -29,7 +29,7 @@ Tag/target/ExcludeDisabled inputs must stay close to their consumers. A shuffled
 fixture covers creation-order independence, shallow inputs feeding deep nodes,
 feedback cycles, and repeatable arrangement. The synthetic run
 writes keyboard-layout.json for inspecting the generated coordinates and edges.
-Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Catalog ID and AllowHandGestures receives bool; no Command slots may remain.
+Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Catalog Slot and AllowHandGestures receives bool; no Command slots may remain.
 Each actual Flux group must stay within one logic board. Core lifecycle, selection,
 playback, the eight public API receivers, and each controller hand have independent
 boards. The test reports node/group counts and enforces a 256-node per-board budget,
@@ -96,7 +96,7 @@ wearer departure/reattachment and clone playback cover the synchronization behav
 
 Version 23 selects Catalog entries directly without changing LeftGesture/RightGesture or PairKey.
 Actual expression buttons disable hand gesture input, write CurrentExpression and execute Playback.
-Unmapped Catalog entries and copied templates are selectable. Invalid IDs preserve selection.
+Unmapped Catalog entries and copied templates are selectable. Invalid Slot references preserve selection.
 Only accepted gesture API events run Selection. Data edits, input permission changes and initialization
 must not select a gesture pair. Lifecycle and input actions retain their local change detectors.
 The sensor-event fixture replaces hardware outputs temporarily and executes the exported graph:
@@ -313,3 +313,5 @@ Version 42 routes all internal impulses through References.Internal targeting th
 Version 43 renames the public impulse reference to References.API. Existing reference-edit and binding checks use this name before and after cloning and package reload.
 
 Version 44 removes Clip/Enabled and unused Clip/Source metadata. Graph checks reject both definitions and references, including templates, and reject GetSlotActive gates. Runtime checks cover inactive clips in gesture mappings and direct selection under an inactive Catalog, null mapping reset, copied templates, cloning and package reload. Pose snapshots no longer include the removed Enabled field.
+
+Version 45 removes Clip Id/DisplayName and writes menu labels directly. Pose floats use Output.Id as the full Clip key and live directly under DV, without the Binding. prefix or group. Checks cover direct label edits, slot renaming, flat placement, variable edits, collisions, templates, cloning and reload. Snapshot comparisons identify clips by Slot name and same-name sibling ordinal and retain legacy pose readers.

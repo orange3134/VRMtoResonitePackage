@@ -145,12 +145,12 @@ internal static class ExpressionOutputWriteChecks
             shortB.Slot.Parent.ActiveSelf = true;
             shortB.Slot.ActiveSelf = true;
             await Frames();
-            Set(ramp, "Binding." + Get<string>(outputA, "Id"), 0.9f);
+            Set(ramp, Get<string>(outputA, "Id"), 0.9f);
             Select(4);
             Near(SelectedValue(outputA), 0.9f, "reselection immediately resolves the edited binding");
             await Frames();
             Near(a.Value, 0.9f, "tracking applies edited stored values");
-            Set(ramp, "Binding." + Get<string>(outputA, "Id"), 1f);
+            Set(ramp, Get<string>(outputA, "Id"), 1f);
             Select(1); Near(b.Value, 0.8f, "static output switches synchronously");
             Near(SelectedValue(outputA), 1, "new tracked binding is resolved synchronously");
             await Frames(); Near(a.Value, 1, "tracking applies the new fixed pose");
@@ -184,7 +184,7 @@ internal static class ExpressionOutputWriteChecks
             shortA.Slot.Destroy();
             await Frames(); Near(a.Value, 0.35f, "deleted variable follows Base");
             var replacement = VrmToResonitePackage.Expressions.ExpressionFlux.Data(
-                catalog.FindChild("Short"), "Binding." + Get<string>(outputA, "Id"), 1f);
+                catalog.FindChild("Short"), Get<string>(outputA, "Id"), 1f);
             await Frames(); Select(1); await Frames();
             Near(a.Value, 1, "new variable with the same name is resolved without Output references");
             tracking.Value = 0.8f; await Frames();

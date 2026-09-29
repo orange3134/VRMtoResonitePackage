@@ -83,7 +83,7 @@ internal sealed partial class ExpressionSystemSetup
     private static IWorldElement MixOutput(ExpressionFlux g, IWorldElement output, IWorldElement worn, IWorldElement expression)
     {
         var baseValue = g.Read<float>(output, OutputSpace, "Base");
-        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(ClipSpace, BindingPrefix))),
+        var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(ClipSpace, ""))),
             ("B", g.Read<string>(output, OutputSpace, "Id")));
         var pose = g.Node("ReadDynamicValueVariable", typeof(float), ("Source", expression), ("Path", path));
         var desired = g.Choose<float>(g.And(worn, Out(pose, "FoundValue")),

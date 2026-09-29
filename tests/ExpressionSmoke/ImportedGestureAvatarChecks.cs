@@ -159,32 +159,32 @@ internal static class ImportedGestureAvatarChecks
                 .FirstOrDefault(button => button.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && mappedExpressions.Contains(button.PressedData.Reference.Target) &&
                     button.Slot.GetComponent<ContextMenuItemSource>().Enabled);
             Check(importedButton != null, "Imported menu contains an actual Slot selection button");
-            var catalog = root.FindChild("Catalog");
             var selected = importedButton.PressedData.Reference.Target;
-            string originalId = Get<string>(selected, "Id");
-            const string editedId = "Smoke.RenamedImportedExpression";
-            Check(catalog.Children.All(entry => Get<string>(entry, "Id") != editedId), "Edited test ID is unique");
-            Check(selected.WriteDynamicVariable("ExpressionSystem.Catalog.Clip/Id", editedId) == DynamicVariableWriteResult.Success, "Can edit imported expression ID");
+            var selectedItem = selected.GetComponent<ContextMenuItemSource>();
+            string originalLabel = selectedItem.Label.Value;
+            const string editedLabel = "Edited imported expression label";
+            selectedItem.Label.Value = editedLabel;
+            Check(selectedItem.Label.ActiveLink == null && selectedItem.Label.Value == editedLabel, "Can edit imported menu label directly");
             try
             {
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
-                Check(importedButton.PressedData.Reference.Target == selected, "Saved imported-menu Slot reference survives an ID edit");
+                Check(importedButton.PressedData.Reference.Target == selected, "Saved imported-menu Slot reference survives a label edit");
                 var api = root.FindChild("API").FindChild("Receivers");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
                 Check(Get<bool>(core, "AllowHandGestures"), "Ordinary input is enabled before imported button verification");
                 importedButton.Pressed(null, default);
                 Check(!Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == selected,
-                    "Saved imported-menu button selects by Slot independently of its ID");
-                Console.WriteLine("PASS: saved imported-menu button selects its Slot synchronously despite ID edits");
+                    "Saved imported-menu button selects by Slot independently of its label");
+                Console.WriteLine("PASS: saved imported-menu button selects its Slot synchronously despite label edits");
             }
             finally
             {
-                Check(selected.WriteDynamicVariable("ExpressionSystem.Catalog.Clip/Id", originalId) == DynamicVariableWriteResult.Success, "Can restore imported expression ID");
+                selectedItem.Label.Value = originalLabel;
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(root.FindChild("API").FindChild("Receivers"),
                     ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
             }
-            Check(importedButton.PressedData.Reference.Target == selected, "Imported-menu Slot reference survives restoring its expression ID");
+            Check(importedButton.PressedData.Reference.Target == selected, "Imported-menu Slot reference survives restoring its expression label");
         }
         Check(root.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "Invalid imported Flux group");
         await ExpressionResetChecks.Run(root);
