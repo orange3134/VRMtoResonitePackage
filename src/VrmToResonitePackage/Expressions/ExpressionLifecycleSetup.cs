@@ -25,7 +25,7 @@ internal sealed partial class ExpressionSystemSetup
             cleanup.Add(g.Write<int>(core, SystemSpace, hand + "Gesture", g.Constant(0)));
         }
         cleanup.Add(g.Write<bool>(core, SystemSpace, "AllowHandGestures", g.Constant(true)));
-        cleanup.Add(g.Trigger<Slot>(g.Ref(_playback), g.Text(PlaybackTickTag), g.Ref<Slot>(null)));
+        cleanup.Add(g.Trigger<Slot>(g.Ref(_internal), g.Text(PlaybackTickTag), g.Ref<Slot>(null)));
         cleanup.Add(g.Write<string>(core, SystemSpace, "PairKey", g.Text("L0R0")));
 
         var clear = g.Sequence(cleanup.ToArray());

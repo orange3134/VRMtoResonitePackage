@@ -100,8 +100,23 @@ internal static class ExpressionDynamicInputChecks
             var local = module.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>();
             Check(local.Count == 0, "local writes need no hand references: " + module.Name);
         }
-        Check(!root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Any(v =>
-            v.VariableName.Value == "ExpressionSystem/References.Internal"), "local Core writes need no Core reference");
+        var internalReferences = root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+            .Where(v => v.VariableName.Value == "ExpressionSystem/References.Internal" ||
+                v.VariableName.Value.StartsWith("ExpressionSystem/References.Internal.", StringComparison.Ordinal)).ToArray();
+        Check(internalReferences.Length == 1 && internalReferences[0].VariableName.Value == "ExpressionSystem/References.Internal" &&
+            internalReferences[0].Reference.Target == root.FindChild("Internal"),
+            "internal impulses share one parent reference without per-board references");
+        foreach (var trigger in root.GetComponentsInChildren<ProtoFluxNode>().Where(n =>
+            n.GetType().Name.StartsWith("DynamicImpulseTrigger", StringComparison.Ordinal)))
+        {
+            var tag = ((ISyncRef)VrmToResonitePackage.Expressions.ExpressionFlux.Member(trigger, "Tag")).Target
+                as FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueObjectInput<string>;
+            if (tag?.Value.Value?.StartsWith("ResoPon/Expression/Internal/", StringComparison.Ordinal) != true) continue;
+            var target = ((ISyncRef)VrmToResonitePackage.Expressions.ExpressionFlux.Member(trigger, "TargetHierarchy")).Target;
+            while (target != null && target is not ProtoFluxNode) target = target.Parent;
+            Check(target is DynamicVariableObjectInput<Slot> input && Name(input) == "ExpressionSystem/References.Internal",
+                "internal impulse targets the shared Internal hierarchy: " + tag.Value.Value);
+        }
         foreach (var write in root.GetComponentsInChildren<ProtoFluxNode>().Where(n =>
             n.GetType().Name is "WriteDynamicValueVariable`1" or "WriteDynamicObjectVariable`1"))
         {

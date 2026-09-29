@@ -308,3 +308,5 @@ Version 39 leaves Target unconnected for writes to the same named ancestor space
 Version 40 represents null constants with unconnected object inputs. Checks reject References.None definitions and input nodes; runtime cases cover empty selections, reset/dequip, unworn Base fallback, cloning and package reload.
 
 Version 41 removes Core. from system state keys, renames fixed Slot references to References.* (excluding CurrentExpression and GestureTable.LnRm), and places Lifecycle/Selection/Playback directly under Internal. Space and graph checks assert this layout and reference naming; runtime, clone and package reload checks use the new state paths.
+
+Version 42 routes all internal impulses through References.Internal targeting the shared Internal parent. Reference checks reject per-board references and inspect internal triggers' TargetHierarchy. Runtime checks send Selection/Initialize/Playback to the parent, verify exactly one receiver, and cover API operations, cloning and package reload.

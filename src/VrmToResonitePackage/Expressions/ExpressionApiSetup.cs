@@ -19,13 +19,13 @@ internal sealed partial class ExpressionSystemSetup
         BuildHandGesturesEnabledReceiver(new(logic.AddSlot("AllowHandGestures")));
         BuildHandGesturesToggleReceiver(new(logic.AddSlot("ToggleHandGestures")));
         var reset = new ExpressionFlux(logic.AddSlot("Reset"));
-        ReceiveUpdate(reset, ResetTag, reset.Trigger(reset.Ref(_lifecycle), ResetStateTag));
+        ReceiveUpdate(reset, ResetTag, reset.Trigger(reset.Ref(_internal), ResetStateTag));
     }
 
     // Initialization runs before checking the input gate so the first event after
     // cloning or reattachment can restore the default enabled state.
     private IWorldElement ApplyRequest(ExpressionFlux g, IWorldElement mutation, IWorldElement allowed = null) => g.Sequence(
-        g.Trigger(g.Ref(_lifecycle), InitializeTag),
+        g.Trigger(g.Ref(_internal), InitializeTag),
         g.If(allowed ?? g.Constant(true), mutation));
 
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
@@ -35,7 +35,7 @@ internal sealed partial class ExpressionSystemSetup
     {
         var receiver = g.Receiver<int>(tag);
         var mutation = g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),
-            g.Trigger(g.Ref(_selection), SelectionTickTag));
+            g.Trigger(g.Ref(_internal), SelectionTickTag));
         Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal,
             ApplyRequest(g, mutation, gestureInput
                 ? g.Read<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures") : null)));
@@ -64,7 +64,7 @@ internal sealed partial class ExpressionSystemSetup
             g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", selected)), g.Ref(_catalog)));
         var select = ApplyRequest(g, g.Sequence(
             g.Write<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures", g.Constant(false)),
-            g.Trigger<Slot>(g.Ref(_playback), g.Text(PlaybackTickTag), selected)));
+            g.Trigger<Slot>(g.Ref(_internal), g.Text(PlaybackTickTag), selected)));
         Link(receiver, "OnTriggered", g.If(g.And(g.AvatarWornLocal, valid), select));
     }
 

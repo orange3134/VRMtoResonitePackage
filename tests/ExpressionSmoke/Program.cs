@@ -428,8 +428,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Set(core, "PairKey", "__unchanged");
         foreach (var (board, tag) in new[] { ("Selection", "ResoPon/Expression/Internal/Selection"),
             ("Lifecycle", "ResoPon/Expression/Internal/Initialize") })
-            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core.FindChild(board), tag, true) == 1,
-                "private stage receiver remains discoverable: " + board);
+            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core, tag, true) == 1,
+                "shared Internal hierarchy reaches exactly one private stage receiver: " + board);
         await Frames();
         Check(Get<string>(core, "PairKey") == "__unchanged" &&
             Math.Abs(Get<float>(outputState, "Result") - 0.4f) < 0.01f,

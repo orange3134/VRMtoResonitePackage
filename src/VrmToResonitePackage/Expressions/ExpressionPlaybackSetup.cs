@@ -24,7 +24,7 @@ internal sealed partial class ExpressionSystemSetup
         actions.Add(g.Set<Slot>(selected, resolved));
         actions.Add(g.Write<string>(core, SystemSpace, "PairKey", key));
 
-        actions.Add(g.Trigger<Slot>(g.Ref(_playback), g.Text(PlaybackTickTag), selected));
+        actions.Add(g.Trigger<Slot>(g.Ref(_internal), g.Text(PlaybackTickTag), selected));
         var select = g.Sequence(actions.ToArray());
         ReceiveUpdate(g, SelectionTickTag, select);
     }
