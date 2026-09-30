@@ -187,17 +187,21 @@ internal sealed partial class ExpressionSystemSetup
         var controller = g.Node(device, null, ("User", g.Owner(_root)), ("Node", g.Constant(side)));
         var gesture = BuildControllerGesture(g, controller, device, side, module);
         var accepting = g.And(g.AvatarWornLocal, Out(controller, "IsActive"),
+            g.Node("UserVR_Active", null, ("User", g.Owner(_root))),
             g.Read<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures"));
         var current = g.Choose<int>(accepting, gesture, g.Constant(-1));
+        var send = SendHandInput(g, g.Text(GestureTag(kind)), current);
         // The authored graph drops changes during the timeout; it neither queues
         // them nor restarts the interval. Reset stays unconnected, including when
         // input stops. Only admitted impulses capture a delayed gesture value.
         var duration = g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds");
         var delayed = g.Node("DelayWithValueSecondsFloat", typeof(int), ("Value", current), ("Duration", duration));
         Link(delayed, "Next", g.If(g.And(accepting, g.Equal<int>(current, Out(delayed, "DelayedValue"))),
-            SendHandInput(g, g.Text(GestureTag(kind)), current)));
+            send));
         var timeout = g.Node("LocalImpulseTimeoutSeconds", null, ("Timeout", duration), ("Next", delayed));
         var start = g.Node("StartAsyncTask", null, ("TaskStart", Out(timeout, "Trigger")));
-        g.OnChanged<int>(current, g.If(accepting, start));
+        // Leaving VR or losing the controller immediately sends the authored -1
+        // sentinel, bypassing the delay. The API still enforces wear/permission.
+        g.OnChanged<int>(current, g.If(accepting, start, send));
     }
 }

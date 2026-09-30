@@ -68,7 +68,7 @@ internal static class ExpressionGraphChecks
         Check(nodes.All(n => n.GetType().Name is not ("GetActiveUser" or "LocalUser")),
             "expression boards do not substitute LocalUser for the active user");
         bool NeedsUser(ProtoFluxNode node) => node.GetType().Name is "TouchController" or "IndexController" or
-            "ViveController" or "WindowsMRController" or "CosmosController" or "UserFingerPoseSource";
+            "ViveController" or "WindowsMRController" or "CosmosController" or "UserFingerPoseSource" or "UserVR_Active";
         foreach (var sensor in nodes.Where(NeedsUser))
             Check(((ISyncRef)VrmToResonitePackage.Expressions.ExpressionFlux.Member(sensor, "User"))
                 .Target?.GetType().Name == "GetActiveUserSelf", "user sensors read GetActiveUserSelf: " + sensor.GetType().Name);

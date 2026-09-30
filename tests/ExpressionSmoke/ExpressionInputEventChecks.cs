@@ -67,6 +67,8 @@ internal static class ExpressionInputEventChecks
                 bool pad = module.Name is "Vive" or "WindowsMR";
                 var controller = hand.GetComponentsInChildren<ProtoFluxNode>().Single(n => n.GetType().Name == module.Name + "Controller");
                 var active = Replace<bool>(hand, ExpressionFlux.Out(controller, "IsActive"));
+                var vrNode = hand.GetComponentsInChildren<Nodes.FrooxEngine.Users.UserVR_Active>().Single();
+                var vrActive = Replace<bool>(hand, vrNode);
                 Action<int> setCode;
                 Nodes.ValueInput<Elements.Core.float2> axis = null;
                 Nodes.ValueInput<bool> touch = null;
@@ -127,6 +129,10 @@ internal static class ExpressionInputEventChecks
                 Set(module, "StabilitySeconds", 0.3f);
                 Gesture(side, 1);
                 active.Value.Value = true;
+                await WaitSeconds(0.4);
+                Check(Get<int>(core, side + "Gesture") == 1,
+                    module.Name + "/" + side + ": desktop ignores active controller sensors");
+                vrActive.Value.Value = true;
                 await WaitSeconds(0.1);
                 Check(Get<int>(core, side + "Gesture") == 1,
                     module.Name + "/" + side + ": first Neutral waits for the captured delay");
@@ -148,10 +154,26 @@ internal static class ExpressionInputEventChecks
                 Allow(true); await Frames(30);
                 Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": re-enable detects current pose");
                 active.Value.Value = false; await Frames(10);
-                Check(Get<int>(core, side + "Gesture") == expected[0],
-                    module.Name + "/" + side + ": disconnect retains input");
+                Check(Get<int>(core, side + "Gesture") == -1,
+                    module.Name + "/" + side + ": disconnect immediately sends the unavailable sentinel");
                 Gesture(side, 4); active.Value.Value = true; await Frames(30);
                 Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": reconnect submits physical pose");
+                // VR exit clears just this hand without waiting for StabilitySeconds.
+                int opposite = Get<int>(core, (side == "Left" ? "Right" : "Left") + "Gesture");
+                Set(module, "StabilitySeconds", 0.3f);
+                vrActive.Value.Value = false; await Frames(3);
+                Check(Get<int>(core, side + "Gesture") == -1 &&
+                    Get<int>(core, (side == "Left" ? "Right" : "Left") + "Gesture") == opposite,
+                    module.Name + "/" + side + ": VR exit immediately clears only its own hand");
+                Gesture(side, 7); await WaitSeconds(0.4);
+                Check(Get<int>(core, side + "Gesture") == 7,
+                    module.Name + "/" + side + ": idle desktop does not repeatedly send the sentinel");
+                vrActive.Value.Value = true; await WaitSeconds(0.1);
+                Check(Get<int>(core, side + "Gesture") == 7,
+                    module.Name + "/" + side + ": VR re-entry waits for a stable pose");
+                await WaitSeconds(0.3);
+                Check(Get<int>(core, side + "Gesture") == expected[0],
+                    module.Name + "/" + side + ": VR re-entry submits the unchanged physical pose");
                 int nextCode = Array.FindIndex(expected, value => value != expected[0]);
                 int thirdCode = Array.FindIndex(expected, value => value != expected[0] && value != expected[nextCode]);
                 Set(module, "StabilitySeconds", 0.3f);
@@ -170,6 +192,12 @@ internal static class ExpressionInputEventChecks
                 setCode(nextCode); await WaitSeconds(0.1);
                 Allow(false); await WaitSeconds(0.3);
                 Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": pending task is rejected while input is disabled");
+                // The authored false branch sends -1, but the public API rejects
+                // it while AllowHandGestures is false.
+                vrActive.Value.Value = false; await Frames(3);
+                Check(Get<int>(core, side + "Gesture") == 7,
+                    module.Name + "/" + side + ": permission gate rejects the VR-exit sentinel");
+                vrActive.Value.Value = true; await Frames(3);
                 // Settle the mocked sensor while disabled before testing re-enable.
                 setCode(0); await Frames(3); Allow(true); await WaitSeconds(0.4);
                 Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": re-enable starts a new task");
@@ -192,6 +220,17 @@ internal static class ExpressionInputEventChecks
                 Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": original admitted snapshot may send after quick re-enable");
                 Gesture(side, 7); await WaitSeconds(0.2);
                 Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": quick re-enable does not reset timeout or schedule a duplicate");
+                // Exit during an admitted delay: -1 bypasses Timeout, and the
+                // pending snapshot must not overwrite it when the delay expires.
+                setCode(nextCode); await WaitSeconds(0.08);
+                vrActive.Value.Value = false; await Frames(3);
+                Check(Get<int>(core, side + "Gesture") == -1,
+                    module.Name + "/" + side + ": VR exit bypasses an active timeout");
+                await WaitSeconds(0.35);
+                Check(Get<int>(core, side + "Gesture") == -1,
+                    module.Name + "/" + side + ": pending snapshot cannot overwrite the VR-exit sentinel");
+                setCode(0); await Frames(3);
+                vrActive.Value.Value = true; await WaitSeconds(0.4);
                 foreach (var entry in wearerReferences) entry.Reference.Target = null;
                 await Frames(10);
                 foreach (var entry in wearerReferences) entry.Reference.Target = expressions.World.LocalUser;

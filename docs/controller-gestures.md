@@ -85,18 +85,26 @@ Touchの64〜73は原版のデスクトップ入力符号であり、VRセンサ
 設定は各機種のDVにあるintで、0〜7を指定する。接触中の座標(0,0)は原版同様に上方向として扱う。
 MR原版はPrimaryHand優先・反対の手へのフォールバックで1つの出力へ統合するが、
 ResoPonは左右64組の表情選択を維持するため、各手のTouchpadを独立して読む。
-タッチ解除はNeutral。機器切断は最後に受理した値を保持する。
+タッチ解除はNeutral。Version 51では機器切断・VRモード終了時に-1を即送信する。
 
 ## 共通の実行制御と移植しない出力
 
-Version 50は、2026-09-30にresoloopで読み取った、yoshi1123_が着用しているPC_Akaneの
-`Expressions/Inputs/HandGestures/Modules/Touch/Left/` の遅延グラフと、その後追加された
-`LocalImpulseTimeoutSeconds`を共通の手入力生成へ反映する。実ワールドは読み取りのみ。
+Version 51は、2026-09-30にresoloopで読み取った、yoshi1123_が着用しているPC_Akaneの
+`Expressions/Inputs/HandGestures/Modules/Touch/Left/` の最新グラフを共通の手入力生成へ反映する。
+Version 50の遅延・Timeoutに加え、`UserVR_Active`と入力受付外の即時送信を左右・5機種へ適用する。
+実ワールドは読み取りのみ。調査時点のTouchはLeft側に実装されており、生成側では右手にも同じ制御を作る。
 C#の`ExpressionFlux.Node`からFrooxEngineの標準コンポーネントを生成・接続し、
 ProtoGraphやFlux-SDKによるビルド・配布物は使わない。
 
-- 入力受付はローカル着用・コントローラーIsActive・AllowHandGesturesのAND。
+- 入力受付はローカル着用・コントローラーIsActive・着用者のUserVR_Active・AllowHandGesturesのAND。
+  UserVR_ActiveとControllerのUserは同じGetActiveUserSelfを参照する。
+  実DLLのUserVR_ActiveはUser.VR_Activeを読み、Userがnullならfalseを返す。
 - 現在値は受付中の手形番号、受付外は-1。`FireOnLocalValueChange<int>`で変化を検出する。
+- 受付外へ変わった場合はIf.OnFalseから同じ送信ノードへ直接進み、現在値-1を即送信する。
+  Timeout・Delayを通らず、それらの状態もリセットしない。機器切断・VRモード終了ならAPIが受理し、
+  対応するGestureTable行がなければBaseへ戻る。0（Neutral）とは別の値。
+  AllowHandGestures=falseや未着用時にはAPIが拒否するため、送信だけで禁止中の表情を変更しない。
+  受付外のままなら現在値は-1で変わらず、毎フレームの送信や他の手・キーボードへの上書きは起こさない。
 - 受付中の変化から`StartAsyncTask`→`LocalImpulseTimeoutSeconds.Trigger`→
   `DelayWithValueSecondsFloat<int>`へ進む。TimeoutとDurationは同じStabilitySeconds（既定0.05秒）を参照する。
 - Timeoutは最初のインパルスを通し、その時点から指定秒数の入力を破棄する。
@@ -136,6 +144,8 @@ Vive／MRの全8方向を観測表と照合する（基本192ケース）。さ�
 方向境界と下向きの継ぎ目、設定変更、入力禁止／再許可、切断／再接続、安定待ち、
 手を止めた際の手動入力保持、反対の手へ干渉しないことを検証する。
 Version 50では初回Neutral、設定変更時の既存期限の維持、待機中の候補破棄・入力禁止、期限後の再受付、短時間での再許可、再装着と0秒設定を検証する。
+Version 51ではさらに、デスクトップ中のセンサー無視、VR終了・機器切断時の即時-1、
+VR復帰時の遅延、待機中のVR終了、禁止中のAPI拒否、受付外での単発送信と反対の手の維持を検証する。
 既存のExpressionSmokeでクローン・保存再読込・瞬き・口パクとの共存も検証する。
 模擬センサーによる単一ユーザー検証であり、実機を装着した操作や複数ユーザーの確認は含まない。
 

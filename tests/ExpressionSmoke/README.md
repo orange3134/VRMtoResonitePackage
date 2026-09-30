@@ -16,8 +16,7 @@ serialized VRChat menu enum values, gesture conditions, Hermite curves, public
 impulse validation, all 64 compiled gesture pairs, layer composition and history rejection,
 all eight int values on each of the ResoPon/Expression/Gesture/Left and ResoPon/Expression/Gesture/Right Tags, immediate evaluation of each
 received hand pair (including back-to-back events before the next frame), unchanged-expression
-playback, unrestricted integers (including externally added table rows and missing rows), invalid/null selection Slots, argument-type mismatches, last-input retention across controller
-inactivity and removable modules, editable table references, original tracking drivers, same-wearer clones,
+playback, unrestricted integers (including externally added table rows and missing rows), invalid/null selection Slots, argument-type mismatches, controller inactivity sentinels, last-input retention across removable modules, editable table references, original tracking drivers, same-wearer clones,
 and saving/reimporting/replaying an actual `.resonitepackage`.
 It also verifies one Flux node per slot, node slots directly under each logic board, and distinct node
 positions before and after package reimport. Every connection outside a feedback cycle
@@ -101,7 +100,7 @@ Only accepted gesture API events run Selection. Data edits, input permission cha
 must not select a gesture pair. Lifecycle and input actions retain their local change detectors.
 The sensor-event fixture replaces hardware outputs temporarily and executes the exported graph:
 both hands must wait for stability, fire when the timer expires without more sensor changes,
-use device-specific pose classification, reset on gate/disconnect transitions, and redetect on reconnect.
+use device-specific pose classification, require the wearer's VR mode, send -1 on disconnect/VR exit, and redetect on reconnect.
 All 20 keyboard shortcuts (keypad 0 through 9 for each hand) are checked, including an externally added L8R9 expression. Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends only the left hand; Ctrl+Shift+keypad sends only the right. Keypad alone and Ctrl+keypad without Shift must leave both hands unchanged.
 Idle sentinels prove Selection does not run on unchanged frames. Table edits wait for the next gesture event. Inactive clips remain selectable, and menu Enabled fields remain unchanged.
 Keyboard Flux consists of exactly two boards, Left/Logic and Right/Logic, with one
@@ -339,3 +338,10 @@ without duplicate sends, captured durations, and zero timeout on all ten hand gr
 Structure checks verify the shared duration source and Trigger/Next wiring after reload.
 Re-enable cases settle mocked sensors while input is disabled before changing permission,
 so the timeout assertions exercise one new accepted pose rather than simultaneous input edits.
+
+Version 51 mirrors the latest PC_Akane Touch graph: UserVR_Active joins the
+acceptance gate, and its false branch sends -1 immediately through the same hand
+sender. All ten controller hand graphs share this behavior. Runtime checks cover
+desktop sensor suppression, VR exit/re-entry, immediate disconnect, pending
+snapshot rejection after VR exit, permission gating, and one-shot/hand isolation.
+The existing timeout and captured-duration checks remain in place.
