@@ -267,7 +267,15 @@ internal sealed class ExpressionFlux
         foreach (var term in terms) node.Operands.Add((INodeValueOutput<bool>)term);
         return node;
     }
-    public IWorldElement Or(params IWorldElement[] terms) => terms.Length == 0 ? Constant(false) : terms.Aggregate((a, b) => Node("OR_Bool", null, ("A", a), ("B", b)));
+    public IWorldElement Or(params IWorldElement[] terms)
+    {
+        if (terms.Length == 0) return Constant(false);
+        if (terms.Length == 1) return terms[0];
+        if (terms.Length == 2) return Node("OR_Bool", null, ("A", terms[0]), ("B", terms[1]));
+        var node = (Nodes.Operators.OR_Multi_Bool)Node("OR_Multi_Bool");
+        foreach (var term in terms) node.Operands.Add((INodeValueOutput<bool>)term);
+        return node;
+    }
     public IWorldElement Add(IWorldElement a, IWorldElement b) => Binary<float>("ValueAdd", a, b);
     public IWorldElement Sub(IWorldElement a, IWorldElement b) => Binary<float>("ValueSub", a, b);
     public IWorldElement Mul(IWorldElement a, IWorldElement b) => Binary<float>("ValueMul", a, b);

@@ -69,7 +69,8 @@ VRC SDKのIdle／Neutral調査を受け、TouchだけをResonite向けの接触�
 実機でのVRC同値性・ポーズの見た目は未検証。指ボーンの駆動は追加しない。
 
 親指接触はButtonYB_Touch、ButtonXA_Touch、JoystickTouch、ThumbRestTouchのOR。
-複数箇所への同時接触も1つの親指状態として扱う。
+複数箇所への同時接触も1つの親指状態として扱う。4入力は1つのOR_Multi_Boolへ接続する。
+ExpressionFlux.Orは3入力以上をOR_Multi_Bool、2入力をOR_Boolとして生成する。
 人差し指はTriggerTouch／TriggerClickから離す・触れるだけ・引くの3状態に分ける。
 TriggerClick=trueならTriggerTouch=falseでも「引く」を優先する。
 GripはGripClickを使い、今回アナログ量の独自しきい値は追加しない。
