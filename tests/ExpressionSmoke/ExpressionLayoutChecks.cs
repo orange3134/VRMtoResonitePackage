@@ -70,7 +70,7 @@ internal static class ExpressionLayoutChecks
                 Check(match.Match.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<bool> literal && literal.Value.Value &&
                     match.Values.Count == 7, "gesture selector has exactly seven rows in gesture-number order");
                 int[] sizes = module.Name switch {
-                    "Touch" => new[] { 4, 1, 4, 4, 3, 1, 1 },
+                    "Touch" => new[] { 3, 1, 1, 1, 2, 1, 3 },
                     "Index" => new[] { 1, 1, 1, 1, 2, 1, 1 },
                     "Cosmos" => new[] { 1, 1, 1, 1, 0, 1, 1 },
                     _ => throw new InvalidOperationException("Unexpected controller")

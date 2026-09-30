@@ -104,15 +104,16 @@ internal static class ExpressionInputEventChecks
                 else
                 {
                     string[] ports = module.Name == "Touch"
-                        ? new[] { "ButtonYB_Touch", "ButtonXA_Touch", "GripClick", "JoystickTouch", "TriggerClick" }
+                        ? new[] { "ButtonYB_Touch", "ButtonXA_Touch", "GripClick", "JoystickTouch", "TriggerClick", "TriggerTouch", "ThumbRestTouch" }
                         : new[] { "JoystickTouch", "GripClick", "TriggerTouch", "TriggerClick" };
                     var sensors = ports.Select(port => Replace<bool>(hand, ExpressionFlux.Out(controller, port))).ToArray();
                     setCode = code => { for (int bit = 0; bit < sensors.Length; bit++) sensors[bit].Value.Value = (code & (1 << bit)) != 0; };
                 }
-                // Independent oracle transcribed from the live editor's ValueEqualityDrivers.
+                // Touch uses the contact-state specification below; other devices
+                // retain the independent oracle from the live editor's drivers.
                 int[] expected = module.Name switch
                 {
-                    "Touch" => new[] { 2,4,4,4,6,3,3,3,4,0,0,0,3,0,0,0,0,5,5,0,7,1,1,1,5,0,0,0,1,0,0,0 },
+                    "Touch" => Enumerable.Range(0, 128).Select(TouchExpected).ToArray(),
                     "Index" => new[] { 2,0,0,0,0,0,5,0,0,0,0,0,0,0,6,7,0,0,0,0,0,0,5,0,0,0,0,0,4,0,3,1 },
                     "Cosmos" => new[] { 2,4,6,3,7,0,0,0,0,0,0,0,1,0,0,0 },
                     _ => new[] { 0,1,2,3,4,5,6,7 }
@@ -242,8 +243,47 @@ internal static class ExpressionInputEventChecks
                 {
                     setCode(code); await Frames(6);
                     Check(Get<int>(core, side + "Gesture") == expected[code],
-                        $"{module.Name}/{side}: editor input code {code} selects {expected[code]}");
+                        $"{module.Name}/{side}: sensor input code {code} selects {expected[code]}");
                     Check(Get<int>(core, (side == "Left" ? "Right" : "Left") + "Gesture") == other, "device input does not change the opposite hand");
+                }
+                if (module.Name == "Touch")
+                {
+                    // A real contact-only transition must select Neutral through
+                    // the normal delay and table, rather than clearing expression.
+                    string otherSide = side == "Left" ? "Right" : "Left";
+                    var neutralRow = Reference<Slot>(core, "GestureTable.L0R0");
+                    try
+                    {
+                        Set(core, "GestureTable.L0R0", smile);
+                        Gesture(otherSide, 0);
+                        setCode(8); await Frames(6); // Thumb on stick, index lifted.
+                        Check(Get<int>(core, side + "Gesture") == 4, side + ": lifted index selects Victory");
+                        Set(module, "StabilitySeconds", 0.3f);
+                        setCode(8 | 32); await WaitSeconds(0.1); // Index touches, no pull.
+                        Check(Get<int>(core, side + "Gesture") == 4, side + ": resting index waits before Neutral");
+                        await WaitSeconds(0.3);
+                        Check(Get<int>(core, side + "Gesture") == 0 &&
+                            Reference<Slot>(core, "CurrentExpression") == smile,
+                            side + ": resting index selects the mapped Neutral expression");
+                        setCode(8); await WaitSeconds(0.4);
+                        Check(Get<int>(core, side + "Gesture") == 4, side + ": lifting index restores Victory");
+                        Set(module, "StabilitySeconds", 0f);
+                        setCode(0); await Frames(6);
+                        Check(Get<int>(core, side + "Gesture") == 2, side + ": releasing all contacts selects Open");
+                        setCode(32 | 4); await Frames(6);
+                        Check(Get<int>(core, side + "Gesture") == 7, side + ": grip plus resting index selects ThumbsUp");
+                        setCode(32 | 4 | 64); await Frames(6);
+                        Check(Get<int>(core, side + "Gesture") == 1, side + ": thumbrest plus grip and resting index selects Fist");
+                        Gesture(side, 7);
+                        setCode(32 | 4 | 1 | 2 | 8 | 64); await Frames(6);
+                        Check(Get<int>(core, side + "Gesture") == 7,
+                            side + ": changing thumb contacts within the same pose does not resend");
+                    }
+                    finally
+                    {
+                        Set(core, "GestureTable.L0R0", neutralRow);
+                        Gesture(otherSide, other);
+                    }
                 }
                 if (pad)
                 {
@@ -426,6 +466,22 @@ internal static class ExpressionInputEventChecks
         await Frames(10);
         Allow(true); Gesture("Left", 0); Gesture("Right", 0);
         await Frames(30);
+    }
+
+    private static int TouchExpected(int sensors)
+    {
+        bool thumb = (sensors & (1 | 2 | 8 | 64)) != 0;
+        bool grip = (sensors & 4) != 0;
+        // Columns: off, contact only, click without contact, contact and click.
+        // This table is the posture specification, independent of packed Flux codes.
+        int[] poses = (thumb, grip) switch
+        {
+            (false, false) => new[] { 2, 0, 0, 0 },
+            (true, false) => new[] { 4, 0, 5, 5 },
+            (false, true) => new[] { 6, 7, 7, 7 },
+            (true, true) => new[] { 3, 1, 1, 1 }
+        };
+        return poses[((sensors & 32) != 0 ? 1 : 0) | ((sensors & 16) != 0 ? 2 : 0)];
     }
 
     private static async Task Frames(int count)

@@ -9,7 +9,8 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
-    // Observed in Avatar Expression Editor v1.12.1. See docs/controller-gestures.md.
+    // Index/Cosmos/pad tables follow Avatar Expression Editor v1.12.1.
+    // Touch normalizes contact separately from pull. See docs/controller-gestures.md.
     private IWorldElement BuildControllerGesture(ExpressionFlux g, Component controller, string device,
         Chirality side, Slot module)
     {
@@ -36,20 +37,27 @@ internal sealed partial class ExpressionSystemSetup
                 Link(bits, "Bit" + bit, curled);
             }
         }
+        else if (device == "TouchController")
+        {
+            // Multiple thumb contacts describe the same posture, not distinct gestures.
+            Link(bits, "Bit0", g.Or(Out(controller, "ButtonYB_Touch"), Out(controller, "ButtonXA_Touch"),
+                Out(controller, "JoystickTouch"), Out(controller, "ThumbRestTouch")));
+            Link(bits, "Bit1", Out(controller, "GripClick"));
+            Link(bits, "Bit2", Out(controller, "TriggerTouch"));
+            Link(bits, "Bit3", Out(controller, "TriggerClick"));
+        }
         else
         {
-            string[] ports = device == "TouchController"
-                ? new[] { "ButtonYB_Touch", "ButtonXA_Touch", "GripClick", "JoystickTouch", "TriggerClick" }
-                : new[] { "JoystickTouch", "GripClick", "TriggerTouch", "TriggerClick" };
+            string[] ports = { "JoystickTouch", "GripClick", "TriggerTouch", "TriggerClick" };
             for (int bit = 0; bit < ports.Length; bit++) Link(bits, "Bit" + bit, Out(controller, ports[bit]));
         }
 
         (int Gesture, byte[] Codes)[] matches = device switch
         {
             "TouchController" => new (int, byte[])[] {
-                (1, new byte[] { 28, 22, 21, 23 }), (2, new byte[] { 0 }),
-                (3, new byte[] { 5, 6, 12, 7 }), (4, new byte[] { 2, 8, 1, 3 }),
-                (5, new byte[] { 17, 18, 24 }), (6, new byte[] { 4 }), (7, new byte[] { 20 }) },
+                (1, new byte[] { 7, 11, 15 }), (2, new byte[] { 0 }),
+                (3, new byte[] { 3 }), (4, new byte[] { 1 }),
+                (5, new byte[] { 9, 13 }), (6, new byte[] { 2 }), (7, new byte[] { 6, 10, 14 }) },
             "IndexController" => new (int, byte[])[] {
                 (1, new byte[] { 31 }), (2, new byte[] { 0 }), (3, new byte[] { 30 }),
                 (4, new byte[] { 28 }), (5, new byte[] { 6, 22 }), (6, new byte[] { 14 }), (7, new byte[] { 15 }) },
@@ -90,7 +98,16 @@ internal sealed partial class ExpressionSystemSetup
             match.Values.Add((INodeValueOutput<bool>)found);
         }
         // Rows 0..6 become gestures 1..7; the unmatched Index (-1) becomes Neutral (0).
-        return g.Node("ValueInc", typeof(int), ("N", Out(match, "Index")));
+        var selected = g.Node("ValueInc", typeof(int), ("N", Out(match, "Index")));
+        if (device != "TouchController") return selected;
+
+        // Resting the index finger without pulling either trigger is explicitly
+        // Neutral, including when the thumb is lifted. A pressed trigger takes
+        // precedence over a missing touch signal; it must not become Open/Point.
+        var neutral = (Component)g.And(Out(controller, "TriggerTouch"),
+            g.Not(Out(controller, "TriggerClick")), g.Not(Out(controller, "GripClick")));
+        neutral.Slot.Name += " : Neutral (0)";
+        return g.Choose<int>(neutral, g.Constant(0), selected);
     }
 
     private static IWorldElement BuildPadGesture(ExpressionFlux g, Component controller, Slot module)

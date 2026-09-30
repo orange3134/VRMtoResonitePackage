@@ -17,7 +17,7 @@ ResoPonのVersion 19から、従来の共通Grip／Triggerしきい値・ボタ�
 Touch／Index／Cosmosは完全一致する手形がなければNeutral (0)、一致コード0はHandOpen (2)。
 Cosmosの原版にRockNRollは存在しない。未定義の組み合わせを別の手形へ丸めない。
 
-## Touch・Index・Cosmos
+## Touch・Index・Cosmos（旧TouchはVersion 51まで）
 
 `ComposeBits_byte` の下位から順に次の値を接続する。
 
@@ -61,6 +61,42 @@ FoundMatch=falseならNeutral（0）。Vive／Windows MRの方向判定はこの
 Touchの複数コード群はFist=28/22/21/23、FingerPoint=5/6/12/7、Victory=2/8/1/3、RockNRoll=17/18/24。
 Touchの64〜73は原版のデスクトップ入力符号であり、VRセンサー判定には含めない。
 キーボードはResoPonの左右別入力を継続する。
+
+## Touchの接触状態による判定（Version 52）
+
+VRC SDKのIdle／Neutral調査を受け、TouchだけをResonite向けの接触判定へ変更する。
+これはVRCクライアントの厳密な入力アルゴリズムの移植ではなく、下記の明示した対応表である。
+実機でのVRC同値性・ポーズの見た目は未検証。指ボーンの駆動は追加しない。
+
+親指接触はButtonYB_Touch、ButtonXA_Touch、JoystickTouch、ThumbRestTouchのOR。
+複数箇所への同時接触も1つの親指状態として扱う。
+人差し指はTriggerTouch／TriggerClickから離す・触れるだけ・引くの3状態に分ける。
+TriggerClick=trueならTriggerTouch=falseでも「引く」を優先する。
+GripはGripClickを使い、今回アナログ量の独自しきい値は追加しない。
+
+| 親指 | GripClick | 人差し指を離す | 触れるだけ | トリガーを引く |
+|---|---|---|---|---|
+| 離す | false | HandOpen (2) | Neutral (0) | Neutral (0) |
+| 触れる | false | Victory (4) | Neutral (0) | RockNRoll (5) |
+| 離す | true | HandGun (6) | ThumbsUp (7) | ThumbsUp (7) |
+| 触れる | true | FingerPoint (3) | Fist (1) | Fist (1) |
+
+FluxではComposeBits_byteのBit0=親指接触、Bit1=GripClick、Bit2=TriggerTouch、
+Bit3=TriggerClickとする。1〜7の手形は従来と同じ7行のグループで判定する。
+新しい正規化コードはFist=7/11/15、HandOpen=0、FingerPoint=3、Victory=1、
+RockNRoll=9/13、HandGun=2、ThumbsUp=6/10/14。
+NeutralはTriggerTouch AND !TriggerClick AND !GripClickを名前付きノードで明示判定して優先する。
+その他未一致も0となる（正規化コード8/12の、Gripなし・親指を離してトリガーだけ引く状態）。
+
+Neutralは有効な表情入力であり、GestureTableの0行を選ぶ。VR終了・切断の-1と区別する。
+同じ手形のまま親指の接触先が変わっても再送しない。
+遅延・Timeout・入力許可・VRモード判定はVersion 51の共通処理を使う。
+そのためTimeout中に発生したNeutral等の変更も破棄され、自動的な末尾再送は行わない。
+
+検証では7つのセンサー（4つの親指接触、GripClick、TriggerTouch、TriggerClick）の
+全128通りを左右で実行する。加えてVictory→接触のみのNeutral→Victory、
+全接触解除のHandOpen、Grip＋接触のFist／ThumbsUp、Neutral表情の対応表選択、
+同じ手形内の接触先変更による再送抑止を確認する。
 
 ## Vive・Windows MR
 
@@ -139,8 +175,8 @@ Standard Controller V1.0も調査済みだが、Strength・Secondary・Grabの3�
 ## 検証
 
 `ExpressionInputEventChecks` は生成された実Fluxのセンサー出力だけを置き換える。
-左右ごとにTouchの全32コード、Indexの全32指姿勢、Cosmosの全16コード、
-Vive／MRの全8方向を観測表と照合する（基本192ケース）。さらに角度しきい値の両側、
+左右ごとにTouchの全128入力をVersion 52の接触状態表、Indexの全32指姿勢、Cosmosの全16コード、
+Vive／MRの全8方向を従来の観測表と照合する（基本384ケース）。さらに角度しきい値の両側、
 方向境界と下向きの継ぎ目、設定変更、入力禁止／再許可、切断／再接続、安定待ち、
 手を止めた際の手動入力保持、反対の手へ干渉しないことを検証する。
 Version 50では初回Neutral、設定変更時の既存期限の維持、待機中の候補破棄・入力禁止、期限後の再受付、短時間での再許可、再装着と0秒設定を検証する。
@@ -206,7 +242,8 @@ Candidateは毎回の候補変更で更新し、最後の送信値Stableとは�
 
 ## VRC SDKのIdle／NeutralとTouchでの再現案（2026-09-30調査）
 
-この節は調査と設計案。Version 51の生成コード・ワールドの配線は変更していない。
+この節はVersion 51時点の調査と設計案の記録。調査時には生成コード・ワールドの配線を変更していない。
+その後、表情入力の提案を上記Version 52として実装した。見た目の指ポーズは提案のまま。
 実行中のUnity 2022.3.22f1プロジェクトから、com.vrchat.avatars / com.vrchat.base 3.10.5を確認した。
 以下のパスはcom.vrchat.avatarsの `Samples/AV3 Demo Assets/Animation/` からの相対パス。
 環境固有のプロジェクトパスや抽出物はコミットしない。
@@ -239,9 +276,9 @@ Candidateは毎回の候補変更で更新し、最後の送信値Stableとは�
 特にこのSDKのAnimatorとクリップからは、Touchの接触・押下をGesture番号へ変換する
 クライアント側のしきい値・優先順位は確定できない。
 
-### 現行ResoPonが区別できない入力
+### Version 51までのResoPonが区別できない入力
 
-現在のTouch判定は5ビットの完全一致であり、TriggerTouch・ThumbRestTouch・アナログ量を使わない。
+Version 51までのTouch判定は5ビットの完全一致であり、TriggerTouch・ThumbRestTouch・アナログ量を使わない。
 Neutral=0は明示した脱力形ではなく、既知の7手形に一致しないコードの戻り値である。
 Neutralになるコードは9,10,11,13,14,15,16,19,25,26,27,29,30,31。
 
@@ -302,5 +339,5 @@ Resoniteの各Touch／Click／アナログ値を照合する。
 左右、Gripの有無を含め、Neutral／Open／Victory／Fistの境界を確定してから採用する。
 
 検証済み：SDKの到達可能な左右状態とGUID参照、Idle/Open/Fistのカーブ値、
-Idle2のループ時間、現行Touch全32コードの割り当て、上記Resonite実DLLの型・メンバー。
+Idle2のループ時間、Version 51のTouch全32コードの割り当て、上記Resonite実DLLの型・メンバー。
 未検証：VRChatクライアントの実機Gesture値、Resonite実機センサー値、ポーズの見た目の一致。

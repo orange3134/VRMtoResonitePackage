@@ -319,7 +319,9 @@ Version 26の `Hand gestures` は単一のトグル項目で、押すたびに�
 ### コントローラーのハンドサイン判定
 
 Version 19ではAvatar Expression Editor v1.12.1の機種別判定を採用する。
-Touchは接触・Clickの5ビット、Indexは5本の指の近位関節角度、Cosmosは4ビットの完全一致を使う。
+Version 52のTouchは4か所の親指接触をORでまとめ、GripClickとTriggerTouch／TriggerClickで
+人差し指を離す・触れるだけ・引く状態を区別する。Gripを握らずトリガーに触れるだけならNeutral。
+Indexは5本の指の近位関節角度、Cosmosは4ビットの完全一致を使う。
 一致しない手形はNeutralへ戻す。Vive・WindowsMRはTouchpadの8方向を編集可能な
 `Direction.0`〜`Direction.7`でジェスチャーへ割り当てる。左右は独立して扱う。
 安定待ち・装着者とVRモードの限定・入力停止時の-1送信は共通の送信処理で管理する。

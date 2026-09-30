@@ -168,8 +168,8 @@ Standalone test fields are driven directly and exposed through the same DynamicF
 Imported-package checks wait for driver mesh assets before verifying named shape links.
 
 Controller checks execute the generated Flux against the observed Avatar Expression
-Editor tables: all 32 Touch codes, all 32 Index finger poses, all 16 Cosmos codes,
-and eight directions on both Vive and Windows MR, for each hand (192 cases).
+Editor tables for Index/Cosmos/pads and the v52 Touch contact specification: all 128 Touch sensor combinations, all 32 Index finger poses, all 16 Cosmos codes,
+and eight directions on both Vive and Windows MR, for each hand (384 cases total).
 They also cover finger/thumb angle thresholds, sector boundaries and the downward
 seam, editable settings, stability, reconnect, input gates, manual-input retention,
 and independence of the opposite hand. These are single-user mock sensor checks;
@@ -345,3 +345,11 @@ sender. All ten controller hand graphs share this behavior. Runtime checks cover
 desktop sensor suppression, VR exit/re-entry, immediate disconnect, pending
 snapshot rejection after VR exit, permission gating, and one-shot/hand isolation.
 The existing timeout and captured-duration checks remain in place.
+
+Version 52 replaces Touch's raw button codes with thumb-contact OR, GripClick,
+TriggerTouch and TriggerClick. Both hands test all 128 raw sensor combinations
+against an independent posture table, including multiple thumb contacts and
+click without touch. Explicit transitions verify resting index -> Neutral through
+the existing delay and a mapped expression, lifted index -> Victory/Open, grip
+plus index contact -> Fist/ThumbsUp, and no resend when only thumb location changes.
+Other devices retain their existing tables; no finger pose output is added.
