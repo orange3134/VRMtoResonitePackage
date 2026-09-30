@@ -189,14 +189,15 @@ internal sealed partial class ExpressionSystemSetup
         var accepting = g.And(g.AvatarWornLocal, Out(controller, "IsActive"),
             g.Read<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures"));
         var current = g.Choose<int>(accepting, gesture, g.Constant(-1));
-        // Mirror PC_Akane's authored Touch/Left graph: each accepted change starts
-        // its own delayed snapshot. Earlier tasks remain alive and may send if
-        // the same pose returns. There is deliberately no last-sent Store.
-        var delayed = g.Node("DelayWithValueSecondsFloat", typeof(int), ("Value", current),
-            ("Duration", g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds")));
+        // The authored graph drops changes during the timeout; it neither queues
+        // them nor restarts the interval. Reset stays unconnected, including when
+        // input stops. Only admitted impulses capture a delayed gesture value.
+        var duration = g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds");
+        var delayed = g.Node("DelayWithValueSecondsFloat", typeof(int), ("Value", current), ("Duration", duration));
         Link(delayed, "Next", g.If(g.And(accepting, g.Equal<int>(current, Out(delayed, "DelayedValue"))),
             SendHandInput(g, g.Text(GestureTag(kind)), current)));
-        var start = g.Node("StartAsyncTask", null, ("TaskStart", delayed));
+        var timeout = g.Node("LocalImpulseTimeoutSeconds", null, ("Timeout", duration), ("Next", delayed));
+        var start = g.Node("StartAsyncTask", null, ("TaskStart", Out(timeout, "Trigger")));
         g.OnChanged<int>(current, g.If(accepting, start));
     }
 }

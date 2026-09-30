@@ -89,30 +89,36 @@ ResoPonは左右64組の表情選択を維持するため、各手のTouchpadを
 
 ## 共通の実行制御と移植しない出力
 
-Version 49は、2026-09-30にresoloopで読み取った、yoshi1123_が着用しているPC_Akaneの
-`Expressions/Inputs/HandGestures/Modules/Touch/Left/` の遅延グラフを共通の手入力生成へ反映する。
-実ワールドは読み取りのみ。C#の`ExpressionFlux.Node`からFrooxEngineの標準コンポーネントを
-生成・接続し、ProtoGraphやFlux-SDKによるビルド・配布物は使わない。
+Version 50は、2026-09-30にresoloopで読み取った、yoshi1123_が着用しているPC_Akaneの
+`Expressions/Inputs/HandGestures/Modules/Touch/Left/` の遅延グラフと、その後追加された
+`LocalImpulseTimeoutSeconds`を共通の手入力生成へ反映する。実ワールドは読み取りのみ。
+C#の`ExpressionFlux.Node`からFrooxEngineの標準コンポーネントを生成・接続し、
+ProtoGraphやFlux-SDKによるビルド・配布物は使わない。
 
 - 入力受付はローカル着用・コントローラーIsActive・AllowHandGesturesのAND。
 - 現在値は受付中の手形番号、受付外は-1。`FireOnLocalValueChange<int>`で変化を検出する。
-- 受付中の変化ごとに`StartAsyncTask`から`DelayWithValueSecondsFloat<int>`を開始する。
-  各タスクが開始時の番号とStabilitySeconds（既定0.05秒）を取り込む。
-- 待機後、取り込んだ番号が現在値と一致したときに、その手のint APIへ送信する。
-  生成側では完了時にも入力受付を明示確認する。左右・5機種は独立したグラフを持つ。
+- 受付中の変化から`StartAsyncTask`→`LocalImpulseTimeoutSeconds.Trigger`→
+  `DelayWithValueSecondsFloat<int>`へ進む。TimeoutとDurationは同じStabilitySeconds（既定0.05秒）を参照する。
+- Timeoutは最初のインパルスを通し、その時点から指定秒数の入力を破棄する。
+  破棄された入力は待ち行列に入らず、期限も延長しない。Resetは未接続で、入力停止・再開でも解除しない。
+- Timeoutを通過したときだけDelayが番号と待機時間を取り込む。待機後、取り込んだ番号が
+  現在値と一致したらその手のint APIへ送信する。生成側では完了時にも入力受付を明示確認する。
+  左右・5機種はそれぞれ独立したTimeoutとDelayを持つ。
 - Candidate／StableのStore、初期化フラグ、ElapsedTimeFloatは不要。状態DVも追加しない。
   未一致のIndex=-1を+1すればNeutral=0なので、手形選択のFoundMatch分岐も省略する。
 
-これは最後の候補だけを確定する方式ではなく、独立した遅延スナップショットの照合である。
-古いタスクをキャンセルせず、最後の送信値との重複比較もしない。A→短いB→AはAを再送する。
-待機中にA→B→Aと戻れば、先のAのタスクが新しいAの待機完了前に送信する場合もある。
+Version 49では全変更が独立した待機を開始したが、Version 50ではTimeoutを通過した変更だけが待機する。
+たとえばBを受け付けて待機中にCへ変えるとCの入力は破棄され、Bの待機も現在値と不一致になり送信しない。
+そのままCを保持しても期限到来による自動送信はなく、期限後の次の入力変更から再び受け付ける。
+B→A→Bのように戻れば最初のBは一致して送信するが、破棄された後のBは追加送信を起こさない。
 入力停止時は現在値=-1となり待機中の送信を拒否するが、完了前に同じ手形で入力を再開すれば
-以前のタスクが一致する場合がある。入力が変わらず待機も残っていないときは手動選択を保持する。
-StabilitySecondsの変更は新しいタスクから適用され、既に開始した待機時間は変わらない。
-0秒でも非同期タスクを経由し、タイマーのbool立ち上がりは要求しない。
+以前の待機が一致する場合がある。短時間で再開してもTimeoutはリセットされない。
+StabilitySecondsの変更は次に受け付ける入力から適用され、既存の遮断期限・待機時間は変わらない。
+0秒設定ではTimeoutを通過でき、Delayによる非同期実行と完了時の一致確認を行う。
 
-実Resonite 2026.9.18.82のDLLでDelayWithValueSecondsFloatのポート、開始時の値保持とDurationの評価を確認した。
-参照グラフのTouchの全32コードは既存の手形表と一致する。Redprintの梱包・表示用コンポーネントは生成しない。
+実Resonite 2026.9.18.82のDLLでDelayの値保持・Durationの評価と、Timeoutのローカルな
+遮断期限（WorldTime基準）、通過時のみの期限更新を確認した。参照グラフの手形判定は変更されていない。
+Redprintの梱包・表示用コンポーネントは生成しない。
 原版にある近くのユーザーやホストへの代替は使わず、ResoPonの装着者に限定する。
 
 今回の対象はジェスチャーによる離散的な表情選択。
@@ -129,7 +135,7 @@ Standard Controller V1.0も調査済みだが、Strength・Secondary・Grabの3�
 Vive／MRの全8方向を観測表と照合する（基本192ケース）。さらに角度しきい値の両側、
 方向境界と下向きの継ぎ目、設定変更、入力禁止／再許可、切断／再接続、安定待ち、
 手を止めた際の手動入力保持、反対の手へ干渉しないことを検証する。
-Version 49では初回Neutral、開始時の待機時間、待機中の候補変更・入力禁止、戻った手形の再送、重複する待機の独立実行、再装着と0秒設定も検証する。
+Version 50では初回Neutral、設定変更時の既存期限の維持、待機中の候補破棄・入力禁止、期限後の再受付、短時間での再許可、再装着と0秒設定を検証する。
 既存のExpressionSmokeでクローン・保存再読込・瞬き・口パクとの共存も検証する。
 模擬センサーによる単一ユーザー検証であり、実機を装着した操作や複数ユーザーの確認は含まない。
 

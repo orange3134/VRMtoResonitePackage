@@ -329,3 +329,13 @@ There is no controller Store or ElapsedTimeFloat. Returning to a previously sent
 older matching tasks are not cancelled. Tests cover first Neutral, captured duration despite settings
 edits, mismatching snapshots, input disabled during a pending delay, independent overlapping tasks,
 rewear, zero delay, and every controller code on both hands. Structure checks also run after clone/reload.
+
+Version 50 inserts LocalImpulseTimeoutSeconds between StartAsyncTask and Delay.
+Both use StabilitySeconds. Changes during the cooldown are dropped, not queued,
+and do not extend it. Reset stays unconnected, including across input disable/re-enable.
+Runtime checks cover dropped replacement poses remaining unsent while held, matching
+round trips sending only the admitted snapshot, later input after expiry, quick re-enable
+without duplicate sends, captured durations, and zero timeout on all ten hand graphs.
+Structure checks verify the shared duration source and Trigger/Next wiring after reload.
+Re-enable cases settle mocked sensors while input is disabled before changing permission,
+so the timeout assertions exercise one new accepted pose rather than simultaneous input edits.

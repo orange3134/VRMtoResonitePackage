@@ -159,32 +159,44 @@ internal static class ExpressionInputEventChecks
                 setCode(nextCode); await WaitSeconds(0.15);
                 Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": changed pose waits for its task");
                 setCode(0); await WaitSeconds(0.4);
-                Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": returning pose is sent again like the authored graph");
+                Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": returning pose during timeout is dropped without a queued resend");
                 Gesture(side, 7);
                 setCode(nextCode); await WaitSeconds(0.15);
                 setCode(thirdCode); await WaitSeconds(0.2);
                 Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": expired snapshot for a different pose is discarded");
                 await WaitSeconds(0.2);
-                Check(Get<int>(core, side + "Gesture") == expected[thirdCode], module.Name + "/" + side + ": replacement candidate has its own delayed task");
+                Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": replacement during timeout stays unsent even after holding it");
                 Gesture(side, 7);
                 setCode(nextCode); await WaitSeconds(0.1);
                 Allow(false); await WaitSeconds(0.3);
                 Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": pending task is rejected while input is disabled");
-                setCode(0); Allow(true); await WaitSeconds(0.4);
+                // Settle the mocked sensor while disabled before testing re-enable.
+                setCode(0); await Frames(3); Allow(true); await WaitSeconds(0.4);
                 Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": re-enable starts a new task");
-                // A -> B -> A matches two independent snapshots. The first task
-                // is not cancelled, even before the latest pose's full delay.
+                // Only the first snapshot survives an A -> B -> A round trip.
+                // Dropped impulses do not extend the cooldown or capture a value.
                 setCode(nextCode); await WaitSeconds(0.08);
                 setCode(0); await WaitSeconds(0.08);
                 setCode(nextCode); await WaitSeconds(0.19);
-                Check(Get<int>(core, side + "Gesture") == expected[nextCode], module.Name + "/" + side + ": an older matching snapshot may send after a round trip");
-                Gesture(side, 7); await WaitSeconds(0.22);
-                Check(Get<int>(core, side + "Gesture") == expected[nextCode], module.Name + "/" + side + ": latest matching snapshot also sends independently");
+                Check(Get<int>(core, side + "Gesture") == expected[nextCode], module.Name + "/" + side + ": admitted snapshot still sends when its pose returns");
+                Gesture(side, 7);
+                setCode(thirdCode); await WaitSeconds(0.22);
+                Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": suppressed matching change did not create another delayed task");
+                await WaitSeconds(0.18);
+                Check(Get<int>(core, side + "Gesture") == expected[thirdCode], module.Name + "/" + side + ": suppressed impulses do not extend the timeout and a later change sends");
+                // A short disable/re-enable neither resets the timeout nor queues
+                // another copy. The original snapshot may still match on completion.
+                setCode(0); await WaitSeconds(0.08);
+                Allow(false); await WaitSeconds(0.04);
+                Allow(true); await WaitSeconds(0.23);
+                Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": original admitted snapshot may send after quick re-enable");
+                Gesture(side, 7); await WaitSeconds(0.2);
+                Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": quick re-enable does not reset timeout or schedule a duplicate");
                 foreach (var entry in wearerReferences) entry.Reference.Target = null;
                 await Frames(10);
                 foreach (var entry in wearerReferences) entry.Reference.Target = expressions.World.LocalUser;
                 await WaitSeconds(0.45);
-                Check(Get<int>(core, side + "Gesture") == expected[nextCode], module.Name + "/" + side + ": rewear submits the unchanged physical pose");
+                Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": rewear submits the unchanged physical pose");
                 Set(module, "StabilitySeconds", 0f);
                 int other = Get<int>(core, (side == "Left" ? "Right" : "Left") + "Gesture");
                 for (int code = 0; code < expected.Length; code++)

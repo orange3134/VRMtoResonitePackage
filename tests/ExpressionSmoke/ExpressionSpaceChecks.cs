@@ -33,6 +33,15 @@ internal static class ExpressionSpaceChecks
             Check(hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.DelayWithValueSecondsFloat<int>>().Count == 1 &&
                 hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Async.StartAsyncTask>().Count == 1,
                 "each controller hand schedules delayed input snapshots");
+            var delayed = hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.DelayWithValueSecondsFloat<int>>().Single();
+            var start = hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Async.StartAsyncTask>().Single();
+            var timeout = hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Actions.LocalImpulseTimeoutSeconds>().Single();
+            Check(start.TaskStart.Target == timeout.Trigger && timeout.Next.Target == delayed &&
+                timeout.Timeout.Target == delayed.Duration.Target,
+                "async tasks pass through the per-hand timeout before capturing input, with the same duration");
+            Check(!hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.ProtoFluxNode>().Any(node =>
+                node.AllImpulses.Any(port => port.Target == timeout.Reset)),
+                "input changes and departure do not reset the authored timeout");
             Check(!hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.ProtoFluxNode>().Any(node =>
                 node.GetType().Name.StartsWith("StoredValue") || node.GetType().Name == "ElapsedTimeFloat"),
                 "controller hands need no candidate or last-sent stores and no elapsed timer");
@@ -100,8 +109,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 49,
-            "Delayed controller snapshots are identified by package version 49");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 50,
+            "Throttled controller snapshots are identified by package version 50");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("LeftGesture", out _),
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),
