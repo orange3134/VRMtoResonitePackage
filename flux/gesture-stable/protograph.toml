@@ -1,7 +1,0 @@
-name = "gesture-stable"
-version = "0.1.0"
-
-[build.dev]
-optimization_preset = "dev"
-
-[dependencies]
