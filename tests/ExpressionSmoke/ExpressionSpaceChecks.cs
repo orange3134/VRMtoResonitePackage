@@ -30,8 +30,12 @@ internal static class ExpressionSpaceChecks
             var hand = module.FindChild(side);
             Check(hand.FindChild("DV") == null && hand.GetComponentsInChildren<DynamicVariableSpace>().Count == 0,
                 "controller hands keep transient state inside Flux: " + module.Name + "/" + side);
-            Check(hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Time.ElapsedTimeFloat>().Count == 1,
-                "each controller hand measures stability with ElapsedTimeFloat");
+            Check(hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.DelayWithValueSecondsFloat<int>>().Count == 1 &&
+                hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Async.StartAsyncTask>().Count == 1,
+                "each controller hand schedules delayed input snapshots");
+            Check(!hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.ProtoFluxNode>().Any(node =>
+                node.GetType().Name.StartsWith("StoredValue") || node.GetType().Name == "ElapsedTimeFloat"),
+                "controller hands need no candidate or last-sent stores and no elapsed timer");
         }
         Check(root.FindChild("Diagnostics") == null, "diagnostics are logged rather than exported into the avatar");
 
@@ -96,8 +100,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 48,
-            "Flux-local controller state is identified by package version 48");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 49,
+            "Delayed controller snapshots are identified by package version 49");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("LeftGesture", out _),
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),

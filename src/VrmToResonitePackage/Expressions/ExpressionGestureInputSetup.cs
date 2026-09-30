@@ -89,9 +89,8 @@ internal sealed partial class ExpressionSystemSetup
             group.Slot.Name += $" : {names[gesture - 1]} ({gesture})";
             match.Values.Add((INodeValueOutput<bool>)found);
         }
-        // Rows 0..6 correspond to gestures 1..7; no matching row means Neutral.
-        var selected = g.Node("ValueInc", typeof(int), ("N", Out(match, "Index")));
-        return g.Choose<int>(Out(match, "FoundMatch"), selected, g.Constant(0));
+        // Rows 0..6 become gestures 1..7; the unmatched Index (-1) becomes Neutral (0).
+        return g.Node("ValueInc", typeof(int), ("N", Out(match, "Index")));
     }
 
     private static IWorldElement BuildPadGesture(ExpressionFlux g, Component controller, Slot module)

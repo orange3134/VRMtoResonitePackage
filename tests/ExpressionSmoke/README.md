@@ -117,7 +117,7 @@ The avatar identification graph is also installed for avatars without FirstPerso
 The synthetic fixture supplies the wearer reference normally assigned by AvatarUserReferenceAssigner on equip.
 Key.1 reassignment must update only its hand and retain valid Dynamic Input bindings after clone and package reload.
 
-Lifecycle and controller hands retain no User references. Local StoredValue<bool> flags
+Lifecycle and controller hands retain no User references. Lifecycle StoredValue<bool> flags
 initialize once while worn and rearm when the local user stops wearing the avatar.
 The previous active client clears state once on departure only when no new wearer is present.
 Private stages reject unworn updates, unworn clones do not initialize or repeatedly clear
@@ -321,3 +321,11 @@ Version 46 removes OnStart from keyboard and controller input boards. Graph chec
 Version 47 groups packed controller codes by gesture. Layout checks require a seven-row bool first-match selector, byte lookups for multi-code gestures, direct comparisons for single codes, and a false RockNRoll row for Cosmos. Group constants follow port order; the existing exhaustive sensor cases verify gesture numbers and unmatched Neutral behavior across clone/reload checks.
 
 Version 48 keeps controller Candidate and last-sent Stable in StoredValue<int>, replaces Since with resettable ElapsedTimeFloat, and removes the hand DV containers/spaces. Runtime checks assert observable API results instead of the removed DV state. Added cases cover an expired timer restarting, candidate replacement during the wait, a brief excursion returning to the last sent pose without overwriting manual input, and the unchanged physical pose being submitted after rewear. Structure checks also run after clone/reload.
+
+Version 49 directly generates the async snapshot graph observed in PC_Akane's Touch/Left
+with FrooxEngine. Each accepted change starts StartAsyncTask -> DelayWithValueSecondsFloat<int>;
+completion sends only if input remains accepted and the captured gesture matches the current one.
+There is no controller Store or ElapsedTimeFloat. Returning to a previously sent pose sends again;
+older matching tasks are not cancelled. Tests cover first Neutral, captured duration despite settings
+edits, mismatching snapshots, input disabled during a pending delay, independent overlapping tasks,
+rewear, zero delay, and every controller code on both hands. Structure checks also run after clone/reload.

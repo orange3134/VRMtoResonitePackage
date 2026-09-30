@@ -184,36 +184,19 @@ internal sealed partial class ExpressionSystemSetup
         var hand = module.AddSlot(side.ToString());
         var g = new ExpressionFlux(hand.AddSlot("Logic"));
         var modRef = g.Ref(module);
-        // Store survives separate impulses on this client; LocalValue does not.
-        var candidate = g.Node("StoredValue", typeof(int));
-        candidate.Slot.Name += " : Candidate";
-        var lastSent = g.Node("StoredValue", typeof(int));
-        lastSent.Slot.Name += " : Stable (last sent)";
-        var elapsed = g.Node("ElapsedTimeFloat");
-        var initialized = g.Node("StoredValue", typeof(bool));
-        var reset = g.If(g.Not(initialized), g.Sequence(
-            g.Set<int>(candidate, g.Constant(-1)), g.Set<int>(lastSent, g.Constant(-1)),
-            g.Set<bool>(initialized, g.Constant(true))));
         var controller = g.Node(device, null, ("User", g.Owner(_root)), ("Node", g.Constant(side)));
-        var active = Out(controller, "IsActive");
         var gesture = BuildControllerGesture(g, controller, device, side, module);
-        var changed = g.NotEqual<int>(gesture, candidate);
-        var delay = g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds");
-        var stable = g.Not(g.Greater(delay, elapsed));
-        var send = g.If(g.NotEqual<int>(lastSent, gesture), g.Sequence(
-            SendHandInput(g, g.Text(GestureTag(kind)), gesture), g.Set<int>(lastSent, gesture)));
-        var enabled = g.And(active, g.Read<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures"));
-        // A changed candidate starts a fresh interval. Never use the old elapsed
-        // value in the same event; a zero delay still sends immediately.
-        var update = g.If(g.AvatarWornLocal, g.Sequence(reset, g.If(enabled,
-            g.If(changed, g.Sequence(g.Set<int>(candidate, gesture), Out(elapsed, "Reset"),
-                g.If(g.Not(g.Greater(delay, g.Constant(0f))), send)), g.If(stable, send)),
-            g.Sequence(g.Set<int>(candidate, g.Constant(-1)), g.Set<int>(lastSent, g.Constant(-1))))),
-            g.Set<bool>(initialized, g.Constant(false)));
-        // The elapsed-time predicate changes when the wait expires, even at rest.
-        var accepting = g.And(g.AvatarWornLocal, enabled);
-        g.OnChanged<int>(g.Choose<int>(accepting, gesture, g.Constant(-1)), update);
-        g.OnChanged<bool>(g.And(accepting, stable), update);
-        g.OnChanged<bool>(g.AvatarWornLocal, update);
+        var accepting = g.And(g.AvatarWornLocal, Out(controller, "IsActive"),
+            g.Read<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures"));
+        var current = g.Choose<int>(accepting, gesture, g.Constant(-1));
+        // Mirror PC_Akane's authored Touch/Left graph: each accepted change starts
+        // its own delayed snapshot. Earlier tasks remain alive and may send if
+        // the same pose returns. There is deliberately no last-sent Store.
+        var delayed = g.Node("DelayWithValueSecondsFloat", typeof(int), ("Value", current),
+            ("Duration", g.Read<float>(modRef, GestureSettingsSpace, "StabilitySeconds")));
+        Link(delayed, "Next", g.If(g.And(accepting, g.Equal<int>(current, Out(delayed, "DelayedValue"))),
+            SendHandInput(g, g.Text(GestureTag(kind)), current)));
+        var start = g.Node("StartAsyncTask", null, ("TaskStart", delayed));
+        g.OnChanged<int>(current, g.If(accepting, start));
     }
 }

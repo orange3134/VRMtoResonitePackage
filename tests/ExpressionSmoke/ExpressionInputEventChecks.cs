@@ -115,56 +115,76 @@ internal static class ExpressionInputEventChecks
                     "Cosmos" => new[] { 2,4,6,3,7,0,0,0,0,0,0,0,1,0,0,0 },
                     _ => new[] { 0,1,2,3,4,5,6,7 }
                 };
-                setCode(0);
-                await Frames(10);
-                Set(module, "StabilitySeconds", 10f);
-                Gesture(side, 1);
-                active.Value.Value = true;
-                await Frames(3);
-                Check(Get<int>(core, side + "Gesture") == 1,
-                    module.Name + "/" + side + ": new sensor candidate waits for stability");
-                Set(module, "StabilitySeconds", 0.05f);
-                await Frames(30);
-                Check(Get<int>(core, side + "Gesture") == expected[0],
-                    module.Name + "/" + side + ": resting sensors send when the stability delay expires");
-                Gesture(side, 1); await Frames(10);
-                Check(Get<int>(core, side + "Gesture") == 1, module.Name + "/" + side + ": idle sensors preserve newer input");
-                Allow(false); await Frames(10);
-                Check(Get<int>(core, side + "Gesture") == 1,
-                    module.Name + "/" + side + ": gate resets sensing and retains the accepted value");
-                Allow(true); await Frames(30);
-                Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": re-enable detects current pose");
-                active.Value.Value = false; await Frames(10);
-                Check(Get<int>(core, side + "Gesture") == expected[0],
-                    module.Name + "/" + side + ": disconnect retains input and resets sensing");
-                Gesture(side, 4); active.Value.Value = true; await Frames(30);
-                Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": reconnect submits physical pose");
-                // An expired timer must restart on every new candidate. A brief
-                // excursion back to the last sent pose must not overwrite manual input.
                 async Task WaitSeconds(double seconds)
                 {
                     double end = expressions.World.Time.WorldTime + seconds;
                     while (expressions.World.Time.WorldTime < end) await default(NextUpdate);
                 }
+                // Each task captures the value and duration at its start. Begin
+                // with Neutral to catch accidental default-int suppression.
+                setCode(Array.FindIndex(expected, value => value == 0));
+                await Frames(10);
+                Set(module, "StabilitySeconds", 0.3f);
+                Gesture(side, 1);
+                active.Value.Value = true;
+                await WaitSeconds(0.1);
+                Check(Get<int>(core, side + "Gesture") == 1,
+                    module.Name + "/" + side + ": first Neutral waits for the captured delay");
+                Set(module, "StabilitySeconds", 0.05f);
+                await WaitSeconds(0.1);
+                Check(Get<int>(core, side + "Gesture") == 1,
+                    module.Name + "/" + side + ": editing delay does not shorten a pending task");
+                await WaitSeconds(0.2);
+                Check(Get<int>(core, side + "Gesture") == 0,
+                    module.Name + "/" + side + ": first Neutral sends after the captured delay");
+                setCode(0); await WaitSeconds(0.12);
+                Check(Get<int>(core, side + "Gesture") == expected[0],
+                    module.Name + "/" + side + ": next change uses the edited delay");
+                Gesture(side, 1); await Frames(10);
+                Check(Get<int>(core, side + "Gesture") == 1, module.Name + "/" + side + ": idle sensors preserve newer input");
+                Allow(false); await Frames(10);
+                Check(Get<int>(core, side + "Gesture") == 1,
+                    module.Name + "/" + side + ": gate retains the accepted value");
+                Allow(true); await Frames(30);
+                Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": re-enable detects current pose");
+                active.Value.Value = false; await Frames(10);
+                Check(Get<int>(core, side + "Gesture") == expected[0],
+                    module.Name + "/" + side + ": disconnect retains input");
+                Gesture(side, 4); active.Value.Value = true; await Frames(30);
+                Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": reconnect submits physical pose");
                 int nextCode = Array.FindIndex(expected, value => value != expected[0]);
                 int thirdCode = Array.FindIndex(expected, value => value != expected[0] && value != expected[nextCode]);
                 Set(module, "StabilitySeconds", 0.3f);
                 Gesture(side, 7);
                 setCode(nextCode); await WaitSeconds(0.15);
-                Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": expired timer restarts for a new pose");
+                Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": changed pose waits for its task");
                 setCode(0); await WaitSeconds(0.4);
-                Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": brief pose excursion does not resend the last stable pose");
+                Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": returning pose is sent again like the authored graph");
+                Gesture(side, 7);
                 setCode(nextCode); await WaitSeconds(0.15);
-                setCode(thirdCode); await WaitSeconds(0.15);
-                Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": changing a pending candidate restarts the full wait");
-                await WaitSeconds(0.25);
-                Check(Get<int>(core, side + "Gesture") == expected[thirdCode], module.Name + "/" + side + ": replacement candidate sends after its own interval");
-                // Stores are local execution state and must rearm after dequip.
+                setCode(thirdCode); await WaitSeconds(0.2);
+                Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": expired snapshot for a different pose is discarded");
+                await WaitSeconds(0.2);
+                Check(Get<int>(core, side + "Gesture") == expected[thirdCode], module.Name + "/" + side + ": replacement candidate has its own delayed task");
+                Gesture(side, 7);
+                setCode(nextCode); await WaitSeconds(0.1);
+                Allow(false); await WaitSeconds(0.3);
+                Check(Get<int>(core, side + "Gesture") == 7, module.Name + "/" + side + ": pending task is rejected while input is disabled");
+                setCode(0); Allow(true); await WaitSeconds(0.4);
+                Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": re-enable starts a new task");
+                // A -> B -> A matches two independent snapshots. The first task
+                // is not cancelled, even before the latest pose's full delay.
+                setCode(nextCode); await WaitSeconds(0.08);
+                setCode(0); await WaitSeconds(0.08);
+                setCode(nextCode); await WaitSeconds(0.19);
+                Check(Get<int>(core, side + "Gesture") == expected[nextCode], module.Name + "/" + side + ": an older matching snapshot may send after a round trip");
+                Gesture(side, 7); await WaitSeconds(0.22);
+                Check(Get<int>(core, side + "Gesture") == expected[nextCode], module.Name + "/" + side + ": latest matching snapshot also sends independently");
                 foreach (var entry in wearerReferences) entry.Reference.Target = null;
                 await Frames(10);
                 foreach (var entry in wearerReferences) entry.Reference.Target = expressions.World.LocalUser;
                 await WaitSeconds(0.45);
-                Check(Get<int>(core, side + "Gesture") == expected[thirdCode], module.Name + "/" + side + ": rewear submits the unchanged physical pose");
+                Check(Get<int>(core, side + "Gesture") == expected[nextCode], module.Name + "/" + side + ": rewear submits the unchanged physical pose");
                 Set(module, "StabilitySeconds", 0f);
                 int other = Get<int>(core, (side == "Left" ? "Right" : "Left") + "Gesture");
                 for (int code = 0; code < expected.Length; code++)
