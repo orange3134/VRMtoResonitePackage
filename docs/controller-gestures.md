@@ -203,3 +203,104 @@ Candidateは毎回の候補変更で更新し、最後の送信値Stableとは�
 
 候補変更時は毎回Candidateを更新してResetし、満了時には受付条件と最後の送信値との差を確認して送信する。
 送信後だけStableを更新することで、短い揺れの再送抑制と新しい手形の確定を両立する。
+
+## VRC SDKのIdle／NeutralとTouchでの再現案（2026-09-30調査）
+
+この節は調査と設計案。Version 51の生成コード・ワールドの配線は変更していない。
+実行中のUnity 2022.3.22f1プロジェクトから、com.vrchat.avatars / com.vrchat.base 3.10.5を確認した。
+以下のパスはcom.vrchat.avatarsの `Samples/AV3 Demo Assets/Animation/` からの相対パス。
+環境固有のプロジェクトパスや抽出物はコミットしない。
+
+### SDKで確認した定義と形
+
+- `Controllers/vrc_AvatarV3HandsLayer.controller` の実際のLeft Hand／Right Handステートマシンを辿ると、
+  GestureLeft／Right == 0はIdle、1はFist、2はOpenへ遷移する。
+  Idleは `ProxyAnim/proxy_hands_idle.anim`、Openは `proxy_hands_open.anim` を参照する。
+  同ファイルには古い未参照の状態も残るため、名前検索だけで全Idle状態を採用しない。
+- `vrc_AvatarV3HandsLayer2.controller` の左右0はIdle2で、
+  `proxy_hands_idle2.anim` を参照する。通常のIdleは静止ポーズ（StopTime=0）、
+  Idle2は5.5秒のループで、指カーブに小さな変動がある。
+- [Animator Parameters](https://creators.vrchat.com/avatars/animator-parameters/)のNeutral=0、
+  HandOpen=2とも一致する。「Idle」と「Neutral」はここでは同じ番号0の状態を指す。
+  [デスクトップ操作](https://docs.vrchat.com/docs/keyboard-and-mouse)のShift+F1もIdleである。
+- SDKクリップの指はHumanoid muscleのStretched／Spreadで定義されている。
+  IdleはOpenより曲がり、Fistほど握り込んでいない脱力した形と読める。
+  親指や各関節の値は均一ではなく、全指へ一律の曲げ率を設定する形ではない。
+  以下は左人差し指の実値であり、角度や0〜1のGrip値ではない。
+
+| 左人差し指のmuscle | Idle | Open | Fist |
+|---|---:|---:|---:|
+| 1 Stretched | 0.25111935 | 0.51009136 | -0.33480328 |
+| 2 Stretched | 0.111410186 | 0.51150346 | -0.30036262 |
+| 3 Stretched | 0.30399844 | 0.820959 | -0.13991955 |
+
+これらはSDKに含まれる標準サンプルの形。実アバターのカスタムGesture、
+トラッキング、クライアントの入力処理まで同じ姿勢になるという証拠ではない。
+特にこのSDKのAnimatorとクリップからは、Touchの接触・押下をGesture番号へ変換する
+クライアント側のしきい値・優先順位は確定できない。
+
+### 現行ResoPonが区別できない入力
+
+現在のTouch判定は5ビットの完全一致であり、TriggerTouch・ThumbRestTouch・アナログ量を使わない。
+Neutral=0は明示した脱力形ではなく、既知の7手形に一致しないコードの戻り値である。
+Neutralになるコードは9,10,11,13,14,15,16,19,25,26,27,29,30,31。
+
+たとえばJoystickTouchだけがtrueならコード8でVictoryとなる。
+この状態で人差し指をトリガーへ触れさせても、引かなければ同じコード8なのでVictoryのまま。
+「人差し指を離している」と「触れて休めている」を区別できない。
+5ビットがすべてfalseなら、TriggerTouch／ThumbRestTouchがtrueでもコード0でHandOpenとなる。
+
+[公式Touch操作表](https://docs.vrchat.com/docs/touch)では指をトリガーから離す条件と引く条件を区別しているが、
+Neutralの厳密な判定表は載っていない。
+また[GestureWeightの説明](https://creators.vrchat.com/avatars/animator-parameters/#footnotes)には
+FistでGesture=1のままトリガー量が0になり得る例がある。
+TriggerClickだけでVRCのGesture／GestureWeightを完全再現できるとは扱わない。
+
+### 表情入力としての提案
+
+Touchの入力を次の状態へ正規化してから手形を選ぶ。
+
+- 親指：ButtonXA_Touch OR ButtonYB_Touch OR JoystickTouch OR ThumbRestTouch。
+- 人差し指：離している／TriggerTouchだけ／トリガーを引いている、の3状態。
+  Clickを使う初期案なら「離している」は!TriggerTouch AND !TriggerClick、
+  「触れているだけ」はTriggerTouch AND !TriggerClickとする。
+- 中指側：GripClick、または実機で較正するGripの押し込み量。
+  これは薬指・小指まで含めた実指の計測ではなく、コントローラー入力からの推定。
+
+Neutralの実装候補は「親指を置き、人差し指は触れるだけで、GripもTriggerも押し込まない」状態。
+既存のVictory等へ進む前にこの条件を明示判定する。
+HandOpenは指を離す条件を使い、Neutralと分ける。
+これはResonite向けの仮説であり、VRCクライアントの厳密な条件として確定していない。
+Gripを握ったままTriggerに触れる場合などはFist／Weightとの照合が必要であり、
+TriggerTouch=trueの全状態をNeutralへまとめない。
+
+外部APIの番号は0=Neutral、1〜7=既存手形、-1=VR終了等の入力無効を維持する。
+0はGestureTableのL0Rn／LnR0を選ぶ有効な入力であり、表情解除やBaseと常に同義ではない。
+-1は既定の0〜7表の範囲外であるため、対応行がなければBaseへ戻る。
+[Gesture Toggle](https://docs.vrchat.com/docs/gesture-toggle)の無効化も別の操作で、
+VRC AV3は最後のGesture値を保持する。これをNeutralへの変更と混同しない。
+
+### 見た目の指ポーズとしての提案
+
+Resonite 2026.9.18.82の実DLLで次を確認した。
+
+- `FingerPosePreset.PresetPose = Idle` は `FingerPosePresets.Idle` を返す。
+  Resonite標準の脱力ポーズを手早く表示する候補だが、VRC標準Idleとの同一性は未検証。
+- `FingerPoseMultiplexer` はSources／IndexでIFingerPoseSourceComponentを選び、
+  InterpolationSpeedで補間する。`HandPoser.PoseSource` が指ポーズを受け取る。
+  左右独立に選べる構成とし、使用中の指トラッキングとの切替を設ける。
+- VRCの形を厳密に再現するなら、対象Humanoid AvatarでSDKクリップを評価し、
+  得られた指ボーン回転をResoniteの手首基準・指の基準軸へ変換する必要がある。
+  Unity muscle値をEuler角としてコピーしたり、全アバター共通の固定角度へ直接変換しない。
+  手の見た目を駆動する経路と、表情を選ぶ0〜7の経路を分ける。
+
+このプロジェクトで先に行うべきなのは表情入力の接触判定の改善。
+手の見た目まで変更する場合は、ポーズ出力の追加を別の検証項目にする。
+実機確認では同じ指の置き方についてVRCのGestureLeft／Right・Weightと、
+Resoniteの各Touch／Click／アナログ値を照合する。
+離す→触れる→浅く引く→深く引く、親指をスティック／ボタン／レストへ置く、
+左右、Gripの有無を含め、Neutral／Open／Victory／Fistの境界を確定してから採用する。
+
+検証済み：SDKの到達可能な左右状態とGUID参照、Idle/Open/Fistのカーブ値、
+Idle2のループ時間、現行Touch全32コードの割り当て、上記Resonite実DLLの型・メンバー。
+未検証：VRChatクライアントの実機Gesture値、Resonite実機センサー値、ポーズの見た目の一致。
