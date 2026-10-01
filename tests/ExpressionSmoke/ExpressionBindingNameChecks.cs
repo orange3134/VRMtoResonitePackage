@@ -45,9 +45,8 @@ internal static class ExpressionBindingNameChecks
                 await Frames(60);
                 if (reverse == 0)
                 {
-                    var groups = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items")
-                        .FindChild("Direct selection").FindChild("Items");
-                    Check(groups.Children.Count == 1 && groups.Children.Single().Name == "Other expressions",
+                    var groups = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
+                    Check(groups.FindChild("Hand sign expressions") == null && groups.FindChild("Other expressions") != null,
                         "Catalog without gesture mappings omits the empty hand sign submenu");
                 }
                 var outputs = root.FindChild("Outputs").Children;

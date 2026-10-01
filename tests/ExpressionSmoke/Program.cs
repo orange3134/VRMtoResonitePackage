@@ -90,15 +90,15 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(expressions.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "all generated ProtoFlux groups are valid");
         ExpressionLayoutChecks.SaveKeyboardLayout(expressions, Path.Combine(artifacts, "keyboard-layout.json"));
         ExpressionGraphChecks.CheckLayout(expressions);
-        var directGroups = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items")
-            .FindChild("Direct selection").FindChild("Items");
+        var directGroups = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
+        var expressionGroups = directGroups.Children.Where(group => group.Name is "Hand sign expressions" or "Other expressions").ToArray();
         var mappedExpressions = expressions.FindChild("DV").FindChild("GestureTable")
             .GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Select(row => row.Reference.Target)
             .Where(target => target != null).ToHashSet();
         var menuTargets = new HashSet<Slot>();
-        Check(directGroups.Children.Count == 2, "mixed Catalog offers separate hand sign and other submenus");
-        foreach (var group in directGroups.Children)
-        foreach (var entry in group.FindChild("Items").Children)
+        Check(expressionGroups.Length == 2, "mixed Catalog offers separate hand sign and other submenus directly under Expressions");
+        foreach (var group in expressionGroups)
+        foreach (var entry in group.FindChild("Items").Children.Where(entry => entry.Name != "Back"))
         {
             var target = entry.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().PressedData.Reference.Target;
             Check(menuTargets.Add(target), "direct selection lists each expression once despite repeated gesture mappings");

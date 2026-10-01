@@ -48,19 +48,23 @@ internal static class ExpressionGraphChecks
     {
         ExpressionSpaceChecks.Run(expressions);
         CheckMenuColors(expressions);
-        if (Descendant(expressions, "Inputs/ContextMenu/Items/Direct selection") is { } direct)
+        if (Descendant(expressions, "Inputs/ContextMenu/Items") is { } groups)
         {
-            var groups = direct.GetComponent<ContextMenuSubmenu>().ItemsRoot.Target;
-            Check(groups != expressions.FindChild("Catalog") && groups == direct.FindChild("Items"),
-                "direct selection opens expression groups instead of the whole Catalog");
-            foreach (var group in groups.Children)
+            Check(groups.FindChild("Direct selection") == null,
+                "expression groups open directly from Expressions without an intermediate selection menu");
+            foreach (var group in groups.Children.Where(group => group.Name is "Hand sign expressions" or "Other expressions"))
             {
-                Check(group.Name is "Hand sign expressions" or "Other expressions",
-                    "direct expression groups have distinct labels");
                 var entries = group.GetComponent<ContextMenuSubmenu>().ItemsRoot.Target;
-                Check(entries == group.FindChild("Items") && entries.Children.Count > 0,
+                Check(entries == group.FindChild("Items") && entries.Children.Count > 1,
                     "expression groups use their own nonempty item roots");
-                foreach (var item in entries.Children)
+                var back = entries.FindChild("Back");
+                Check(back?.GetComponent<ContextMenuItemSource>()?.Label.Value == "Back" &&
+                    back.GetComponent<ContextMenuSubmenu>()?.ItemsRoot.Target == groups &&
+                    !back.GetComponent<ContextMenuSubmenu>().SearchWholeHierarchy.Value,
+                    "Back uses a Submenu referencing the local Expressions items after cloning and reload");
+                Check(back.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>() == null,
+                    "Back navigates without selecting an expression");
+                foreach (var item in entries.Children.Where(item => item != back))
                 {
                     var target = item.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().PressedData.Reference.Target;
                     Check(target == null || target.Parent == expressions.FindChild("Catalog"),

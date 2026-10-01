@@ -78,9 +78,6 @@ internal sealed partial class ExpressionSystemSetup
         menu.AttachComponent<RootContextMenuItem>().Item.Target = MenuItem(menu, "Expressions");
         var items = menu.AddSlot("Items");
         menu.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
-        var direct = items.AddSlot("Direct selection"); MenuItem(direct, "Select expression");
-        var directItems = direct.AddSlot("Items");
-        direct.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = directItems;
         foreach (var expression in _clips.Values)
         {
             MenuItem(expression, expression.Name);
@@ -93,9 +90,11 @@ internal sealed partial class ExpressionSystemSetup
         {
             var entries = _clips.Where(clip => mapped.Contains(clip.Key) == assigned).ToArray();
             if (entries.Length == 0) continue;
-            var group = directItems.AddSlot(label); MenuItem(group, label);
+            var group = items.AddSlot(label); MenuItem(group, label);
             var children = group.AddSlot("Items");
             group.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = children;
+            var back = children.AddSlot("Back"); MenuItem(back, "Back");
+            back.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
             foreach (var (_, expression) in entries)
             {
                 var item = children.AddSlot(expression.Name);

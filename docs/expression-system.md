@@ -298,7 +298,10 @@ Version 23では左右ジェスチャーのコンテキストメニューと専�
   Grip/Trigger の押し込み・解放しきい値と安定待ち時間を機種ごとに編集できる。
   指を個別に取得できない機種の Victory/Rock はボタン操作から判定する。
 
-Version 57の `Select expression` は `Hand sign expressions` と `Other expressions` のサブメニューに分ける。
+Version 58は `Expressions` メニュー直下に `Hand sign expressions` と `Other expressions` のサブメニューを置く。
+中間の `Select expression` メニューは生成しない。それぞれのサブメニューには `Back` 項目を置き、
+そのContextMenuSubmenu.ItemsRootからExpressions直下のItemsを参照して親メニューへ戻る。
+Backは表情選択APIを送らず、選択中の表情やハンドジェスチャーの許可状態を変更しない。
 変換時に確定した64通りのGestureTableから参照される表情を前者、それ以外のCatalog表情を後者に入れる。
 同じ表情が複数の組み合わせで使われても項目は1つとし、空のサブメニューは生成しない。
 分類は変換時に固定する。変換後のGestureTable編集による自動再分類は行わない。

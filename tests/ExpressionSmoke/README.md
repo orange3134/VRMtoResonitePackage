@@ -1,6 +1,8 @@
 # Expression integration checks
 
-Version 57 splits direct selection into Hand sign expressions and Other expressions.
+Version 58 places Hand sign expressions and Other expressions directly under Expressions.
+Each group includes a Back item whose ContextMenuSubmenu opens the local Expressions items,
+including after cloning and package reload. There is no intermediate Select expression menu.
 The synthetic fixture checks classification against the compiled 64-pair table,
 deduplication, complete Catalog coverage, actual button selection in both groups,
 editable Catalog labels, and local menu references after cloning and package reload.
