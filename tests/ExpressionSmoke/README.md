@@ -359,3 +359,11 @@ inputs. Thumb-contact combinations expand the grouped byte lookup sizes to
 45/1/15/15/30/1/3 while retaining the seven gesture rows and v52 behavior.
 Layout checks require the exact sensor-to-bit connections and an unused Bit7
 before and after package reload; the independent 128-case posture oracle stays unchanged.
+
+Version 54 orders the seven used Touch outputs as they appear on the stock node:
+YB touch, XA touch, thumb rest, grip click, joystick touch, trigger touch and trigger click.
+Long byte lookups become inclusive IsBetween_Int ranges (6 for Fist, 2 for Point,
+2 for Victory and 4 for RockNRoll) with one shared byte-to-int cast. ThumbsUp retains
+its three sparse codes; Open/Gun retain direct equality. Graph checks verify actual
+output order and forbid large Touch byte lookups; the exhaustive sensor oracle
+covers every range endpoint and gap, alongside clone and package reload checks.

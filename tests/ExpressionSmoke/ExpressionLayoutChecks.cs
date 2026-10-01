@@ -78,13 +78,23 @@ internal static class ExpressionLayoutChecks
                 if (module.Name == "Touch")
                 {
                     var controller = nodes.Single(n => n.GetType().Name == "TouchController");
-                    string[] ports = { "ButtonYB_Touch", "ButtonXA_Touch", "JoystickTouch", "ThumbRestTouch",
-                        "GripClick", "TriggerTouch", "TriggerClick" };
+                    string[] ports = { "ButtonYB_Touch", "ButtonXA_Touch", "ThumbRestTouch", "GripClick",
+                        "JoystickTouch", "TriggerTouch", "TriggerClick" };
+                    var outputs = controller.NodeOutputs.Select(output => (IWorldElement)output).ToArray();
+                    int previousOutput = -1;
                     for (int bit = 0; bit < ports.Length; bit++)
+                    {
                         Check(((ISyncRef)ExpressionFlux.Member(bits, "Bit" + bit)).Target == ExpressionFlux.Out(controller, ports[bit]),
                             "Touch sensor connects directly to its own packed bit: " + ports[bit]);
+                        int outputIndex = Array.IndexOf(outputs, ExpressionFlux.Out(controller, ports[bit]));
+                        Check(outputIndex > previousOutput, "Touch sensor bits follow the actual controller output order");
+                        previousOutput = outputIndex;
+                    }
                     Check(((ISyncRef)ExpressionFlux.Member(bits, "Bit7")).Target == null,
                         "Touch leaves the eighth bit unused");
+                    var lookups = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<byte>>().ToArray();
+                    Check(lookups.Length == 1 && lookups[0].Values.Count == 3,
+                        "Touch retains only the three-code ThumbsUp byte lookup");
                 }
                 for (int gesture = 0; gesture < sizes.Length; gesture++)
                 {
@@ -96,6 +106,17 @@ internal static class ExpressionLayoutChecks
                         Check(condition is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueEquals<byte> equal && equal.A.Target == bits &&
                             equal.B.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<byte>,
                             "single-code gestures compare directly against the packed byte");
+                    else if (module.Name == "Touch" && sizes[gesture] > 3)
+                    {
+                        int[] rangeCounts = { 6, 0, 2, 2, 4, 0, 0 };
+                        var ranges = condition.AllInputs.Select(input => Owner(input.Target)).ToArray();
+                        Check(ranges.Length == rangeCounts[gesture], "Touch gesture uses compact contiguous ranges");
+                        foreach (var range in ranges)
+                            Check(range is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Math.IsBetween_Int between &&
+                                between.Value.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Casts.Cast_byte_To_int cast &&
+                                cast.Input.Target == bits,
+                                "Touch ranges compare the packed sensor byte through one integer cast");
+                    }
                     else
                     {
                         var group = condition as FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<byte>;

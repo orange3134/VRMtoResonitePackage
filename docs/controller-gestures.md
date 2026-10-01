@@ -62,7 +62,7 @@ Touchの複数コード群はFist=28/22/21/23、FingerPoint=5/6/12/7、Victory=2
 Touchの64〜73は原版のデスクトップ入力符号であり、VRセンサー判定には含めない。
 キーボードはResoPonの左右別入力を継続する。
 
-## Touchの接触状態による判定（Version 52〜53）
+## Touchの接触状態による判定（Version 52〜54）
 
 VRC SDKのIdle／Neutral調査を受け、TouchだけをResonite向けの接触判定へ変更する。
 これはVRCクライアントの厳密な入力アルゴリズムの移植ではなく、下記の明示した対応表である。
@@ -71,6 +71,7 @@ VRC SDKのIdle／Neutral調査を受け、TouchだけをResonite向けの接触�
 親指接触はButtonYB_Touch、ButtonXA_Touch、JoystickTouch、ThumbRestTouchのいずれかがtrueの状態。
 複数箇所への同時接触も1つの親指状態として扱う。Version 52では4入力をORでまとめていたが、
 Version 53では各センサーをComposeBits_byteへ直接接続し、一致コード側で全組み合わせを扱う。
+Version 54では使用する出力の表示順にビットを並べ、連続する一致コードをIsBetweenでまとめる。
 人差し指はTriggerTouch／TriggerClickから離す・触れるだけ・引くの3状態に分ける。
 TriggerClick=trueならTriggerTouch=falseでも「引く」を優先する。
 GripはGripClickを使い、今回アナログ量の独自しきい値は追加しない。
@@ -82,23 +83,27 @@ GripはGripClickを使い、今回アナログ量の独自しきい値は追加�
 | 離す | true | HandGun (6) | ThumbsUp (7) | ThumbsUp (7) |
 | 触れる | true | FingerPoint (3) | Fist (1) | Fist (1) |
 
-Version 53のComposeBits_byteはBit0=ButtonYB_Touch、Bit1=ButtonXA_Touch、
-Bit2=JoystickTouch、Bit3=ThumbRestTouch、Bit4=GripClick、Bit5=TriggerTouch、
+Version 54のComposeBits_byteはBit0=ButtonYB_Touch、Bit1=ButtonXA_Touch、
+Bit2=ThumbRestTouch、Bit3=GripClick、Bit4=JoystickTouch、Bit5=TriggerTouch、
 Bit6=TriggerClickとし、Bit7は未接続。1〜7の手形は従来と同じ7行のグループで判定する。
-下位4ビットの親指接触の全15通りを各手形のIndexOfFirstValueMatch<byte>.Valuesへ展開する。
-次の `t` は1〜15であり、上位ビットと重ならないため、加算はビットORと同じ値になる。
+この順序は実行対象のProtoFluxBindings.dllのTouchController出力順に従う。
+未使用のボタン押下・アナログ量などを飛ばして、接続する7出力の上下順を維持する。
 
-| 手形 | 一致コード | 比較値の数 |
+親指接触の値は1〜7と16〜23。多数の一致コードは連続区間に分けてIsBetween_Intで判定し、
+区間の結果をORでまとめる。ComposeBits_byteの出力は共有のCast_byte_To_intを通す。
+範囲の下端・上端はいずれも含む。各コードを列挙した巨大なbyte一覧は生成しない。
+
+| 手形 | 一致コード／範囲 | 判定 |
 |---|---|---:|
-| Fist (1) | 48+t、80+t、112+t | 45 |
-| HandOpen (2) | 0 | 1 |
-| FingerPoint (3) | 16+t | 15 |
-| Victory (4) | t | 15 |
-| RockNRoll (5) | 64+t、96+t | 30 |
-| HandGun (6) | 16 | 1 |
-| ThumbsUp (7) | 48、80、112 | 3 |
+| Fist (1) | 41〜47、56〜63、73〜79、88〜95、105〜111、120〜127 | 6区間 |
+| HandOpen (2) | 0 | ValueEquals<byte> |
+| FingerPoint (3) | 9〜15、24〜31 | 2区間 |
+| Victory (4) | 1〜7、16〜23 | 2区間 |
+| RockNRoll (5) | 65〜71、80〜87、97〜103、112〜119 | 4区間 |
+| HandGun (6) | 8 | ValueEquals<byte> |
+| ThumbsUp (7) | 40、72、104 | IndexOfFirstValueMatch<byte>の3値 |
 
-単一コードのHandOpenとHandGunはValueEquals<byte>を維持する。
+単一コードのHandOpenとHandGun、離れた3コードのThumbsUpは小さな比較を維持する。
 NeutralはTriggerTouch AND !TriggerClick AND !GripClickを名前付きノードで明示判定して優先する。
 その他未一致も0となる（コード64/96の、Gripなし・親指を離してトリガーだけ引く状態）。
 

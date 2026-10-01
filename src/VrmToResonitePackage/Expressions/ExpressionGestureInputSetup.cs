@@ -39,8 +39,9 @@ internal sealed partial class ExpressionSystemSetup
         }
         else if (device == "TouchController")
         {
-            string[] ports = { "ButtonYB_Touch", "ButtonXA_Touch", "JoystickTouch", "ThumbRestTouch",
-                "GripClick", "TriggerTouch", "TriggerClick" };
+            // Keep the used outputs in the stock TouchController's visual port order.
+            string[] ports = { "ButtonYB_Touch", "ButtonXA_Touch", "ThumbRestTouch", "GripClick",
+                "JoystickTouch", "TriggerTouch", "TriggerClick" };
             for (int bit = 0; bit < ports.Length; bit++) Link(bits, "Bit" + bit, Out(controller, ports[bit]));
         }
         else
@@ -49,17 +50,18 @@ internal sealed partial class ExpressionSystemSetup
             for (int bit = 0; bit < ports.Length; bit++) Link(bits, "Bit" + bit, Out(controller, ports[bit]));
         }
 
-        // Bits 0..3 enumerate all 15 nonempty thumb-contact combinations.
-        // Bits 4/5/6 are GripClick/TriggerTouch/TriggerClick, respectively.
+        // Thumb contact occupies bits 0/1/2/4; bit 3 is GripClick.
+        // Bits 5/6 are TriggerTouch/TriggerClick, respectively.
         static byte[] WithThumbContact(params byte[] states) => states
-            .SelectMany(state => Enumerable.Range(1, 15).Select(thumb => (byte)(state | thumb))).ToArray();
+            .SelectMany(state => Enumerable.Range(1, 23).Where(thumb => (thumb & 8) == 0)
+                .Select(thumb => (byte)(state | thumb))).ToArray();
 
         (int Gesture, byte[] Codes)[] matches = device switch
         {
             "TouchController" => new (int, byte[])[] {
-                (1, WithThumbContact(48, 80, 112)), (2, new byte[] { 0 }),
-                (3, WithThumbContact(16)), (4, WithThumbContact(0)),
-                (5, WithThumbContact(64, 96)), (6, new byte[] { 16 }), (7, new byte[] { 48, 80, 112 }) },
+                (1, WithThumbContact(40, 72, 104)), (2, new byte[] { 0 }),
+                (3, WithThumbContact(8)), (4, WithThumbContact(0)),
+                (5, WithThumbContact(64, 96)), (6, new byte[] { 8 }), (7, new byte[] { 40, 72, 104 }) },
             "IndexController" => new (int, byte[])[] {
                 (1, new byte[] { 31 }), (2, new byte[] { 0 }), (3, new byte[] { 30 }),
                 (4, new byte[] { 28 }), (5, new byte[] { 6, 22 }), (6, new byte[] { 14 }), (7, new byte[] { 15 }) },
@@ -71,6 +73,24 @@ internal sealed partial class ExpressionSystemSetup
         var match = (Nodes.Utility.IndexOfFirstValueMatch<bool>)g.Node("IndexOfFirstValueMatch", typeof(bool),
             ("Match", g.Constant(true, shared: false)));
         string[] names = { "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
+        var touchCode = device == "TouchController" ? g.Node("Cast_byte_To_int", null, ("Input", bits)) : null;
+
+        // Export consecutive Touch codes as inclusive ranges rather than one
+        // constant and input per code. The three sparse ThumbsUp codes stay a lookup.
+        IWorldElement MatchTouchRanges(byte[] codes)
+        {
+            var sorted = codes.Order().ToArray();
+            var ranges = new List<IWorldElement>();
+            for (int i = 0; i < sorted.Length; i++)
+            {
+                int min = sorted[i];
+                while (i + 1 < sorted.Length && sorted[i + 1] == sorted[i] + 1) i++;
+                ranges.Add(g.Node("IsBetween_Int", null, ("Value", touchCode),
+                    ("Min", g.Constant(min)), ("Max", g.Constant((int)sorted[i]))));
+            }
+            return g.Or(ranges.ToArray());
+        }
+
         // One bool row per gesture keeps the code groups readable and the output
         // index stable. Cosmos has no RockNRoll, so that row is always false.
         for (int gesture = 1; gesture <= names.Length; gesture++)
@@ -86,6 +106,11 @@ internal sealed partial class ExpressionSystemSetup
             else if (codes.Length == 1)
             {
                 group = (Component)g.Equal<byte>(bits, g.Constant(codes[0]));
+                found = group;
+            }
+            else if (device == "TouchController" && codes.Length > 3)
+            {
+                group = (Component)MatchTouchRanges(codes);
                 found = group;
             }
             else
