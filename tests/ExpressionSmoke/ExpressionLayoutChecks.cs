@@ -95,6 +95,11 @@ internal static class ExpressionLayoutChecks
                     var lookups = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<byte>>().ToArray();
                     Check(lookups.Length == 1 && lookups[0].Values.Count == 3,
                         "Touch retains only the three-code ThumbsUp byte lookup");
+                    var gates = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueConditional<int>>().ToArray();
+                    Check(gates.Length == 1 &&
+                        gates[0].OnTrue.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Operators.ValueInc<int> gestureIndex &&
+                        gestureIndex.N.Target == match.Index,
+                        "Touch sends Index+1 directly into the acceptance gate without a Neutral override");
                 }
                 for (int gesture = 0; gesture < sizes.Length; gesture++)
                 {

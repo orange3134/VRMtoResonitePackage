@@ -125,16 +125,9 @@ internal sealed partial class ExpressionSystemSetup
             match.Values.Add((INodeValueOutput<bool>)found);
         }
         // Rows 0..6 become gestures 1..7; the unmatched Index (-1) becomes Neutral (0).
-        var selected = g.Node("ValueInc", typeof(int), ("N", Out(match, "Index")));
-        if (device != "TouchController") return selected;
-
-        // Resting the index finger without pulling either trigger is explicitly
-        // Neutral, including when the thumb is lifted. A pressed trigger takes
-        // precedence over a missing touch signal; it must not become Open/Point.
-        var neutral = (Component)g.And(Out(controller, "TriggerTouch"),
-            g.Not(Out(controller, "TriggerClick")), g.Not(Out(controller, "GripClick")));
-        neutral.Slot.Name += " : Neutral (0)";
-        return g.Choose<int>(neutral, g.Constant(0), selected);
+        // Touch's contact-only codes (32..39 and 48..55) match no gesture above,
+        // so resting the index finger needs no separate Neutral override.
+        return g.Node("ValueInc", typeof(int), ("N", Out(match, "Index")));
     }
 
     private static IWorldElement BuildPadGesture(ExpressionFlux g, Component controller, Slot module)

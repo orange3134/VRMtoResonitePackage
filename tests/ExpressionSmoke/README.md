@@ -367,3 +367,9 @@ Long byte lookups become inclusive IsBetween_Int ranges (6 for Fist, 2 for Point
 its three sparse codes; Open/Gun retain direct equality. Graph checks verify actual
 output order and forbid large Touch byte lookups; the exhaustive sensor oracle
 covers every range endpoint and gap, alongside clone and package reload checks.
+
+Version 55 removes Touch's contact-only Neutral override after Index+1. Codes
+32..39 and 48..55 already match none of the seven gesture inputs, so unmatched
+Index=-1 becomes Neutral=0 without extra NOT/AND/conditional nodes. Graph checks
+require Index+1 to feed the acceptance gate directly; the existing 128-case
+oracle and resting-index transitions still verify Neutral and mapped expressions.

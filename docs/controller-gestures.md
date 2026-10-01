@@ -62,7 +62,7 @@ Touchの複数コード群はFist=28/22/21/23、FingerPoint=5/6/12/7、Victory=2
 Touchの64〜73は原版のデスクトップ入力符号であり、VRセンサー判定には含めない。
 キーボードはResoPonの左右別入力を継続する。
 
-## Touchの接触状態による判定（Version 52〜54）
+## Touchの接触状態による判定（Version 52〜55）
 
 VRC SDKのIdle／Neutral調査を受け、TouchだけをResonite向けの接触判定へ変更する。
 これはVRCクライアントの厳密な入力アルゴリズムの移植ではなく、下記の明示した対応表である。
@@ -104,8 +104,14 @@ Bit6=TriggerClickとし、Bit7は未接続。1〜7の手形は従来と同じ7�
 | ThumbsUp (7) | 40、72、104 | IndexOfFirstValueMatch<byte>の3値 |
 
 単一コードのHandOpenとHandGun、離れた3コードのThumbsUpは小さな比較を維持する。
-NeutralはTriggerTouch AND !TriggerClick AND !GripClickを名前付きノードで明示判定して優先する。
-その他未一致も0となる（コード64/96の、Gripなし・親指を離してトリガーだけ引く状態）。
+Version 55ではNeutralの後段条件分岐を省く。
+Version 52〜54の `TriggerTouch AND !TriggerClick AND !GripClick ? 0 : Index+1` は、
+「トリガーに触れるだけ」の状態をNeutralへ優先するための明示判定だった。
+ただし、この状態のコード32〜39／48〜55は最初から全手形の一致条件の範囲外である。
+IndexOfFirstValueMatch<bool>が未一致のIndex=-1を返すため、Index+1だけでNeutral=0となる。
+同じ条件を入力側へ追加する必要もなく、AND・2つのNOT・条件分岐・0のint定数を削除する。
+コード64/96の、Gripなし・親指を離してトリガーだけ引く状態も同じ未一致経路で0となる。
+入力受付外の-1を選ぶ条件分岐は残す。これはNeutralを選ぶ判定とは別に必要な受付制御である。
 
 Neutralは有効な表情入力であり、GestureTableの0行を選ぶ。VR終了・切断の-1と区別する。
 同じ手形のまま親指の接触先が変わっても再送しない。

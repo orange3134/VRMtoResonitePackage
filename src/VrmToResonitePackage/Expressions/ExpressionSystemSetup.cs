@@ -52,7 +52,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "CurrentExpression", null);
         Data(_root, "PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 54);
+        Data(_root, "Version", 55);
         Reference(_root, "References.API", _api);
         Reference(_root, "References.Catalog", _catalog);
     }
