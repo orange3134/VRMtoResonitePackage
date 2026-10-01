@@ -93,6 +93,7 @@ internal sealed partial class ExpressionSystemSetup
 
         // One bool row per gesture keeps the code groups readable and the output
         // index stable. Cosmos has no RockNRoll, so that row is always false.
+        var conditions = new List<INodeValueOutput<bool>>();
         for (int gesture = 1; gesture <= names.Length; gesture++)
         {
             byte[] codes = matches.FirstOrDefault(m => m.Gesture == gesture).Codes;
@@ -122,11 +123,21 @@ internal sealed partial class ExpressionSystemSetup
                 found = Out(codesMatch, "FoundMatch");
             }
             group.Slot.Name += $" : {names[gesture - 1]} ({gesture})";
-            match.Values.Add((INodeValueOutput<bool>)found);
+            conditions.Add((INodeValueOutput<bool>)found);
         }
-        // Rows 0..6 become gestures 1..7; the unmatched Index (-1) becomes Neutral (0).
-        // Touch's contact-only codes (32..39 and 48..55) match no gesture above,
-        // so resting the index finger needs no separate Neutral override.
+        if (device == "TouchController")
+        {
+            // Explicit row 0 covers all 18 Neutral patterns by reusing the seven
+            // gesture conditions. Rows now directly match gesture numbers 0..7.
+            var neutral = (Nodes.Operators.NOR_Multi_Bool)g.Node("NOR_Multi_Bool");
+            neutral.Slot.Name += " : Neutral (0)";
+            foreach (var condition in conditions) neutral.Operands.Add(condition);
+            match.Values.Add(neutral);
+        }
+        foreach (var condition in conditions) match.Values.Add(condition);
+        if (device == "TouchController") return Out(match, "Index");
+
+        // Other controllers keep rows 0..6 for gestures 1..7; unmatched becomes 0.
         return g.Node("ValueInc", typeof(int), ("N", Out(match, "Index")));
     }
 

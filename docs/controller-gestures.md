@@ -62,7 +62,7 @@ Touchの複数コード群はFist=28/22/21/23、FingerPoint=5/6/12/7、Victory=2
 Touchの64〜73は原版のデスクトップ入力符号であり、VRセンサー判定には含めない。
 キーボードはResoPonの左右別入力を継続する。
 
-## Touchの接触状態による判定（Version 52〜55）
+## Touchの接触状態による判定（Version 52〜56）
 
 VRC SDKのIdle／Neutral調査を受け、TouchだけをResonite向けの接触判定へ変更する。
 これはVRCクライアントの厳密な入力アルゴリズムの移植ではなく、下記の明示した対応表である。
@@ -85,7 +85,7 @@ GripはGripClickを使い、今回アナログ量の独自しきい値は追加�
 
 Version 54のComposeBits_byteはBit0=ButtonYB_Touch、Bit1=ButtonXA_Touch、
 Bit2=ThumbRestTouch、Bit3=GripClick、Bit4=JoystickTouch、Bit5=TriggerTouch、
-Bit6=TriggerClickとし、Bit7は未接続。1〜7の手形は従来と同じ7行のグループで判定する。
+Bit6=TriggerClickとし、Bit7は未接続。1〜7の手形の一致条件は次の表を使う。
 この順序は実行対象のProtoFluxBindings.dllのTouchController出力順に従う。
 未使用のボタン押下・アナログ量などを飛ばして、接続する7出力の上下順を維持する。
 
@@ -95,6 +95,7 @@ Bit6=TriggerClickとし、Bit7は未接続。1〜7の手形は従来と同じ7�
 
 | 手形 | 一致コード／範囲 | 判定 |
 |---|---|---:|
+| Neutral (0) | 32〜39、48〜55、64、96 | 他7手形の判定結果のNOR |
 | Fist (1) | 41〜47、56〜63、73〜79、88〜95、105〜111、120〜127 | 6区間 |
 | HandOpen (2) | 0 | ValueEquals<byte> |
 | FingerPoint (3) | 9〜15、24〜31 | 2区間 |
@@ -112,6 +113,13 @@ IndexOfFirstValueMatch<bool>が未一致のIndex=-1を返すため、Index+1だ�
 同じ条件を入力側へ追加する必要もなく、AND・2つのNOT・条件分岐・0のint定数を削除する。
 コード64/96の、Gripなし・親指を離してトリガーだけ引く状態も同じ未一致経路で0となる。
 入力受付外の-1を選ぶ条件分岐は残す。これはNeutralを選ぶ判定とは別に必要な受付制御である。
+
+Version 56ではTouchのIndexOfFirstValueMatch<bool>の先頭にNeutralの判定行を追加する。
+NOR_Multi_Boolへ既存の7手形の一致結果を接続し、どの手形も成立しないときにNeutralを選ぶ。
+接触のみの16通りとコード64/96を含む全18通りが対象で、Version 54〜55と同じ入力分類を保つ。
+手形0〜7の8行に揃えるため、出力Indexをそのまま使い、+1ノードを省く。
+NORを1つ加えてValueIncを1つ外すので、Touchは片手81ノードを維持する。
+他機種は従来の7行とIndex+1を継続する。
 
 Neutralは有効な表情入力であり、GestureTableの0行を選ぶ。VR終了・切断の-1と区別する。
 同じ手形のまま親指の接触先が変わっても再送しない。

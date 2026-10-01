@@ -67,8 +67,9 @@ internal static class ExpressionLayoutChecks
             {
                 var bits = nodes.Single(n => n.GetType().Name == "ComposeBits_byte");
                 var match = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<bool>>().Single();
+                int gestureOffset = module.Name == "Touch" ? 1 : 0;
                 Check(match.Match.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<bool> literal && literal.Value.Value &&
-                    match.Values.Count == 7, "gesture selector has exactly seven rows in gesture-number order");
+                    match.Values.Count == 7 + gestureOffset, "gesture selector rows follow gesture-number order");
                 int[] sizes = module.Name switch {
                     "Touch" => new[] { 45, 1, 15, 15, 30, 1, 3 },
                     "Index" => new[] { 1, 1, 1, 1, 2, 1, 1 },
@@ -95,15 +96,16 @@ internal static class ExpressionLayoutChecks
                     var lookups = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<byte>>().ToArray();
                     Check(lookups.Length == 1 && lookups[0].Values.Count == 3,
                         "Touch retains only the three-code ThumbsUp byte lookup");
+                    var neutral = Owner(match.Values[0]) as FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Operators.NOR_Multi_Bool;
+                    Check(neutral != null && neutral.Operands.SequenceEqual(match.Values.Skip(1)),
+                        "Touch row 0 explicitly selects Neutral when all seven existing gestures are false");
                     var gates = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueConditional<int>>().ToArray();
-                    Check(gates.Length == 1 &&
-                        gates[0].OnTrue.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Operators.ValueInc<int> gestureIndex &&
-                        gestureIndex.N.Target == match.Index,
-                        "Touch sends Index+1 directly into the acceptance gate without a Neutral override");
+                    Check(gates.Length == 1 && gates[0].OnTrue.Target == match.Index,
+                        "Touch sends Index directly into the acceptance gate without increment or Neutral override");
                 }
                 for (int gesture = 0; gesture < sizes.Length; gesture++)
                 {
-                    var condition = Owner(match.Values[gesture]);
+                    var condition = Owner(match.Values[gesture + gestureOffset]);
                     if (sizes[gesture] == 0)
                         Check(condition is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<bool> absent && !absent.Value.Value,
                             "missing gesture keeps its false row without shifting later gesture numbers");
@@ -126,7 +128,7 @@ internal static class ExpressionLayoutChecks
                     {
                         var group = condition as FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<byte>;
                         Check(group != null && group.Match.Target == bits && group.Values.Count == sizes[gesture] &&
-                            match.Values[gesture] == group.FoundMatch,
+                            match.Values[gesture + gestureOffset] == group.FoundMatch,
                             "multi-code gesture uses one grouped byte lookup's FoundMatch output");
                         var constants = group.Values.Select(v => Owner(v)).ToArray();
                         Check(constants.All(n => n is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<byte>),

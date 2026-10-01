@@ -373,3 +373,9 @@ Version 55 removes Touch's contact-only Neutral override after Index+1. Codes
 Index=-1 becomes Neutral=0 without extra NOT/AND/conditional nodes. Graph checks
 require Index+1 to feed the acceptance gate directly; the existing 128-case
 oracle and resting-index transitions still verify Neutral and mapped expressions.
+
+Version 56 makes Touch Neutral explicit as row 0 of the eight-row bool selector.
+One NOR_Multi_Bool reuses the seven gesture conditions, covering the same 18 of
+128 input patterns. The selector Index now directly supplies gesture 0..7 without
+ValueInc. Graph checks require the NOR's exact condition references and direct
+Index-to-acceptance wiring; other controllers retain seven rows and Index+1.
