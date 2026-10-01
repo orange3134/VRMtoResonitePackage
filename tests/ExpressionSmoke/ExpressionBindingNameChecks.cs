@@ -40,9 +40,16 @@ internal static class ExpressionBindingNameChecks
                     clip.Curves.Add(curve);
                 }
                 model.Clips.Add(clip);
-                var root = await ExpressionSystemSetup.BuildAsync(avatar, model, b => fields[b], menu: false);
+                var root = await ExpressionSystemSetup.BuildAsync(avatar, model, b => fields[b], menu: reverse == 0);
                 EquipAvatar(avatar);
                 await Frames(60);
+                if (reverse == 0)
+                {
+                    var groups = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items")
+                        .FindChild("Direct selection").FindChild("Items");
+                    Check(groups.Children.Count == 1 && groups.Children.Single().Name == "Other expressions",
+                        "Catalog without gesture mappings omits the empty hand sign submenu");
+                }
                 var outputs = root.FindChild("Outputs").Children;
                 var names = outputs.ToDictionary(o => fields.Single(p => p.Value == OutputTarget(o)).Key.Path, o => Text(o, "Id"));
                 Check(names.Values.Distinct().Count() == bindings.Length, "all colliding sources get distinct keys");

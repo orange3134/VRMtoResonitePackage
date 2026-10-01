@@ -79,11 +79,32 @@ internal sealed partial class ExpressionSystemSetup
         var items = menu.AddSlot("Items");
         menu.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
         var direct = items.AddSlot("Direct selection"); MenuItem(direct, "Select expression");
-        direct.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = _catalog;
+        var directItems = direct.AddSlot("Items");
+        direct.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = directItems;
         foreach (var expression in _clips.Values)
         {
             MenuItem(expression, expression.Name);
             SelectMenuTrigger(expression, expression);
+        }
+        // Keep clips directly under Catalog for the Select API and copied templates.
+        // Only menu entries are grouped, using the final compiled gesture assignments.
+        var mapped = _compiled.Pairs.Where(id => id != null).ToHashSet();
+        foreach (var (assigned, label) in new[] { (true, "Hand sign expressions"), (false, "Other expressions") })
+        {
+            var entries = _clips.Where(clip => mapped.Contains(clip.Key) == assigned).ToArray();
+            if (entries.Length == 0) continue;
+            var group = directItems.AddSlot(label); MenuItem(group, label);
+            var children = group.AddSlot("Items");
+            group.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = children;
+            foreach (var (_, expression) in entries)
+            {
+                var item = children.AddSlot(expression.Name);
+                var source = MenuItem(item, expression.Name);
+                var labelCopy = item.AttachComponent<ValueCopy<string>>();
+                labelCopy.Source.Target = expression.GetComponent<ContextMenuItemSource>().Label;
+                labelCopy.Target.Target = source.Label;
+                SelectMenuTrigger(item, expression);
+            }
         }
         var mode = items.AddSlot("Hand gestures"); MenuItem(mode, mode.Name);
         var toggleButton = mode.AttachComponent<ButtonDynamicImpulseTrigger>();

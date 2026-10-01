@@ -90,6 +90,23 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(expressions.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "all generated ProtoFlux groups are valid");
         ExpressionLayoutChecks.SaveKeyboardLayout(expressions, Path.Combine(artifacts, "keyboard-layout.json"));
         ExpressionGraphChecks.CheckLayout(expressions);
+        var directGroups = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items")
+            .FindChild("Direct selection").FindChild("Items");
+        var mappedExpressions = expressions.FindChild("DV").FindChild("GestureTable")
+            .GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Select(row => row.Reference.Target)
+            .Where(target => target != null).ToHashSet();
+        var menuTargets = new HashSet<Slot>();
+        Check(directGroups.Children.Count == 2, "mixed Catalog offers separate hand sign and other submenus");
+        foreach (var group in directGroups.Children)
+        foreach (var entry in group.FindChild("Items").Children)
+        {
+            var target = entry.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().PressedData.Reference.Target;
+            Check(menuTargets.Add(target), "direct selection lists each expression once despite repeated gesture mappings");
+            Check(mappedExpressions.Contains(target) == (group.Name == "Hand sign expressions"),
+                "direct menu classification matches the final 64 gesture assignments");
+        }
+        Check(menuTargets.SetEquals(expressions.FindChild("Catalog").Children),
+            "both submenus together retain every Catalog expression");
         await ExpressionDynamicInputChecks.CheckEdits(expressions);
         await KeyboardPriorityChecks.Run(expressions, 0);
         await ExpressionInputEventChecks.Run(expressions);
@@ -332,7 +349,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var menu = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null,
             "context menu has no hand submenus");
-        var menuButton = catalog.FindChild("Smile").GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
+        var menuButton = directGroups.FindChild("Hand sign expressions").FindChild("Items").FindChild("Smile")
+            .GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
         Gesture(0, 0);
         menuButton.Pressed(null, default);
         Check(Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 1 &&
@@ -340,6 +358,13 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "actual expression menu button selects directly without changing gestures");
         await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "actual menu button applies the selected pose");
+        var otherButton = directGroups.FindChild("Other expressions").FindChild("Items").FindChild("Animated")
+            .GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
+        string menuPair = Get<string>(core, "PairKey");
+        otherButton.Pressed(null, default);
+        Check(Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Animated") &&
+            Get<string>(core, "PairKey") == menuPair && !Get<bool>(core, "AllowHandGestures"),
+            "other submenu selects an unmapped expression without changing the hand pair");
         var keyboard = expressions.FindChild("Inputs").FindChild("Keyboard");
         Check(keyboard.Children.Count == 2, "keyboard exposes settings for each hand");
         var shortcut = keyboard.FindChild("Right").FindChild("DV").FindChild("Tag");
@@ -364,6 +389,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await Frames(2);
         Check(directItem.Label.Value == "Edited expression label" && directButton.PressedData.Reference.Target == directExpression,
             "menu label is editable without changing the Slot selection target");
+        Check(menuButton.Slot.GetComponent<ContextMenuItemSource>().Label.Value == "Edited expression label",
+            "Catalog label edits also update the visible grouped menu");
         AllowInput();
         directButton.Pressed(null, default);
         Check(!Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == directExpression,
@@ -394,6 +421,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Select("Smile"); await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
         var clone = avatar.Duplicate(avatar.Parent); EquipAvatar(clone); await Frames(90);
+        ExpressionGraphChecks.CheckLayout(clone.FindChild("Expressions"));
         Check(Math.Abs(clone.GetComponent<ValueField<float>>().Value.Value - 0.2f) < 0.01, "cloning resets transient selection");
         Check(Math.Abs(field.Value - 1f) < 0.01, "cloning does not reset original");
         await ExpressionDynamicInputChecks.CheckEdits(clone.FindChild("Expressions"));

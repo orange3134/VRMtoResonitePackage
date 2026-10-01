@@ -1,5 +1,11 @@
 # Expression integration checks
 
+Version 57 splits direct selection into Hand sign expressions and Other expressions.
+The synthetic fixture checks classification against the compiled 64-pair table,
+deduplication, complete Catalog coverage, actual button selection in both groups,
+editable Catalog labels, and local menu references after cloning and package reload.
+Empty groups are omitted; grouping is fixed at conversion time.
+
 Run with the installed Resonite runtime and .NET 10:
 
 ```powershell

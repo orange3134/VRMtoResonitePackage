@@ -298,7 +298,12 @@ Version 23では左右ジェスチャーのコンテキストメニューと専�
   Grip/Trigger の押し込み・解放しきい値と安定待ち時間を機種ごとに編集できる。
   指を個別に取得できない機種の Victory/Rock はボタン操作から判定する。
 
-直接表情を選ぶ `Select expression` はCatalogの表情を一覧にする。項目のEnabledを自動制御しない。
+Version 57の `Select expression` は `Hand sign expressions` と `Other expressions` のサブメニューに分ける。
+変換時に確定した64通りのGestureTableから参照される表情を前者、それ以外のCatalog表情を後者に入れる。
+同じ表情が複数の組み合わせで使われても項目は1つとし、空のサブメニューは生成しない。
+分類は変換時に固定する。変換後のGestureTable編集による自動再分類は行わない。
+表情SlotはCatalog直下に保ち、サブメニュー配下の項目からSlot参照を送る。表示LabelはCatalog項目のLabelからValueCopyで取得する。
+項目のEnabledを自動制御しない。
 押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをSelect APIへ送る。自身のCatalog直下で有効な表情かを検証し、PlaybackがCurrentExpressionへ設定して適用する。
 AllowHandGestures=falseにするが、LeftGesture・RightGesture・PairKeyは変更しない。GestureTable未割り当てでも選択できる。
 同じ表情の再選択でもPlaybackを実行するため、名前付きfloat変数の編集も反映できる。
@@ -351,6 +356,10 @@ DV直下のfloat値とContextMenuItemSource.Labelを設定する。
 Clipの識別子変数は持たず、外部からの直接選択には表情Slotを送る。
 直接選択ボタンからの適用にGestureTableの割り当ては不要。対応表の編集でメニュー項目の Enabled は変更しない。直接選択は即時に反映する。削除は表情スロットごと行える。
 テンプレートから複製したメニューのLabelは直接編集でき、送信するSlot参照は複製先自身へリマップされる。項目の Enabled は駆動しない。
+Version 57でCatalogへ表情を追加した場合は、直接選択サブメニューのItemsにも既存項目を複製し、
+ButtonDynamicImpulseTriggerWithReference<Slot>のPressedData.Reference、選択色DriverのReferenceTarget、
+Label用ValueCopyのSourceを追加した表情へ設定する。Catalogへの追加だけではサブメニューに項目は増えない。
+表情を削除する場合は、サブメニュー側の参照項目も削除する。
 
 各表情のExpressionSystem.Catalog.Clip空間のDV直下に、Output.Idと同名のfloat変数スロットを並べる。
 VariableNameはExpressionSystem.Catalog.Clip/と対応するOutput.Idを連結した名前、値は元カーブの最後のキー値。
