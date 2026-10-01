@@ -10,7 +10,7 @@ namespace VrmToResonitePackage.Expressions;
 internal sealed partial class ExpressionSystemSetup
 {
     // Index/Cosmos/pad tables follow Avatar Expression Editor v1.12.1.
-    // Touch normalizes contact separately from pull. See docs/controller-gestures.md.
+    // Touch packs each sensor separately. See docs/controller-gestures.md.
     private IWorldElement BuildControllerGesture(ExpressionFlux g, Component controller, string device,
         Chirality side, Slot module)
     {
@@ -39,12 +39,9 @@ internal sealed partial class ExpressionSystemSetup
         }
         else if (device == "TouchController")
         {
-            // Multiple thumb contacts describe the same posture, not distinct gestures.
-            Link(bits, "Bit0", g.Or(Out(controller, "ButtonYB_Touch"), Out(controller, "ButtonXA_Touch"),
-                Out(controller, "JoystickTouch"), Out(controller, "ThumbRestTouch")));
-            Link(bits, "Bit1", Out(controller, "GripClick"));
-            Link(bits, "Bit2", Out(controller, "TriggerTouch"));
-            Link(bits, "Bit3", Out(controller, "TriggerClick"));
+            string[] ports = { "ButtonYB_Touch", "ButtonXA_Touch", "JoystickTouch", "ThumbRestTouch",
+                "GripClick", "TriggerTouch", "TriggerClick" };
+            for (int bit = 0; bit < ports.Length; bit++) Link(bits, "Bit" + bit, Out(controller, ports[bit]));
         }
         else
         {
@@ -52,12 +49,17 @@ internal sealed partial class ExpressionSystemSetup
             for (int bit = 0; bit < ports.Length; bit++) Link(bits, "Bit" + bit, Out(controller, ports[bit]));
         }
 
+        // Bits 0..3 enumerate all 15 nonempty thumb-contact combinations.
+        // Bits 4/5/6 are GripClick/TriggerTouch/TriggerClick, respectively.
+        static byte[] WithThumbContact(params byte[] states) => states
+            .SelectMany(state => Enumerable.Range(1, 15).Select(thumb => (byte)(state | thumb))).ToArray();
+
         (int Gesture, byte[] Codes)[] matches = device switch
         {
             "TouchController" => new (int, byte[])[] {
-                (1, new byte[] { 7, 11, 15 }), (2, new byte[] { 0 }),
-                (3, new byte[] { 3 }), (4, new byte[] { 1 }),
-                (5, new byte[] { 9, 13 }), (6, new byte[] { 2 }), (7, new byte[] { 6, 10, 14 }) },
+                (1, WithThumbContact(48, 80, 112)), (2, new byte[] { 0 }),
+                (3, WithThumbContact(16)), (4, WithThumbContact(0)),
+                (5, WithThumbContact(64, 96)), (6, new byte[] { 16 }), (7, new byte[] { 48, 80, 112 }) },
             "IndexController" => new (int, byte[])[] {
                 (1, new byte[] { 31 }), (2, new byte[] { 0 }), (3, new byte[] { 30 }),
                 (4, new byte[] { 28 }), (5, new byte[] { 6, 22 }), (6, new byte[] { 14 }), (7, new byte[] { 15 }) },

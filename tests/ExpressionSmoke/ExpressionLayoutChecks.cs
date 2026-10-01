@@ -70,11 +70,22 @@ internal static class ExpressionLayoutChecks
                 Check(match.Match.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<bool> literal && literal.Value.Value &&
                     match.Values.Count == 7, "gesture selector has exactly seven rows in gesture-number order");
                 int[] sizes = module.Name switch {
-                    "Touch" => new[] { 3, 1, 1, 1, 2, 1, 3 },
+                    "Touch" => new[] { 45, 1, 15, 15, 30, 1, 3 },
                     "Index" => new[] { 1, 1, 1, 1, 2, 1, 1 },
                     "Cosmos" => new[] { 1, 1, 1, 1, 0, 1, 1 },
                     _ => throw new InvalidOperationException("Unexpected controller")
                 };
+                if (module.Name == "Touch")
+                {
+                    var controller = nodes.Single(n => n.GetType().Name == "TouchController");
+                    string[] ports = { "ButtonYB_Touch", "ButtonXA_Touch", "JoystickTouch", "ThumbRestTouch",
+                        "GripClick", "TriggerTouch", "TriggerClick" };
+                    for (int bit = 0; bit < ports.Length; bit++)
+                        Check(((ISyncRef)ExpressionFlux.Member(bits, "Bit" + bit)).Target == ExpressionFlux.Out(controller, ports[bit]),
+                            "Touch sensor connects directly to its own packed bit: " + ports[bit]);
+                    Check(((ISyncRef)ExpressionFlux.Member(bits, "Bit7")).Target == null,
+                        "Touch leaves the eighth bit unused");
+                }
                 for (int gesture = 0; gesture < sizes.Length; gesture++)
                 {
                     var condition = Owner(match.Values[gesture]);

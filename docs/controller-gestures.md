@@ -62,15 +62,15 @@ Touchの複数コード群はFist=28/22/21/23、FingerPoint=5/6/12/7、Victory=2
 Touchの64〜73は原版のデスクトップ入力符号であり、VRセンサー判定には含めない。
 キーボードはResoPonの左右別入力を継続する。
 
-## Touchの接触状態による判定（Version 52）
+## Touchの接触状態による判定（Version 52〜53）
 
 VRC SDKのIdle／Neutral調査を受け、TouchだけをResonite向けの接触判定へ変更する。
 これはVRCクライアントの厳密な入力アルゴリズムの移植ではなく、下記の明示した対応表である。
 実機でのVRC同値性・ポーズの見た目は未検証。指ボーンの駆動は追加しない。
 
-親指接触はButtonYB_Touch、ButtonXA_Touch、JoystickTouch、ThumbRestTouchのOR。
-複数箇所への同時接触も1つの親指状態として扱う。4入力は1つのOR_Multi_Boolへ接続する。
-ExpressionFlux.Orは3入力以上をOR_Multi_Bool、2入力をOR_Boolとして生成する。
+親指接触はButtonYB_Touch、ButtonXA_Touch、JoystickTouch、ThumbRestTouchのいずれかがtrueの状態。
+複数箇所への同時接触も1つの親指状態として扱う。Version 52では4入力をORでまとめていたが、
+Version 53では各センサーをComposeBits_byteへ直接接続し、一致コード側で全組み合わせを扱う。
 人差し指はTriggerTouch／TriggerClickから離す・触れるだけ・引くの3状態に分ける。
 TriggerClick=trueならTriggerTouch=falseでも「引く」を優先する。
 GripはGripClickを使い、今回アナログ量の独自しきい値は追加しない。
@@ -82,12 +82,25 @@ GripはGripClickを使い、今回アナログ量の独自しきい値は追加�
 | 離す | true | HandGun (6) | ThumbsUp (7) | ThumbsUp (7) |
 | 触れる | true | FingerPoint (3) | Fist (1) | Fist (1) |
 
-FluxではComposeBits_byteのBit0=親指接触、Bit1=GripClick、Bit2=TriggerTouch、
-Bit3=TriggerClickとする。1〜7の手形は従来と同じ7行のグループで判定する。
-新しい正規化コードはFist=7/11/15、HandOpen=0、FingerPoint=3、Victory=1、
-RockNRoll=9/13、HandGun=2、ThumbsUp=6/10/14。
+Version 53のComposeBits_byteはBit0=ButtonYB_Touch、Bit1=ButtonXA_Touch、
+Bit2=JoystickTouch、Bit3=ThumbRestTouch、Bit4=GripClick、Bit5=TriggerTouch、
+Bit6=TriggerClickとし、Bit7は未接続。1〜7の手形は従来と同じ7行のグループで判定する。
+下位4ビットの親指接触の全15通りを各手形のIndexOfFirstValueMatch<byte>.Valuesへ展開する。
+次の `t` は1〜15であり、上位ビットと重ならないため、加算はビットORと同じ値になる。
+
+| 手形 | 一致コード | 比較値の数 |
+|---|---|---:|
+| Fist (1) | 48+t、80+t、112+t | 45 |
+| HandOpen (2) | 0 | 1 |
+| FingerPoint (3) | 16+t | 15 |
+| Victory (4) | t | 15 |
+| RockNRoll (5) | 64+t、96+t | 30 |
+| HandGun (6) | 16 | 1 |
+| ThumbsUp (7) | 48、80、112 | 3 |
+
+単一コードのHandOpenとHandGunはValueEquals<byte>を維持する。
 NeutralはTriggerTouch AND !TriggerClick AND !GripClickを名前付きノードで明示判定して優先する。
-その他未一致も0となる（正規化コード8/12の、Gripなし・親指を離してトリガーだけ引く状態）。
+その他未一致も0となる（コード64/96の、Gripなし・親指を離してトリガーだけ引く状態）。
 
 Neutralは有効な表情入力であり、GestureTableの0行を選ぶ。VR終了・切断の-1と区別する。
 同じ手形のまま親指の接触先が変わっても再送しない。

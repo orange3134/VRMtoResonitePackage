@@ -353,3 +353,9 @@ click without touch. Explicit transitions verify resting index -> Neutral throug
 the existing delay and a mapped expression, lifted index -> Victory/Open, grip
 plus index contact -> Fist/ThumbsUp, and no resend when only thumb location changes.
 Other devices retain their existing tables; no finger pose output is added.
+
+Version 53 connects all seven Touch sensors directly to separate ComposeBits_byte
+inputs. Thumb-contact combinations expand the grouped byte lookup sizes to
+45/1/15/15/30/1/3 while retaining the seven gesture rows and v52 behavior.
+Layout checks require the exact sensor-to-bit connections and an unused Bit7
+before and after package reload; the independent 128-case posture oracle stays unchanged.
