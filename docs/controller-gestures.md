@@ -36,6 +36,9 @@ Indexは装着者の `UserFingerPoseSource` → `FingerPose` の各 `_Proximal` 
 これは原版の接続方向をそのまま移したもので、親指だけ左右でしきい値の符号が変わる。
 IndexControllerのIsActiveで入力機種を限定する。
 
+IndexのNeutral／Idleの意味、現在の2値判定の制約、脱力域を設けるProtoFlux案は
+[IndexのNeutral／Idle調査](index-gestures.md)を参照。これは設計案であり、以下の既存対応表は変更していない。
+
 | ジェスチャー | Touchの一致コード | Indexの一致コード | Cosmosの一致コード |
 |---|---|---|---|
 | Fist (1) | 28, 22, 21, 23 | 31 | 12 |
