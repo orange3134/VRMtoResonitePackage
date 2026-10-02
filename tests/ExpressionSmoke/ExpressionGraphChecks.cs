@@ -135,7 +135,9 @@ internal static class ExpressionGraphChecks
             .All(n => n is not Nodes.Strings.FormatString), "direct selection does not look up gesture pairs");
         Check(nodes.All(n => n.Group?.IsValid == true), "all expression Flux groups are valid");
         Check(nodes.All(n => n.Slot.Parent.GetComponents<ProtoFluxNode>().Count == 0), "Flux nodes belong to logic boards, not other nodes");
-        Check(nodes.Select(n => n.Slot.GlobalPosition).Distinct().Count() == nodes.Count, "Flux node positions do not overlap across logic boards");
+        Check(nodes.GroupBy(n => n.Slot.Parent).All(board => board.Key.LocalPosition == float3.Zero &&
+            board.Select(n => n.Slot.LocalPosition).Distinct().Count() == board.Count()),
+            "Flux logic parents stay at local zero and node positions remain distinct within each board");
 
         Slot Board(ProtoFluxNode node) => node.Slot.Parent;
         var updates = nodes.Where(n => n.GetType().Name == "LocalUpdate").ToArray();

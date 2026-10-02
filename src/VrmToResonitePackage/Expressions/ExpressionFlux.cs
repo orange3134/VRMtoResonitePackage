@@ -105,14 +105,12 @@ internal sealed class ExpressionFlux
             .Select(input => OwningNode(input.Target)).ToHashSet();
         foreach (var unused in allNodes.OfType<Nodes.RefObjectInput<Slot>>().Where(node => !usedSources.Contains(node)).ToArray())
             unused.Slot.Destroy();
-        float boardOffset = 0;
         foreach (var board in expressions.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent))
         {
             var positions = ExpressionFluxLayout.Arrange(board.ToArray());
-            board.Key.GlobalPosition = expressions.LocalPointToGlobal(new float3(boardOffset, 0, 0));
+            board.Key.LocalPosition = float3.Zero;
             foreach (var node in board)
                 node.Slot.LocalPosition = new float3(positions[node].x, positions[node].y, 0);
-            boardOffset += board.Max(n => positions[n].x + ExpressionFluxLayout.Width(n) / 2) + 0.6f;
         }
     }
 

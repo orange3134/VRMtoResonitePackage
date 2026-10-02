@@ -49,8 +49,10 @@ all eight int values on each of the ResoPon/Expression/Gesture/Left and ResoPon/
 received hand pair (including back-to-back events before the next frame), unchanged-expression
 playback, unrestricted integers (including externally added table rows and missing rows), invalid/null selection Slots, argument-type mismatches, controller inactivity sentinels, last-input retention across removable modules, editable table references, original tracking drivers, same-wearer clones,
 and saving/reimporting/replaying an actual `.resonitepackage`.
-It also verifies one Flux node per slot, node slots directly under each logic board, and distinct node
-positions before and after package reimport. Every connection outside a feedback cycle
+It also verifies one Flux node per slot, node slots directly under each logic board,
+and distinct node positions within each board before and after package reimport.
+Version 62 sets every logic board parent's local Position to (0, 0, 0), including
+after cloning and package reimport. Every connection outside a feedback cycle
 must run from left to right; this includes data inputs and impulse calls. Feedback
 cycles stay within one layer.
 Layout checks also require keyboard inputs to follow port order from top to bottom
