@@ -96,9 +96,9 @@ internal static class ExpressionInputEventChecks
                     }
                     setCode = code =>
                     {
-                        for (int i = 0; i < 4; i++) rotations[i].Value.Value = Elements.Core.floatQ.Euler((code & (1 << i)) != 0 ? 60f : 20f, 0, 0);
+                        for (int i = 0; i < 4; i++) rotations[i].Value.Value = Elements.Core.floatQ.Euler((code & (1 << i)) != 0 ? 60f : 10f, 0, 0);
                         float threshold = side == "Left" ? 25f : -25f;
-                        rotations[4].Value.Value = Elements.Core.floatQ.Euler(0, threshold + ((code & 16) != 0 ? -10f : 10f), 0);
+                        rotations[4].Value.Value = Elements.Core.floatQ.Euler(0, threshold + ((code & 16) != 0 ? -10f : 30f), 0);
                     };
                 }
                 else
@@ -306,20 +306,90 @@ internal static class ExpressionInputEventChecks
                 }
                 if (module.Name == "Index")
                 {
+                    // Exercise the exported graph and normal event path for all
+                    // 3^5 states; this oracle describes hand shapes, not angles.
+                    for (int states = 0; states < 243; states++)
+                    {
+                        int remaining = states;
+                        string shape = "";
+                        for (int finger = 0; finger < 5; finger++)
+                        {
+                            int state = remaining % 3; remaining /= 3;
+                            shape += "OMC"[state];
+                            rotations[finger].Value.Value = finger == 4
+                                ? Elements.Core.floatQ.Euler(0, (side == "Left" ? 25f : -25f) + new[] { 30f, 10f, -10f }[state], 0)
+                                : Elements.Core.floatQ.Euler(new[] { 10f, 30f, 60f }[state], 0, 0);
+                        }
+                        int selected = shape switch
+                        {
+                            "CCCCC" => 1, "OOOOO" => 2, "OCCCC" => 3, "OOCCC" => 4,
+                            "OCCOO" or "OCCOM" or "OCCOC" => 5, "OCCCO" => 6, "CCCCO" => 7,
+                            _ => 0
+                        };
+                        await Frames(6);
+                        Check(Get<int>(core, side + "Gesture") == selected, $"Index/{side}: {shape} selects {selected}");
+                        Check(Get<int>(core, (side == "Left" ? "Right" : "Left") + "Gesture") == other,
+                            "intermediate Index input does not change the opposite hand");
+                    }
                     setCode(30); await Frames(6);
+                    rotations[0].Value.Value = Elements.Core.floatQ.Euler(19.9f, 0, 0); await Frames(6);
+                    Check(Get<int>(core, side + "Gesture") == 3, "index angle below open boundary makes FingerPoint");
+                    rotations[0].Value.Value = Elements.Core.floatQ.Euler(20.1f, 0, 0); await Frames(6);
+                    Check(Get<int>(core, side + "Gesture") == 0, "index angle above open boundary enters Neutral");
                     rotations[0].Value.Value = Elements.Core.floatQ.Euler(39.9f, 0, 0); await Frames(6);
-                    Check(Get<int>(core, side + "Gesture") == 3, "index angle below threshold remains FingerPoint");
+                    Check(Get<int>(core, side + "Gesture") == 0, "index angle below closed boundary remains Neutral");
                     rotations[0].Value.Value = Elements.Core.floatQ.Euler(40.1f, 0, 0); await Frames(6);
                     Check(Get<int>(core, side + "Gesture") == 1, "index angle above threshold makes Fist");
                     Set(module, "FingerThreshold", 70f); await Frames(6);
                     Check(Get<int>(core, side + "Gesture") == 0, "editing finger threshold refreshes detection");
                     Set(module, "FingerThreshold", 40f);
+                    rotations[0].Value.Value = Elements.Core.floatQ.Euler(30f, 0, 0); await Frames(6);
+                    Set(module, "FingerNeutralRange", 0f); await Frames(6);
+                    Check(Get<int>(core, side + "Gesture") == 3, "zero finger neutral range restores binary detection");
+                    Set(module, "FingerNeutralRange", -10f); await Frames(6);
+                    Check(Get<int>(core, side + "Gesture") == 3, "negative finger neutral range cannot overlap states");
+                    Set(module, "FingerNeutralRange", 20f); await Frames(6);
+                    Check(Get<int>(core, side + "Gesture") == 0, "editing finger neutral range restores intermediate detection");
                     setCode(15); await Frames(6);
                     float boundary = side == "Left" ? 25f : -25f;
+                    rotations[4].Value.Value = Elements.Core.floatQ.Euler(0, boundary + 20.1f, 0); await Frames(6);
+                    Check(Get<int>(core, side + "Gesture") == 7, "thumb angle above open boundary makes ThumbsUp");
+                    rotations[4].Value.Value = Elements.Core.floatQ.Euler(0, boundary + 19.9f, 0); await Frames(6);
+                    Check(Get<int>(core, side + "Gesture") == 0, "thumb angle below open boundary enters Neutral");
                     rotations[4].Value.Value = Elements.Core.floatQ.Euler(0, boundary + 0.1f, 0); await Frames(6);
-                    Check(Get<int>(core, side + "Gesture") == 7, "thumb angle above side threshold makes ThumbsUp");
+                    Check(Get<int>(core, side + "Gesture") == 0, "thumb angle above closed boundary remains Neutral");
+                    Set(module, "ThumbNeutralRange", 0f); await Frames(6);
+                    Check(Get<int>(core, side + "Gesture") == 7, "zero thumb neutral range restores binary detection");
+                    Set(module, "ThumbNeutralRange", -10f); await Frames(6);
+                    Check(Get<int>(core, side + "Gesture") == 7, "negative thumb neutral range cannot overlap states");
+                    Set(module, "ThumbNeutralRange", 20f); await Frames(6);
+                    Check(Get<int>(core, side + "Gesture") == 0, "editing thumb neutral range restores intermediate detection");
                     rotations[4].Value.Value = Elements.Core.floatQ.Euler(0, boundary - 0.1f, 0); await Frames(6);
                     Check(Get<int>(core, side + "Gesture") == 1, "thumb angle below side threshold makes Fist");
+                    string otherSide = side == "Left" ? "Right" : "Left";
+                    var neutralRow = Reference<Slot>(core, "GestureTable.L0R0");
+                    try
+                    {
+                        Set(core, "GestureTable.L0R0", smile); Gesture(otherSide, 0);
+                        setCode(31); await Frames(6);
+                        Set(module, "StabilitySeconds", 0.3f);
+                        rotations[0].Value.Value = Elements.Core.floatQ.Euler(30f, 0, 0);
+                        await WaitSeconds(0.1);
+                        Check(Get<int>(core, side + "Gesture") == 1, "intermediate Index pose waits for stability");
+                        await WaitSeconds(0.3);
+                        Check(Get<int>(core, side + "Gesture") == 0 && Reference<Slot>(core, "CurrentExpression") == smile,
+                            "intermediate Index pose selects the mapped Neutral expression");
+                        setCode(30); await WaitSeconds(0.4);
+                        Check(Get<int>(core, side + "Gesture") == 3, "extending the intermediate finger restores FingerPoint");
+                        setCode(31); await WaitSeconds(0.4);
+                        Check(Get<int>(core, side + "Gesture") == 1, "closing the intermediate finger restores Fist");
+                        setCode(0); await WaitSeconds(0.4);
+                        Check(Get<int>(core, side + "Gesture") == 2, "fully open Index hand remains HandOpen");
+                    }
+                    finally
+                    {
+                        Set(core, "GestureTable.L0R0", neutralRow); Gesture(otherSide, other);
+                    }
                 }
                 active.Value.Value = false;
                 Set(module, "StabilitySeconds", originalStability[module]);

@@ -191,6 +191,7 @@ internal sealed partial class ExpressionSystemSetup
             if (device == "IndexController")
             {
                 Data(module, "FingerThreshold", 40f); Data(module, "ThumbThreshold", 25f);
+                Data(module, "FingerNeutralRange", 20f); Data(module, "ThumbNeutralRange", 20f);
             }
             if (device is "ViveController" or "WindowsMRController")
                 for (int direction = 0; direction < 8; direction++) Data(module, "Direction." + direction, direction);

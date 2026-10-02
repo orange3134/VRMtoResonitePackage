@@ -17,7 +17,7 @@ ResoPonのVersion 19から、従来の共通Grip／Triggerしきい値・ボタ�
 Touch／Index／Cosmosは完全一致する手形がなければNeutral (0)、一致コード0はHandOpen (2)。
 Cosmosの原版にRockNRollは存在しない。未定義の組み合わせを別の手形へ丸めない。
 
-## Touch・Index・Cosmos（旧TouchはVersion 51まで）
+## Touch・Index・Cosmos（旧TouchはVersion 51まで、旧IndexはVersion 58まで）
 
 `ComposeBits_byte` の下位から順に次の値を接続する。
 
@@ -36,8 +36,9 @@ Indexは装着者の `UserFingerPoseSource` → `FingerPose` の各 `_Proximal` 
 これは原版の接続方向をそのまま移したもので、親指だけ左右でしきい値の符号が変わる。
 IndexControllerのIsActiveで入力機種を限定する。
 
-IndexのNeutral／Idleの意味、現在の2値判定の制約、脱力域を設けるProtoFlux案は
-[IndexのNeutral／Idle調査](index-gestures.md)を参照。これは設計案であり、以下の既存対応表は変更していない。
+IndexのNeutral／Idleの意味と2値判定の制約は
+[IndexのNeutral／Idle調査](index-gestures.md)を参照。
+Version 59では下記の中間域を追加し、伸び・曲げの端の姿勢は以下の既存対応表を維持する。
 
 | ジェスチャー | Touchの一致コード | Indexの一致コード | Cosmosの一致コード |
 |---|---|---|---|
@@ -64,6 +65,29 @@ FoundMatch=falseならNeutral（0）。Vive／Windows MRの方向判定はこの
 Touchの複数コード群はFist=28/22/21/23、FingerPoint=5/6/12/7、Victory=2/8/1/3、RockNRoll=17/18/24。
 Touchの64〜73は原版のデスクトップ入力符号であり、VRセンサー判定には含めない。
 キーボードはResoPonの左右別入力を継続する。
+
+## Indexの中間域による判定（Version 59）
+
+各指にOpen／Closedを別々の比較で定義し、どちらでもない角度を中間状態とする。
+既存のClosedしきい値は維持し、IndexモジュールのDVに
+`FingerNeutralRange`・`ThumbNeutralRange`（ともに初期20度）を追加する。
+負の幅は0として扱い、0なら従来の2値判定になる。
+
+| 指 | Open | 中間 | Closed |
+|---|---|---|---|
+| 人差し指〜小指 | X < 20 | 20 <= X < 40 | X >= 40 |
+| 左親指 | Y > 45 | 25 < Y <= 45 | Y <= 25 |
+| 右親指 | Y > -5 | -25 < Y <= -5 | Y <= -25 |
+
+上表は初期設定。4指のOpen境界は`FingerThreshold - FingerNeutralRange`、
+親指は左右の符号を適用した`ThumbThreshold + ThumbNeutralRange`となる。
+7手形の必要な指がすべてOpen／Closedに一致すると1〜7、一致する手形がなければNeutral=0。
+RockNRollは既存互換のため親指を判定せず、親指が中間でも5となる。
+`NOR_Multi_Bool`でNeutralを明示し、8行の`IndexOfFirstValueMatch<bool>`から0〜7を直接出力する。
+中間域への移行にも共通の`StabilitySeconds`を適用する。
+初期20度はResoPonの調整値であり、VRChatの非公開しきい値を再現する保証はない。
+設定は`Expressions/Inputs/HandGestures/Modules/Index/DV`で変更できる。
+生成済みパッケージへ適用するには再変換・再インポートする。
 
 ## Touchの接触状態による判定（Version 52〜56）
 
@@ -212,7 +236,10 @@ Standard Controller V1.0も調査済みだが、Strength・Secondary・Grabの3�
 
 `ExpressionInputEventChecks` は生成された実Fluxのセンサー出力だけを置き換える。
 左右ごとにTouchの全128入力をVersion 52の接触状態表、Indexの全32指姿勢、Cosmosの全16コード、
-Vive／MRの全8方向を従来の観測表と照合する（基本384ケース）。さらに角度しきい値の両側、
+Vive／MRの全8方向を従来の観測表と照合する（基本384ケース）。
+Version 59では左右のIndexそれぞれについて5指3状態の全243通りも照合し、合計870ケースとなる。
+中間域の境界、幅0・負値・設定変更、遅延後のNeutral送信と表情切替、通常手形への復帰も検証する。
+さらに角度しきい値の両側、
 方向境界と下向きの継ぎ目、設定変更、入力禁止／再許可、切断／再接続、安定待ち、
 手を止めた際の手動入力保持、反対の手へ干渉しないことを検証する。
 Version 50では初回Neutral、設定変更時の既存期限の維持、待機中の候補破棄・入力禁止、期限後の再受付、短時間での再許可、再装着と0秒設定を検証する。

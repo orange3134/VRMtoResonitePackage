@@ -1,9 +1,10 @@
-# IndexのNeutral／Idle調査とProtoFlux案
+# IndexのNeutral／Idle調査と中間域の実装
 
 2026-10-02に、起動中Unity 2022.3.22f1のプロジェクト内にある
 `com.vrchat.avatars` / `com.vrchat.base` 3.10.5を読み取り調査した。
-SDK、Unityプロジェクト、生成コード、実ワールドの変更は行っていない。
-この資料はIndexモジュールの改修案であり、実装済みの対応表は
+調査時にはSDK、Unityプロジェクト、生成コード、実ワールドの変更は行っていない。
+その後、表情入力の3状態判定をVersion 59として実装した。見た目のIdleポーズは提案のまま。
+実装済みの対応表は
 [コントローラー別ジェスチャー判定](controller-gestures.md)を参照。
 環境固有のプロジェクトパス、抽出物、検証スクリプトはコミットしない。
 
@@ -150,7 +151,7 @@ ResoniteのFingerPoseの角度をこのcurlと同一視せず、利用する追�
 パッケージ内の全C#をXR／SteamVR／OpenVR／OVRInput／指curl／Grip／GetAxis／GetButton等で検索し、
 上記のUIからパラメーター設定までの経路を直接読んだ。Neutralの実機しきい値の根拠としては使えない。
 
-## 現在のResoPonのIndex
+## Version 58までのResoPonのIndex
 
 `ExpressionGestureInputSetup.BuildControllerGesture` は装着者の
 `UserFingerPoseSource` → 各指の `FingerPose.Rotation` → `EulerAngles_floatQ` を読む。
@@ -169,10 +170,22 @@ Fist=31、HandOpen=0、FingerPoint=30、Victory=28、RockNRoll=6/22、HandGun=14
 全指が曲げしきい値未満ならHandOpenへ、全指が曲げ判定を満たせばFistへ進むため、
 脱力していてもこの2つへ分類され得る。NeutralのNOR行だけを追加しても分類は変わらない。
 
-公式IndexのRock N Rollは親指downだが、現在の6/22は親指を問わない。
+公式IndexのRock N Rollは親指downだが、既存の6/22は親指を問わない。
 VRCへ厳密に合わせる変更と、既存利用者の互換性を保つ変更を区別する。
 
-## 提案：伸び・中間・曲げの3状態で表情を選ぶ
+## 伸び・中間・曲げの3状態で表情を選ぶ（Version 59）
+
+実装は従来のFingerPose角度経路とClosedしきい値を維持し、
+`FingerNeutralRange`・`ThumbNeutralRange`（初期20度）でOpen境界を離す。
+負の幅は0として扱う。4指はX < FingerThreshold - 幅でOpen、X >= FingerThresholdでClosed。
+親指は左右の符号適用済みしきい値をTとして、Y > T + 幅でOpen、Y <= TでClosed。
+Open側を厳密不等号にするため、幅0でも状態は重ならず従来の2値判定となる。
+親指を問わないRockNRollの互換条件を採用し、その他の必要な指が中間ならNeutral=0とする。
+中間状態も既存の安定時間を経て通常のGesture APIへ送信される。
+左右各243通り、境界、幅設定、Neutralによる表情切替、通常手形への復帰を実ノードで検証する。
+この幅は実機から校正したVRChatの値ではなく、ユーザーが調整するResoPonの初期設定である。
+
+以下はこの実装の設計根拠と、別途検討できる校正方法。
 
 Resonite向けの設計案であり、VRCクライアントの認識アルゴリズムとして確定したものではない。
 各指にOpen判定とClosed判定を別々に設け、その間は両方falseとする。
@@ -242,7 +255,8 @@ Indexで実指追跡を維持する目的なら、通常は表示を追跡ソー
 表示したIdleを再び入力として判定するフィードバックを作らない。
 
 実DLLの `FingerPose` はデータ取得失敗時にPosition=0、Rotation=Identityを返し、成功フラグを出力しない。
-現在のしきい値へIdentityを渡すと左はコード16でNeutral、右はコード0でHandOpenになり得る。
+既存のしきい値へIdentityを渡すと、旧2値表では左はコード16でNeutral、右はコード0でHandOpenとなる。
+Version 59の初期中間域でも左はNeutral、右はHandOpenになり得る。
 ソースnullや追跡停止を脱力と同一視しない。3状態判定だけではこの問題は解決しないので、
 入力受付時には上流ソースの有効性・追跡状態を別に確認する必要がある。
 

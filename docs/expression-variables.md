@@ -1,6 +1,6 @@
 # 表情システムの DynamicVariable・定数リファレンス
 
-現行の生成実装（`ExpressionSystem/Version = 48`）に基づく。構成・操作方法は[表情システム](expression-system.md)を参照。
+生成実装の変数を記載する。各変更のVersionは本文に示す。構成・操作方法は[表情システム](expression-system.md)を参照。
 
 ## 名前・型・編集区分
 
@@ -47,7 +47,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 47 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 59 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -233,8 +233,11 @@ Version 48では各手の状態用DynamicVariableを廃止し、Left/RightのLog
 | `StabilitySeconds` | float | 0.05 | 全機種。候補が変わらず続く必要時間（秒） |
 | `FingerThreshold` | float | 40 | Indexの人差し指〜小指の近位関節X角度。以上なら曲げた指 |
 | `ThumbThreshold` | float | 25 | Indexの親指Y角度。左はこの値以下、右は符号を反転した値以下 |
+| `FingerNeutralRange` | float | 20 | Version 59。Indexの4指の中間域幅（度）。OpenはX < FingerThreshold - 幅 |
+| `ThumbNeutralRange` | float | 20 | Version 59。Indexの親指の中間域幅（度）。OpenはY > 左右符号適用済みThumbThreshold + 幅 |
 | `Direction.0`〜`Direction.7` | int | 各添字の0〜7 | Vive・WindowsMRの下・左下・左・左上・上・右上・右・右下への割り当て |
 
+Version 59の負の中間域幅は0として扱い、0なら従来の2値判定になる。Closedしきい値は変更しない。
 Version 19でGrip/Triggerの押下・解放しきい値とGripHeld/TriggerHeldを廃止した。
 Touch／CosmosはControllerの接触とClick出力、Indexは指の姿勢、Vive／MRはパッド方向を使う。
 詳細は[コントローラー別ジェスチャー判定](controller-gestures.md)を参照。

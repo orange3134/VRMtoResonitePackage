@@ -261,6 +261,19 @@ internal static class ExpressionGraphChecks
                 new[] { "Tag", "Control", "Shift" }.Concat(Enumerable.Range(0, 10).Select(i => "Key." + i))),
                 "keyboard settings expose only the hand tag, shared modifiers and ten indexed keys");
         }
+        foreach (string side in new[] { "Left", "Right" })
+        {
+            var indexBoard = Descendant(expressions, "Inputs/HandGestures/Modules/Index/" + side + "/Logic");
+            var selector = indexBoard.GetComponentsInChildren<Nodes.Utility.IndexOfFirstValueMatch<bool>>().Single();
+            var neutral = indexBoard.GetComponentsInChildren<Nodes.Operators.NOR_Multi_Bool>().Single();
+            Check(selector.Values.Count == 8 && selector.Values[0] == neutral && neutral.Operands.Count == 7,
+                "Index selector has explicit Neutral followed by the seven hand shapes");
+            Check(selector.Values.Skip(1).Select((condition, gesture) =>
+                    condition is Nodes.Operators.AND_Multi_Bool shape &&
+                    shape.Operands.Count == (gesture == 4 ? 4 : 5)).All(valid => valid) &&
+                !indexBoard.GetComponentsInChildren<ProtoFluxNode>().Any(node => node.GetType().Name == "ComposeBits_byte"),
+                "Index hand shapes use explicit open/closed conditions instead of a binary finger mask");
+        }
         foreach (var group in nodes.GroupBy(n => n.Group))
         {
             var owners = group.Select(Board).Distinct().ToArray();

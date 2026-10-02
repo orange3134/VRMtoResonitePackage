@@ -1,5 +1,14 @@
 # Expression integration checks
 
+Version 59 gives Index fingers separate open and closed comparisons with an
+editable neutral band (20 degrees by default). Both hands run all 243 combinations
+of five open/intermediate/closed finger states against an independent gesture
+oracle, in addition to the existing 32 extreme poses. Checks cover band boundaries,
+zero and negative widths, live setting edits, delayed Neutral expression selection,
+and recovery to Point/Fist/Open. RockNRoll retains its thumb-independent mapping.
+Graph checks verify eight direct gesture rows with an explicit Neutral NOR,
+and the new setting inputs remain bound after cloning and package reload.
+
 Version 58 places Hand sign expressions and Other expressions directly under Expressions.
 Each group includes a Back item whose ContextMenuSubmenu opens the local Expressions items,
 including after cloning and package reload. There is no intermediate Select expression menu.

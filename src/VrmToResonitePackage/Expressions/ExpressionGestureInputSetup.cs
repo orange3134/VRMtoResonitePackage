@@ -9,35 +9,18 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
-    // Index/Cosmos/pad tables follow Avatar Expression Editor v1.12.1.
+    // Gesture templates follow Avatar Expression Editor v1.12.1.
+    // Index keeps an explicit neutral band between open and closed fingers.
     // Touch packs each sensor separately. See docs/controller-gestures.md.
     private IWorldElement BuildControllerGesture(ExpressionFlux g, Component controller, string device,
         Chirality side, Slot module)
     {
         if (device is "ViveController" or "WindowsMRController")
             return BuildPadGesture(g, controller, module);
+        if (device == "IndexController") return BuildIndexGesture(g, side, module);
 
         var bits = g.Node("ComposeBits_byte");
-        if (device == "IndexController")
-        {
-            var source = g.Node("UserFingerPoseSource", null, ("User", g.Owner(_root)));
-            var threshold = g.Read<float>(g.Ref(module), GestureSettingsSpace, "FingerThreshold");
-            var thumbThreshold = g.Read<float>(g.Ref(module), GestureSettingsSpace, "ThumbThreshold");
-            if (side == Chirality.Right) thumbThreshold = g.Node("ValueNegate", typeof(float), ("N", thumbThreshold));
-            string[] fingers = { "IndexFinger", "MiddleFinger", "RingFinger", "Pinky", "Thumb" };
-            for (int bit = 0; bit < fingers.Length; bit++)
-            {
-                var pose = g.Node("FingerPose", null, ("PoseSource", source),
-                    ("FingerNode", g.Constant(Enum.Parse<BodyNode>(side + fingers[bit] + "_Proximal"))));
-                var euler = g.Node("EulerAngles_floatQ", null, ("Q", Out(pose, "Rotation")));
-                var axes = g.Node("Unpack_Float3", null, ("V", euler));
-                var curled = bit == 4
-                    ? g.Node("ValueGreaterOrEqual", typeof(float), ("A", thumbThreshold), ("B", Out(axes, "Y")))
-                    : g.Node("ValueLessOrEqual", typeof(float), ("A", threshold), ("B", Out(axes, "X")));
-                Link(bits, "Bit" + bit, curled);
-            }
-        }
-        else if (device == "TouchController")
+        if (device == "TouchController")
         {
             // Keep the used outputs in the stock TouchController's visual port order.
             string[] ports = { "ButtonYB_Touch", "ButtonXA_Touch", "ThumbRestTouch", "GripClick",
@@ -62,9 +45,6 @@ internal sealed partial class ExpressionSystemSetup
                 (1, WithThumbContact(40, 72, 104)), (2, new byte[] { 0 }),
                 (3, WithThumbContact(8)), (4, WithThumbContact(0)),
                 (5, WithThumbContact(64, 96)), (6, new byte[] { 8 }), (7, new byte[] { 40, 72, 104 }) },
-            "IndexController" => new (int, byte[])[] {
-                (1, new byte[] { 31 }), (2, new byte[] { 0 }), (3, new byte[] { 30 }),
-                (4, new byte[] { 28 }), (5, new byte[] { 6, 22 }), (6, new byte[] { 14 }), (7, new byte[] { 15 }) },
             "CosmosController" => new (int, byte[])[] {
                 (1, new byte[] { 12 }), (2, new byte[] { 0 }), (3, new byte[] { 3 }),
                 (4, new byte[] { 1 }), (6, new byte[] { 2 }), (7, new byte[] { 4 }) },
@@ -139,6 +119,58 @@ internal sealed partial class ExpressionSystemSetup
 
         // Other controllers keep rows 0..6 for gestures 1..7; unmatched becomes 0.
         return g.Node("ValueInc", typeof(int), ("N", Out(match, "Index")));
+    }
+
+    private IWorldElement BuildIndexGesture(ExpressionFlux g, Chirality side, Slot module)
+    {
+        var source = g.Node("UserFingerPoseSource", null, ("User", g.Owner(_root)));
+        var moduleRef = g.Ref(module);
+        var threshold = g.Read<float>(moduleRef, GestureSettingsSpace, "FingerThreshold");
+        var thumbThreshold = g.Read<float>(moduleRef, GestureSettingsSpace, "ThumbThreshold");
+        if (side == Chirality.Right) thumbThreshold = g.Node("ValueNegate", typeof(float), ("N", thumbThreshold));
+        // A negative edited width behaves like zero; strict open comparisons
+        // keep open and closed disjoint even when the neutral band is disabled.
+        IWorldElement Width(string name) => g.Binary<float>("ValueMax",
+            g.Read<float>(moduleRef, GestureSettingsSpace, name), g.Constant(0f));
+        var fingerOpen = g.Sub(threshold, Width("FingerNeutralRange"));
+        var thumbOpen = g.Add(thumbThreshold, Width("ThumbNeutralRange"));
+        string[] fingers = { "IndexFinger", "MiddleFinger", "RingFinger", "Pinky", "Thumb" };
+        var open = new IWorldElement[5];
+        var closed = new IWorldElement[5];
+        for (int finger = 0; finger < fingers.Length; finger++)
+        {
+            var pose = g.Node("FingerPose", null, ("PoseSource", source),
+                ("FingerNode", g.Constant(Enum.Parse<BodyNode>(side + fingers[finger] + "_Proximal"))));
+            var euler = g.Node("EulerAngles_floatQ", null, ("Q", Out(pose, "Rotation")));
+            var axes = g.Node("Unpack_Float3", null, ("V", euler));
+            bool thumb = finger == 4;
+            var angle = Out(axes, thumb ? "Y" : "X");
+            closed[finger] = g.Binary<float>(thumb ? "ValueLessOrEqual" : "ValueGreaterOrEqual",
+                angle, thumb ? thumbThreshold : threshold);
+            open[finger] = g.Binary<float>(thumb ? "ValueGreaterThan" : "ValueLessThan",
+                angle, thumb ? thumbOpen : fingerOpen);
+            ((Component)closed[finger]).Slot.Name += " : " + fingers[finger] + " Closed";
+            ((Component)open[finger]).Slot.Name += " : " + fingers[finger] + " Open";
+        }
+        // O/C require an explicit state. The legacy RockNRoll codes 6/22
+        // ignore the thumb, including when only that finger is intermediate.
+        string[] patterns = { "CCCCC", "OOOOO", "OCCCC", "OOCCC", "OCCO*", "OCCCO", "CCCCO" };
+        string[] names = { "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
+        var neutral = (Nodes.Operators.NOR_Multi_Bool)g.Node("NOR_Multi_Bool");
+        neutral.Slot.Name += " : Neutral (0)";
+        var match = (Nodes.Utility.IndexOfFirstValueMatch<bool>)g.Node("IndexOfFirstValueMatch", typeof(bool),
+            ("Match", g.Constant(true, shared: false)));
+        match.Values.Add(neutral);
+        for (int gesture = 0; gesture < patterns.Length; gesture++)
+        {
+            var condition = g.And(patterns[gesture].Select((state, finger) =>
+                state == 'C' ? closed[finger] : state == 'O' ? open[finger] : null)
+                .Where(input => input != null).ToArray());
+            ((Component)condition).Slot.Name += $" : {names[gesture]} ({gesture + 1})";
+            neutral.Operands.Add((INodeValueOutput<bool>)condition);
+            match.Values.Add((INodeValueOutput<bool>)condition);
+        }
+        return Out(match, "Index");
     }
 
     private static IWorldElement BuildPadGesture(ExpressionFlux g, Component controller, Slot module)
