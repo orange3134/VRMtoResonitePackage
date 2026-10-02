@@ -51,6 +51,85 @@ Avatars Use Finger Tracking設定が関係する。指追跡を表示に適用�
 [Gesture Toggle](https://docs.vrchat.com/docs/gesture-toggle)を無効にしたAV3では最後の番号を保持する。
 これもNeutralへの遷移とは別である。
 
+## インターネットで確認した入力対応（2026-10-02）
+
+### 公式操作表の7手形
+
+[VRChat公式Index操作表](https://docs.vrchat.com/docs/valve-index)の入力条件を整理すると次の通り。
+上／下は原文のup／downであり、Resoniteの固定Euler角やcurlしきい値へは直結しない。
+人差し指の「触れる」は原文のon triggerであり、トリガーを引き切る条件とは書かれていない。
+
+| 番号／手形 | 人差し指 | 中指 | 薬指 | 小指 | 親指 |
+|---|---|---|---|---|---|
+| 1 Fist | トリガーに触れる | 下 | 下 | 下 | 下 |
+| 2 HandOpen | トリガーから離す | 上 | 上 | 上 | 上 |
+| 3 FingerPoint | トリガーから離す | 下 | 下 | 下 | 下 |
+| 4 Victory | トリガーから離す | 上 | 下 | 下 | 下 |
+| 5 RockNRoll | トリガーから離す | 下 | 下 | 上 | 下 |
+| 6 HandGun | トリガーから離す | 下 | 下 | 下 | 上 |
+| 7 ThumbsUp | トリガーに触れる | 下 | 下 | 下 | 上 |
+
+公式ページは、中指・薬指・小指の静電容量センサー、人差し指のトリガー接触センサー、
+親指のパッド／ボタン接触センサー、握り込みのsqueezeセンサーを説明する。
+親指に触れるボタンのTouchバインディングを外すと曲げを認識できなくなるとも説明している。
+操作表にはNeutralの専用行や、伸び／曲げの数値境界はない。
+
+この公式表はSkeletal Input更新前からある操作説明である。
+[Input 2.0 FAQ](https://docs.vrchat.com/docs/input-20-faq)は従来のIndexを単純なfinger-curl方式と説明し、
+新方式ではSteamVRの骨格データを表示へ適用すると説明している。
+公式表だけから現行クライアントの全入力経路・優先順位・較正方法は確定しない。
+
+### Neutralの中間域についての具体的な実機報告
+
+[Neutral Flickerの報告](https://feedback.vrchat.com/bug-reports/p/1491-vive-and-index-controllers-neutral-flicker-on-touchpad-gesture-to-fist-tran)
+では、2024-08-21にIndexで「Fistを作って人差し指をゆっくり伸ばすと、
+FingerPointとの間にGesture=0のdeadzoneがある」という再現手順が投稿されている。
+同じスレッドにはFist→ThumbsUpで一瞬0を経由する報告と、2024.3.1以降の挙動とする報告もある。
+
+これは入力当事者の観測であり、公式のアルゴリズム説明や現在の実機検証ではない。
+指の中間域をNeutralへ落とす案を支持する材料にはなるが、
+全指について共通のdeadzoneがあることや、0.25／0.75等の数値を保証する証拠ではない。
+特に「全指を脱力させると必ず0」とは結論しない。
+
+### SteamVRバインディングで番号を直接指定できる
+
+[2024-05-02公式開発報告](https://ask.vrchat.com/t/developer-update-2-may-2024/24284)は
+Gesture Directで手形を任意のボタンへ割り当てる機能を説明している。
+[VRChat WikiのSteamVR Bindingsガイド](https://wiki.vrchat.com/wiki/Guides:SteamVR_Bindings)は
+コミュニティによる具体的な調査資料で、次の経路を掲載している。
+
+- Gesture Activator：親指・人差し指・Gripなどのbool入力。
+  別のGesture入力としてTrigger／Grip Axisなどのアナログ入力も掲載されている。
+- Use Gesture：`UG - Neutral`から`UG - Thumbs Up`まで、0〜7を直接指定するboolアクション。
+- Gesture Wheel：パッドの位置から手形を選ぶ経路。
+- Index等のGesture Activatorを持つ機種では入力がないとOpenが成立するという説明。
+  `Disable Gesture Tracked`で追跡由来の手形認識を無効にし、明示入力のみを使う方法も説明されている。
+
+このガイドの未解明箇所には「(?)」「TODO」もあり、全経路の優先順位までは示していない。
+Neutralを出す方法は実指の姿勢だけに限定されず、バインディングで0を直接指定することもできる。
+Resoniteでも既存のGesture APIへ0を送るボタンを設ければ、指角度によらずNeutralを選ぶ経路を作れる。
+これは入力方式の追加案であり、今回ボタンや配線は変更していない。
+
+### Index向け表情システムのNeutral再割り当て
+
+[FaceEmo作者の設定資料](https://suzuryg.github.io/face-emo/docs/optional-functions/setting-menu/)には
+Controller TypeをIndex Controllerにすると、Fistによる表情変更を無効にしNeutral扱いにする設定がある。
+これは表情システム側の再割り当てであり、VRCクライアントのGesture=1が0へ変更される意味ではない。
+「通常の握り方で表情を出したくない」という用途には、この選択層の設定も検討できる。
+
+### 公開APIから分かる数値の範囲
+
+[ValveのSteamVR Skeletal Input資料](https://github.com/ValveSoftware/openvr/wiki/SteamVR-Skeletal-Input)には
+`GetSkeletalSummaryData`と `flFingerCurl[5]` が定義され、0=伸ばす、1=完全に曲げると説明されている。
+WithController／WithoutControllerで手の可動域が異なり、WithoutControllerは
+コントローラーを握る形を閉じた拳へ再マッピングする。
+これもValveの骨格API仕様であり、VRCのGesture認識に使う境界値の公開ではない。
+ResoniteのFingerPoseの角度をこのcurlと同一視せず、利用する追跡ソースを確認して較正する。
+
+今回の公式資料・作者資料・公開実装の検索では、VRC現行クライアントの
+全手形の数値しきい値、Neutralの完全な条件表、認識処理の公開ソースは見つからなかった。
+公開資料による確認と実機報告を分け、再現案の数値境界は引き続き較正対象とする。
+
 ## Gesture Managerにはコントローラー認識処理があるか
 
 同じUnityプロジェクトの `vrchat.blackstartx.gesture-manager` 3.9.9も確認した。
