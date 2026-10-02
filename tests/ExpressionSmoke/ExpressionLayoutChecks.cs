@@ -60,12 +60,13 @@ internal static class ExpressionLayoutChecks
             var board = hand.FindChild("Logic");
             var nodes = board.GetComponentsInChildren<ProtoFluxNode>();
             bool pad = module.Name is "Vive" or "WindowsMR";
-            Check(nodes.Count(n => n.GetType().Name == "ComposeBits_byte") == (pad ? 0 : 1) &&
+            string composeType = module.Name == "Index" ? "ComposeBits_ushort" : "ComposeBits_byte";
+            Check(nodes.Count(n => n.GetType().Name == composeType) == (pad ? 0 : 1) &&
                 nodes.Count(n => n.GetType().Name == "ValueMultiplex`1") == (pad ? 1 : 0),
                 module.Name + " has one device-specific classifier");
             if (!pad)
             {
-                var bits = nodes.Single(n => n.GetType().Name == "ComposeBits_byte");
+                var bits = nodes.Single(n => n.GetType().Name == composeType);
                 var match = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<bool>>().Single();
                 int gestureOffset = module.Name is "Touch" or "Index" ? 1 : 0;
                 Check(match.Match.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<bool> literal && literal.Value.Value &&
@@ -109,6 +110,10 @@ internal static class ExpressionLayoutChecks
                     if (sizes[gesture] == 0)
                         Check(condition is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<bool> absent && !absent.Value.Value,
                             "missing gesture keeps its false row without shifting later gesture numbers");
+                    else if (module.Name == "Index" && sizes[gesture] == 1)
+                        Check(condition is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueEquals<ushort> equal && equal.A.Target == bits &&
+                            equal.B.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<ushort>,
+                            "Index single-code gestures compare directly against the packed ushort");
                     else if (sizes[gesture] == 1)
                         Check(condition is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueEquals<byte> equal && equal.A.Target == bits &&
                             equal.B.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<byte>,
@@ -123,6 +128,14 @@ internal static class ExpressionLayoutChecks
                                 between.Value.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Casts.Cast_byte_To_int cast &&
                                 cast.Input.Target == bits,
                                 "Touch ranges compare the packed sensor byte through one integer cast");
+                    }
+                    else if (module.Name == "Index")
+                    {
+                        var group = condition as FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<ushort>;
+                        Check(group != null && group.Match.Target == bits && group.Values.Count == sizes[gesture] &&
+                            match.Values[gesture + gestureOffset] == group.FoundMatch &&
+                            group.Values.All(value => Owner(value) is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<ushort>),
+                            "Index RockNRoll compares three explicit ushort codes and uses FoundMatch");
                     }
                     else
                     {

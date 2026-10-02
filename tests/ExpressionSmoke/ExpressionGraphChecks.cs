@@ -269,18 +269,17 @@ internal static class ExpressionGraphChecks
             var neutral = indexBoard.GetComponentsInChildren<Nodes.Operators.NOR_Multi_Bool>().Single();
             Check(selector.Values.Count == 8 && selector.Values[0] == neutral && neutral.Operands.Count == 7,
                 "Index selector has explicit Neutral followed by the seven hand shapes");
-            var bits = indexBoard.GetComponentsInChildren<ProtoFluxNode>().Single(node => node.GetType().Name == "ComposeBits_byte");
+            var bits = indexBoard.GetComponentsInChildren<ProtoFluxNode>().Single(node => node.GetType().Name == "ComposeBits_ushort");
+            string[] fingers = { "IndexFinger", "MiddleFinger", "RingFinger", "Pinky", "Thumb" };
             for (int finger = 0; finger < 5; finger++)
-                Check(((ISyncRef)ExpressionFlux.Member(bits, "Bit" + finger)).Target is ProtoFluxNode comparison &&
-                    comparison.Slot.Name.EndsWith(" Closed", StringComparison.Ordinal),
-                    "Index curl comparisons connect directly to packed finger bits");
-            Check(((ISyncRef)ExpressionFlux.Member(bits, "Bit5")).Target is Nodes.Operators.AND_Multi_Bool resolved &&
-                resolved.Operands.Count == 4 && resolved.Operands.All(condition => condition is Nodes.Operators.OR_Bool),
-                "Index packs the four-finger neutral-band validity into Bit5");
-            Check(((ISyncRef)ExpressionFlux.Member(bits, "Bit6")).Target is ProtoFluxNode thumbOpen &&
-                thumbOpen.Slot.Name.EndsWith("Thumb Open", StringComparison.Ordinal) &&
-                ((ISyncRef)ExpressionFlux.Member(bits, "Bit7")).Target == null,
-                "Index preserves the thumb's third state and leaves Bit7 unused");
+            for (int state = 0; state < 2; state++)
+                Check(((ISyncRef)ExpressionFlux.Member(bits, "Bit" + (2 * finger + state))).Target is ProtoFluxNode comparison &&
+                    comparison.Slot.Name.EndsWith(fingers[finger] + (state == 0 ? " Closed" : " Open"), StringComparison.Ordinal),
+                    "Index open/closed comparisons connect directly to all ten packed bits");
+            Check(Enumerable.Range(10, 6).All(bit => ((ISyncRef)ExpressionFlux.Member(bits, "Bit" + bit)).Target == null),
+                "Index leaves the upper six ushort bits unused");
+            Check(neutral.Operands.SequenceEqual(selector.Values.Skip(1)),
+                "Index Neutral reuses the seven packed gesture comparisons");
         }
         foreach (var group in nodes.GroupBy(n => n.Group))
         {

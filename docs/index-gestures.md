@@ -5,6 +5,7 @@
 調査時にはSDK、Unityプロジェクト、生成コード、実ワールドの変更は行っていない。
 その後、表情入力の3状態判定をVersion 59として実装した。見た目のIdleポーズは提案のまま。
 Version 60では分類を維持し、比較boolを`ComposeBits_byte`へまとめて手形ごとのコード比較へ変更した。
+Version 61では`ComposeBits_ushort`を使い、Closed／Open比較10個を直接接続する。
 実装済みの対応表は
 [コントローラー別ジェスチャー判定](controller-gestures.md)を参照。
 環境固有のプロジェクトパス、抽出物、検証スクリプトはコミットしない。
@@ -188,9 +189,9 @@ Open側を厳密不等号にするため、幅0でも状態は重ならず従来
 
 以下はこの実装の設計根拠と、別途検討できる校正方法。
 Version 59は手形ごとに指比較をANDへ直接つないでいた。
-Version 60のビット配置と一致コードは[コントローラー別ジェスチャー判定](controller-gestures.md)を参照。
-各指のClosedをBit0〜4、4指のOpenまたはClosedの成立をBit5、親指OpenをBit6へ入れる。
-各手形の比較はTouchと共通のbyte一致処理で生成する。
+Version 61のビット配置と一致コードは[コントローラー別ジェスチャー判定](controller-gestures.md)を参照。
+各指のClosed／Openを隣り合う2ビットへ直接入れ、Bit0〜9を使用する。
+各手形の比較はTouchと共通の型付きコード一致処理で生成する。
 
 Resonite向けの設計案であり、VRCクライアントの認識アルゴリズムとして確定したものではない。
 各指にOpen判定とClosed判定を別々に設け、その間は両方falseとする。
@@ -228,7 +229,8 @@ RockNRollの親指*は既存6/22の互換性を保つ案。公式の説明へ寄
 flowchart LR
     P[UserFingerPoseSource → FingerPose] --> A[指ごとの曲げ量・較正]
     A --> O[Open比較／Closed比較]
-    O --> G[7手形のAND条件]
+    O --> B[ComposeBits_ushortの10入力]
+    B --> G[7手形のushortコード比較]
     G --> N[NOR → Neutral条件]
     G --> I[IndexOfFirstValueMatch bool]
     N --> I
@@ -277,7 +279,7 @@ Version 59の初期中間域でも左はNeutral、右はHandOpenになり得る�
   IndexOfFirstValueMatch、FingerPosePreset、FingerPoseMultiplexer、HandPoserの定義を確認した。
 
 調査時の243通りの検証は離散条件のオフライン検証だった。
-Version 59〜60では生成Fluxを動かす左右各243通りのテストも実施する。実機の認識テストは未実施。
+Version 59〜61では生成Fluxを動かす左右各243通りのテストも実施する。実機の認識テストは未実施。
 実装時は左右でOpen→脱力→Fist、Victory→脱力、親指の接触先変更、境界での揺れ、
 指追跡喪失、VR終了／復帰、Timeout中からのNeutral復帰、GestureTableの0行の選択を確認する。
 VRC同値性を求める場合は、VRCのGestureLeft／Right表示と同じ実手形・バインディングで照合する。

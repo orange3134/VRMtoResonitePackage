@@ -11,13 +11,18 @@ internal sealed partial class ExpressionSystemSetup
 {
     // Gesture templates follow Avatar Expression Editor v1.12.1.
     // Index keeps an explicit neutral band between open and closed fingers.
-    // Touch/Index pack sensor comparisons into a byte. See docs/controller-gestures.md.
+    // Touch/Index pack sensor comparisons into byte/ushort codes. See docs/controller-gestures.md.
     private IWorldElement BuildControllerGesture(ExpressionFlux g, Component controller, string device,
         Chirality side, Slot module)
     {
         if (device is "ViveController" or "WindowsMRController")
             return BuildPadGesture(g, controller, module);
-        var bits = device == "IndexController" ? BuildIndexBits(g, side, module) : g.Node("ComposeBits_byte");
+        if (device == "IndexController")
+            return BuildPackedGesture<ushort>(g, BuildIndexBits(g, side, module), new (int, ushort[])[] {
+                (1, new ushort[] { 341 }), (2, new ushort[] { 682 }), (3, new ushort[] { 342 }),
+                (4, new ushort[] { 346 }), (5, new ushort[] { 150, 406, 662 }),
+                (6, new ushort[] { 598 }), (7, new ushort[] { 597 }) }, explicitNeutral: true);
+        var bits = g.Node("ComposeBits_byte");
         if (device == "TouchController")
         {
             // Keep the used outputs in the stock TouchController's visual port order.
@@ -43,18 +48,11 @@ internal sealed partial class ExpressionSystemSetup
                 (1, WithThumbContact(40, 72, 104)), (2, new byte[] { 0 }),
                 (3, WithThumbContact(8)), (4, WithThumbContact(0)),
                 (5, WithThumbContact(64, 96)), (6, new byte[] { 8 }), (7, new byte[] { 40, 72, 104 }) },
-            "IndexController" => new (int, byte[])[] {
-                (1, new byte[] { 63 }), (2, new byte[] { 96 }), (3, new byte[] { 62 }),
-                (4, new byte[] { 60 }), (5, new byte[] { 38, 54, 102 }),
-                (6, new byte[] { 110 }), (7, new byte[] { 111 }) },
             "CosmosController" => new (int, byte[])[] {
                 (1, new byte[] { 12 }), (2, new byte[] { 0 }), (3, new byte[] { 3 }),
                 (4, new byte[] { 1 }), (6, new byte[] { 2 }), (7, new byte[] { 4 }) },
             _ => throw new ArgumentOutOfRangeException(nameof(device))
         };
-        var match = (Nodes.Utility.IndexOfFirstValueMatch<bool>)g.Node("IndexOfFirstValueMatch", typeof(bool),
-            ("Match", g.Constant(true, shared: false)));
-        string[] names = { "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
         var touchCode = device == "TouchController" ? g.Node("Cast_byte_To_int", null, ("Input", bits)) : null;
 
         // Export consecutive Touch codes as inclusive ranges rather than one
@@ -73,12 +71,22 @@ internal sealed partial class ExpressionSystemSetup
             return g.Or(ranges.ToArray());
         }
 
+        return BuildPackedGesture(g, bits, matches, device == "TouchController",
+            device == "TouchController" ? MatchTouchRanges : null);
+    }
+
+    private static IWorldElement BuildPackedGesture<T>(ExpressionFlux g, Component bits,
+        (int Gesture, T[] Codes)[] matches, bool explicitNeutral, Func<T[], IWorldElement> ranges = null) where T : unmanaged
+    {
+        var match = (Nodes.Utility.IndexOfFirstValueMatch<bool>)g.Node("IndexOfFirstValueMatch", typeof(bool),
+            ("Match", g.Constant(true, shared: false)));
+        string[] names = { "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
         // One bool row per gesture keeps the code groups readable and the output
         // index stable. Cosmos has no RockNRoll, so that row is always false.
         var conditions = new List<INodeValueOutput<bool>>();
         for (int gesture = 1; gesture <= names.Length; gesture++)
         {
-            byte[] codes = matches.FirstOrDefault(m => m.Gesture == gesture).Codes;
+            T[] codes = matches.FirstOrDefault(m => m.Gesture == gesture).Codes;
             IWorldElement found;
             Component group;
             if (codes == null)
@@ -88,26 +96,26 @@ internal sealed partial class ExpressionSystemSetup
             }
             else if (codes.Length == 1)
             {
-                group = (Component)g.Equal<byte>(bits, g.Constant(codes[0]));
+                group = (Component)g.Equal<T>(bits, g.Constant(codes[0]));
                 found = group;
             }
-            else if (device == "TouchController" && codes.Length > 3)
+            else if (ranges != null && codes.Length > 3)
             {
-                group = (Component)MatchTouchRanges(codes);
+                group = (Component)ranges(codes);
                 found = group;
             }
             else
             {
-                var codesMatch = (Nodes.Utility.IndexOfFirstValueMatch<byte>)g.Node("IndexOfFirstValueMatch", typeof(byte),
+                var codesMatch = (Nodes.Utility.IndexOfFirstValueMatch<T>)g.Node("IndexOfFirstValueMatch", typeof(T),
                     ("Match", bits));
-                foreach (byte code in codes) codesMatch.Values.Add((INodeValueOutput<byte>)g.Constant(code));
+                foreach (T code in codes) codesMatch.Values.Add((INodeValueOutput<T>)g.Constant(code));
                 group = codesMatch;
                 found = Out(codesMatch, "FoundMatch");
             }
             group.Slot.Name += $" : {names[gesture - 1]} ({gesture})";
             conditions.Add((INodeValueOutput<bool>)found);
         }
-        if (device is "TouchController" or "IndexController")
+        if (explicitNeutral)
         {
             // Explicit row 0 reuses the seven gesture conditions. Rows directly
             // match gesture numbers 0..7, including intermediate Index poses.
@@ -117,7 +125,7 @@ internal sealed partial class ExpressionSystemSetup
             match.Values.Add(neutral);
         }
         foreach (var condition in conditions) match.Values.Add(condition);
-        if (device is "TouchController" or "IndexController") return Out(match, "Index");
+        if (explicitNeutral) return Out(match, "Index");
 
         // Other controllers keep rows 0..6 for gestures 1..7; unmatched becomes 0.
         return g.Node("ValueInc", typeof(int), ("N", Out(match, "Index")));
@@ -154,15 +162,14 @@ internal sealed partial class ExpressionSystemSetup
             ((Component)closed[finger]).Slot.Name += " : " + fingers[finger] + " Closed";
             ((Component)open[finger]).Slot.Name += " : " + fingers[finger] + " Open";
         }
-        // Closed bits alone cannot distinguish Open from intermediate. Bit5
-        // requires all four non-thumb fingers to be outside the neutral band;
-        // Bit4/Bit6 preserve the thumb's Closed/intermediate/Open states.
-        var bits = g.Node("ComposeBits_byte");
-        for (int finger = 0; finger < fingers.Length; finger++) Link(bits, "Bit" + finger, closed[finger]);
-        var resolved = g.And(Enumerable.Range(0, 4).Select(finger => g.Or(open[finger], closed[finger])).ToArray());
-        ((Component)resolved).Slot.Name += " : Four fingers outside neutral band";
-        Link(bits, "Bit5", resolved);
-        Link(bits, "Bit6", open[4]);
+        // Two direct comparison bits per finger: Closed/Open = 10 bits.
+        // An intermediate finger has both bits false; no validity aggregation is needed.
+        var bits = g.Node("ComposeBits_ushort");
+        for (int finger = 0; finger < fingers.Length; finger++)
+        {
+            Link(bits, "Bit" + (2 * finger), closed[finger]);
+            Link(bits, "Bit" + (2 * finger + 1), open[finger]);
+        }
         return bits;
     }
 

@@ -66,7 +66,7 @@ Touchの複数コード群はFist=28/22/21/23、FingerPoint=5/6/12/7、Victory=2
 Touchの64〜73は原版のデスクトップ入力符号であり、VRセンサー判定には含めない。
 キーボードはResoPonの左右別入力を継続する。
 
-## Indexの中間域による判定（Version 59〜60）
+## Indexの中間域による判定（Version 59〜61）
 
 各指にOpen／Closedを別々の比較で定義し、どちらでもない角度を中間状態とする。
 既存のClosedしきい値は維持し、IndexモジュールのDVに
@@ -90,30 +90,33 @@ RockNRollは既存互換のため親指を判定せず、親指が中間でも5�
 生成済みパッケージへ適用するには再変換・再インポートする。
 
 Version 60ではEuler角比較のboolを1つの`ComposeBits_byte`へまとめ、
-Touchと同じコード一致判定へ変更した。Version 59と同じ指状態分類を保つ。
+Touchと同じコード一致判定へ変更した。
+Version 61では`ComposeBits_ushort`へ切り替え、5指のClosed／Open比較10個をすべて直接接続する。
+手形の比較もushort型に揃えた。Version 59と同じ指状態分類を保つ。
 
 | Bit | 入力 |
 |---|---|
-| 0〜4 | 人差し指・中指・薬指・小指・親指のClosed比較 |
-| 5 | 親指以外の4指すべてがOpenまたはClosed（中間の指がない） |
-| 6 | 親指のOpen比較 |
-| 7 | 未使用 |
+| 0／1 | 人差し指Closed／Open |
+| 2／3 | 中指Closed／Open |
+| 4／5 | 薬指Closed／Open |
+| 6／7 | 小指Closed／Open |
+| 8／9 | 親指Closed／Open |
+| 10〜15 | 未使用 |
 
-4指のOpen比較はClosedとのORを通し、4つのORのANDをBit5へ入れる。
-全手形の一致コードでBit5を要求するため、4指のどれかが中間ならNeutralになる。
-親指はBit4／Bit6でClosed／Openを区別し、両方falseが中間となる。
+各指の2ビットが両方falseなら中間状態となる。
+Version 60で必要だったOpen／ClosedのORと4指をまとめるANDは不要になった。
 
-| 手形 | 一致byte |
+| 手形 | 一致ushort |
 |---|---|
-| Fist (1) | 63 |
-| HandOpen (2) | 96 |
-| FingerPoint (3) | 62 |
-| Victory (4) | 60 |
-| RockNRoll (5) | 38、54、102 |
-| HandGun (6) | 110 |
-| ThumbsUp (7) | 111 |
+| Fist (1) | 341 |
+| HandOpen (2) | 682 |
+| FingerPoint (3) | 342 |
+| Victory (4) | 346 |
+| RockNRoll (5) | 150、406、662 |
+| HandGun (6) | 598 |
+| ThumbsUp (7) | 597 |
 
-単一コードは`ValueEquals<byte>`、RockNRollは`IndexOfFirstValueMatch<byte>.FoundMatch`で比較する。
+単一コードは`ValueEquals<ushort>`、RockNRollは`IndexOfFirstValueMatch<ushort>.FoundMatch`で比較する。
 RockNRollの3コードは親指の中間／Closed／Openに対応し、その他の手形は親指の中間を受け付けない。
 Neutralは7つのコード一致結果のNORで選び、8行の最終セレクターへ渡す。
 

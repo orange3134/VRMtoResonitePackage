@@ -16,6 +16,13 @@ codes or the three-code RockNRoll lookup before the same eight-row selector.
 Layout checks verify these packed connections, byte comparison inputs and code
 groups after cloning and package reload. The 243-state oracle is unchanged.
 
+Version 61 uses ComposeBits_ushort with all ten finger Closed/Open comparisons
+connected directly, in adjacent pairs from Bit0/1 (index) through Bit8/9 (thumb).
+Both bits are false for an intermediate finger; Bit10..15 remain unused.
+The code matcher is shared with Touch but uses ushort equality and a three-code
+ushort RockNRoll lookup. Checks verify the direct connections, ushort comparison
+inputs and unused ports; the same 243-state oracle still checks classification.
+
 Version 58 places Hand sign expressions and Other expressions directly under Expressions.
 Each group includes a Back item whose ContextMenuSubmenu opens the local Expressions items,
 including after cloning and package reload. There is no intermediate Select expression menu.
