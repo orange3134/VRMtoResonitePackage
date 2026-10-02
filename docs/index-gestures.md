@@ -51,6 +51,26 @@ Avatars Use Finger Tracking設定が関係する。指追跡を表示に適用�
 [Gesture Toggle](https://docs.vrchat.com/docs/gesture-toggle)を無効にしたAV3では最後の番号を保持する。
 これもNeutralへの遷移とは別である。
 
+## Gesture Managerにはコントローラー認識処理があるか
+
+同じUnityプロジェクトの `vrchat.blackstartx.gesture-manager` 3.9.9も確認した。
+この版にはIndex等のコントローラーの接触・押下・指curlからGesture番号を認識する処理はない。
+手形を選択してAnimatorへ番号を渡すエミュレーターである。
+[公式README](https://github.com/BlackStartx/VRC-Gesture-Manager)も左右の手形をUIボタンで試す方法を説明している。
+
+- `Scripts/Editor/GestureManagerEditor.cs` の `OnCheckBoxGuiHand` は1〜7のチェックを表示し、
+  `module.OnNewHand(hand, isOn ? i : 0)` を呼ぶ。選択解除がNeutral=0であり、実指の脱力判定ではない。
+- `Scripts/Runtime/Data/ModuleBase.cs` の `OnNewHand` が左右へ分岐し、
+  `Scripts/Editor/Modules/Vrc3/ModuleVrc3.cs` の `OnNewLeft`／`OnNewRight` が
+  GestureLeft／Rightパラメーターを直接設定する。リスト上のマウスドラッグも選択行を番号へ変換する。
+- `Vrc3WeightSlider.UpdatePosition` はマウス位置を0〜1へClampし、GestureWeightを設定する。
+  Gesture変更時にWeightを更新する補助処理もあるが、実トリガー量の測定・手形判定ではない。
+- `OpenSoundControl/OscSettings.cs` はOSCの入力値をパラメーターへ渡す。
+  外部から値を受け取る機能であり、コントローラーセンサーからの手形認識は実装していない。
+
+パッケージ内の全C#をXR／SteamVR／OpenVR／OVRInput／指curl／Grip／GetAxis／GetButton等で検索し、
+上記のUIからパラメーター設定までの経路を直接読んだ。Neutralの実機しきい値の根拠としては使えない。
+
 ## 現在のResoPonのIndex
 
 `ExpressionGestureInputSetup.BuildControllerGesture` は装着者の
