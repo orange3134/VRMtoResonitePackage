@@ -108,7 +108,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(menuTargets.SetEquals(expressions.FindChild("Catalog").Children),
             "both submenus together retain every Catalog expression");
         await ExpressionDynamicInputChecks.CheckEdits(expressions);
-        await KeyboardPriorityChecks.Run(expressions, 0);
+        await KeyboardShortcutChecks.Run(expressions);
         await ExpressionInputEventChecks.Run(expressions);
         var core = expressions.FindChild("Internal"); var api = expressions.FindChild("API").FindChild("Receivers");
         var catalog = expressions.FindChild("Catalog"); var table = expressions.FindChild("DV").FindChild("GestureTable");
@@ -437,6 +437,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<int>(cloneCore, "LeftGesture") == 1 && Get<int>(cloneCore, "RightGesture") == 0 && Get<string>(cloneCore, "PairKey") == "L1R0" &&
             Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 7 && !Get<bool>(core, "AllowHandGestures"),
             "clone int requests update only the clone and leave the original hand state and input mode unchanged");
+        await KeyboardShortcutChecks.Run(clone.FindChild("Expressions"));
         await ExpressionResetChecks.Run(clone.FindChild("Expressions"));
         Check(Get<int>(core, "RightGesture") == 7 && !Get<bool>(core, "AllowHandGestures"),
             "clone reset leaves the original input state unchanged");
@@ -556,6 +557,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
             "reloaded keyboard API selects a pose without enabling hand gestures");
         await ExpressionResetChecks.Run(expressions);
+        await KeyboardShortcutChecks.Run(restoredExpressions);
         await ExpressionResetChecks.Run(restoredExpressions);
         // Curves with equal endpoints may still have a tangent excursion.
         var testCurve = new ExpressionCurve { Binding = new("Face", "Curve") };

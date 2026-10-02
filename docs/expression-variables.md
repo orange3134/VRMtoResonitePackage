@@ -47,7 +47,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 62 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 63 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -200,19 +200,20 @@ OriginalDriverは元コンポーネント自体ではなく、元のActiveLink�
 Version 24ではTagの既定値を `ResoPon/Expression/Keyboard/Left`・`Right` とする。Gesture APIと違い、AllowHandGestures=falseでも受け付ける。
 
 各手の DynamicVariableSpace は `ExpressionSystem.Input.Keyboard`。
-変数は `DV/Tag`、`DV/Shift`、`DV/Control`、`DV/Key.0`〜`DV/Key.9` の各 Slot に置く。
+Version 63の変数は `DV/Tag`、`DV/Modifier`、`DV/Key.0`〜`DV/Key.9` の各 Slot に置く。
 
 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|
-| `Tag` | string | 左右の Gesture API Tag | 設定。イベントの送信先 Tag |
+| `Tag` | string | 左右の Keyboard API Tag | 設定。イベントの送信先 Tag |
 | `Key.0`〜`Key.9` | Renderite.Shared.Key | Keypad0〜Keypad9 | 設定。添字が送信する手の状態（0=Neutral、1=Fist、7=ThumbsUp、8・9は拡張用）。None は未割当 |
-| `Shift` | bool | true | 設定。その手の全キーに共通の Shift 押下状態の一致条件 |
-| `Control` | bool | 左=false、右=true | 設定。その手の全キーに共通の Ctrl 押下状態の一致条件 |
+| `Modifier` | Renderite.Shared.Key | 左=Shift、右=Control | 設定。その手の全キーに共通で押下を要求するキー。Noneは未割当 |
 
 キーごとの Enabled・Gesture は持たない。Flux は各手の `Logic` にまとめる。
-`KeyHeld(Key.Control)` と `KeyHeld(Key.Shift)` で左右どちらの修飾キーも扱い、Alt は判定しない。
+`KeyHeld(Modifier)` で指定したキーの押下を調べる。Shift・Controlは左右どちらの物理キーも扱う。
+他の修飾キーは判定しないため、既定値ではCtrl+Shift+テンキーが両手を更新する。
+Modifierは各手で独立して編集でき、Altなどに変更したり、両手を同じキーへ割り当てたりできる。
 10個の KeyHeld を `IndexOfFirstValueMatch<bool>` に渡し、最初の true の添字をペイロードにする。
-`modular_avatar/AvatarWornLocal`、修飾キーの一致、FoundMatch の AND を
+`modular_avatar/AvatarWornLocal`、Modifierの押下、FoundMatch の AND を
 `FireOnLocalValueChange<bool>` で監視し、true になった時だけ送信する。Inputs配下にはOnStartを生成しない。
 着用判定は既存の Avatar Root Identification が提供し、FirstPerson 設定がなくても表情生成時に用意する。
 

@@ -25,7 +25,6 @@ internal sealed partial class ExpressionSystemSetup
     private const string ResetStateTag = "ResoPon/Expression/Internal/Reset";
     private const string InitializeTag = "ResoPon/Expression/Internal/Initialize";
     private GesturePairCompiler _compiled;
-    private int _keyboardPrimaryHand;
     private readonly Dictionary<string, Slot> _clips = new();
     private readonly Dictionary<string, Slot> _outputSlots = new();
 
@@ -52,7 +51,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "CurrentExpression", null);
         Data(_root, "PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 62);
+        Data(_root, "Version", 63);
         Reference(_root, "References.API", _api);
         Reference(_root, "References.Catalog", _catalog);
     }
@@ -197,9 +196,6 @@ internal sealed partial class ExpressionSystemSetup
             }
             _clips[clip.Id] = entry;
         }
-        var exported = definitions.Where(c => _clips.ContainsKey(c.Id)).ToDictionary(c => c.Id);
-        _keyboardPrimaryHand = ExpressionHandPriority.PreferredHand(
-            _compiled.Pairs.Select(id => id == null ? null : exported.GetValueOrDefault(id)).ToArray(), neutral);
     }
 
     private void LogDiagnostics()

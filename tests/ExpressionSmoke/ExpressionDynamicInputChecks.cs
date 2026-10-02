@@ -30,7 +30,7 @@ internal static class ExpressionDynamicInputChecks
         {
             var inputs = hand.GetComponentsInChildren<DynamicVariableValueInput<Renderite.Shared.Key>>();
             var settings = hand.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<Renderite.Shared.Key>>();
-            Check(inputs.Count == 10 && settings.Count == 10, "each keyboard hand has ten key bindings");
+            Check(inputs.Count == 11 && settings.Count == 11, "each keyboard hand has a modifier and ten key bindings");
             foreach (var input in inputs)
             {
                 var proxy = input.Slot.GetComponent<global::ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Variables.DynamicVariableInputProxy<Renderite.Shared.Key>>();
@@ -64,6 +64,9 @@ internal static class ExpressionDynamicInputChecks
         var key = root.FindChild("Inputs").FindChild("Keyboard").FindChild("Left").FindChild("DV").FindChild("Key.1")
             .GetComponent<DynamicValueVariable<Renderite.Shared.Key>>();
         var originalKey = key.Value.Value;
+        var modifier = root.FindChild("Inputs").FindChild("Keyboard").FindChild("Left").FindChild("DV").FindChild("Modifier")
+            .GetComponent<DynamicValueVariable<Renderite.Shared.Key>>();
+        var originalModifier = modifier.Value.Value;
         float original = field.Value.Value;
         var receiver = root.FindChild("DV").FindChild("References.API").GetComponent<DynamicReferenceVariable<Slot>>();
         var originalReceiver = receiver.Reference.Target;
@@ -72,6 +75,7 @@ internal static class ExpressionDynamicInputChecks
         {
             receiver.Reference.Target = alternateReceiver;
             key.Value.Value = Renderite.Shared.Key.Keypad7;
+            modifier.Value.Value = Renderite.Shared.Key.Alt;
             Check(module.WriteDynamicVariable("ExpressionSystem.Input.HandGestures/StabilitySeconds", original + 0.137f) == DynamicVariableWriteResult.Success,
                 "can edit ancestor setting");
             for (int i = 0; i < 3; i++) await default(NextUpdate);
@@ -82,6 +86,7 @@ internal static class ExpressionDynamicInputChecks
             receiver.Reference.Target = originalReceiver;
             field.Value.Value = original;
             key.Value.Value = originalKey;
+            modifier.Value.Value = originalModifier;
         }
         for (int i = 0; i < 3; i++) await default(NextUpdate);
         CheckBindings(root);

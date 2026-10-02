@@ -3,6 +3,9 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 63ではキーボードの修飾キーを各手の `Modifier`（Renderite.Shared.Key）にする。
+既定値は左手がShift、右手がControl。Ctrl+Shift+テンキーでは両手の入力を受け付ける。
+
 Version 62では、Fluxノードをまとめる各Logic親スロットのローカルPositionを `(0, 0, 0)` にする。
 親スロットを横へずらす配置は行わず、ノードは各親スロット内で左から右へ配置する。
 複製・保存後の再読込でも親の原点配置と、同じLogic内でノードが重ならないことを検証する。
@@ -63,7 +66,7 @@ Expressions/
     ContextMenu/                   表情の直接選択・入力許可（項目の自動選択可否制御なし）
     Keyboard/
       Left|Right/                  各手の共通設定用の変数空間
-        DV/                        Tag、Shift、Control、Key.0〜Key.9
+        DV/                        Tag、Modifier、Key.0〜Key.9
         Logic/                     着用・修飾キー・押下成立の変更監視と送信
     HandGestures/Modules/
       Touch|Index|Vive|WindowsMR|Cosmos/   削除できる機種別入力
@@ -277,20 +280,17 @@ Version 23では左右ジェスチャーのコンテキストメニューと専�
 ハンドジェスチャーが許可されている間は、手を動かさずにキーボードで設定した状態を維持し、次の物理ジェスチャー変更で更新する。ハンドジェスチャー停止中は機種別の判定状態をリセットし、許可を戻した後は再び安定した手形を検出して送る。
 
 - コンテキストメニュー: Catalogの表情を直接選択。左右値は変更しない。
-- キーボード: 表情の優先順位が高い手は Shift+テンキー0〜9（Ctrl なし）、もう一方は Ctrl+Shift+テンキー0〜9。
+- キーボード: 左手は Shift+テンキー0〜9、右手は Ctrl+テンキー0〜9。Ctrl+Shift+テンキーでは両手が同時に入力される。
   Version 27ではテンキー0〜9をそれぞれジェスチャー値0〜9として送信する。
   0が Neutral、1が Fist、7が ThumbsUp。8・9は拡張用で、対応するGestureTableの行があればその表情を選び、未割り当てなら表情を解除する。
   自動生成するジェスチャー表は引き続き左右0〜7の64組。8・9を含む割り当ては同じ命名規則（例: `GestureTable.L8R9`）で追加できる。
-  `ExpressionHandPriority` は変換後の64組の固定ポーズを比較する。両手それぞれがNeutralと異なる別の表情を持つとき、
-  両手入力の結果がどちらの片手入力と一致するかを数え、採用回数が多い手をShift側にする。
-  Clip IDが別でも全出力の最終値が同じなら同じ表情として扱う。両手専用表情・同じ表情・未解決の組は勝敗に数えない。
-  同数なら片手で選べる異なる非Neutralポーズが多い手、それも同数なら左手を採用する。
-  これは生成時のキー設定であり、Catalog・GestureTable・元FXの読み込み規則は変更しない。
-  優先側は変換ログに記録する。保存後にGestureTableを編集してもショートカットは自動変更しない。
-  `Left/DV` と `Right/DV` の `Key.0`〜`Key.9`、共通の `Shift`・`Control`、送信先の `Tag` を編集できる。
+  左右の割当は表情の優先順位に依存せず、Catalog・GestureTable・元FXの読み込み規則にも影響しない。
+  `Left/DV` と `Right/DV` の `Key.0`〜`Key.9`、各手の共通キー `Modifier`、送信先の `Tag` を編集できる。
+  `Modifier` はShift・Control・Altなどのキー値を持つDynamicVariableで、指定したキーの押下だけを判定する。
+  他の修飾キーが押されていても入力を受け付ける。Noneは未割当で、その手のショートカットを無効にする。
   各手は `ExpressionSystem.Input.Keyboard` 空間を持ち、Enabled とキーごとの Gesture は作らない。
   Flux は `Keyboard/Left/Logic` と `Right/Logic` の2つに生成する。
-  `modular_avatar/AvatarWornLocal`、修飾キーの一致、10キーのいずれかの押下を AND でまとめ、
+  `modular_avatar/AvatarWornLocal`、Modifierの押下、10キーのいずれかの押下を AND でまとめ、
   1つの FireOnLocalValueChange<bool> で監視する。条件成立時は最小番号のキーの添字を一度送る。
   条件が成立したまま他のキーを追加・解放しても再送しない。全キーを離すなどして条件を false に戻すと再度送信できる。
   Control・Shift は左右どちらの物理キーでもよい。各手の設定は独立して変更できる。

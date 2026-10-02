@@ -145,13 +145,12 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildKeyboard()
     {
         var root = _inputs.AddSlot("Keyboard");
-        _model.Diagnostics.Add($"Keyboard: Shift + keypad uses {(_keyboardPrimaryHand == 0 ? "Left" : "Right")}; Shift + Ctrl + keypad uses the other hand. Priority is inferred from exported gesture poses; ties prefer Left.");
+        _model.Diagnostics.Add("Keyboard: Shift + keypad uses Left; Ctrl + keypad uses Right; Ctrl + Shift + keypad uses both hands. Each hand's Modifier key is editable.");
         for (int hand = 0; hand < 2; hand++)
         {
             var settings = Record(root, hand == 0 ? "Left" : "Right", KeyboardSpace);
             Data(settings, "Tag", hand == 0 ? KeyboardLeftTag : KeyboardRightTag);
-            Data(settings, "Shift", true);
-            Data(settings, "Control", hand != _keyboardPrimaryHand);
+            Data(settings, "Modifier", hand == 0 ? InputKey.Shift : InputKey.Control);
             for (int gesture = 0; gesture < KeyboardGestureCount; gesture++)
                 Data(settings, "Key." + gesture, (InputKey)((int)InputKey.Keypad0 + gesture));
             BuildKeyboardHand(settings.AddSlot("Logic"), settings);
@@ -162,7 +161,6 @@ internal sealed partial class ExpressionSystemSetup
     {
         var g = new ExpressionFlux(board);
         var source = g.Ref(settings);
-        IWorldElement Held(InputKey key) => g.Node("KeyHeld", null, ("Key", g.Constant(key)));
         var match = (global::FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<bool>)
             g.Node("IndexOfFirstValueMatch", typeof(bool), ("Match", g.Constant(true, shared: false)));
         for (int index = 0; index < KeyboardGestureCount; index++)
@@ -170,8 +168,7 @@ internal sealed partial class ExpressionSystemSetup
                 ("Key", g.Read<InputKey>(source, KeyboardSpace, "Key." + index))));
 
         var accepting = g.And(g.AvatarWornLocal,
-            g.Equal<bool>(Held(InputKey.Control), g.Read<bool>(source, KeyboardSpace, "Control")),
-            g.Equal<bool>(Held(InputKey.Shift), g.Read<bool>(source, KeyboardSpace, "Shift")),
+            g.Node("KeyHeld", null, ("Key", g.Read<InputKey>(source, KeyboardSpace, "Modifier"))),
             Out(match, "FoundMatch"));
         // Mirror the authored hand graph: one rising condition sends the first
         // matching key index. Changing keys while the condition stays true does not resend.

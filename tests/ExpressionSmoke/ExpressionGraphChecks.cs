@@ -261,8 +261,8 @@ internal static class ExpressionGraphChecks
         {
             var data = hand.FindChild("DV");
             Check(data.Children.Select(s => s.Name).ToHashSet().SetEquals(
-                new[] { "Tag", "Control", "Shift" }.Concat(Enumerable.Range(0, 10).Select(i => "Key." + i))),
-                "keyboard settings expose only the hand tag, shared modifiers and ten indexed keys");
+                new[] { "Tag", "Modifier" }.Concat(Enumerable.Range(0, 10).Select(i => "Key." + i))),
+                "keyboard settings expose only the hand tag, modifier key and ten indexed keys");
         }
         foreach (string side in new[] { "Left", "Right" })
         {

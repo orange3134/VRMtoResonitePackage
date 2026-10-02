@@ -50,8 +50,7 @@ internal static class ImportedGestureAvatarChecks
             baseline.Destroy();
             Console.WriteLine("PASS: baseline catalog, final pose values, output bindings and all 64 gesture mappings are unchanged");
         }
-        string expectedHand = Environment.GetEnvironmentVariable("RESOPON_TEST_KEYBOARD_PRIMARY_HAND");
-        await KeyboardPriorityChecks.Run(root, expectedHand == null ? null : int.Parse(expectedHand));
+        await KeyboardShortcutChecks.Run(root);
         var core = root.FindChild("Internal"); var table = root.FindChild("DV").FindChild("GestureTable");
         var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null, "Saved menu has no hand submenus");

@@ -1,5 +1,11 @@
 # Expression integration checks
 
+Version 63 stores each keyboard hand's modifier as an editable Renderite.Shared.Key.
+Left defaults to Shift and Right to Control, independent of gesture table priority.
+Sensor checks cover all four modifier combinations for keypad 0-9, both-hand pair
+selection, adding/removing Ctrl while Shift is held, Alt remapping, shared modifiers,
+and an unassigned None modifier. Shortcuts and Dynamic Input edits also run after clone/reload.
+
 Version 59 gives Index fingers separate open and closed comparisons with an
 editable neutral band (20 degrees by default). Both hands run all 243 combinations
 of five open/intermediate/closed finger states against an independent gesture
@@ -134,14 +140,14 @@ must not select a gesture pair. Lifecycle and input actions retain their local c
 The sensor-event fixture replaces hardware outputs temporarily and executes the exported graph:
 both hands must wait for stability, fire when the timer expires without more sensor changes,
 use device-specific pose classification, require the wearer's VR mode, send -1 on disconnect/VR exit, and redetect on reconnect.
-All 20 keyboard shortcuts (keypad 0 through 9 for each hand) are checked, including an externally added L8R9 expression. Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends only the left hand; Ctrl+Shift+keypad sends only the right. Keypad alone and Ctrl+keypad without Shift must leave both hands unchanged.
+All keyboard shortcuts (keypad 0 through 9 for each hand) are checked, including an externally added L8R9 expression. Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends Left; Ctrl+keypad sends Right; Ctrl+Shift+keypad sends both. Keypad alone must leave both hands unchanged.
 Idle sentinels prove Selection does not run on unchanged frames. Table edits wait for the next gesture event. Inactive clips remain selectable, and menu Enabled fields remain unchanged.
 Keyboard Flux consists of exactly two boards, Left/Logic and Right/Logic, with one
 bool change detector, IndexOfFirstValueMatch<bool>, and sender per hand. Settings
 live under each hand's DV in the ExpressionSystem.Input.Keyboard space, with Tag,
-Control, Shift and Key.0 through Key.9 only. Simultaneous keys select the lowest
+Modifier and Key.0 through Key.9 only. Simultaneous keys select the lowest
 index; adding or releasing another key while the chord stays valid does not resend.
-Runtime checks cover shared modifier edits, independent hand settings, edited Tags,
+Runtime checks cover modifier key edits, independent hand settings, edited Tags,
 and AvatarWornLocal blocking input even while the avatar remains under the active user.
 Graph checks require no LocalUpdate and two keyboard boards before and after package reload.
 Version 7 retains the Version 6 keyboard schema and moves playback sampling to each Output.
@@ -245,13 +251,10 @@ cycles, transition priority/Mute/Solo, discrete 1D BlendTree children and fallba
 all 64 input pairs against authored expected values. Unseen clips and later FaceEmo patterns
 must never enter the Catalog through graph evaluation.
 
-Keyboard defaults follow the exported gesture table's hand priority. Pure checks
-cover both winners, identical clips with different IDs, sparse and unresolved tables,
-combined poses, mixed priorities and ties. Runtime checks exercise all 16 keypad
-shortcuts through the actual keyboard Flux, mocking only KeyHeld sensors.
-For imported packages, `RESOPON_TEST_KEYBOARD_PRIMARY_HAND=0` asserts Left uses Shift;
-`1` asserts Right uses Shift. The other hand must require Shift+Ctrl. These checks
-also run after package import; Ctrl alone and no modifiers must trigger neither hand.
+Keyboard defaults use Shift for Left and Ctrl for Right. Runtime checks execute
+the actual keyboard Flux, mocking only KeyHeld sensors and resolving their Key
+inputs through the exported Dynamic Inputs. The same checks run on imported
+packages; the old RESOPON_TEST_KEYBOARD_PRIMARY_HAND setting is no longer used.
 Version 16 inserts a SmoothValue<float> per named mesh-driver entry. Result now
 views TargetValue; selection updates the destination synchronously while Value
 drives the DynamicBlendShapeDriver entry. Real-mesh tests require intermediate

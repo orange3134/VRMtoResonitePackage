@@ -472,27 +472,8 @@ internal static class ExpressionInputEventChecks
             Key(InputKey.Keypad1, false);
             Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.KeyboardLeftTag);
             await Frames(5);
-            Set(leftSettings.FindChild("Control"), "Control", true);
-            Gesture("Left", 6);
-            Key(InputKey.Keypad1, true);
-            await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 6, "shared Control setting gates the whole hand");
-            Set(leftSettings.FindChild("Control"), "Control", false);
-            await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 1, "editing shared modifiers detects a newly valid held chord");
-            Key(InputKey.Keypad1, false);
-            await Frames(5);
-            Set(leftSettings.FindChild("Shift"), "Shift", false);
-            Key(InputKey.Shift, false);
-            Key(InputKey.Keypad2, true);
-            await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 2, "shared Shift can be disabled for the left hand");
-            Key(InputKey.Keypad2, false);
-            Set(leftSettings.FindChild("Shift"), "Shift", true);
-            Key(InputKey.Shift, true);
-            await Frames(5);
-            Check(Get<bool>(rightSettings.FindChild("Control"), "Control") && Get<bool>(rightSettings.FindChild("Shift"), "Shift"),
-                "editing left-hand modifiers preserves right-hand settings");
+            Check(Get<InputKey>(rightSettings.FindChild("Modifier"), "Modifier") == InputKey.Control,
+                "right-hand modifier remains Ctrl");
             Key(InputKey.Keypad0, true);
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 0, "keypad zero sends Neutral through the shared sender");
@@ -503,12 +484,12 @@ internal static class ExpressionInputEventChecks
             await Frames(5);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 4 && Get<int>(core, "RightGesture") == 4,
-                "Ctrl plus keypad without Shift does not trigger either hand");
+            Check(Get<int>(core, "LeftGesture") == 4 && Get<int>(core, "RightGesture") == 1,
+                "Ctrl plus keypad sends only the right-hand input");
             Key(InputKey.Shift, true);
             await Frames(10);
-            Check(Get<int>(core, "LeftGesture") == 4 && Get<int>(core, "RightGesture") == 1,
-                "Ctrl plus Shift plus keypad sends only the right-hand input");
+            Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1,
+                "adding Shift to a held Ctrl chord updates Left and retains Right");
             Key(InputKey.Keypad1, false);
             await Frames(5);
             Key(InputKey.Control, false);
