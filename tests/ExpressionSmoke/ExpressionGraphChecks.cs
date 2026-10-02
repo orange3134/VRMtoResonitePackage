@@ -14,7 +14,6 @@ internal static class ExpressionGraphChecks
     {
         if (Descendant(expressions, "Inputs/ContextMenu") == null) return;
         var current = ExpressionTestFields.Reference<Slot>(expressions.FindChild("Internal"), "CurrentExpression");
-        bool allow = Value<bool>(expressions.FindChild("Internal"), "AllowHandGestures");
         var green = new colorX(0f, 1f, 0f, 1f, Renderite.Shared.ColorProfile.Linear);
         foreach (var item in expressions.GetComponentsInChildren<ContextMenuItemSource>())
         {
@@ -30,8 +29,11 @@ internal static class ExpressionGraphChecks
                     "expression color driver preserves label and sprite bindings");
             }
             else if (item.Slot.GetComponent<ButtonDynamicImpulseTrigger>() is { } toggle &&
-                toggle.PressedTag.Value == "ResoPon/Expression/ToggleHandGestures")
+                toggle.PressedTag.Value.StartsWith("ResoPon/Expression/ToggleHandGestures", StringComparison.Ordinal))
             {
+                bool allow = toggle.PressedTag.Value == "ResoPon/Expression/ToggleHandGestures"
+                    ? ExpressionTestFields.BothHandsAllowed(expressions)
+                    : ExpressionTestFields.HandGesturesAllowed(expressions, toggle.PressedTag.Value.Split('/').Last());
                 var driver = item.Slot.GetComponent<ValueOptionDescriptionDriver<bool>>();
                 Check(driver != null && driver.Color.IsLinkValid && driver.Color.Target == item.Color,
                     "permission menu Color uses ValueOptionDescriptionDriver: " + item.Slot.Name);
@@ -293,7 +295,9 @@ internal static class ExpressionGraphChecks
         foreach (string path in new[] { "Internal/Lifecycle", "Internal/Selection", "Internal/Playback",
             "API/Receivers/Logic/Left", "API/Receivers/Logic/Right",
             "API/Receivers/Logic/KeyboardLeft", "API/Receivers/Logic/KeyboardRight",
-            "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowHandGestures", "API/Receivers/Logic/ToggleHandGestures", "API/Receivers/Logic/Reset" })
+            "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowHandGestures", "API/Receivers/Logic/ToggleHandGestures", "API/Receivers/Logic/Reset",
+            "API/Receivers/Logic/AllowHandGesturesLeft", "API/Receivers/Logic/AllowHandGesturesRight",
+            "API/Receivers/Logic/ToggleHandGesturesLeft", "API/Receivers/Logic/ToggleHandGesturesRight" })
         {
             var board = Descendant(expressions, path);
             Check(board != null && boards.Any(g => g.Key == board), "independent logic board exists: " + path);
@@ -319,7 +323,7 @@ internal static class ExpressionGraphChecks
         }
         var publicReceivers = Descendant(expressions, "API/Receivers").GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
-        Check(publicReceivers.Length == 8, "exactly eight public API receivers");
+        Check(publicReceivers.Length == 12, "exactly twelve public API receivers");
         foreach (string hand in new[] { "Left", "Right" })
         {
             var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == hand);
@@ -344,6 +348,13 @@ internal static class ExpressionGraphChecks
             "reset receives an impulse without a payload");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "ToggleHandGestures").GetType().Name == "DynamicImpulseReceiver",
             "hand gesture toggle receives an impulse without a payload");
+        foreach (string hand in new[] { "Left", "Right" })
+        {
+            Check(publicReceivers.Single(node => node.Slot.Parent.Name == "AllowHandGestures" + hand).GetType().GetGenericArguments().Single() == typeof(bool),
+                hand + " input permission receives a bool");
+            Check(publicReceivers.Single(node => node.Slot.Parent.Name == "ToggleHandGestures" + hand).GetType().Name == "DynamicImpulseReceiver",
+                hand + " gesture toggle receives an impulse without a payload");
+        }
         if (Descendant(expressions, "Inputs/ContextMenu/Items") is { } menuItems)
         {
             Check(menuItems.FindChild("Allow hand gestures") == null && menuItems.FindChild("Disable hand gestures") == null,

@@ -1,6 +1,7 @@
 using FrooxEngine;
 using FrooxEngine.ProtoFlux;
 using VrmToResonitePackage.Expressions;
+using static ExpressionTestFields;
 
 // Optional integration check for a converted avatar with 64 assigned gesture poses (including animated clips).
 // Input packages and their paths are supplied locally and are never part of the fixture.
@@ -70,7 +71,7 @@ internal static class ImportedGestureAvatarChecks
                 var mapped = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
                     .Single(v => v.VariableName.Value == $"ExpressionSystem/GestureTable.L{l}R{r}").Reference.Target;
                 Check(mapped != null && Reference<Slot>(core, "CurrentExpression") == mapped, "Missing or incorrect selected pose");
-                Check(Get<string>(core, "PairKey") == $"L{l}R{r}" && Get<bool>(core, "AllowHandGestures"),
+                Check(Get<string>(core, "PairKey") == $"L{l}R{r}" && BothHandsAllowed(core),
                     "Imported pair or input mode disagrees with the selected gesture pair");
                 for (int i = 0; i < 6; i++) await default(NextUpdate);
                 var pose = ExpressionPackageSnapshot.Pose(mapped);
@@ -118,7 +119,7 @@ internal static class ImportedGestureAvatarChecks
             int leftBefore = Get<int>(core, "LeftGesture"), rightBefore = Get<int>(core, "RightGesture");
             string pairBefore = Get<string>(core, "PairKey");
             expression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().Pressed(null, default);
-            Check(!Get<bool>(core, "AllowHandGestures") && Get<string>(core, "PairKey") == pairBefore &&
+            Check(NoHandsAllowed(core) && Get<string>(core, "PairKey") == pairBefore &&
                 Get<int>(core, "LeftGesture") == leftBefore && Get<int>(core, "RightGesture") == rightBefore &&
                 Reference<Slot>(core, "CurrentExpression") == expression,
                 "Saved direct menu preserves gestures and selects the Catalog expression");
@@ -135,13 +136,13 @@ internal static class ImportedGestureAvatarChecks
         Check(toggle.PressedTag.Value == ExpressionSystemSetup.ToggleHandGesturesTag,
             "Saved hand gesture button sends a toggle impulse");
         toggle.Pressed(null, default);
-        Check(Get<bool>(core, "AllowHandGestures") && Get<int>(core, "LeftGesture") == heldLeft && Get<int>(core, "RightGesture") == heldRight,
+        Check(BothHandsAllowed(core) && Get<int>(core, "LeftGesture") == heldLeft && Get<int>(core, "RightGesture") == heldRight,
             "Enabling ordinary input retains the saved menu pair");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.LeftTag, true, 0);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.RightTag, true, 0);
         Check(Get<string>(core, "PairKey") == "L0R0", "Saved normal input works after enabling");
         toggle.Pressed(null, default);
-        Check(!Get<bool>(core, "AllowHandGestures"), "Saved menu-only button disables ordinary input");
+        Check(NoHandsAllowed(core), "Saved menu-only button disables ordinary input");
         for (int i = 0; i < 2; i++) await default(NextUpdate);
         ExpressionGraphChecks.CheckMenuColors(root);
         Console.WriteLine($"PASS: {visible} Catalog direct-menu entries and the hand gesture toggle work without Override state");
@@ -170,9 +171,9 @@ internal static class ImportedGestureAvatarChecks
                 Check(importedButton.PressedData.Reference.Target == selected, "Saved imported-menu Slot reference survives a label edit");
                 var api = root.FindChild("API").FindChild("Receivers");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
-                Check(Get<bool>(core, "AllowHandGestures"), "Ordinary input is enabled before imported button verification");
+                Check(BothHandsAllowed(core), "Ordinary input is enabled before imported button verification");
                 importedButton.Pressed(null, default);
-                Check(!Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == selected,
+                Check(NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == selected,
                     "Saved imported-menu button selects by Slot independently of its label");
                 Console.WriteLine("PASS: saved imported-menu button selects its Slot synchronously despite label edits");
             }

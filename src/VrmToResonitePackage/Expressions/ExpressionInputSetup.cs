@@ -51,11 +51,22 @@ internal sealed partial class ExpressionSystemSetup
         driver.Color.Target = item.GetComponent<ContextMenuItemSource>().Color;
     }
 
-    private void GesturePermissionMenuColor(Slot item)
+    private void GesturePermissionMenuColor(Slot item, string hand = null)
     {
         var driver = item.AttachComponent<ValueOptionDescriptionDriver<bool>>();
-        driver.Value.Target = _root.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>()
-            .Single(v => v.VariableName.Value == Path(SystemSpace, "AllowHandGestures")).Value;
+        IField<bool> Permission(string side) => _root.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>()
+            .Single(v => v.VariableName.Value == Path(SystemSpace, HandGesturePermission(side))).Value;
+        if (hand != null) driver.Value.Target = Permission(hand);
+        else
+        {
+            var both = item.AttachComponent<ValueField<bool>>();
+            var condition = item.AttachComponent<MultiBoolConditionDriver>();
+            condition.Mode.Value = MultiBoolConditionDriver.ConditionMode.All;
+            condition.Conditions.Add().Field.Target = Permission("Left");
+            condition.Conditions.Add().Field.Target = Permission("Right");
+            condition.Target.Target = both.Value;
+            driver.Value.Target = both.Value;
+        }
         driver.DefaultOption.Color.Value = new colorX(1f, 0f, 0f, 1f, ColorProfile.Linear);
         var selected = driver.Options.Add();
         selected.ReferenceValue.Value = true;
@@ -111,6 +122,18 @@ internal sealed partial class ExpressionSystemSetup
         toggleButton.ExcludeDisabled.Value = true;
         toggleButton.PressedTag.Value = ToggleHandGesturesTag;
         GesturePermissionMenuColor(mode);
+        foreach (var side in new[] { Chirality.Left, Chirality.Right })
+        {
+            var single = menu.AddSlot(side + " hand gestures");
+            var rootItem = single.AttachComponent<RootContextMenuItem>();
+            rootItem.Item.Target = MenuItem(single, single.Name);
+            rootItem.OnlyForSide.Value = side;
+            var toggle = single.AttachComponent<ButtonDynamicImpulseTrigger>();
+            toggle.Target.Target = _api;
+            toggle.ExcludeDisabled.Value = true;
+            toggle.PressedTag.Value = ToggleHandGesturesHandTag(side.ToString());
+            GesturePermissionMenuColor(single, side.ToString());
+        }
         var reset = items.AddSlot("Reset settings"); MenuItem(reset, reset.Name);
         var resetButton = reset.AttachComponent<ButtonDynamicImpulseTrigger>();
         resetButton.Target.Target = _api;
@@ -206,7 +229,7 @@ internal sealed partial class ExpressionSystemSetup
         var gesture = BuildControllerGesture(g, controller, device, side, module);
         var accepting = g.And(g.AvatarWornLocal, Out(controller, "IsActive"),
             g.Node("UserVR_Active", null, ("User", g.Owner(_root))),
-            g.Read<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures"));
+            g.Read<bool>(g.Ref(_internal), SystemSpace, HandGesturePermission(side.ToString())));
         var current = g.Choose<int>(accepting, gesture, g.Constant(-1));
         var send = SendHandInput(g, g.Text(GestureTag(kind)), current);
         // The authored graph drops changes during the timeout; it neither queues

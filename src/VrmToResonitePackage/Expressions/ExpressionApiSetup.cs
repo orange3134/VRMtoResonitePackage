@@ -18,6 +18,11 @@ internal sealed partial class ExpressionSystemSetup
         BuildSelectReceiver(new(logic.AddSlot("Select")));
         BuildHandGesturesEnabledReceiver(new(logic.AddSlot("AllowHandGestures")));
         BuildHandGesturesToggleReceiver(new(logic.AddSlot("ToggleHandGestures")));
+        foreach (string hand in new[] { "Left", "Right" })
+        {
+            BuildHandGesturesEnabledReceiver(new(logic.AddSlot("AllowHandGestures" + hand)), hand);
+            BuildHandGesturesToggleReceiver(new(logic.AddSlot("ToggleHandGestures" + hand)), hand);
+        }
         var reset = new ExpressionFlux(logic.AddSlot("Reset"));
         ReceiveUpdate(reset, ResetTag, reset.Trigger(reset.Ref(_internal), ResetStateTag));
     }
@@ -38,7 +43,7 @@ internal sealed partial class ExpressionSystemSetup
             g.Trigger(g.Ref(_internal), SelectionTickTag));
         Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal,
             ApplyRequest(g, mutation, gestureInput
-                ? g.Read<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures") : null)));
+                ? g.Read<bool>(g.Ref(_internal), SystemSpace, HandGesturePermission(hand)) : null)));
     }
 
     private static IWorldElement FormatGesturePair(ExpressionFlux g, string format, IWorldElement left, IWorldElement right)
@@ -63,23 +68,28 @@ internal sealed partial class ExpressionSystemSetup
         var valid = g.And(g.Not(g.IsNull<Slot>(selected)),
             g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", selected)), g.Ref(_catalog)));
         var select = ApplyRequest(g, g.Sequence(
-            g.Write<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures", g.Constant(false)),
+            WriteHandGesturePermissions(g, g.Constant(false)),
             g.Trigger<Slot>(g.Ref(_internal), g.Text(PlaybackTickTag), selected)));
         Link(receiver, "OnTriggered", g.If(g.And(g.AvatarWornLocal, valid), select));
     }
 
-    private void BuildHandGesturesToggleReceiver(ExpressionFlux g)
+    private IWorldElement WriteHandGesturePermissions(ExpressionFlux g, IWorldElement value, string hand = null) =>
+        g.Sequence((hand == null ? new[] { "Left", "Right" } : new[] { hand })
+            .Select(side => (IWorldElement)g.Write<bool>(g.Ref(_internal), SystemSpace, HandGesturePermission(side), value)).ToArray());
+
+    private void BuildHandGesturesToggleReceiver(ExpressionFlux g, string hand = null)
     {
         var core = g.Ref(_internal);
-        ReceiveUpdate(g, ToggleHandGesturesTag, ApplyRequest(g,
-            g.Write<bool>(core, SystemSpace, "AllowHandGestures",
-                g.Not(g.Read<bool>(core, SystemSpace, "AllowHandGestures")))));
+        var toggle = g.Sequence((hand == null ? new[] { "Left", "Right" } : new[] { hand })
+            .Select(side => (IWorldElement)g.Write<bool>(core, SystemSpace, HandGesturePermission(side),
+                g.Not(g.Read<bool>(core, SystemSpace, HandGesturePermission(side))))).ToArray());
+        ReceiveUpdate(g, hand == null ? ToggleHandGesturesTag : ToggleHandGesturesHandTag(hand), ApplyRequest(g, toggle));
     }
 
-    private void BuildHandGesturesEnabledReceiver(ExpressionFlux g)
+    private void BuildHandGesturesEnabledReceiver(ExpressionFlux g, string hand = null)
     {
-        var receiver = g.Receiver<bool>(HandGesturesEnabledTag);
+        var receiver = g.Receiver<bool>(hand == null ? HandGesturesEnabledTag : HandGesturesEnabledHandTag(hand));
         Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal,
-            ApplyRequest(g, g.Write<bool>(g.Ref(_internal), SystemSpace, "AllowHandGestures", Out(receiver, "Value")))));
+            ApplyRequest(g, WriteHandGesturePermissions(g, Out(receiver, "Value"), hand))));
     }
 }

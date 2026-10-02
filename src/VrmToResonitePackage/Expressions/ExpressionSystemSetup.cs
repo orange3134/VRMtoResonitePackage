@@ -17,6 +17,9 @@ internal sealed partial class ExpressionSystemSetup
     internal const string ResetTag = "ResoPon/Expression/Reset";
     internal const string ToggleHandGesturesTag = "ResoPon/Expression/ToggleHandGestures";
     internal const string HandGesturesEnabledTag = "ResoPon/Expression/AllowHandGestures";
+    internal static string HandGesturesEnabledHandTag(string hand) => HandGesturesEnabledTag + "/" + hand;
+    internal static string ToggleHandGesturesHandTag(string hand) => ToggleHandGesturesTag + "/" + hand;
+    internal static string HandGesturePermission(string hand) => "AllowHandGestures." + hand;
     private readonly ExpressionModel _model;
     private readonly Slot _root, _catalog, _internal, _outputs, _table, _api, _inputs;
     private readonly Slot _lifecycle, _selection, _playback;
@@ -46,12 +49,12 @@ internal sealed partial class ExpressionSystemSetup
         foreach (string hand in new[] { "Left", "Right" })
         {
             Data(_root, hand + "Gesture", 0);
+            Data(_root, HandGesturePermission(hand), true);
         }
-        Data(_root, "AllowHandGestures", true);
         Reference<Slot>(_root, "CurrentExpression", null);
         Data(_root, "PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 63);
+        Data(_root, "Version", 64);
         Reference(_root, "References.API", _api);
         Reference(_root, "References.Catalog", _catalog);
     }

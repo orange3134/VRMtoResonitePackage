@@ -47,7 +47,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 63 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 64 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -127,7 +127,7 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 
 | 名前 | 型 | 初期値 | 更新元・役割 |
 |---|---|---|---|
-| `AllowHandGestures` | bool | true | **設定**。ハンドジェスチャーとGesture APIだけの受付可否。キーボード・メニューは常に受け付ける。メニュー操作で false、初期化で true。許可 API でも変更可能 |
+| `AllowHandGestures.Left` / `AllowHandGestures.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとGesture APIだけの受付可否。キーボード・メニューは常に受け付ける。表情の直接選択で両方false、初期化・リセットで両方true。許可 API でも個別に変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューでは変更しない |
 | `PairKey` | string | L0R0 | 最後の左右入力イベントでSelectionが組み立てたキー。直接選択中の表情を示すものではない |
 | `CurrentExpression` | Slot | null | Playbackが受信した表情Slot。Selectionは対応表の参照をそのまま渡し、Select APIは自身のCatalog直下かだけ確認する。解除はnull |
@@ -136,14 +136,16 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
 左右入力の参照先確認にはPairKeyとGestureTableの行を使う。直接選択の確認にはCurrentExpressionを使う。
 
-AllowHandGestures 以外は状態として扱う。SelectionStatus は生成しない。入力モードは AllowHandGestures、再生対象は CurrentExpression で確認する。未割当・参照先の削除は CurrentExpression=null となる。非アクティブな表情も選択できる。
+AllowHandGestures.Left・Right 以外は状態として扱う。SelectionStatus は生成しない。入力モードは左右の許可設定、再生対象は CurrentExpression で確認する。未割当・参照先の削除は CurrentExpression=null となる。非アクティブな表情も選択できる。
+Version 64では旧 `ExpressionSystem/AllowHandGestures` を定義しない。旧bool APIのTagは引き続き両手を同じ値へ設定する。
+両手Toggle APIは左右をそれぞれ反転し、片手だけ許可されているときは許可する手が入れ替わる。
 PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の時間再生は行わない。
 
 Lifecycle は OnStart とローカル装着状態の変更時に動き、現在の装着者がローカルユーザーの場合だけ、初期化確認 → Selection を実行する。
 初期化済みかは保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。
 公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、装着状態の変更イベントより早い左右入力も保持する。
 
-初期化時は左右値を 0、PairKey を L0R0、AllowHandGestures を true、
+初期化時は左右値を 0、PairKey を L0R0、AllowHandGestures.Left・Right を両方true、
 Playbackへnullを送り、CurrentExpressionの解除と通常出力のBase復帰をまとめて実行する。追跡出力は専用DriveがBaseを反映する。
 その後の Selection と Playback の同期Writeで現在の対応表に応じた状態になる。
 
@@ -299,11 +301,13 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 
 | C# 定数 | Tag | 引数・役割 |
 |---|---|---|
-| `LeftTag` / `RightTag` | `ResoPon/Expression/Gesture/Left` / `ResoPon/Expression/Gesture/Right` | int（範囲制限なし）。ハンドジェスチャー入力。AllowHandGestures に従う |
-| `KeyboardLeftTag` / `KeyboardRightTag` | `ResoPon/Expression/Keyboard/Left` / `ResoPon/Expression/Keyboard/Right` | int（範囲制限なし）。AllowHandGesturesに関係なく左右値を更新。フラグは維持 |
+| `LeftTag` / `RightTag` | `ResoPon/Expression/Gesture/Left` / `ResoPon/Expression/Gesture/Right` | int（範囲制限なし）。ハンドジェスチャー入力。対応するAllowHandGestures.Left・Right に従う |
+| `KeyboardLeftTag` / `KeyboardRightTag` | `ResoPon/Expression/Keyboard/Left` / `ResoPon/Expression/Keyboard/Right` | int（範囲制限なし）。左右のジェスチャー許可に関係なく左右値を更新。フラグは維持 |
 | `SelectTag` | `ResoPon/Expression/Menu/Select` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してPlaybackへ渡す。null・範囲外は無視 |
-| `HandGesturesEnabledTag` | `ResoPon/Expression/AllowHandGestures` | bool。ハンドジェスチャーだけの許可・停止。左右値と表情は維持 |
-| `ToggleHandGesturesTag` | `ResoPon/Expression/ToggleHandGestures` | 引数なし。現在のハンドジェスチャー許可を反転。左右値と表情は維持 |
+| `HandGesturesEnabledTag` | `ResoPon/Expression/AllowHandGestures` | bool。両手の許可を同じ値へ設定。左右値と表情は維持 |
+| `HandGesturesEnabledHandTag(hand)` | `ResoPon/Expression/AllowHandGestures/Left` / `Right` | bool。該当する手だけ許可・停止。左右値と表情は維持 |
+| `ToggleHandGesturesTag` | `ResoPon/Expression/ToggleHandGestures` | 引数なし。左右の許可をそれぞれ反転。左右値と表情は維持 |
+| `ToggleHandGesturesHandTag(hand)` | `ResoPon/Expression/ToggleHandGestures/Left` / `Right` | 引数なし。該当する手だけ許可を反転。左右値と表情は維持 |
 | `InitializeTag` | `ResoPon/Expression/Internal/Initialize` | 引数なし。Lifecycle の初期化確認 |
 | `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。左右入力イベントから選択更新を同期実行 |
 | `PlaybackTickTag` | `ResoPon/Expression/Internal/Playback` | Slot。受信SlotをCurrentExpressionへ設定し、終端ポーズを同期適用。nullは解除。非nullはローカル装着者だけが受理し、未装着時もnullは受理する |
@@ -313,7 +317,7 @@ Internal の3つは公開操作用ではない。メニューボタンの送信�
 これらも DynamicVariable の保存変数とは区別する。
 
 現行版は `PreviousOwner`、`Override`、`LeftInput`、`RightInput` という項目を生成しない。
-メニュー選択はAllowHandGestures=falseとCurrentExpressionで保持する。キーボードは停止せず、次のショートカットで表情を変更できる。
+メニュー選択はAllowHandGestures.Left・Right=falseとCurrentExpressionで保持する。キーボードは停止せず、次のショートカットで表情を変更できる。
 
 ## 実装の参照先
 

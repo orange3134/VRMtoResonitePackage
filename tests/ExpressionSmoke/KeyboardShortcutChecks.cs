@@ -37,7 +37,7 @@ internal static class KeyboardShortcutChecks
         void Gesture(int hand, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             api, hand == 0 ? ExpressionSystemSetup.KeyboardLeftTag : ExpressionSystemSetup.KeyboardRightTag, true, value);
         int GestureValue(int hand) => Get<int>(core, hand == 0 ? "LeftGesture" : "RightGesture");
-        bool allowedBefore = Get<bool>(core, "AllowHandGestures");
+        bool leftAllowedBefore = HandGesturesAllowed(core, "Left"), rightAllowedBefore = HandGesturesAllowed(core, "Right");
         Slot extendedRow = null;
         try
         {
@@ -86,7 +86,7 @@ internal static class KeyboardShortcutChecks
             await Frames();
             Check(Reference<Slot>(core, "CurrentExpression") == null, "adding an extended row waits for keyboard input");
             Key(InputKey.Keypad9, true); await Frames();
-            Check(Reference<Slot>(core, "CurrentExpression") == expression && !Get<bool>(core, "AllowHandGestures"),
+            Check(Reference<Slot>(core, "CurrentExpression") == expression && NoHandsAllowed(core),
                 "keypad 9 selects an externally added L8R9 expression while hand gestures are disabled");
             Key(InputKey.Keypad9, false); await Frames();
             Key(InputKey.Shift, false); Key(InputKey.Control, false);
@@ -130,7 +130,8 @@ internal static class KeyboardShortcutChecks
             foreach (var w in wearers) w.Reference.Target = w.Previous;
             mocks.Destroy();
             extendedRow?.Destroy();
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, allowedBefore);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledHandTag("Left"), true, leftAllowedBefore);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledHandTag("Right"), true, rightAllowedBefore);
         }
         for (int i = 0; i < 10; i++) await default(NextUpdate);
         Console.WriteLine("PASS: keyboard Shift=Left, Ctrl=Right, Ctrl+Shift=both; all keypad 0-9 combinations and editable Modifier keys");

@@ -109,8 +109,12 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 63,
-            "editable modifier key shortcuts are identified by package version 63");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 64,
+            "per-hand gesture permissions are identified by package version 64");
+        Check(root.ExpressionVariables<DynamicValueVariable<bool>>().Count(v =>
+            v.VariableName.Value is "ExpressionSystem/AllowHandGestures.Left" or "ExpressionSystem/AllowHandGestures.Right") == 2 &&
+            root.ExpressionVariables<DynamicValueVariable<bool>>().All(v => v.VariableName.Value != "ExpressionSystem/AllowHandGestures"),
+            "gesture permission is stored independently for Left and Right");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("LeftGesture", out _),
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),

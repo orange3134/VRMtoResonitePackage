@@ -149,10 +149,12 @@ internal static class ExpressionInputEventChecks
                     module.Name + "/" + side + ": next change uses the edited delay");
                 Gesture(side, 1); await Frames(10);
                 Check(Get<int>(core, side + "Gesture") == 1, module.Name + "/" + side + ": idle sensors preserve newer input");
-                Allow(false); await Frames(10);
+                Set(core, "AllowHandGestures." + side, false); await Frames(10);
                 Check(Get<int>(core, side + "Gesture") == 1,
                     module.Name + "/" + side + ": gate retains the accepted value");
-                Allow(true); await Frames(30);
+                Check(HandGesturesAllowed(core, side == "Left" ? "Right" : "Left"),
+                    module.Name + "/" + side + ": disabling one hand preserves the opposite permission");
+                Set(core, "AllowHandGestures." + side, true); await Frames(30);
                 Check(Get<int>(core, side + "Gesture") == expected[0], module.Name + "/" + side + ": re-enable detects current pose");
                 active.Value.Value = false; await Frames(10);
                 Check(Get<int>(core, side + "Gesture") == -1,
@@ -438,7 +440,7 @@ internal static class ExpressionInputEventChecks
             Allow(false);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 1 && !Get<bool>(core, "AllowHandGestures") &&
+            Check(Get<int>(core, "LeftGesture") == 1 && NoHandsAllowed(core) &&
                 Reference<Slot>(core, "CurrentExpression") == smile, "keyboard selects a pose while hand gestures are disabled");
             Gesture("Left", 4); await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 1, "disabled gesture API cannot overwrite keyboard selection");

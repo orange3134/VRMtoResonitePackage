@@ -1,5 +1,15 @@
 # Expression integration checks
 
+Version 64 replaces the shared permission variable with AllowHandGestures.Left/Right.
+The global bool API still sets both; global Toggle inverts each independently.
+HandGesturePermissionChecks covers all four permission combinations, real both/individual
+menu button presses, API payload validation, selection retention, keyboard bypass and
+side-filtered RootContextMenuItem entries before and after cloning/package reload.
+Controller sensor checks disable only the tested hand and assert the opposite permission
+stays enabled. Individual menu colors follow their own fields; the global color follows
+MultiBoolConditionDriver(All). Root hand toggles sit outside the shared Expressions submenu
+because ContextMenuSubmenu itself has no per-hand filtering.
+
 Version 63 stores each keyboard hand's modifier as an editable Renderite.Shared.Key.
 Left defaults to Shift and Right to Control, independent of gesture table priority.
 Sensor checks cover all four modifier combinations for keypad 0-9, both-hand pair
@@ -69,7 +79,7 @@ feedback cycles, and repeatable arrangement. The synthetic run
 writes keyboard-layout.json for inspecting the generated coordinates and edges.
 Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Catalog Slot and AllowHandGestures receives bool; no Command slots may remain.
 Each actual Flux group must stay within one logic board. Core lifecycle, selection,
-playback, the eight public API receivers, and each controller hand have independent
+playback, the twelve public API receivers, and each controller hand have independent
 boards. The test reports node/group counts and enforces a 256-node per-board budget,
 including after package reimport. Module diagnostic counts must match the graph.
 Each Output has its own sampling/mixing/fade board and a driven field exposed as Result.

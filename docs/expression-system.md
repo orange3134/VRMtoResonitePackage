@@ -3,6 +3,20 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 64ではジェスチャー許可を `AllowHandGestures.Left`・`Right` に分け、各手の
+コントローラー入力とGesture APIに適用する。キーボードは左右の許可に関係なく受け付ける。
+既存の「Hand gestures」は両方をそれぞれ反転し、「Left hand gestures」「Right hand gestures」は
+該当する手だけ反転する。表情の直接選択では両方を停止し、初期化・Resetでは両方を許可する。
+旧 `ExpressionSystem/AllowHandGestures` は定義せず、両手を同じ値にする既存bool APIは維持する。
+
+個別トグルはExpressionsサブメニュー内ではなく、左右のルートコンテキストメニューに置く。
+`Inputs/ContextMenu/Left hand gestures`・`Right hand gestures` の `RootContextMenuItem.OnlyForSide` に
+対応するChiralityを設定する。標準 `ContextMenuItemSource`・`ContextMenuSubmenu` に手別のフィルターはなく、
+実行対象DLLの `InteractionHandler` はルート項目だけをOnlyForSideでフィルターするため、この配置を使う。
+個別のColorは自分の許可設定に直接追従し、有効なら緑、無効なら赤。
+両手用は `MultiBoolConditionDriver(All)` で2つの許可を合成し、両方有効なら緑、それ以外なら赤。
+ドライバー参照と手のフィルターは複製・保存後の再読込でも維持する。
+
 Version 63ではキーボードの修飾キーを各手の `Modifier`（Renderite.Shared.Key）にする。
 既定値は左手がShift、右手がControl。Ctrl+Shift+テンキーでは両手の入力を受け付ける。
 
@@ -24,7 +38,7 @@ Version 23ではメニューからCatalogの表情を直接選択できる。Ges
 
 ```mermaid
 flowchart LR
-    H[ハンドジェスチャー・Gesture API] --> G{AllowHandGestures}
+    H[ハンドジェスチャー・Gesture API] --> G{各手のAllowHandGestures.Left・Right}
     G -->|true| S[LeftGesture / RightGesture]
     K[キーボード・Keyboard API] --> S
     D[メニューでCatalogの表情を選択] --> T[boolをfalseにして表情Slotを送信]
@@ -43,7 +57,7 @@ flowchart LR
 Expressions/
   DV/                              システム共通の変数（1変数1子 Slot）
     LeftGesture・RightGesture      左右の入力状態
-    AllowHandGestures・PairKey      入力許可と最後の組み合わせ
+    AllowHandGestures.Left・Right・PairKey  入力許可と最後の組み合わせ
     CurrentExpression              現在の表情（Slot参照）
     GestureTable/                  対応表の変数をまとめるスロット
       L0R0〜L7R7                   64個の Catalog 参照
@@ -191,15 +205,15 @@ Inspector 上の状態変数名は `ExpressionSystem/LeftGesture` などで、Co
 |---|---|
 | `LeftGesture` / `RightGesture` | 各入力から届いた int の状態（範囲制限なし） |
 | `PairKey` | `L{左}R{右}` 形式の対応表キー（例：L1R2） |
-| AllowHandGestures | true=ハンドジェスチャーを許可、false=停止。キーボード・表情メニューは常に使用可能 |
+| AllowHandGestures.Left / Right | true=該当する手のジェスチャーを許可、false=停止。キーボード・表情メニューは常に使用可能 |
 | `CurrentExpression` | 対応表または直接選択から渡された再生対象。未割当・削除済みなら null |
 
 1. 左右の番号が違う場合は、`API/Receivers/Logic/Left`／`Right` と該当入力の `Logic` を調べる。
-2. キーが正しく表情が違う場合は、`PairKey` に対応する `GestureTable` の参照と `AllowHandGestures` を確認し、`Selection` を調べる。
+2. キーが正しく表情が違う場合は、`PairKey` に対応する `GestureTable` の参照と `AllowHandGestures.Left`・`Right` を確認し、`Selection` を調べる。
 3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（末尾の LnRm は PairKey）の参照があるか確認する。表情Slotのアクティブ状態は選択に影響しない。参照先が削除されていないか確認する。
 4. 選択が正しく見た目が違う場合は、`Internal/Playback` と該当出力の `Base`、`TrackingWeight`、`Result` と、Resultの参照先からメッシュまでの駆動接続を調べる。
 
-`AllowHandGestures` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
+`AllowHandGestures.Left`・`Right` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
 変換時の警告・案内はログの `Expression diagnostics:` に記録する。
 `Expression graph:` にはボードの相対パスとノード数を記録する。アバター内にはDiagnosticsを生成しない。
 Outputs の `Id` はメッシュ名.BlendShape名から作る変数キー。選択表情に対応するfloat変数がなければBaseを使う。Binding参照・Pose・HasPose・再生時計は持たない。
@@ -229,7 +243,7 @@ Selection は左・右を文字列化して `L{左}R{右}` を組み立て、`Ex
 PlaybackがCurrentExpressionへ設定し、終端値を即時にWriteする。同じ表情でも再適用する。
 同じ参照なら同じ固定ポーズになる。nullでの解除時は出力目標をBaseへ戻す。Slotの無効化では解除しない。
 対応表の参照を調べたい場合は、PairKey に対応する行を直接見る。
-SelectionStatus は生成・計算しない。入力モードは AllowHandGestures、再生対象は CurrentExpression で確認する。
+SelectionStatus は生成・計算しない。入力モードは AllowHandGestures.Left・Right、再生対象は CurrentExpression で確認する。
 未割当・参照先の削除は CurrentExpression=null となる。表情SlotやCatalogが非アクティブでも選択・適用できる。
 
 ## 装着状態と Lifecycle
@@ -259,7 +273,7 @@ bool APIも `ResoPon/Expression/AllowHandGestures` に変更する。旧変数�
 
 ジェスチャー番号は次の対応になる。
 Version 23では左右ジェスチャーのコンテキストメニューと専用のMenu/Left・Menu/Right APIを生成しない。
-コントローラーはGesture/Left・Gesture/Rightを使い、AllowHandGestures=trueのときだけ受け付ける。
+コントローラーはGesture/Left・Gesture/Rightを使い、対応するAllowHandGestures.Left・Right=trueのときだけ受け付ける。
 キーボードはKeyboard/Left・Keyboard/Rightのint APIを使い、フラグに関係なく受け付ける。どちらも装着者限定で、受理したイベントごとに左右値から表情を選ぶ。
 動作確認では `Core/LeftGesture`、`RightGesture`、`CurrentExpression` と対応表の参照先を見る。
 
@@ -312,12 +326,12 @@ Backは表情選択APIを送らず、選択中の表情やハンドジェスチ�
 表情SlotはCatalog直下に保ち、サブメニュー配下の項目からSlot参照を送る。表示LabelはCatalog項目のLabelからValueCopyで取得する。
 項目のEnabledを自動制御しない。
 押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをSelect APIへ送る。自身のCatalog直下で有効な表情かを検証し、PlaybackがCurrentExpressionへ設定して適用する。
-AllowHandGestures=falseにするが、LeftGesture・RightGesture・PairKeyは変更しない。GestureTable未割り当てでも選択できる。
+AllowHandGestures.Left・Rightを両方falseにするが、LeftGesture・RightGesture・PairKeyは変更しない。GestureTable未割り当てでも選択できる。
 同じ表情の再選択でもPlaybackを実行するため、名前付きfloat変数の編集も反映できる。
 表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `CurrentExpression` を参照して駆動する。
 Catalog・Imported menuともに選択中の表情は緑、それ以外は白。null用の白いOptionを先頭に置き、
 参照先の表情を削除した項目が未選択状態で緑にならないようにする。
-ジェスチャー許可トグルのColorは `ValueOptionDescriptionDriver<bool>` が `AllowHandGestures` を読み、
+ジェスチャー許可トグルのColorは `ValueOptionDescriptionDriver<bool>` が片手の許可、または両手のANDを読み、
 有効（true）なら緑、無効（false）なら赤にする。両DriverともLabel・Spriteは駆動せず、Enabledの自動制御も追加しない。
 参照はアバター複製時に複製先へ再対応し、Catalogテンプレートを複製した項目は自分自身の表情を比較対象にする。
 Catalog の Slot を固定用に保持する Override 変数は生成しない。
@@ -384,13 +398,15 @@ Selectの引数は表情Slot。旧string ID送信は受理しない。内部Play
 
 | Tag | 引数 | 動作 |
 |---|---|---|
-| `ResoPon/Expression/Gesture/Left` | int（範囲制限なし） | bool が true のとき左手を更新 |
-| `ResoPon/Expression/Gesture/Right` | int（範囲制限なし） | bool が true のとき右手を更新 |
+| `ResoPon/Expression/Gesture/Left` | int（範囲制限なし） | AllowHandGestures.Left が true のとき左手を更新 |
+| `ResoPon/Expression/Gesture/Right` | int（範囲制限なし） | AllowHandGestures.Right が true のとき右手を更新 |
 | `ResoPon/Expression/Keyboard/Left` | int（範囲制限なし） | フラグに関係なく左手を更新。フラグ自体は維持 |
 | `ResoPon/Expression/Keyboard/Right` | int（範囲制限なし） | フラグに関係なく右手を更新。フラグ自体は維持 |
 | `ResoPon/Expression/Menu/Select` | Slot: 自身のCatalog直下の表情 | 有効性を検証し、boolをfalseにしてPlaybackへ送信 |
-| `ResoPon/Expression/AllowHandGestures` | bool | ハンドジェスチャーを許可するか設定。左右値・表情は維持 |
-| `ResoPon/Expression/ToggleHandGestures` | なし | 現在のハンドジェスチャー許可を反転。左右値・表情は維持 |
+| `ResoPon/Expression/AllowHandGestures` | bool | 両手の許可を同じ値に設定。左右値・表情は維持 |
+| `ResoPon/Expression/AllowHandGestures/Left` / `Right` | bool | 対応する手だけ許可を設定。左右値・表情は維持 |
+| `ResoPon/Expression/ToggleHandGestures` | なし | 左右の許可をそれぞれ反転。左右値・表情は維持 |
+| `ResoPon/Expression/ToggleHandGestures/Left` / `Right` | なし | 対応する手だけ許可を反転。左右値・表情は維持 |
 | `ResoPon/Expression/Reset` | なし | 表情を解除してBaseへ戻し、左右を0、ジェスチャー入力を有効にする |
 
 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp。
@@ -402,7 +418,7 @@ Tag は大文字・小文字を含めて完全一致。引数型違い、無効�
 直接選択ではSelectionを経由せず、Playbackが固定ポーズと通常出力を同期更新する。追跡対象は通常のドライバー更新で反映する。
 boolの変更だけでは左右値も表情も変更しない。
 Version 25のコンテキストメニュー「Reset settings」は引数なしのReset APIを送る。
-CurrentExpression=null、左右のGesture=0、PairKey=L0R0、AllowHandGestures=trueへ一括で戻し、各出力にBaseを反映する。
+CurrentExpression=null、左右のGesture=0、PairKey=L0R0、AllowHandGestures.Left・Rightを両方trueへ一括で戻し、各出力にBaseを反映する。
 GestureTableの割り当てやCatalog、キー設定は変更しない。L0R0に表情が割り当てられていてもリセットでは再選択せず、次の左右入力イベントで再評価する。
 Resetもローカル装着者限定で、ジェスチャー無効時にも受け付ける。
 初期化は入力許可の判定より前に行い、複製・再ロード・再装着時には bool=true、左右=0 に戻す。

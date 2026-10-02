@@ -27,14 +27,14 @@ internal static class ExpressionResetChecks
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.KeyboardRightTag, true, 6);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, expression);
             Check(Get<int>(core, "LeftGesture") == 5 && Get<int>(core, "RightGesture") == 6 &&
-                !Get<bool>(core, "AllowHandGestures") && Reference<Slot>(core, "CurrentExpression") == expression,
+                NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == expression,
                 "reset starts with both hands non-neutral, a selected expression and gestures disabled");
             var toggle = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Hand gestures")
                 .GetComponent<ButtonDynamicImpulseTrigger>();
             void Toggle(bool expected)
             {
                 toggle.Pressed(null, default);
-                Check(Get<bool>(core, "AllowHandGestures") == expected && Get<int>(core, "LeftGesture") == 5 &&
+                Check(BothHandsAllowed(core) == expected && Get<int>(core, "LeftGesture") == 5 &&
                     Get<int>(core, "RightGesture") == 6 && Reference<Slot>(core, "CurrentExpression") == expression,
                     "gesture toggle changes only permission and preserves the selected expression and hands");
             }
@@ -47,7 +47,7 @@ internal static class ExpressionResetChecks
             void CheckReset()
             {
                 Check(Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 0 &&
-                    Get<string>(core, "PairKey") == "L0R0" && Get<bool>(core, "AllowHandGestures") &&
+                    Get<string>(core, "PairKey") == "L0R0" && BothHandsAllowed(core) &&
                     Reference<Slot>(core, "CurrentExpression") == null,
                     "reset button synchronously clears expression and hands and enables hand gestures");
                 Check(outputs.All(o => !TryReadSelectedValue(o, out _)), "reset clears every resolved output binding");

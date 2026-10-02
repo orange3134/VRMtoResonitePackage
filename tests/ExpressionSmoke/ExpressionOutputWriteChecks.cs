@@ -215,7 +215,7 @@ internal static class ExpressionOutputWriteChecks
                 catalog.FindChild("Short"));
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, false);
             await Frames();
-            Check(Get<int>(core, "RightGesture") == 0 && Get<bool>(core, "AllowHandGestures") &&
+            Check(Get<int>(core, "RightGesture") == 0 && BothHandsAllowed(core) &&
                 Reference<Slot>(core, "CurrentExpression") == null,
                 "identification blocks gesture, keyboard, menu and permission APIs while unworn under UserRoot");
             tracking.Value = 0.65f; await Frames();
