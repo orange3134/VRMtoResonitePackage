@@ -1,6 +1,7 @@
 using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.ProtoFlux;
+using VrmToResonitePackage.Expressions;
 using Nodes = FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes;
 
 internal static class ExpressionGraphChecks
@@ -268,11 +269,18 @@ internal static class ExpressionGraphChecks
             var neutral = indexBoard.GetComponentsInChildren<Nodes.Operators.NOR_Multi_Bool>().Single();
             Check(selector.Values.Count == 8 && selector.Values[0] == neutral && neutral.Operands.Count == 7,
                 "Index selector has explicit Neutral followed by the seven hand shapes");
-            Check(selector.Values.Skip(1).Select((condition, gesture) =>
-                    condition is Nodes.Operators.AND_Multi_Bool shape &&
-                    shape.Operands.Count == (gesture == 4 ? 4 : 5)).All(valid => valid) &&
-                !indexBoard.GetComponentsInChildren<ProtoFluxNode>().Any(node => node.GetType().Name == "ComposeBits_byte"),
-                "Index hand shapes use explicit open/closed conditions instead of a binary finger mask");
+            var bits = indexBoard.GetComponentsInChildren<ProtoFluxNode>().Single(node => node.GetType().Name == "ComposeBits_byte");
+            for (int finger = 0; finger < 5; finger++)
+                Check(((ISyncRef)ExpressionFlux.Member(bits, "Bit" + finger)).Target is ProtoFluxNode comparison &&
+                    comparison.Slot.Name.EndsWith(" Closed", StringComparison.Ordinal),
+                    "Index curl comparisons connect directly to packed finger bits");
+            Check(((ISyncRef)ExpressionFlux.Member(bits, "Bit5")).Target is Nodes.Operators.AND_Multi_Bool resolved &&
+                resolved.Operands.Count == 4 && resolved.Operands.All(condition => condition is Nodes.Operators.OR_Bool),
+                "Index packs the four-finger neutral-band validity into Bit5");
+            Check(((ISyncRef)ExpressionFlux.Member(bits, "Bit6")).Target is ProtoFluxNode thumbOpen &&
+                thumbOpen.Slot.Name.EndsWith("Thumb Open", StringComparison.Ordinal) &&
+                ((ISyncRef)ExpressionFlux.Member(bits, "Bit7")).Target == null,
+                "Index preserves the thumb's third state and leaves Bit7 unused");
         }
         foreach (var group in nodes.GroupBy(n => n.Group))
         {

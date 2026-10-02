@@ -9,6 +9,13 @@ and recovery to Point/Fist/Open. RockNRoll retains its thumb-independent mapping
 Graph checks verify eight direct gesture rows with an explicit Neutral NOR,
 and the new setting inputs remain bound after cloning and package reload.
 
+Version 60 packs Index comparisons into one ComposeBits_byte: Bit0..4 are
+finger Closed, Bit5 requires all four non-thumb fingers to be Open or Closed,
+and Bit6 is thumb Open. The shared Touch/Index matcher compares single byte
+codes or the three-code RockNRoll lookup before the same eight-row selector.
+Layout checks verify these packed connections, byte comparison inputs and code
+groups after cloning and package reload. The 243-state oracle is unchanged.
+
 Version 58 places Hand sign expressions and Other expressions directly under Expressions.
 Each group includes a Back item whose ContextMenuSubmenu opens the local Expressions items,
 including after cloning and package reload. There is no intermediate Select expression menu.

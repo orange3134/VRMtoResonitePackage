@@ -66,7 +66,7 @@ Touchの複数コード群はFist=28/22/21/23、FingerPoint=5/6/12/7、Victory=2
 Touchの64〜73は原版のデスクトップ入力符号であり、VRセンサー判定には含めない。
 キーボードはResoPonの左右別入力を継続する。
 
-## Indexの中間域による判定（Version 59）
+## Indexの中間域による判定（Version 59〜60）
 
 各指にOpen／Closedを別々の比較で定義し、どちらでもない角度を中間状態とする。
 既存のClosedしきい値は維持し、IndexモジュールのDVに
@@ -88,6 +88,34 @@ RockNRollは既存互換のため親指を判定せず、親指が中間でも5�
 初期20度はResoPonの調整値であり、VRChatの非公開しきい値を再現する保証はない。
 設定は`Expressions/Inputs/HandGestures/Modules/Index/DV`で変更できる。
 生成済みパッケージへ適用するには再変換・再インポートする。
+
+Version 60ではEuler角比較のboolを1つの`ComposeBits_byte`へまとめ、
+Touchと同じコード一致判定へ変更した。Version 59と同じ指状態分類を保つ。
+
+| Bit | 入力 |
+|---|---|
+| 0〜4 | 人差し指・中指・薬指・小指・親指のClosed比較 |
+| 5 | 親指以外の4指すべてがOpenまたはClosed（中間の指がない） |
+| 6 | 親指のOpen比較 |
+| 7 | 未使用 |
+
+4指のOpen比較はClosedとのORを通し、4つのORのANDをBit5へ入れる。
+全手形の一致コードでBit5を要求するため、4指のどれかが中間ならNeutralになる。
+親指はBit4／Bit6でClosed／Openを区別し、両方falseが中間となる。
+
+| 手形 | 一致byte |
+|---|---|
+| Fist (1) | 63 |
+| HandOpen (2) | 96 |
+| FingerPoint (3) | 62 |
+| Victory (4) | 60 |
+| RockNRoll (5) | 38、54、102 |
+| HandGun (6) | 110 |
+| ThumbsUp (7) | 111 |
+
+単一コードは`ValueEquals<byte>`、RockNRollは`IndexOfFirstValueMatch<byte>.FoundMatch`で比較する。
+RockNRollの3コードは親指の中間／Closed／Openに対応し、その他の手形は親指の中間を受け付けない。
+Neutralは7つのコード一致結果のNORで選び、8行の最終セレクターへ渡す。
 
 ## Touchの接触状態による判定（Version 52〜56）
 

@@ -11,15 +11,13 @@ internal sealed partial class ExpressionSystemSetup
 {
     // Gesture templates follow Avatar Expression Editor v1.12.1.
     // Index keeps an explicit neutral band between open and closed fingers.
-    // Touch packs each sensor separately. See docs/controller-gestures.md.
+    // Touch/Index pack sensor comparisons into a byte. See docs/controller-gestures.md.
     private IWorldElement BuildControllerGesture(ExpressionFlux g, Component controller, string device,
         Chirality side, Slot module)
     {
         if (device is "ViveController" or "WindowsMRController")
             return BuildPadGesture(g, controller, module);
-        if (device == "IndexController") return BuildIndexGesture(g, side, module);
-
-        var bits = g.Node("ComposeBits_byte");
+        var bits = device == "IndexController" ? BuildIndexBits(g, side, module) : g.Node("ComposeBits_byte");
         if (device == "TouchController")
         {
             // Keep the used outputs in the stock TouchController's visual port order.
@@ -27,7 +25,7 @@ internal sealed partial class ExpressionSystemSetup
                 "JoystickTouch", "TriggerTouch", "TriggerClick" };
             for (int bit = 0; bit < ports.Length; bit++) Link(bits, "Bit" + bit, Out(controller, ports[bit]));
         }
-        else
+        else if (device == "CosmosController")
         {
             string[] ports = { "JoystickTouch", "GripClick", "TriggerTouch", "TriggerClick" };
             for (int bit = 0; bit < ports.Length; bit++) Link(bits, "Bit" + bit, Out(controller, ports[bit]));
@@ -45,6 +43,10 @@ internal sealed partial class ExpressionSystemSetup
                 (1, WithThumbContact(40, 72, 104)), (2, new byte[] { 0 }),
                 (3, WithThumbContact(8)), (4, WithThumbContact(0)),
                 (5, WithThumbContact(64, 96)), (6, new byte[] { 8 }), (7, new byte[] { 40, 72, 104 }) },
+            "IndexController" => new (int, byte[])[] {
+                (1, new byte[] { 63 }), (2, new byte[] { 96 }), (3, new byte[] { 62 }),
+                (4, new byte[] { 60 }), (5, new byte[] { 38, 54, 102 }),
+                (6, new byte[] { 110 }), (7, new byte[] { 111 }) },
             "CosmosController" => new (int, byte[])[] {
                 (1, new byte[] { 12 }), (2, new byte[] { 0 }), (3, new byte[] { 3 }),
                 (4, new byte[] { 1 }), (6, new byte[] { 2 }), (7, new byte[] { 4 }) },
@@ -105,23 +107,23 @@ internal sealed partial class ExpressionSystemSetup
             group.Slot.Name += $" : {names[gesture - 1]} ({gesture})";
             conditions.Add((INodeValueOutput<bool>)found);
         }
-        if (device == "TouchController")
+        if (device is "TouchController" or "IndexController")
         {
-            // Explicit row 0 covers all 18 Neutral patterns by reusing the seven
-            // gesture conditions. Rows now directly match gesture numbers 0..7.
+            // Explicit row 0 reuses the seven gesture conditions. Rows directly
+            // match gesture numbers 0..7, including intermediate Index poses.
             var neutral = (Nodes.Operators.NOR_Multi_Bool)g.Node("NOR_Multi_Bool");
             neutral.Slot.Name += " : Neutral (0)";
             foreach (var condition in conditions) neutral.Operands.Add(condition);
             match.Values.Add(neutral);
         }
         foreach (var condition in conditions) match.Values.Add(condition);
-        if (device == "TouchController") return Out(match, "Index");
+        if (device is "TouchController" or "IndexController") return Out(match, "Index");
 
         // Other controllers keep rows 0..6 for gestures 1..7; unmatched becomes 0.
         return g.Node("ValueInc", typeof(int), ("N", Out(match, "Index")));
     }
 
-    private IWorldElement BuildIndexGesture(ExpressionFlux g, Chirality side, Slot module)
+    private Component BuildIndexBits(ExpressionFlux g, Chirality side, Slot module)
     {
         var source = g.Node("UserFingerPoseSource", null, ("User", g.Owner(_root)));
         var moduleRef = g.Ref(module);
@@ -152,25 +154,16 @@ internal sealed partial class ExpressionSystemSetup
             ((Component)closed[finger]).Slot.Name += " : " + fingers[finger] + " Closed";
             ((Component)open[finger]).Slot.Name += " : " + fingers[finger] + " Open";
         }
-        // O/C require an explicit state. The legacy RockNRoll codes 6/22
-        // ignore the thumb, including when only that finger is intermediate.
-        string[] patterns = { "CCCCC", "OOOOO", "OCCCC", "OOCCC", "OCCO*", "OCCCO", "CCCCO" };
-        string[] names = { "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
-        var neutral = (Nodes.Operators.NOR_Multi_Bool)g.Node("NOR_Multi_Bool");
-        neutral.Slot.Name += " : Neutral (0)";
-        var match = (Nodes.Utility.IndexOfFirstValueMatch<bool>)g.Node("IndexOfFirstValueMatch", typeof(bool),
-            ("Match", g.Constant(true, shared: false)));
-        match.Values.Add(neutral);
-        for (int gesture = 0; gesture < patterns.Length; gesture++)
-        {
-            var condition = g.And(patterns[gesture].Select((state, finger) =>
-                state == 'C' ? closed[finger] : state == 'O' ? open[finger] : null)
-                .Where(input => input != null).ToArray());
-            ((Component)condition).Slot.Name += $" : {names[gesture]} ({gesture + 1})";
-            neutral.Operands.Add((INodeValueOutput<bool>)condition);
-            match.Values.Add((INodeValueOutput<bool>)condition);
-        }
-        return Out(match, "Index");
+        // Closed bits alone cannot distinguish Open from intermediate. Bit5
+        // requires all four non-thumb fingers to be outside the neutral band;
+        // Bit4/Bit6 preserve the thumb's Closed/intermediate/Open states.
+        var bits = g.Node("ComposeBits_byte");
+        for (int finger = 0; finger < fingers.Length; finger++) Link(bits, "Bit" + finger, closed[finger]);
+        var resolved = g.And(Enumerable.Range(0, 4).Select(finger => g.Or(open[finger], closed[finger])).ToArray());
+        ((Component)resolved).Slot.Name += " : Four fingers outside neutral band";
+        Link(bits, "Bit5", resolved);
+        Link(bits, "Bit6", open[4]);
+        return bits;
     }
 
     private static IWorldElement BuildPadGesture(ExpressionFlux g, Component controller, Slot module)

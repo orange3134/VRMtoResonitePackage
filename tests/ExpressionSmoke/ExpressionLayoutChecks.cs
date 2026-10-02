@@ -59,13 +59,6 @@ internal static class ExpressionLayoutChecks
         {
             var board = hand.FindChild("Logic");
             var nodes = board.GetComponentsInChildren<ProtoFluxNode>();
-            if (module.Name == "Index")
-            {
-                Check(nodes.Count(n => n.GetType().Name == "ComposeBits_byte") == 0 &&
-                    nodes.Count(n => n.GetType().Name == "ValueMultiplex`1") == 0,
-                    "Index classifies open/closed states directly");
-                continue; // The ternary classifier structure is checked by ExpressionGraphChecks.
-            }
             bool pad = module.Name is "Vive" or "WindowsMR";
             Check(nodes.Count(n => n.GetType().Name == "ComposeBits_byte") == (pad ? 0 : 1) &&
                 nodes.Count(n => n.GetType().Name == "ValueMultiplex`1") == (pad ? 1 : 0),
@@ -74,11 +67,12 @@ internal static class ExpressionLayoutChecks
             {
                 var bits = nodes.Single(n => n.GetType().Name == "ComposeBits_byte");
                 var match = nodes.OfType<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Utility.IndexOfFirstValueMatch<bool>>().Single();
-                int gestureOffset = module.Name == "Touch" ? 1 : 0;
+                int gestureOffset = module.Name is "Touch" or "Index" ? 1 : 0;
                 Check(match.Match.Target is FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<bool> literal && literal.Value.Value &&
                     match.Values.Count == 7 + gestureOffset, "gesture selector rows follow gesture-number order");
                 int[] sizes = module.Name switch {
                     "Touch" => new[] { 45, 1, 15, 15, 30, 1, 3 },
+                    "Index" => new[] { 1, 1, 1, 1, 3, 1, 1 },
                     "Cosmos" => new[] { 1, 1, 1, 1, 0, 1, 1 },
                     _ => throw new InvalidOperationException("Unexpected controller")
                 };
