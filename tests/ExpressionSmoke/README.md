@@ -1,5 +1,10 @@
 # Expression integration checks
 
+Version 68 removes eight unconditional If nodes from API request handling. Graph
+checks reject constant-true If conditions after generation, cloning and package reload.
+Existing event checks cover initialization order, wearer gates, keyboard bypass,
+gesture permissions, selection and toggles on the simplified paths.
+
 Version 64 replaces the shared permission variable with AllowHandGestures.Left/Right.
 The global bool API still sets both. Version 66 makes global Toggle disable both when
 both are enabled, and enable both otherwise. Both menu copies are tested for all four

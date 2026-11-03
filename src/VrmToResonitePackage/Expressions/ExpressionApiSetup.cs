@@ -31,7 +31,7 @@ internal sealed partial class ExpressionSystemSetup
     // cloning or reattachment can restore the default enabled state.
     private IWorldElement ApplyRequest(ExpressionFlux g, IWorldElement mutation, IWorldElement allowed = null) => g.Sequence(
         g.Trigger(g.Ref(_internal), InitializeTag),
-        g.If(allowed ?? g.Constant(true), mutation));
+        allowed == null ? mutation : g.If(allowed, mutation));
 
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
         g.Write<int>(g.Ref(_internal), SystemSpace, hand + "Gesture", gesture);

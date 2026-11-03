@@ -3,6 +3,11 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 68では、API共通の `ApplyRequest` が追加条件を受け取らない場合、Initializeの次に
+処理を直接接続する。Keyboard左右・Select・AllowHandGestures両手/左右・ToggleHandGestures左右の
+計8個の固定true条件のIfを生成しない。装着判定と、Gesture入力に対する各手の許可判定は維持する。
+生成直後・複製・保存再読込後に、固定trueを条件に持つIfが存在しないことを検証する。
+
 Version 64ではジェスチャー許可を `AllowHandGestures.Left`・`Right` に分け、各手の
 コントローラー入力とGesture APIに適用する。キーボードは左右の許可に関係なく受け付ける。
 Version 66の「Hand gestures」は両手とも許可されていれば両手を停止し、それ以外は両手を許可する。

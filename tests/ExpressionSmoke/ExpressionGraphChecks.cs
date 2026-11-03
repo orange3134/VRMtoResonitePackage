@@ -97,6 +97,9 @@ internal static class ExpressionGraphChecks
         Report(expressions);
         ExpressionLayoutChecks.CheckDirection(expressions);
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
+        Check(nodes.OfType<Nodes.If>().All(node =>
+            node.Condition.Target is not Nodes.ValueInput<bool> constant || !constant.Value.Value),
+            "generated Flux has no If branches with a constant true condition, including clones and package reloads");
         Check(nodes.All(n => n.GetType().Name is not ("GetActiveUser" or "LocalUser")),
             "expression boards do not substitute LocalUser for the active user");
         bool NeedsUser(ProtoFluxNode node) => node.GetType().Name is "TouchController" or "IndexController" or
