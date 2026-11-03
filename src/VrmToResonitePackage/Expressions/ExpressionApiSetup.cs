@@ -80,9 +80,13 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildHandGesturesToggleReceiver(ExpressionFlux g, string hand = null)
     {
         var core = g.Ref(_internal);
-        var toggle = g.Sequence((hand == null ? new[] { "Left", "Right" } : new[] { hand })
-            .Select(side => (IWorldElement)g.Write<bool>(core, SystemSpace, HandGesturePermission(side),
-                g.Not(g.Read<bool>(core, SystemSpace, HandGesturePermission(side))))).ToArray());
+        // Choose the branch before writing either hand so both writes use the same decision.
+        var toggle = hand == null
+            ? g.If(g.And(g.Read<bool>(core, SystemSpace, HandGesturePermission("Left")),
+                    g.Read<bool>(core, SystemSpace, HandGesturePermission("Right"))),
+                WriteHandGesturePermissions(g, g.Constant(false)),
+                WriteHandGesturePermissions(g, g.Constant(true)))
+            : WriteHandGesturePermissions(g, g.Not(g.Read<bool>(core, SystemSpace, HandGesturePermission(hand))), hand);
         ReceiveUpdate(g, hand == null ? ToggleHandGesturesTag : ToggleHandGesturesHandTag(hand), ApplyRequest(g, toggle));
     }
 

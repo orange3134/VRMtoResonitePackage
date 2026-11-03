@@ -5,7 +5,8 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 
 Version 64ではジェスチャー許可を `AllowHandGestures.Left`・`Right` に分け、各手の
 コントローラー入力とGesture APIに適用する。キーボードは左右の許可に関係なく受け付ける。
-既存の「Hand gestures」は両方をそれぞれ反転し、「Left hand gestures」「Right hand gestures」は
+Version 66の「Hand gestures」は両手とも許可されていれば両手を停止し、それ以外は両手を許可する。
+片手だけ変更した後も両手を同じ状態に揃えられる。「Left hand gestures」「Right hand gestures」は
 該当する手だけ反転する。表情の直接選択では両方を停止し、初期化・Resetでは両方を許可する。
 旧 `ExpressionSystem/AllowHandGestures` は定義せず、両手を同じ値にする既存bool APIは維持する。
 
@@ -409,7 +410,7 @@ Selectの引数は表情Slot。旧string ID送信は受理しない。内部Play
 | `ResoPon/Expression/Menu/Select` | Slot: 自身のCatalog直下の表情 | 有効性を検証し、boolをfalseにしてPlaybackへ送信 |
 | `ResoPon/Expression/AllowHandGestures` | bool | 両手の許可を同じ値に設定。左右値・表情は維持 |
 | `ResoPon/Expression/AllowHandGestures/Left` / `Right` | bool | 対応する手だけ許可を設定。左右値・表情は維持 |
-| `ResoPon/Expression/ToggleHandGestures` | なし | 左右の許可をそれぞれ反転。左右値・表情は維持 |
+| `ResoPon/Expression/ToggleHandGestures` | なし | 両手とも許可なら両手を停止、それ以外は両手を許可。左右値・表情は維持 |
 | `ResoPon/Expression/ToggleHandGestures/Left` / `Right` | なし | 対応する手だけ許可を反転。左右値・表情は維持 |
 | `ResoPon/Expression/Reset` | なし | 表情を解除してBaseへ戻し、左右を0、ジェスチャー入力を有効にする |
 

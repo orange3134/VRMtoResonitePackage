@@ -1,7 +1,9 @@
 # Expression integration checks
 
 Version 64 replaces the shared permission variable with AllowHandGestures.Left/Right.
-The global bool API still sets both; global Toggle inverts each independently.
+The global bool API still sets both. Version 66 makes global Toggle disable both when
+both are enabled, and enable both otherwise. Both menu copies are tested for all four
+initial combinations, repeated same-frame presses and recovery after individual toggles.
 HandGesturePermissionChecks covers all four permission combinations, real both/individual
 menu button presses, API payload validation, selection retention, keyboard bypass and
 side-filtered RootContextMenuItem entries before and after cloning/package reload.

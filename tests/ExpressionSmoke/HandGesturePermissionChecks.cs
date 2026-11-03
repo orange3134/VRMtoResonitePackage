@@ -56,18 +56,25 @@ internal static class HandGesturePermissionChecks
         async Task Frames() { for (int i = 0; i < 3; i++) await default(NextUpdate); ExpressionGraphChecks.CheckMenuColors(expressions); }
         for (int combination = 0; combination < 4; combination++)
         {
-            var bothToggle = bothToggles[combination % bothToggles.Count];
             bool left = (combination & 1) != 0, right = (combination & 2) != 0;
             Allow("Left", left); Allow("Right", right); State(left, right);
             Keyboard("Left", 6); Keyboard("Right", 7);
             var selected = Reference<Slot>(core, "CurrentExpression");
             void Preserved() => Check(Gesture("Left") == 6 && Gesture("Right") == 7 && Reference<Slot>(core, "CurrentExpression") == selected,
                 "permission toggles retain both hand values and the selected expression");
-            bothToggle.Pressed(null, default); State(!left, !right); Preserved(); await Frames();
-            bothToggle.Pressed(null, default); State(left, right); Preserved();
+            foreach (var bothToggle in bothToggles)
+            {
+                Allow("Left", left); Allow("Right", right);
+                bool enabled = !(left && right);
+                bothToggle.Pressed(null, default); State(enabled, enabled); Preserved(); await Frames();
+                bothToggle.Pressed(null, default); State(!enabled, !enabled); Preserved();
+                bothToggle.Pressed(null, default); State(enabled, enabled); Preserved(); await Frames();
+            }
+            Allow("Left", left); Allow("Right", right);
             toggles["Left"].Pressed(null, default); State(!left, right); Preserved(); await Frames();
             toggles["Right"].Pressed(null, default); State(!left, !right); Preserved(); await Frames();
-            bothToggle.Pressed(null, default); State(left, right); Preserved();
+            bothToggles[0].Pressed(null, default); State(left || right, left || right); Preserved(); await Frames();
+            Allow("Left", left); Allow("Right", right);
             foreach (string hand in new[] { "Left", "Right" })
             {
                 Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
