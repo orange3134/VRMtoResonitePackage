@@ -3,6 +3,7 @@ using FrooxEngine.ProtoFlux;
 using Renderite.Shared;
 using VrmToResonitePackage.Expressions;
 using static ExpressionTestFields;
+using Nodes = FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes;
 
 internal static class HandGesturePermissionChecks
 {
@@ -10,6 +11,7 @@ internal static class HandGesturePermissionChecks
     {
         var core = expressions.FindChild("Internal");
         var api = expressions.FindChild("API").FindChild("Receivers");
+        CheckToggleGraph(api.FindChild("Logic").FindChild("ToggleHandGestures"));
         var menu = expressions.FindChild("Inputs").FindChild("ContextMenu");
         var bothToggles = new List<ButtonDynamicImpulseTrigger>();
         var toggles = new Dictionary<string, ButtonDynamicImpulseTrigger>();
@@ -99,5 +101,22 @@ internal static class HandGesturePermissionChecks
         State(true, true); await Frames();
         Console.WriteLine("PASS: per-hand gesture permissions, both/individual toggles, complete side-filtered submenus and keyboard bypass");
     }
+    private static void CheckToggleGraph(Slot board)
+    {
+        var local = board.GetComponentsInChildren<Nodes.LocalValue<bool>>().Single();
+        var capture = board.GetComponentsInChildren<Nodes.ValueWrite<bool>>().Single();
+        var nand = board.GetComponentsInChildren<Nodes.Operators.NAND_Bool>().Single();
+        var writes = board.GetComponentsInChildren<Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<bool>>();
+        Check(capture.Variable.Target == local && capture.Value.Target == nand &&
+            writes.Count == 2 && writes.All(write => write.Value.Target == local),
+            "both hand writes consume the same per-impulse NAND snapshot");
+        var sequence = capture.OnWritten.Target as Nodes.Sequence;
+        Check(sequence != null && sequence.Calls.Count == 2 &&
+            sequence.Calls.All(call => writes.Any(write => call == write)),
+            "permission writes run only after the local snapshot is captured");
+        Check(board.GetComponentsInChildren<Nodes.If>().Count == 1,
+            "shared toggle keeps only the wearer gate, without duplicated true/false write branches");
+    }
+
     private static void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 }

@@ -10,6 +10,17 @@ Version 66の「Hand gestures」は両手とも許可されていれば両手を
 該当する手だけ反転する。表情の直接選択では両方を停止し、初期化・Resetでは両方を許可する。
 旧 `ExpressionSystem/AllowHandGestures` は定義せず、両手を同じ値にする既存bool APIは維持する。
 
+Version 67ではSaltで編集された共通トグルを採用する。2026-11-04にResoLoopで
+`Root/Salt/Expressions/API/Receivers/Logic/ToggleHandGestures` を読み取り、
+`NAND_Bool(Left, Right)` → `ValueWrite<bool>` → `LocalValue<bool>` と、
+`OnWritten` → `Sequence` → 左右の `WriteDynamicValueVariable<bool>` の接続を確認した。
+ローカル装着ゲートとInitializeを通した後、今回の切り替え値をLocalへ一度保存してから左右に書く。
+Localはインパルス内だけの値なので、別クリックや別アバターへ状態を持ち越さない。
+両手オンだけをオフにする真理値表はVersion 66と同じで、書き込みノードは4個から2個になる。
+生成された共通トグルはSaltと同じ18ノード。
+生ワールドは読み取りのみとし、4通りの初期状態・同一フレームの連続操作・複製・パッケージ再読込を
+インストール済みDLLを使うExpressionSmokeで検証済み。生成パッケージのinspectも成功した。
+
 Version 65では `Inputs/ContextMenu/Left`・`Right` にExpressionsメニュー全体をそれぞれ生成する。
 両方の `RootContextMenuItem.OnlyForSide` に対応するChiralityを設定し、各手のルートにはExpressions入口だけを表示する。
 各 `Items` サブメニューには、その手の個別トグルだけを置く。表情一覧・両手共通トグル・リセット・

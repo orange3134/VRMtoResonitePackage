@@ -80,14 +80,22 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildHandGesturesToggleReceiver(ExpressionFlux g, string hand = null)
     {
         var core = g.Ref(_internal);
-        // Choose the branch before writing either hand so both writes use the same decision.
-        var toggle = hand == null
-            ? g.If(g.And(g.Read<bool>(core, SystemSpace, HandGesturePermission("Left")),
-                    g.Read<bool>(core, SystemSpace, HandGesturePermission("Right"))),
-                WriteHandGesturePermissions(g, g.Constant(false)),
-                WriteHandGesturePermissions(g, g.Constant(true)))
-            : WriteHandGesturePermissions(g, g.Not(g.Read<bool>(core, SystemSpace, HandGesturePermission(hand))), hand);
-        ReceiveUpdate(g, hand == null ? ToggleHandGesturesTag : ToggleHandGesturesHandTag(hand), ApplyRequest(g, toggle));
+        if (hand != null)
+        {
+            var toggle = WriteHandGesturePermissions(g,
+                g.Not(g.Read<bool>(core, SystemSpace, HandGesturePermission(hand))), hand);
+            ReceiveUpdate(g, ToggleHandGesturesHandTag(hand), ApplyRequest(g, toggle));
+            return;
+        }
+
+        // Match the authored Salt graph: capture NAND once per impulse before either write.
+        var enabled = g.Local<bool>();
+        var capture = g.Set<bool>(enabled, g.Node("NAND_Bool", null,
+            ("A", g.Read<bool>(core, SystemSpace, HandGesturePermission("Left"))),
+            ("B", g.Read<bool>(core, SystemSpace, HandGesturePermission("Right")))));
+        Link(capture, "OnWritten", WriteHandGesturePermissions(g, enabled));
+        ReceiveUpdate(g, ToggleHandGesturesTag,
+            g.Sequence(g.Trigger(core, InitializeTag), capture));
     }
 
     private void BuildHandGesturesEnabledReceiver(ExpressionFlux g, string hand = null)

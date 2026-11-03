@@ -4,6 +4,9 @@ Version 64 replaces the shared permission variable with AllowHandGestures.Left/R
 The global bool API still sets both. Version 66 makes global Toggle disable both when
 both are enabled, and enable both otherwise. Both menu copies are tested for all four
 initial combinations, repeated same-frame presses and recovery after individual toggles.
+Version 67 follows Salt's authored NAND/ValueWrite/LocalValue graph. Structural checks
+require two permission writes consuming one captured value, reached through OnWritten,
+with only the wearer If gate. Behavioral checks also run on clones and package reloads.
 HandGesturePermissionChecks covers all four permission combinations, real both/individual
 menu button presses, API payload validation, selection retention, keyboard bypass and
 side-filtered RootContextMenuItem entries before and after cloning/package reload.

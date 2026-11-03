@@ -47,7 +47,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 66 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 67 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -139,7 +139,8 @@ MappedExpression／CandidateExpression の診断用 DynamicVariable は生成し
 AllowHandGestures.Left・Right 以外は状態として扱う。SelectionStatus は生成しない。入力モードは左右の許可設定、再生対象は CurrentExpression で確認する。未割当・参照先の削除は CurrentExpression=null となる。非アクティブな表情も選択できる。
 Version 64では旧 `ExpressionSystem/AllowHandGestures` を定義しない。旧bool APIのTagは引き続き両手を同じ値へ設定する。
 Version 66の両手Toggle APIは、両手とも許可なら両手を停止し、それ以外は両手を許可する。
-判定は書き込み前にIfで分岐し、左右へ同じ定数を書き込む。片手を書き換えた後の再判定を避ける。
+Version 67では `NAND_Bool` の判定を `ValueWrite<bool>` で `LocalValue<bool>` に一度保存し、
+`OnWritten` から左右へ同じLocal値を書き込む。片手を書き換えた後の再判定を避ける。
 PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の時間再生は行わない。
 
 Lifecycle は OnStart とローカル装着状態の変更時に動き、現在の装着者がローカルユーザーの場合だけ、初期化確認 → Selection を実行する。
