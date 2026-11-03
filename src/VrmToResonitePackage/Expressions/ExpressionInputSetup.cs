@@ -86,14 +86,22 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildMenus()
     {
         var menu = _inputs.AddSlot("ContextMenu");
-        menu.AttachComponent<RootContextMenuItem>().Item.Target = MenuItem(menu, "Expressions");
-        var items = menu.AddSlot("Items");
-        menu.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
         foreach (var expression in _clips.Values)
         {
             MenuItem(expression, expression.Name);
             SelectMenuTrigger(expression, expression);
         }
+        foreach (var side in new[] { Chirality.Left, Chirality.Right })
+            BuildHandMenu(menu.AddSlot(side.ToString()), side);
+    }
+
+    private void BuildHandMenu(Slot menu, Chirality side)
+    {
+        var rootItem = menu.AttachComponent<RootContextMenuItem>();
+        rootItem.Item.Target = MenuItem(menu, "Expressions");
+        rootItem.OnlyForSide.Value = side;
+        var items = menu.AddSlot("Items");
+        menu.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
         // Keep clips directly under Catalog for the Select API and copied templates.
         // Only menu entries are grouped, using the final compiled gesture assignments.
         var mapped = _compiled.Pairs.Where(id => id != null).ToHashSet();
@@ -122,18 +130,13 @@ internal sealed partial class ExpressionSystemSetup
         toggleButton.ExcludeDisabled.Value = true;
         toggleButton.PressedTag.Value = ToggleHandGesturesTag;
         GesturePermissionMenuColor(mode);
-        foreach (var side in new[] { Chirality.Left, Chirality.Right })
-        {
-            var single = menu.AddSlot(side + " hand gestures");
-            var rootItem = single.AttachComponent<RootContextMenuItem>();
-            rootItem.Item.Target = MenuItem(single, single.Name);
-            rootItem.OnlyForSide.Value = side;
-            var toggle = single.AttachComponent<ButtonDynamicImpulseTrigger>();
-            toggle.Target.Target = _api;
-            toggle.ExcludeDisabled.Value = true;
-            toggle.PressedTag.Value = ToggleHandGesturesHandTag(side.ToString());
-            GesturePermissionMenuColor(single, side.ToString());
-        }
+        var single = items.AddSlot(side + " hand gestures");
+        MenuItem(single, single.Name);
+        var toggle = single.AttachComponent<ButtonDynamicImpulseTrigger>();
+        toggle.Target.Target = _api;
+        toggle.ExcludeDisabled.Value = true;
+        toggle.PressedTag.Value = ToggleHandGesturesHandTag(side.ToString());
+        GesturePermissionMenuColor(single, side.ToString());
         var reset = items.AddSlot("Reset settings"); MenuItem(reset, reset.Name);
         var resetButton = reset.AttachComponent<ButtonDynamicImpulseTrigger>();
         resetButton.Target.Target = _api;

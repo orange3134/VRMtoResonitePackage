@@ -51,7 +51,8 @@ internal static class ExpressionGraphChecks
     {
         ExpressionSpaceChecks.Run(expressions);
         CheckMenuColors(expressions);
-        if (Descendant(expressions, "Inputs/ContextMenu/Items") is { } groups)
+        foreach (string hand in new[] { "Left", "Right" })
+        if (Descendant(expressions, "Inputs/ContextMenu/" + hand + "/Items") is { } groups)
         {
             Check(groups.FindChild("Direct selection") == null,
                 "expression groups open directly from Expressions without an intermediate selection menu");
@@ -355,7 +356,8 @@ internal static class ExpressionGraphChecks
             Check(publicReceivers.Single(node => node.Slot.Parent.Name == "ToggleHandGestures" + hand).GetType().Name == "DynamicImpulseReceiver",
                 hand + " gesture toggle receives an impulse without a payload");
         }
-        if (Descendant(expressions, "Inputs/ContextMenu/Items") is { } menuItems)
+        foreach (string hand in new[] { "Left", "Right" })
+        if (Descendant(expressions, "Inputs/ContextMenu/" + hand + "/Items") is { } menuItems)
         {
             Check(menuItems.FindChild("Allow hand gestures") == null && menuItems.FindChild("Disable hand gestures") == null,
                 "separate allow and disable menu items are absent");

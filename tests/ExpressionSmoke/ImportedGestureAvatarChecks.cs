@@ -53,7 +53,7 @@ internal static class ImportedGestureAvatarChecks
         }
         await KeyboardShortcutChecks.Run(root);
         var core = root.FindChild("Internal"); var table = root.FindChild("DV").FindChild("GestureTable");
-        var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
+        var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null, "Saved menu has no hand submenus");
         var receiverRoot = root.FindChild("API").FindChild("Receivers");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.HandGesturesEnabledTag, true, true);

@@ -9,10 +9,12 @@ Version 64ではジェスチャー許可を `AllowHandGestures.Left`・`Right` �
 該当する手だけ反転する。表情の直接選択では両方を停止し、初期化・Resetでは両方を許可する。
 旧 `ExpressionSystem/AllowHandGestures` は定義せず、両手を同じ値にする既存bool APIは維持する。
 
-個別トグルはExpressionsサブメニュー内ではなく、左右のルートコンテキストメニューに置く。
-`Inputs/ContextMenu/Left hand gestures`・`Right hand gestures` の `RootContextMenuItem.OnlyForSide` に
-対応するChiralityを設定する。標準 `ContextMenuItemSource`・`ContextMenuSubmenu` に手別のフィルターはなく、
-実行対象DLLの `InteractionHandler` はルート項目だけをOnlyForSideでフィルターするため、この配置を使う。
+Version 65では `Inputs/ContextMenu/Left`・`Right` にExpressionsメニュー全体をそれぞれ生成する。
+両方の `RootContextMenuItem.OnlyForSide` に対応するChiralityを設定し、各手のルートにはExpressions入口だけを表示する。
+各 `Items` サブメニューには、その手の個別トグルだけを置く。表情一覧・両手共通トグル・リセット・
+インポートメニューは左右とも含め、共通のCatalog・API・許可変数を参照する。Backは同じ手のItemsへ戻る。
+標準 `ContextMenuItemSource`・`ContextMenuSubmenu` に手別のフィルターはなく、実行対象DLLの
+`InteractionHandler` はルート項目だけをOnlyForSideでフィルターするため、入口ごとにメニューを分ける。
 個別のColorは自分の許可設定に直接追従し、有効なら緑、無効なら赤。
 両手用は `MultiBoolConditionDriver(All)` で2つの許可を合成し、両方有効なら緑、それ以外なら赤。
 ドライバー参照と手のフィルターは複製・保存後の再読込でも維持する。
@@ -78,6 +80,8 @@ Expressions/
     各シェイプ/                   SmoothValue<float>、TargetValue → BlendShapes[].Value
   Inputs/
     ContextMenu/                   表情の直接選択・入力許可（項目の自動選択可否制御なし）
+      Left|Right/                  手別のExpressions入口（OnlyForSideで表示を制限）
+        Items/                     共通項目一式と、その手だけの個別トグル
     Keyboard/
       Left|Right/                  各手の共通設定用の変数空間
         DV/                        Tag、Modifier、Key.0〜Key.9

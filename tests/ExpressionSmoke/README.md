@@ -7,8 +7,12 @@ menu button presses, API payload validation, selection retention, keyboard bypas
 side-filtered RootContextMenuItem entries before and after cloning/package reload.
 Controller sensor checks disable only the tested hand and assert the opposite permission
 stays enabled. Individual menu colors follow their own fields; the global color follows
-MultiBoolConditionDriver(All). Root hand toggles sit outside the shared Expressions submenu
-because ContextMenuSubmenu itself has no per-hand filtering.
+MultiBoolConditionDriver(All).
+
+Version 65 generates complete Left/Right Expressions submenus, with OnlyForSide on
+each root entry and only the matching hand toggle inside each submenu. Checks cover
+both copies of common controls, identical menu contents apart from the hand toggle,
+local Back/Catalog references, colors and button behavior after cloning/package reload.
 
 Version 63 stores each keyboard hand's modifier as an editable Renderite.Shared.Key.
 Left defaults to Shift and Right to Control, independent of gesture table priority.
