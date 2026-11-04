@@ -3,6 +3,13 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 85ではDynamicImpulseのタグを `ExpressionSystem/Method.*`（公開操作）と
+`ExpressionSystem/Internal.*`（内部処理）へ統一した。公開操作はSetGesture.Left/Right、
+TrySetGesture.Left/Right、SelectExpression、ToggleHandGestures、Reset。
+内部処理はUpdateSelection、ApplyExpression、ResetStateとする。
+DynamicVariable名・Slot構造・引数・動作は維持し、旧タグの受信口は生成しない。
+既存パッケージは再変換し、外部送信側のタグも新しい名前へ更新する。
+
 Version 84ではSelectionのReadDynamicObjectVariable<Slot>のSourceを未接続にし、
 ノード自身の階層からExpressionSystem空間の `GestureTable.LnRm` を検索する。
 参照元がなくなった `ExpressionSystem/GestureTable` とその入力ノードを削除した。
@@ -218,7 +225,7 @@ Expressions/
 ```
 
 Internal に入力元の一覧・優先順位・有効期限・汎用 Animator パラメーターは持たない。
-入力内容は `ResoPon/Expression/TrySetGesture/Left`／`ResoPon/Expression/TrySetGesture/Right` タグと int 引数で渡す。許可判定を迂回する入力はSetGestureを使う。Internal は入力元の Slot 参照を保持しない。
+入力内容は `ExpressionSystem/Method.TrySetGesture.Left`／`ExpressionSystem/Method.TrySetGesture.Right` タグと int 引数で渡す。許可判定を迂回する入力はSetGestureを使う。Internal は入力元の Slot 参照を保持しない。
 各手は最後に受理した入力値を保持する。Version 51のコントローラーは切断・VRモード終了時に-1を送る。更新番号は保持しない。
 
 Flux は1スロット1ノードで、各モジュール直下にノードを置き、モジュール全体の接続関係で整列する。
@@ -243,7 +250,7 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → Selection → Playback を同期実行する。
 同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態・固定ポーズ・出力目標が確定する。
 追跡対象の出力目標は通常のドライバー更新で反映する。瞬き以外のメッシュの実ウェイトはSmoothValueで補間する。
-表情Slotを引数としてResoPon/Expression/Internal/Playbackを送る。PlaybackがCurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情のアクティブ状態は選択条件にしない。
+表情Slotを引数としてExpressionSystem/Internal.ApplyExpressionを送る。PlaybackがCurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情のアクティブ状態は選択条件にしない。
 
 Version 47 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を 各CatalogエントリーのDV直下のfloat変数 に保存する。
@@ -389,13 +396,13 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
 
 Version 24では `ExpressionSystem/Core.AllowExternalInput` を `ExpressionSystem/Core.AllowHandGestures` へ変更した。
 bool APIも `ResoPon/Expression/AllowHandGestures` に変更する。旧変数名・旧Tagは生成しないため、外部連携は更新が必要。
-キーボードは共通APIの `ResoPon/Expression/SetGesture/Left`・`Right` を使い、ハンドジェスチャー停止中も入力できる。
+キーボードは共通APIの `ExpressionSystem/Method.SetGesture.Left`・`ExpressionSystem/Method.SetGesture.Right` を使い、ハンドジェスチャー停止中も入力できる。
 
 
 ジェスチャー番号は次の対応になる。
 Version 23では左右ジェスチャーのコンテキストメニューと専用のMenu/Left・Menu/Right APIを生成しない。
-コントローラーはTrySetGesture/Left・TrySetGesture/Rightを使い、対応するAllowHandGestures.Left・Right=trueのときだけ受け付ける。
-キーボードはSetGesture/Left・SetGesture/Rightのint APIを使い、許可フラグに関係なく受け付ける。Inputs側の送信は装着者限定。APIを直接呼ぶと未着用でも左右値を更新するが、表情選択はInternalで装着者に限定する。
+コントローラーはMethod.TrySetGesture.Left・Method.TrySetGesture.Rightを使い、対応するAllowHandGestures.Left・Right=trueのときだけ受け付ける。
+キーボードはMethod.SetGesture.Left・Method.SetGesture.Rightのint APIを使い、許可フラグに関係なく受け付ける。Inputs側の送信は装着者限定。APIを直接呼ぶと未着用でも左右値を更新するが、表情選択はInternalで装着者に限定する。
 動作確認では `Core/LeftGesture`、`RightGesture`、`CurrentExpression` と対応表の参照先を見る。
 
 | 番号 | 状態 |
@@ -508,9 +515,9 @@ VariableNameはExpressionSystem.Catalog.Clip/と対応するOutput.Idを連結�
 例：ExpressionSystem.Catalog.Clip/Body.Smile。独立したBinding空間やBindings参照は生成しない。
 新しいシェイプを追加する場合は、対応する Outputs とメッシュへの接続も用意する。
 通常出力の名前付き変数・子レコードの編集後は表情を再選択する。追跡出力の名前付き変数の編集は自動反映する。
-外部から直接適用する場合は、PlaybackスロットへResoPon/Expression/Internal/Playbackを表情Slot付きで送る。CurrentExpressionを先に編集する必要はない。
+外部から直接適用する場合は、PlaybackスロットへExpressionSystem/Internal.ApplyExpressionを表情Slot付きで送る。CurrentExpressionを先に編集する必要はない。
 
-## 外部イベント API（Version 37）
+## 外部イベント API（タグ名はVersion 85）
 
 Selectの引数は表情Slot。旧string ID送信は受理しない。内部PlaybackもSlot引数を必要とし、解除時はnullを送る。
 
@@ -519,13 +526,13 @@ Selectの引数は表情Slot。旧string ID送信は受理しない。内部Play
 
 | Tag | 引数 | 動作 |
 |---|---|---|
-| `ResoPon/Expression/TrySetGesture/Left` | int（範囲制限なし） | AllowHandGestures.Left が true のときSetGesture/Leftへ転送 |
-| `ResoPon/Expression/TrySetGesture/Right` | int（範囲制限なし） | AllowHandGestures.Right が true のときSetGesture/Rightへ転送 |
-| `ResoPon/Expression/SetGesture/Left` | int（範囲制限なし） | フラグに関係なく左手を更新。フラグ自体は維持 |
-| `ResoPon/Expression/SetGesture/Right` | int（範囲制限なし） | フラグに関係なく右手を更新。フラグ自体は維持 |
-| `ResoPon/Expression/Menu/Select` | Slot: 自身のCatalog直下の表情 | 有効性を検証し、boolをfalseにしてPlaybackへ送信 |
-| `ResoPon/Expression/ToggleHandGestures` | なし | 両手とも許可なら両手を停止、それ以外は両手を許可。左右値・表情は維持 |
-| `ResoPon/Expression/Reset` | なし | 表情を解除してBaseへ戻し、左右を0、ジェスチャー入力を有効にする |
+| `ExpressionSystem/Method.TrySetGesture.Left` | int（範囲制限なし） | AllowHandGestures.Left が true のときMethod.SetGesture.Leftへ転送 |
+| `ExpressionSystem/Method.TrySetGesture.Right` | int（範囲制限なし） | AllowHandGestures.Right が true のときMethod.SetGesture.Rightへ転送 |
+| `ExpressionSystem/Method.SetGesture.Left` | int（範囲制限なし） | フラグに関係なく左手を更新。フラグ自体は維持 |
+| `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし） | フラグに関係なく右手を更新。フラグ自体は維持 |
+| `ExpressionSystem/Method.SelectExpression` | Slot: 自身のCatalog直下の表情 | 有効性を検証し、boolをfalseにしてPlaybackへ送信 |
+| `ExpressionSystem/Method.ToggleHandGestures` | なし | 両手とも許可なら両手を停止、それ以外は両手を許可。左右値・表情は維持 |
+| `ExpressionSystem/Method.Reset` | なし | 表情を解除してBaseへ戻し、左右を0、ジェスチャー入力を有効にする |
 
 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp。
 Tag は大文字・小文字を含めて完全一致。引数型違い、無効・存在しない ID は入力状態を変更しない。
@@ -543,7 +550,7 @@ Resetもローカル装着者限定で、ジェスチャー無効時にも受け
 Dynamic ImpulseはネットワークRPCではない。API内の左右値・許可の更新は呼び出したクライアントで実行し、Internalの表情適用とリセットにはローカル着用条件が残る。
 
 旧 `ResoPon/Expression/v3/Select` と `v3/Automatic` は生成しない。
-旧 Select 送信側は Menu/Select へ変更する。ハンドジェスチャーを明示的に再開する場合は
+旧 Select 送信側は `ExpressionSystem/Method.SelectExpression` へ変更する。ハンドジェスチャーを明示的に再開する場合は
 `ExpressionSystem/AllowHandGestures.Left`・`Right` をtrueに設定する。
 
 ## FaceEmo に合わせた表情候補の検出

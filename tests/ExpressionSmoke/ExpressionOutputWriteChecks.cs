@@ -41,7 +41,7 @@ internal static class ExpressionOutputWriteChecks
             var outputA = outputs.FindChild("A"); var outputB = outputs.FindChild("B");
             var api = expressions.FindChild("API").FindChild("Receivers");
             void Playback(Slot expression) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(
-                core, "ResoPon/Expression/Internal/Playback", true, expression) == 1,
+                core, "ExpressionSystem/Internal.ApplyExpression", true, expression) == 1,
                 "explicit playback impulse reaches the receiver");
             for (int i = 0; i < model.Clips.Count; i++)
             {

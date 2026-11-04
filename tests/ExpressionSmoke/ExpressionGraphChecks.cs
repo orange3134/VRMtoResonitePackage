@@ -35,9 +35,9 @@ internal static class ExpressionGraphChecks
                 continue;
             }
             else if (item.Slot.GetComponent<ButtonDynamicImpulseTrigger>() is { } toggle &&
-                toggle.PressedTag.Value.StartsWith("ResoPon/Expression/ToggleHandGestures", StringComparison.Ordinal))
+                toggle.PressedTag.Value.StartsWith("ExpressionSystem/Method.ToggleHandGestures", StringComparison.Ordinal))
             {
-                bool allow = toggle.PressedTag.Value == "ResoPon/Expression/ToggleHandGestures"
+                bool allow = toggle.PressedTag.Value == "ExpressionSystem/Method.ToggleHandGestures"
                     ? ExpressionTestFields.BothHandsAllowed(expressions)
                     : ExpressionTestFields.HandGesturesAllowed(expressions, toggle.PressedTag.Value.Split('/').Last());
                 CheckPermissionColor(item, allow);
@@ -368,22 +368,24 @@ internal static class ExpressionGraphChecks
             .Concat(nodes.OfType<Nodes.ValueObjectInput<string>>().Select(node => node.Value.Value));
         Check(tags.All(tag => tag == null ||
             (!tag.StartsWith("ResoPon/Expression/AllowHandGestures", StringComparison.Ordinal) &&
-             !tag.StartsWith("ResoPon/Expression/ToggleHandGestures/", StringComparison.Ordinal))),
+             !tag.StartsWith("ExpressionSystem/Method.ToggleHandGestures.", StringComparison.Ordinal))),
             "removed permission APIs have no senders or receivers after generation, clone and reload");
+        Check(tags.All(tag => tag?.StartsWith("ResoPon/Expression/", StringComparison.Ordinal) != true),
+            "legacy expression tags are absent after generation, clone and reload");
         foreach (string hand in new[] { "Left", "Right" })
         {
             var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == "TrySetGesture" + hand);
             Check(receiver.GetType().Name == "DynamicImpulseReceiverWithValue`1" &&
                 receiver.GetType().GetGenericArguments().SequenceEqual(new[] { typeof(int) }),
                 hand + " receives int directly");
-            Check(receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/TrySetGesture/" + hand,
+            Check(receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ExpressionSystem/Method.TrySetGesture." + hand,
                 hand + " uses the exact hand Tag");
         }
         foreach (string hand in new[] { "Left", "Right" })
         {
             var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == "SetGesture" + hand);
             Check(receiver.GetType().GetGenericArguments().Single() == typeof(int) &&
-                receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/SetGesture/" + hand,
+                receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ExpressionSystem/Method.SetGesture." + hand,
                 "SetGesture has a shared int receiver independent of the input source: " + hand);
         }
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Select").GetType().GetGenericArguments().Single() == typeof(Slot),
@@ -399,12 +401,12 @@ internal static class ExpressionGraphChecks
                 "separate allow and disable menu items are absent");
             var toggle = menuItems.FindChild("Hand gestures")?.GetComponent<ButtonDynamicImpulseTrigger>();
             Check(toggle?.Target.Target == Descendant(expressions, "API/Receivers") &&
-                toggle.PressedTag.Value == "ResoPon/Expression/ToggleHandGestures" &&
+                toggle.PressedTag.Value == "ExpressionSystem/Method.ToggleHandGestures" &&
                 menuItems.GetComponentsInChildren<ButtonDynamicImpulseTrigger>().Count(b => b.PressedTag.Value == toggle.PressedTag.Value) == 1,
                 "one toggle menu targets this avatar's gesture permission API");
             var resetButton = menuItems.FindChild("Reset settings")?.GetComponent<ButtonDynamicImpulseTrigger>();
             Check(resetButton?.Target.Target == Descendant(expressions, "API/Receivers") &&
-                resetButton.PressedTag.Value == "ResoPon/Expression/Reset", "reset menu targets this avatar's reset API");
+                resetButton.PressedTag.Value == "ExpressionSystem/Method.Reset", "reset menu targets this avatar's reset API");
         }
         Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value != "ExpressionSystem/Override"),
             "no Override Slot state is generated");

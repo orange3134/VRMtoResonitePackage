@@ -127,7 +127,7 @@ internal static class ExpressionDynamicInputChecks
         {
             var tag = ((ISyncRef)VrmToResonitePackage.Expressions.ExpressionFlux.Member(trigger, "Tag")).Target
                 as FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueObjectInput<string>;
-            if (tag?.Value.Value?.StartsWith("ResoPon/Expression/Internal/", StringComparison.Ordinal) != true) continue;
+            if (tag?.Value.Value?.StartsWith("ExpressionSystem/Internal.", StringComparison.Ordinal) != true) continue;
             var target = ((ISyncRef)VrmToResonitePackage.Expressions.ExpressionFlux.Member(trigger, "TargetHierarchy")).Target;
             while (target != null && target is not ProtoFluxNode) target = target.Parent;
             Check(target is DynamicVariableObjectInput<Slot> input && Name(input) == "ExpressionSystem/References.Internal",

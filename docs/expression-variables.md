@@ -35,7 +35,7 @@ ProtoFlux の読み書きは対象の空間名と変数名を明示し、変数�
 実行時に対象が変わるレコードと GestureTable.LnRm の可変名は ReadDynamicVariable を使う。Selectionの対応表読み取りはSource未接続で、自身の階層からExpressionSystem空間を検索する。状態変数と固定の表セルは、各モジュールから共通の ExpressionSystem 空間の Dynamic Variable Input で読める。
 
 Version 17 で単一モジュールを統合・空間名を階層化し、Version 18 で DV 配下の1変数1スロット配置に統一した。旧形式の空間は新規生成しない。既存パッケージは再変換・再インポートで更新する。
-DynamicVariable を直接読む外部処理は新しい名前へ変更する。公開 Dynamic Impulse の Tag・引数は Version 4 と同じ。
+DynamicVariable を直接読む外部処理は新しい名前へ変更する。公開 Dynamic Impulse の現行Tag・引数は末尾の定数一覧を参照。Version 85でTagの命名を統一した。
 
 - **設定**：動作を調整する編集用の値。固定的に使われても、実装上は変更可能な変数。
 - **定義**：生成時の識別子・参照・メタデータ。編集時は関連データとの整合が必要。
@@ -48,7 +48,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 84 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 85 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -94,7 +94,7 @@ PlaybackはOutputsを1回走査し、CurrentExpression自身をSourceとして
 値が0であることと、変数が存在しないことを区別する。表情値の子スロットを走査する処理はない。
 通常出力の値・名前・子レコードの編集後は表情を再選択する。
 追跡出力は同じ名前を継続的に読み、値・追加・削除・名前変更をDynamicVariable更新後に反映する。
-表情Slotを引数としてResoPon/Expression/Internal/Playbackを送る。Playbackが受信SlotをCurrentExpressionへ設定してから通常出力へ適用する。nullは表情解除。通常出力は参照の直接編集だけでは更新されない。Playbackの値選択ではClip・Binding・Outputスロットのアクティブ状態を判定しない。
+表情Slotを引数としてExpressionSystem/Internal.ApplyExpressionを送る。Playbackが受信SlotをCurrentExpressionへ設定してから通常出力へ適用する。nullは表情解除。通常出力は参照の直接編集だけでは更新されない。Playbackの値選択ではClip・Binding・Outputスロットのアクティブ状態を判定しない。
 
 ### 読めるキーと禁止文字の変換（Version 30）
 
@@ -207,7 +207,7 @@ OriginalDriverは元コンポーネント自体ではなく、元のActiveLink�
 
 ## Inputs/Keyboard/Left・Right
 
-Version 72のTagの既定値は `ResoPon/Expression/SetGesture/Left`・`Right`。TrySetGesture APIと違い、AllowHandGestures=falseでも受け付ける。Version 24～71の旧名は `ResoPon/Expression/Keyboard/Left`・`Right`。
+Version 85のTagの既定値は `ExpressionSystem/Method.SetGesture.Left`・`ExpressionSystem/Method.SetGesture.Right`。TrySetGesture APIと違い、AllowHandGestures=falseでも受け付ける。Version 72～84は `ResoPon/Expression/SetGesture/Left`・`Right`、Version 24～71は `ResoPon/Expression/Keyboard/Left`・`Right`。
 
 各手の DynamicVariableSpace は `ExpressionSystem.Input.Keyboard`。
 Version 63の変数は `DV/Tag`、`DV/Modifier`、`DV/Key.0`〜`DV/Key.9` の各 Slot に置く。
@@ -311,14 +311,14 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 
 | C# 定数 | Tag | 引数・役割 |
 |---|---|---|
-| `TrySetGestureLeftTag` / `TrySetGestureRightTag` | `ResoPon/Expression/TrySetGesture/Left` / `ResoPon/Expression/TrySetGesture/Right` | int（範囲制限なし）。対応するAllowHandGestures.Left・Right がtrueの場合だけSetGestureへ転送 |
-| `SetGestureLeftTag` / `SetGestureRightTag` | `ResoPon/Expression/SetGesture/Left` / `ResoPon/Expression/SetGesture/Right` | int（範囲制限なし）。入力元共通の更新処理。ジェスチャー許可に関係なく左右値を更新。フラグは維持 |
-| `SelectTag` | `ResoPon/Expression/Menu/Select` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してPlaybackへ渡す。null・範囲外は無視 |
-| `ToggleHandGesturesTag` | `ResoPon/Expression/ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
-| `ResetTag` | `ResoPon/Expression/Reset` | 引数なし。ローカル着用中に左右値・許可・表情を初期状態へ戻す |
-| `ResetStateTag` | `ResoPon/Expression/Internal/Reset` | 引数なし。公開Resetから呼び出すLifecycleのリセット処理 |
-| `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。左右入力イベントから選択更新を同期実行 |
-| `PlaybackTickTag` | `ResoPon/Expression/Internal/Playback` | Slot。受信SlotをCurrentExpressionへ設定し、終端ポーズを同期適用。nullは解除。非nullはローカル装着者だけが受理し、未装着時もnullは受理する |
+| `TrySetGestureLeftTag` / `TrySetGestureRightTag` | `ExpressionSystem/Method.TrySetGesture.Left` / `ExpressionSystem/Method.TrySetGesture.Right` | int（範囲制限なし）。対応するAllowHandGestures.Left・Right がtrueの場合だけSetGestureへ転送 |
+| `SetGestureLeftTag` / `SetGestureRightTag` | `ExpressionSystem/Method.SetGesture.Left` / `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし）。入力元共通の更新処理。ジェスチャー許可に関係なく左右値を更新。フラグは維持 |
+| `SelectTag` | `ExpressionSystem/Method.SelectExpression` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してPlaybackへ渡す。null・範囲外は無視 |
+| `ToggleHandGesturesTag` | `ExpressionSystem/Method.ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
+| `ResetTag` | `ExpressionSystem/Method.Reset` | 引数なし。ローカル着用中に左右値・許可・表情を初期状態へ戻す |
+| `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Resetから呼び出すLifecycleのリセット処理 |
+| `SelectionTickTag` | `ExpressionSystem/Internal.UpdateSelection` | 引数なし。左右入力イベントから選択更新を同期実行 |
+| `PlaybackTickTag` | `ExpressionSystem/Internal.ApplyExpression` | Slot。受信SlotをCurrentExpressionへ設定し、終端ポーズを同期適用。nullは解除。非nullはローカル装着者だけが受理し、未装着時もnullは受理する |
 
 Internal の3つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
 Version 74で未使用の `ResoPon/Expression/Internal/Initialize` を廃止した。自動初期化はLifecycleのイベントから実行する。

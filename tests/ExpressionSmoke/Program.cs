@@ -489,8 +489,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "unworn Reset reaches the still-gated Internal Lifecycle without clearing API-written state");
         // Non-neutral hand state must survive rejected wearer-only private updates.
         var outputState = expressions.FindChild("Outputs").Children.Single();
-        foreach (var (board, tag) in new[] { ("Selection", "ResoPon/Expression/Internal/Selection"),
-            ("Lifecycle", "ResoPon/Expression/Internal/Reset") })
+        foreach (var (board, tag) in new[] { ("Selection", "ExpressionSystem/Internal.UpdateSelection"),
+            ("Lifecycle", "ExpressionSystem/Internal.ResetState") })
             Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core, tag, true) == 1,
                 "shared Internal hierarchy reaches exactly one private stage receiver: " + board);
         await Frames();

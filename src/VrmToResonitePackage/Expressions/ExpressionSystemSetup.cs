@@ -9,20 +9,20 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
-    internal const string TrySetGestureLeftTag = "ResoPon/Expression/TrySetGesture/Left";
-    internal const string TrySetGestureRightTag = "ResoPon/Expression/TrySetGesture/Right";
-    internal const string SetGestureLeftTag = "ResoPon/Expression/SetGesture/Left";
-    internal const string SetGestureRightTag = "ResoPon/Expression/SetGesture/Right";
-    internal const string SelectTag = "ResoPon/Expression/Menu/Select";
-    internal const string ResetTag = "ResoPon/Expression/Reset";
-    internal const string ToggleHandGesturesTag = "ResoPon/Expression/ToggleHandGestures";
+    internal const string TrySetGestureLeftTag = "ExpressionSystem/Method.TrySetGesture.Left";
+    internal const string TrySetGestureRightTag = "ExpressionSystem/Method.TrySetGesture.Right";
+    internal const string SetGestureLeftTag = "ExpressionSystem/Method.SetGesture.Left";
+    internal const string SetGestureRightTag = "ExpressionSystem/Method.SetGesture.Right";
+    internal const string SelectTag = "ExpressionSystem/Method.SelectExpression";
+    internal const string ResetTag = "ExpressionSystem/Method.Reset";
+    internal const string ToggleHandGesturesTag = "ExpressionSystem/Method.ToggleHandGestures";
     internal static string HandGesturePermission(string hand) => "AllowHandGestures." + hand;
     private readonly ExpressionModel _model;
     private readonly Slot _root, _catalog, _internal, _outputs, _table, _api, _inputs;
     private readonly Slot _lifecycle, _selection, _playback;
-    private const string PlaybackTickTag = "ResoPon/Expression/Internal/Playback";
-    private const string SelectionTickTag = "ResoPon/Expression/Internal/Selection";
-    private const string ResetStateTag = "ResoPon/Expression/Internal/Reset";
+    private const string PlaybackTickTag = "ExpressionSystem/Internal.ApplyExpression";
+    private const string SelectionTickTag = "ExpressionSystem/Internal.UpdateSelection";
+    private const string ResetStateTag = "ExpressionSystem/Internal.ResetState";
     private GesturePairCompiler _compiled;
     private readonly Dictionary<string, Slot> _clips = new();
     private readonly Dictionary<string, Slot> _outputSlots = new();
@@ -49,7 +49,7 @@ internal sealed partial class ExpressionSystemSetup
         }
         Reference<Slot>(_root, "CurrentExpression", null);
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 84);
+        Data(_root, "Version", 85);
         Reference(_root, "References.API", _api);
         Reference(_root, "References.Catalog", _catalog);
     }
