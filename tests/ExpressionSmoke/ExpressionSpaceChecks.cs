@@ -113,8 +113,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 81,
-            "GestureTable reference on the table slot uses package version 81");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 82,
+            "direct gesture selection payload uses package version 82");
         Check(root.ExpressionVariables<DynamicValueVariable<bool>>().Count(v =>
             v.VariableName.Value is "ExpressionSystem/AllowHandGestures.Left" or "ExpressionSystem/AllowHandGestures.Right") == 2 &&
             root.ExpressionVariables<DynamicValueVariable<bool>>().All(v => v.VariableName.Value != "ExpressionSystem/AllowHandGestures"),

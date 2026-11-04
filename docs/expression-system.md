@@ -3,6 +3,9 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 82ではSelectionの対応表読み取り結果をPlayback送信ノードのValueへ直接接続する。
+一時保存用のLocalObject・ObjectWrite・Sequenceを省き、着用判定と同期通知は維持する。
+
 Version 81では対応表への固定参照を `ExpressionSystem/GestureTable` に変更し、
 `Expressions/DV/GestureTable` 自体にDynamicReferenceVariable<Slot>を付けて自分のSlotを参照する。
 旧 `References.GestureTable`・`References.DV.GestureTable` とその専用スロットは生成しない。

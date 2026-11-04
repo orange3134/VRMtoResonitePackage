@@ -11,17 +11,10 @@ internal sealed partial class ExpressionSystemSetup
         // Fixed system state binds to the named ancestor space; selected clips stay dynamic.
         var g = new ExpressionFlux(_selection);
         var core = g.Ref(_internal);
-        var actions = new List<IWorldElement>();
-
         var left = g.Read<int>(core, SystemSpace, "LeftGesture");
         var right = g.Read<int>(core, SystemSpace, "RightGesture");
         var candidate = ReadGesturePair(g, left, right);
-        // Capture the mapped Slot for this update regardless of its active state.
-        var selected = g.Local<Slot>();
-        actions.Add(g.Set<Slot>(selected, candidate));
-
-        actions.Add(g.Trigger<Slot>(g.Ref(_internal), g.Text(PlaybackTickTag), selected));
-        var select = g.Sequence(actions.ToArray());
+        var select = g.Trigger<Slot>(core, g.Text(PlaybackTickTag), candidate);
         ReceiveUpdate(g, SelectionTickTag, select);
     }
 

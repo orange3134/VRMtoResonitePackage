@@ -48,7 +48,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 81 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 82 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions/DV/GestureTable | `GestureTable` | Slot | 自身のSlot | 定義。Selectionが対応表を読む参照先。Version 81で旧 `References.GestureTable` から変更し、このスロットへ直接配置 |
@@ -325,8 +325,8 @@ Internal の3つは公開操作用ではない。メニューボタンの送信�
 Version 74で未使用の `ResoPon/Expression/Internal/Initialize` を廃止した。自動初期化はLifecycleのイベントから実行する。
 Version 75の個別ハンドメニューは `ButtonToggle.TargetValue` から自身の `AllowHandGestures.Left`・`Right` のValueを直接変更する。両手メニューは引き続きToggle APIを使う。
 Version 76で未使用のAllowHandGestures両手/左右とToggleHandGestures左右の5つのAPIを廃止した。設定用のDynamicVariableは維持する。
-選択中の一時候補、Catalog検索で見つけた表情参照は LocalObject、初期化済みフラグは StoredValue<bool> を使う。
-これらも DynamicVariable の保存変数とは区別する。
+Selectionは対応表から読み取った表情Slotを送信ノードへ直接渡し、一時候補のLocalObjectは使わない。
+初期化済みフラグは StoredValue<bool> を使い、DynamicVariable の保存変数とは区別する。
 
 現行版は `PreviousOwner`、`Override`、`LeftInput`、`RightInput` という項目を生成しない。
 メニュー選択はAllowHandGestures.Left・Right=falseとCurrentExpressionで保持する。キーボードは停止せず、次のショートカットで表情を変更できる。
