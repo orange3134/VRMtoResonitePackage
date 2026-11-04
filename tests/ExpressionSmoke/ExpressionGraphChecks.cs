@@ -416,7 +416,8 @@ internal static class ExpressionGraphChecks
         var core = Descendant(expressions, "Internal");
         Check(core.ExpressionVariables<DynamicValueVariable<int>>().All(v => v.VariableName.Value != "ExpressionSystem/SelectionStatus"),
             "Core contains no SelectionStatus diagnostic variable");
-        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().Where(v => !v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) &&
+        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().Where(v => v.VariableName.Value != "ExpressionSystem/GestureTable" &&
+                !v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) &&
                 !v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal))
             .Select(v => v.VariableName.Value).SequenceEqual(new[] { "ExpressionSystem/CurrentExpression" }),
             "Core stores only the current expression, without intermediate diagnostic references");

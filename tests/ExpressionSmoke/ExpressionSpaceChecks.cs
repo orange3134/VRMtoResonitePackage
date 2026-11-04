@@ -58,7 +58,7 @@ internal static class ExpressionSpaceChecks
             "Internal directly contains exactly the three logic boards");
         Check(root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/", StringComparison.Ordinal))
-            .All(v => v.VariableName.Value == "ExpressionSystem/CurrentExpression" ||
+            .All(v => v.VariableName.Value is "ExpressionSystem/CurrentExpression" or "ExpressionSystem/GestureTable" ||
                 v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal) ||
                 v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal)),
             "fixed system Slot references use References; current expression and gesture mappings retain their keys");
@@ -106,14 +106,15 @@ internal static class ExpressionSpaceChecks
             foreach (var variable in root.GetComponentsInChildren<DynamicReferenceVariable<T>>())
             {
                 Placement(variable, variable.VariableName.Value);
-                Check(variable.VariableName.Value.StartsWith(Prefix(variable.Slot), StringComparison.Ordinal),
+                Check(variable.VariableName.Value == "ExpressionSystem/GestureTable" ||
+                    variable.VariableName.Value.StartsWith(Prefix(variable.Slot), StringComparison.Ordinal),
                     "reference belongs to its record's space: " + variable.VariableName.Value);
             }
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 80,
-            "renamed gesture table reference and flat controller hierarchy use package version 80");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 81,
+            "GestureTable reference on the table slot uses package version 81");
         Check(root.ExpressionVariables<DynamicValueVariable<bool>>().Count(v =>
             v.VariableName.Value is "ExpressionSystem/AllowHandGestures.Left" or "ExpressionSystem/AllowHandGestures.Right") == 2 &&
             root.ExpressionVariables<DynamicValueVariable<bool>>().All(v => v.VariableName.Value != "ExpressionSystem/AllowHandGestures"),
@@ -122,6 +123,9 @@ internal static class ExpressionSpaceChecks
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),
             "table rows are readable from the system root");
+        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable", out var table) &&
+            table == root.FindChild("DV").FindChild("GestureTable"),
+            "table self-reference is readable alongside its row variables");
         var core = root.FindChild("Internal");
         Check(core.WriteDynamicVariable("Expr/AllowExternalInput", false) != DynamicVariableWriteResult.Success,
             "legacy shared-space writes cannot modify the new Core");

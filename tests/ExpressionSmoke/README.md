@@ -1,5 +1,10 @@
 # Expression integration checks
 
+Version 81 attaches the ExpressionSystem/GestureTable reference directly to the
+DV/GestureTable slot and targets that slot itself. Checks verify placement, absence
+of both old reference names, root-space reads alongside GestureTable.LnRm rows,
+and bound Selection inputs after generation, cloning and package reload.
+
 Version 80 explicitly binds References.GestureTable to DV/GestureTable and places
 Touch/Index/Vive/WindowsMR/Cosmos directly below Inputs/HandGestures. Structure and
 reference checks reject the old reference name and Modules wrapper after generation,

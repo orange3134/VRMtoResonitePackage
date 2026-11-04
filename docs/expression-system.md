@@ -3,8 +3,12 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
-Version 80では対応表への固定参照を `ExpressionSystem/References.GestureTable` として明示する。
-参照先は `Expressions/DV/GestureTable` のままで、スロット配置由来の `References.DV.GestureTable` は生成しない。
+Version 81では対応表への固定参照を `ExpressionSystem/GestureTable` に変更し、
+`Expressions/DV/GestureTable` 自体にDynamicReferenceVariable<Slot>を付けて自分のSlotを参照する。
+旧 `References.GestureTable`・`References.DV.GestureTable` とその専用スロットは生成しない。
+子の `L0R0` などは従来どおり `ExpressionSystem/GestureTable.L0R0` で表情Slotを参照する。
+
+Version 80では対応表の参照名を明示し、入力階層を整理した。
 `Inputs/HandGestures/Modules` を廃止し、Touch・Index・Vive・WindowsMR・Cosmosを `Inputs/HandGestures` 直下へ配置する。
 各機種のDV・左右Logic・名前空間は維持する。既存パッケージへ反映するには再変換が必要。
 
@@ -164,7 +168,7 @@ Expressions/
     LeftGesture・RightGesture      左右の入力状態
     AllowHandGestures.Left・Right          入力許可
     CurrentExpression              現在の表情（Slot参照）
-    GestureTable/                  対応表の変数をまとめるスロット
+    GestureTable/                  自身へのSlot参照DVと、対応表の変数をまとめるスロット
       L0R0〜L7R7                   64個の Catalog 参照
     Version・SmoothingSpeed        バージョンと補間速度
     References.*                   API・Catalog・内部Slotの固定参照

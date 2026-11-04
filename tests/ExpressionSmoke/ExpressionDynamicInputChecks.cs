@@ -96,14 +96,15 @@ internal static class ExpressionDynamicInputChecks
     private static void CheckSlotReferences(Slot root)
     {
         var tableReference = root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Single(v => v.VariableName.Value == "ExpressionSystem/References.GestureTable");
-        Check(tableReference.Slot.Name == "References.GestureTable" &&
-            tableReference.Reference.Target == root.FindChild("DV").FindChild("GestureTable") &&
+            .Single(v => v.VariableName.Value == "ExpressionSystem/GestureTable");
+        Check(tableReference.Slot == root.FindChild("DV").FindChild("GestureTable") &&
+            tableReference.Reference.Target == tableReference.Slot &&
+            root.FindChild("DV").FindChild("References.GestureTable") == null &&
             root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v =>
-                v.VariableName.Value != "ExpressionSystem/References.DV.GestureTable") &&
+                v.VariableName.Value is not ("ExpressionSystem/References.DV.GestureTable" or "ExpressionSystem/References.GestureTable")) &&
             root.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>().All(n =>
-                Name(n) != "ExpressionSystem/References.DV.GestureTable"),
-            "References.GestureTable binds to this avatar's DV/GestureTable without the old reference name");
+                Name(n) is not ("ExpressionSystem/References.DV.GestureTable" or "ExpressionSystem/References.GestureTable")),
+            "GestureTable reference lives on and targets this avatar's DV/GestureTable without old names or slots");
         Check(root.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.RefObjectInput<Slot>>().Count == 0,
             "no fixed Slot reference inputs are exported");
         Check(!root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Any(v =>
@@ -141,7 +142,8 @@ internal static class ExpressionDynamicInputChecks
                 "only traversed Output writes require a Target: " + path.Value.Value);
         }
         var references = root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) ||
+            .Where(v => v.VariableName.Value == "ExpressionSystem/GestureTable" ||
+                v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) ||
                 v.VariableName.Value.StartsWith("ExpressionSystem.Input.HandGestures/References.", StringComparison.Ordinal)).ToArray();
         Check(references.All(v => v.VariableName.Value != "ExpressionSystem/References.None"),
             "null constants generate no reference variable");

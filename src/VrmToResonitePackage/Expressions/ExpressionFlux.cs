@@ -51,7 +51,7 @@ internal sealed class ExpressionFlux
             });
         var existing = expressions.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value is "ExpressionSystem/References.API" or "ExpressionSystem/References.Catalog"
-                or "ExpressionSystem/References.GestureTable").ToArray();
+                or "ExpressionSystem/GestureTable").ToArray();
         var references = existing.ToDictionary(v => v.Reference.Target, v => v.VariableName.Value);
         var usedNames = new Dictionary<Slot, HashSet<string>>();
         foreach (var literal in nodes.OfType<Nodes.RefObjectInput<Slot>>().ToArray())

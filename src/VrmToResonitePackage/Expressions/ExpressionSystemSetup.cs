@@ -49,10 +49,12 @@ internal sealed partial class ExpressionSystemSetup
         }
         Reference<Slot>(_root, "CurrentExpression", null);
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 80);
+        Data(_root, "Version", 81);
         Reference(_root, "References.API", _api);
         Reference(_root, "References.Catalog", _catalog);
-        Reference(_root, "References.GestureTable", _table);
+        var tableReference = _table.AttachComponent<DynamicReferenceVariable<Slot>>();
+        tableReference.VariableName.Value = Path(SystemSpace, "GestureTable");
+        tableReference.Reference.Target = _table;
     }
 
     public static Task<Slot> BuildAsync(Slot avatar, ExpressionModel model, Func<ExpressionBinding, IField<float>> resolve,
