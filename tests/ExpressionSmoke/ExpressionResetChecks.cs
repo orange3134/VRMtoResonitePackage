@@ -46,8 +46,7 @@ internal static class ExpressionResetChecks
             button.Pressed(null, default);
             void CheckReset()
             {
-                Check(Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 0 &&
-                    Get<string>(core, "PairKey") == "L0R0" && BothHandsAllowed(core) &&
+                Check(Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 0 && BothHandsAllowed(core) &&
                     Reference<Slot>(core, "CurrentExpression") == null,
                     "reset button synchronously clears expression and hands and enables hand gestures");
                 Check(outputs.All(o => !TryReadSelectedValue(o, out _)), "reset clears every resolved output binding");

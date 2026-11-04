@@ -1,5 +1,10 @@
 # Expression integration checks
 
+Version 79 removes the write-only PairKey diagnostic. Graph checks reject its
+variable and references after generation, cloning and reload. Runtime checks assert
+stored hand values and actual CurrentExpression selection, including all 64 table
+rows, idle table edits, direct selection, reset and unworn lifecycle behavior.
+
 Version 78 bypasses SmoothValue for mesh outputs originally driven by an
 EyeLinearDriver.OpenCloseTarget. Real meshes test short closing/reopening pulses,
 independent left/right eyes, reversed ranges, half/fully closed expressions, missing
@@ -222,7 +227,7 @@ StabilitySeconds must update that module's hands while other modules retain thei
 run on clones and package reloads. Existing same-frame events, editable tables, removable modules,
 wearer departure/reattachment and clone playback cover the synchronization behavior of Core inputs.
 
-Version 23 selects Catalog entries directly without changing LeftGesture/RightGesture or PairKey.
+Version 23 selects Catalog entries directly without changing LeftGesture/RightGesture or the then-existing PairKey diagnostic (removed in Version 79).
 Actual expression buttons disable hand gesture input, write CurrentExpression and execute Playback.
 Unmapped Catalog entries and copied templates are selectable. Invalid Slot references preserve selection.
 Only accepted gesture API events run Selection. Data edits, input permission changes and initialization
@@ -381,7 +386,7 @@ unmapped, disabled and inactive expressions and after removing the last mapping.
 Selection validation and direct Catalog ID lookup are covered independently.
 
 Version 22 uses GestureTable.Pair.L0R0 through GestureTable.Pair.L7R7 and the string
-Core.PairKey (initially L0R0). All 64 keys and synchronous pair lookups are checked.
+Core.PairKey (initially L0R0, removed in Version 79). All 64 keys and synchronous pair lookups are checked.
 A conflicting legacy numeric key must be ignored. Gesture Selection uses FormatString
 with ExpressionSystem/GestureTable.Pair.L{0}R{1} and no integer multiply/divide/modulo
 for packing or unpacking pair indices, including

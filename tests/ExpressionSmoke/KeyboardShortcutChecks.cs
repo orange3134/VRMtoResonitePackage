@@ -76,7 +76,7 @@ internal static class KeyboardShortcutChecks
             Key(InputKey.Keypad8, false); await Frames();
             Key(InputKey.Shift, false); Key(InputKey.Control, true); Key(InputKey.Keypad9, true); await Frames();
             Key(InputKey.Keypad9, false); await Frames();
-            Check(GestureValue(0) == 8 && GestureValue(1) == 9 && Get<string>(core, "PairKey") == "L8R9" &&
+            Check(GestureValue(0) == 8 && GestureValue(1) == 9 &&
                 Reference<Slot>(core, "CurrentExpression") == null, "keypad 8/9 produce an unmapped L8R9 without truncation");
             var expression = expressions.FindChild("Catalog").Children.First();
             extendedRow = expressions.FindChild("DV").FindChild("GestureTable").AddSlot("L8R9");
@@ -94,7 +94,7 @@ internal static class KeyboardShortcutChecks
             Key(InputKey.Shift, true); Key(InputKey.Control, true); await Frames();
             Check(GestureValue(0) == 0 && GestureValue(1) == 0, "modifiers alone do not send a gesture");
             Key(InputKey.Keypad1, true); await Frames();
-            Check(GestureValue(0) == 1 && GestureValue(1) == 1 && Get<string>(core, "PairKey") == "L1R1" &&
+            Check(GestureValue(0) == 1 && GestureValue(1) == 1 &&
                 Reference<Slot>(core, "CurrentExpression") == Reference<Slot>(core, "GestureTable.L1R1"),
                 "both keyboard events settle on the simultaneous hand pair");
             Gesture(0, 4); Gesture(1, 5); await Frames();

@@ -4,6 +4,13 @@ using FrooxEngine;
 // Program must load before Main can register the external Resonite DLL resolver.
 internal static class ExpressionTestFields
 {
+    public static (int Left, int Right) Gestures(Slot slot)
+    {
+        int Read(string hand) => slot.ExpressionVariables<DynamicValueVariable<int>>()
+            .Single(v => v.VariableName.Value == VariablePath(slot, hand + "Gesture")).Value.Value;
+        return (Read("Left"), Read("Right"));
+    }
+
     public static bool HandGesturesAllowed(Slot slot, string hand) => slot.ExpressionVariables<DynamicValueVariable<bool>>()
         .Single(v => v.VariableName.Value == VariablePath(slot, "AllowHandGestures." + hand)).Value.Value;
     public static bool BothHandsAllowed(Slot slot) => HandGesturesAllowed(slot, "Left") && HandGesturesAllowed(slot, "Right");

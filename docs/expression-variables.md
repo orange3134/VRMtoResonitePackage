@@ -47,7 +47,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 78 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 79 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -56,8 +56,8 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 Version 22で左右を明示する参照名に変更し、Version 28で `.Pair` を除いた `GestureTable.LnRm` に変更した。例：左1・右2は
 `GestureTable.L1R2`。選択時に左×8＋右の番号へ変換せず、左右を文字列化して直接参照する。
-状態の診断値も数値の `PairIndex` から文字列の `PairKey` へ変更した。
-Version 37のSelect APIは表情Slotを受け取り、自身のCatalog直下で有効な表情かを検証してPlaybackへ渡す。CurrentExpressionの設定はPlaybackが担当する。左右値とPairKeyは維持する。
+状態の診断値も数値の `PairIndex` から文字列の `PairKey` へ変更したが、実行処理には使わないためVersion 79で削除した。
+Version 37のSelect APIは表情Slotを受け取り、自身のCatalog直下で有効な表情かを検証してPlaybackへ渡す。CurrentExpressionの設定はPlaybackが担当する。左右値は維持する。
 生成アバターは旧 `Pair.0`〜`Pair.63` を参照しない。旧パッケージの変更には再変換が必要。
 
 Version 20から `SmoothingSpeed` を共有する。各SmoothValueと同じSlotの
@@ -129,12 +129,11 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 |---|---|---|---|
 | `AllowHandGestures.Left` / `AllowHandGestures.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとTrySetGesture APIだけの受付可否。SetGesture・メニューはこの設定で停止しない。表情の直接選択で両方false、初期化・リセットで両方true。個別メニューのButtonToggleや変数の直接編集で変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューでは変更しない |
-| `PairKey` | string | L0R0 | 最後の左右入力イベントでSelectionが組み立てたキー。直接選択中の表情を示すものではない |
 | `CurrentExpression` | Slot | null | Playbackが受信した表情Slot。Selectionは対応表の参照をそのまま渡し、Select APIは自身のCatalog直下かだけ確認する。解除はnull |
 
 状態の DynamicVariable に保持する表情参照は CurrentExpression だけ。Selection は対応表から読み取ったSlot（未割当・削除済みならnull）をそのままPlaybackへ送り、PlaybackがCurrentExpressionへ設定する。
 MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
-左右入力の参照先確認にはPairKeyとGestureTableの行を使う。直接選択の確認にはCurrentExpressionを使う。
+左右入力の参照先確認にはLeftGesture・RightGestureとGestureTableの `L{左}R{右}` 行を使う。実際の選択結果はCurrentExpressionで確認する。
 
 AllowHandGestures.Left・Right 以外は状態として扱う。SelectionStatus は生成しない。入力モードは左右の許可設定、再生対象は CurrentExpression で確認する。未割当・参照先の削除は CurrentExpression=null となる。非アクティブな表情も選択できる。
 Version 64では旧 `ExpressionSystem/AllowHandGestures` を定義しない。両手を同じ値へ設定するbool APIはVersion 75まで維持し、Version 76で廃止した。
@@ -147,7 +146,7 @@ LifecycleはOnStartと着用状態の変更時に動き、現在の装着者が�
 初期化済みかは保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。
 公開APIは暗黙の初期化を行わず、初期化前の入力は後続のLifecycle初期化でクリアされる。Version 77以降はAPI内で着用判定せず、未着用でも左右値・許可を更新する。Internalの表情適用・リセットには着用判定が残る。
 
-初期化時は左右値を 0、PairKey を L0R0、AllowHandGestures.Left・Right を両方true、
+初期化時は左右値を 0、AllowHandGestures.Left・Right を両方true、
 Playbackへnullを送り、CurrentExpressionの解除と通常出力のBase復帰をまとめて実行する。追跡出力は専用DriveがBaseを反映する。
 その後の Selection と Playback の同期Writeで現在の対応表に応じた状態になる。
 
@@ -368,7 +367,7 @@ CurrentExpressionなど、実行中に値が変わる参照変数は初期値が
 ## Version 41：状態名と固定参照、Internal の階層
 
 状態変数の `Core.` 接頭辞を削除した。`LeftGesture`、`RightGesture`、
-`AllowHandGestures`、`PairKey`、`CurrentExpression` は ExpressionSystem 空間に直接登録する。
+`AllowHandGestures.Left`・`Right`、`CurrentExpression` は ExpressionSystem 空間に直接登録する。
 `CurrentExpression` と `GestureTable.LnRm` は References 接頭辞の対象外。
 固定参照は `References.Receiver`、`References.Catalog`、`References.Outputs`、
 `References.Internal.Lifecycle`、`References.Internal.Selection`、`References.Internal.Playback` などに統一する。

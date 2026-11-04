@@ -107,6 +107,11 @@ internal static class ExpressionGraphChecks
         Report(expressions);
         ExpressionLayoutChecks.CheckDirection(expressions);
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
+        Check(expressions.GetComponentsInChildren<DynamicValueVariable<string>>().All(v =>
+                v.VariableName.Value != "ExpressionSystem/PairKey") &&
+            expressions.GetComponentsInChildren<GlobalValue<string>>().All(v => v.Value.Value != "ExpressionSystem/PairKey") &&
+            nodes.OfType<Nodes.ValueObjectInput<string>>().All(v => v.Value.Value != "ExpressionSystem/PairKey"),
+            "PairKey variable and graph references are absent after generation, clone and reload");
         Check(nodes.OfType<Nodes.ValueObjectInput<string>>()
             .All(node => node.Value.Value != "ResoPon/Expression/Internal/Initialize") &&
             expressions.GetComponentsInChildren<GlobalValue<string>>()

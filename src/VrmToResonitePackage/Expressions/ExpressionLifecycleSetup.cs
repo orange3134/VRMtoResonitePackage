@@ -26,7 +26,6 @@ internal sealed partial class ExpressionSystemSetup
         }
         cleanup.Add(WriteHandGesturePermissions(g, g.Constant(true)));
         cleanup.Add(g.Trigger<Slot>(g.Ref(_internal), g.Text(PlaybackTickTag), g.Ref<Slot>(null)));
-        cleanup.Add(g.Write<string>(core, SystemSpace, "PairKey", g.Text("L0R0")));
 
         var clear = g.Sequence(cleanup.ToArray());
         var reset = g.Sequence(clear, g.Set<bool>(initialized, g.Constant(true)));

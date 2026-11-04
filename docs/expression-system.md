@@ -3,6 +3,9 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 79では診断専用だった `ExpressionSystem/PairKey` を削除した。実行処理からの読み取りはなく、
+Selectionは左右のGestureから `GestureTable.L{左}R{右}` を直接参照する。確認には左右値とCurrentExpressionを使う。
+
 Version 78では、生成時に瞬き接続を検出したメッシュ出力のSmoothValueを省略する。瞬きのタイミングと振幅を保ち、表情とのmax/min合成を維持する。詳細は出力構築の説明を参照。
 
 Version 77では、API内の `modular_avatar/AvatarWornLocal` 判定を削除した。
@@ -154,7 +157,7 @@ flowchart LR
 Expressions/
   DV/                              システム共通の変数（1変数1子 Slot）
     LeftGesture・RightGesture      左右の入力状態
-    AllowHandGestures.Left・Right・PairKey  入力許可と最後の組み合わせ
+    AllowHandGestures.Left・Right          入力許可
     CurrentExpression              現在の表情（Slot参照）
     GestureTable/                  対応表の変数をまとめるスロット
       L0R0〜L7R7                   64個の Catalog 参照
@@ -304,13 +307,12 @@ Inspector 上の状態変数名は `ExpressionSystem/LeftGesture` などで、Co
 | 状態変数 | 確認する内容 |
 |---|---|
 | `LeftGesture` / `RightGesture` | 各入力から届いた int の状態（範囲制限なし） |
-| `PairKey` | `L{左}R{右}` 形式の対応表キー（例：L1R2） |
 | AllowHandGestures.Left / Right | true=該当する手のジェスチャーを許可、false=停止。キーボード・表情メニューは常に使用可能 |
 | `CurrentExpression` | 対応表または直接選択から渡された再生対象。未割当・削除済みなら null |
 
 1. 左右の番号が違う場合は、`API/Receivers/TrySetGestureLeft`／`TrySetGestureRight`、転送先の `SetGestureLeft`／`SetGestureRight` と該当入力の `Logic` を調べる。
-2. キーが正しく表情が違う場合は、`PairKey` に対応する `GestureTable` の参照と `AllowHandGestures.Left`・`Right` を確認し、`Selection` を調べる。
-3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（末尾の LnRm は PairKey）の参照があるか確認する。表情Slotのアクティブ状態は選択に影響しない。参照先が削除されていないか確認する。
+2. 左右値が正しく表情が違う場合は、`GestureTable.L{左}R{右}` の参照と `AllowHandGestures.Left`・`Right` を確認し、`Selection` を調べる。
+3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（nはLeftGesture、mはRightGesture）の参照があるか確認する。表情Slotのアクティブ状態は選択に影響しない。参照先が削除されていないか確認する。
 4. 選択が正しく見た目が違う場合は、`Internal/Playback` と該当出力の `Base`、`TrackingWeight`、`Result` と、Resultの参照先からメッシュまでの駆動接続を調べる。
 
 `AllowHandGestures.Left`・`Right` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
@@ -342,7 +344,7 @@ Selection は左・右を文字列化して `L{左}R{右}` を組み立て、`Ex
 取得した参照（未割当・削除済みならnull）をその更新中のローカル値として確定し、Playbackへ同期送信する。
 PlaybackがCurrentExpressionへ設定し、終端値を即時にWriteする。同じ表情でも再適用する。
 同じ参照なら同じ固定ポーズになる。nullでの解除時は出力目標をBaseへ戻す。Slotの無効化では解除しない。
-対応表の参照を調べたい場合は、PairKey に対応する行を直接見る。
+対応表の参照を調べたい場合は、左右のGesture値に対応する `L{左}R{右}` の行を直接見る。
 SelectionStatus は生成・計算しない。入力モードは AllowHandGestures.Left・Right、再生対象は CurrentExpression で確認する。
 未割当・参照先の削除は CurrentExpression=null となる。表情SlotやCatalogが非アクティブでも選択・適用できる。
 
@@ -426,7 +428,7 @@ Backは表情選択APIを送らず、選択中の表情やハンドジェスチ�
 表情SlotはCatalog直下に保ち、サブメニュー配下の項目からSlot参照を送る。表示LabelはCatalog項目のLabelからValueCopyで取得する。
 項目のEnabledを自動制御しない。
 押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをSelect APIへ送る。自身のCatalog直下で有効な表情かを検証し、PlaybackがCurrentExpressionへ設定して適用する。
-AllowHandGestures.Left・Rightを両方falseにするが、LeftGesture・RightGesture・PairKeyは変更しない。GestureTable未割り当てでも選択できる。
+AllowHandGestures.Left・Rightを両方falseにするが、LeftGesture・RightGestureは変更しない。GestureTable未割り当てでも選択できる。
 同じ表情の再選択でもPlaybackを実行するため、名前付きfloat変数の編集も反映できる。
 表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `CurrentExpression` を参照して駆動する。
 Catalog・Imported menuともに選択中の表情は緑、それ以外は白。null用の白いOptionを先頭に置き、
@@ -515,7 +517,7 @@ Tag は大文字・小文字を含めて完全一致。引数型違い、無効�
 直接選択ではSelectionを経由せず、Playbackが固定ポーズと通常出力を同期更新する。追跡対象は通常のドライバー更新で反映する。
 boolの変更だけでは左右値も表情も変更しない。
 Version 25のコンテキストメニュー「Reset settings」は引数なしのReset APIを送る。
-CurrentExpression=null、左右のGesture=0、PairKey=L0R0、AllowHandGestures.Left・Rightを両方trueへ一括で戻し、各出力にBaseを反映する。
+CurrentExpression=null、左右のGesture=0、AllowHandGestures.Left・Rightを両方trueへ一括で戻し、各出力にBaseを反映する。
 GestureTableの割り当てやCatalog、キー設定は変更しない。L0R0に表情が割り当てられていてもリセットでは再選択せず、次の左右入力イベントで再評価する。
 Resetもローカル装着者限定で、ジェスチャー無効時にも受け付ける。
 初期化はLifecycleが担当し、複製・再ロード・再装着後のローカル着用時に bool=true、左右=0 に戻す。APIから暗黙の初期化は行わない。

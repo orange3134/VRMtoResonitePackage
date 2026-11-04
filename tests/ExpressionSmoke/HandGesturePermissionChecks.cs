@@ -105,8 +105,6 @@ internal static class HandGesturePermissionChecks
         var initialized = core.GetComponentsInChildren<Nodes.StoredValue<bool>>().Single();
         int Gesture(string hand) => core.ExpressionVariables<DynamicValueVariable<int>>()
             .Single(v => v.VariableName.Value == "ExpressionSystem/" + hand + "Gesture").Value.Value;
-        string Pair() => core.ExpressionVariables<DynamicValueVariable<string>>()
-            .Single(v => v.VariableName.Value == "ExpressionSystem/PairKey").Value.Value;
         var fixture = expressions.Parent.AddSlot("Temporary uninitialized gesture fixture");
         try
         {
@@ -133,22 +131,21 @@ internal static class HandGesturePermissionChecks
                 Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(fixture, prepareTag, true) == 1,
                     "the fresh-lifecycle fixture receives its preparation impulse");
                 Check(NoHandsAllowed(core), "fresh lifecycle starts with saved false permission values");
-                var previous = (Gesture("Left"), Gesture("Right"), Pair(), Reference<Slot>(core, "CurrentExpression"));
+                var previous = (Gesture("Left"), Gesture("Right"), Reference<Slot>(core, "CurrentExpression"));
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
                     hand == "Left" ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, true, 7);
                 Check(NoHandsAllowed(core) && previous ==
-                    (Gesture("Left"), Gesture("Right"), Pair(), Reference<Slot>(core, "CurrentExpression")),
+                    (Gesture("Left"), Gesture("Right"), Reference<Slot>(core, "CurrentExpression")),
                     hand + " early gesture with false permission is dropped without initialization or mutation");
                 string other = hand == "Left" ? "Right" : "Left";
                 int otherGesture = Gesture(other);
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
                     hand == "Left" ? ExpressionSystemSetup.SetGestureLeftTag : ExpressionSystemSetup.SetGestureRightTag, true, 6);
-                Check(NoHandsAllowed(core) && Gesture(hand) == 6 && Gesture(other) == otherGesture &&
-                    Pair() == $"L{Gesture("Left")}R{Gesture("Right")}",
+                Check(NoHandsAllowed(core) && Gesture(hand) == 6 && Gesture(other) == otherGesture,
                     hand + " early keyboard request updates only that hand without initializing permissions or opposite state");
-                var earlyPair = (Gesture("Left"), Gesture("Right"), Pair());
-                void Preserved() => Check(earlyPair == (Gesture("Left"), Gesture("Right"), Pair()),
-                    "early permission and selection APIs retain both hand values and their pair");
+                var earlyPair = (Gesture("Left"), Gesture("Right"));
+                void Preserved() => Check(earlyPair == (Gesture("Left"), Gesture("Right")),
+                    "early permission and selection APIs retain both hand values");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesTag, true);
                 Check(BothHandsAllowed(core), "early global toggle enables saved false permissions without an implicit reset");
                 Preserved();
@@ -172,11 +169,12 @@ internal static class HandGesturePermissionChecks
                 Preserved();
                 Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(fixture, updateTag, true) == 1,
                     "the fixture invokes the lifecycle event entry point");
-                Check(BothHandsAllowed(core) && Gesture("Left") == 0 && Gesture("Right") == 0 && Pair() == "L0R0",
+                Check(BothHandsAllowed(core) && Gesture("Left") == 0 && Gesture("Right") == 0,
                     "lifecycle initialization clears early keyboard input without replaying the dropped gesture");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
                     hand == "Left" ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, true, 7);
-                Check(Gesture(hand) == 7 && Pair() == (hand == "Left" ? "L7R0" : "L0R7"),
+                Check(Gesture(hand) == 7 && Gesture(other) == 0 &&
+                    Reference<Slot>(core, "CurrentExpression") == Reference<Slot>(expressions.FindChild("DV").FindChild("GestureTable"), hand == "Left" ? "L7R0" : "L0R7"),
                     hand + " subsequent gesture selects synchronously after initialization");
             }
         }
