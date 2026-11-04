@@ -10,20 +10,19 @@ internal sealed partial class ExpressionSystemSetup
 {
     private void BuildApi()
     {
-        var logic = _api.AddSlot("Logic");
-        BuildHandReceiver(new(logic.AddSlot("TrySetGestureLeft")), "Left", TrySetGestureLeftTag, checkPermission: true);
-        BuildHandReceiver(new(logic.AddSlot("TrySetGestureRight")), "Right", TrySetGestureRightTag, checkPermission: true);
-        BuildHandReceiver(new(logic.AddSlot("SetGestureLeft")), "Left", SetGestureLeftTag, checkPermission: false);
-        BuildHandReceiver(new(logic.AddSlot("SetGestureRight")), "Right", SetGestureRightTag, checkPermission: false);
-        BuildSelectReceiver(new(logic.AddSlot("Select")));
-        BuildHandGesturesEnabledReceiver(new(logic.AddSlot("AllowHandGestures")));
-        BuildHandGesturesToggleReceiver(new(logic.AddSlot("ToggleHandGestures")));
+        BuildHandReceiver(new(_api.AddSlot("TrySetGestureLeft")), "Left", TrySetGestureLeftTag, checkPermission: true);
+        BuildHandReceiver(new(_api.AddSlot("TrySetGestureRight")), "Right", TrySetGestureRightTag, checkPermission: true);
+        BuildHandReceiver(new(_api.AddSlot("SetGestureLeft")), "Left", SetGestureLeftTag, checkPermission: false);
+        BuildHandReceiver(new(_api.AddSlot("SetGestureRight")), "Right", SetGestureRightTag, checkPermission: false);
+        BuildSelectReceiver(new(_api.AddSlot("Select")));
+        BuildHandGesturesEnabledReceiver(new(_api.AddSlot("AllowHandGestures")));
+        BuildHandGesturesToggleReceiver(new(_api.AddSlot("ToggleHandGestures")));
         foreach (string hand in new[] { "Left", "Right" })
         {
-            BuildHandGesturesEnabledReceiver(new(logic.AddSlot("AllowHandGestures" + hand)), hand);
-            BuildHandGesturesToggleReceiver(new(logic.AddSlot("ToggleHandGestures" + hand)), hand);
+            BuildHandGesturesEnabledReceiver(new(_api.AddSlot("AllowHandGestures" + hand)), hand);
+            BuildHandGesturesToggleReceiver(new(_api.AddSlot("ToggleHandGestures" + hand)), hand);
         }
-        var reset = new ExpressionFlux(logic.AddSlot("Reset"));
+        var reset = new ExpressionFlux(_api.AddSlot("Reset"));
         ReceiveUpdate(reset, ResetTag, reset.Trigger(reset.Ref(_internal), ResetStateTag));
     }
 

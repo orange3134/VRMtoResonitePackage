@@ -140,7 +140,7 @@ internal static class ExpressionGraphChecks
         Check(Descendant(expressions, "Internal/Selection").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => !n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "gesture selection has no state-change monitors");
-        Check(Descendant(expressions, "API/Receivers/Logic/Select").GetComponentsInChildren<ProtoFluxNode>()
+        Check(Descendant(expressions, "API/Receivers/Select").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => n is not Nodes.Strings.FormatString), "direct selection does not look up gesture pairs");
         Check(nodes.All(n => n.Group?.IsValid == true), "all expression Flux groups are valid");
         Check(nodes.All(n => n.Slot.Parent.GetComponents<ProtoFluxNode>().Count == 0), "Flux nodes belong to logic boards, not other nodes");
@@ -300,11 +300,11 @@ internal static class ExpressionGraphChecks
         }
 
         foreach (string path in new[] { "Internal/Lifecycle", "Internal/Selection", "Internal/Playback",
-            "API/Receivers/Logic/TrySetGestureLeft", "API/Receivers/Logic/TrySetGestureRight",
-            "API/Receivers/Logic/SetGestureLeft", "API/Receivers/Logic/SetGestureRight",
-            "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowHandGestures", "API/Receivers/Logic/ToggleHandGestures", "API/Receivers/Logic/Reset",
-            "API/Receivers/Logic/AllowHandGesturesLeft", "API/Receivers/Logic/AllowHandGesturesRight",
-            "API/Receivers/Logic/ToggleHandGesturesLeft", "API/Receivers/Logic/ToggleHandGesturesRight" })
+            "API/Receivers/TrySetGestureLeft", "API/Receivers/TrySetGestureRight",
+            "API/Receivers/SetGestureLeft", "API/Receivers/SetGestureRight",
+            "API/Receivers/Select", "API/Receivers/AllowHandGestures", "API/Receivers/ToggleHandGestures", "API/Receivers/Reset",
+            "API/Receivers/AllowHandGesturesLeft", "API/Receivers/AllowHandGesturesRight",
+            "API/Receivers/ToggleHandGesturesLeft", "API/Receivers/ToggleHandGesturesRight" })
         {
             var board = Descendant(expressions, path);
             Check(board != null && boards.Any(g => g.Key == board), "independent logic board exists: " + path);
@@ -396,7 +396,7 @@ internal static class ExpressionGraphChecks
         var playback = Descendant(expressions, "Internal/Playback").GetComponentsInChildren<ProtoFluxNode>();
         Check(playback.Single(n => n.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal))
             .GetType().GetGenericArguments().SequenceEqual(new[] { typeof(Slot) }), "Playback receives a Slot");
-        Check(Descendant(expressions, "API/Receivers/Logic/Select").GetComponentsInChildren<ProtoFluxNode>()
+        Check(Descendant(expressions, "API/Receivers/Select").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => n.GetType().Name != "Children" && !n.GetType().Name.StartsWith("ForEachObject", StringComparison.Ordinal)),
             "Select validates the supplied Slot without scanning Catalog");
         var currentWrites = nodes.Where(n => n.GetType().Name == "WriteDynamicObjectVariable`1" &&

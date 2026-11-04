@@ -3,6 +3,10 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 73では、`Expressions/API/Receivers/Logic` を廃止し、その子の12個の受信処理スロットを
+`Receivers` 直下へ置く。各処理内のノード構成・公開Tag・送信先の `References.API` は維持する。
+受信処理を直接参照する場合のパスは `API/Receivers/SetGestureLeft` などになる。
+
 Version 72では、入力元ではなく処理の役割を表すAPI名へ変更する。左右とも同じ対応になる。
 
 | 旧Tag | 新Tag | 役割 |
@@ -155,7 +159,7 @@ Expressions/
       Touch|Index|Vive|WindowsMR|Cosmos/   削除できる機種別入力
         Left/Logic/                左手の入力検出・安定化・通知
         Right/Logic/               右手の入力検出・安定化・通知
-  API/Receivers/Logic/
+  API/Receivers/
     TrySetGestureLeft|TrySetGestureRight/  許可判定付きのint入力・SetGestureへ転送
     SetGestureLeft|SetGestureRight/        共通のint入力・左右値更新と表情選択
     Select/                        表情Slotを検証してPlaybackへ送信
@@ -276,7 +280,7 @@ Inspector 上の状態変数名は `ExpressionSystem/LeftGesture` などで、Co
 | AllowHandGestures.Left / Right | true=該当する手のジェスチャーを許可、false=停止。キーボード・表情メニューは常に使用可能 |
 | `CurrentExpression` | 対応表または直接選択から渡された再生対象。未割当・削除済みなら null |
 
-1. 左右の番号が違う場合は、`API/Receivers/Logic/TrySetGestureLeft`／`TrySetGestureRight`、転送先の `SetGestureLeft`／`SetGestureRight` と該当入力の `Logic` を調べる。
+1. 左右の番号が違う場合は、`API/Receivers/TrySetGestureLeft`／`TrySetGestureRight`、転送先の `SetGestureLeft`／`SetGestureRight` と該当入力の `Logic` を調べる。
 2. キーが正しく表情が違う場合は、`PairKey` に対応する `GestureTable` の参照と `AllowHandGestures.Left`・`Right` を確認し、`Selection` を調べる。
 3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（末尾の LnRm は PairKey）の参照があるか確認する。表情Slotのアクティブ状態は選択に影響しない。参照先が削除されていないか確認する。
 4. 選択が正しく見た目が違う場合は、`Internal/Playback` と該当出力の `Base`、`TrackingWeight`、`Result` と、Resultの参照先からメッシュまでの駆動接続を調べる。

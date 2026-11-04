@@ -1,5 +1,9 @@
 # Expression integration checks
 
+Version 73 places all twelve API boards directly below Receivers, removing its Logic
+wrapper. Existing graph and toggle checks use the new paths through generation,
+cloning and package reload. Public tags, References.API and node counts are unchanged.
+
 Version 72 renames Keyboard/Left|Right to SetGesture/Left|Right and Gesture/Left|Right
 to TrySetGesture/Left|Right, with matching receiver board and C# constant names.
 SetGesture is shared by keyboard and other input sources; TrySetGesture forwards to

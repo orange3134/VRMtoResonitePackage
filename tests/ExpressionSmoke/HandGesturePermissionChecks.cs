@@ -11,7 +11,7 @@ internal static class HandGesturePermissionChecks
     {
         var core = expressions.FindChild("Internal");
         var api = expressions.FindChild("API").FindChild("Receivers");
-        CheckToggleGraph(api.FindChild("Logic").FindChild("ToggleHandGestures"));
+        CheckToggleGraph(api.FindChild("ToggleHandGestures"));
         var menu = expressions.FindChild("Inputs").FindChild("ContextMenu");
         var bothToggles = new List<ButtonDynamicImpulseTrigger>();
         var toggles = new Dictionary<string, ButtonDynamicImpulseTrigger>();
