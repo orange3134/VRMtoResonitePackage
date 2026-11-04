@@ -15,13 +15,7 @@ internal sealed partial class ExpressionSystemSetup
         BuildHandReceiver(new(_api.AddSlot("SetGestureLeft")), "Left", SetGestureLeftTag, checkPermission: false);
         BuildHandReceiver(new(_api.AddSlot("SetGestureRight")), "Right", SetGestureRightTag, checkPermission: false);
         BuildSelectReceiver(new(_api.AddSlot("Select")));
-        BuildHandGesturesEnabledReceiver(new(_api.AddSlot("AllowHandGestures")));
         BuildHandGesturesToggleReceiver(new(_api.AddSlot("ToggleHandGestures")));
-        foreach (string hand in new[] { "Left", "Right" })
-        {
-            BuildHandGesturesEnabledReceiver(new(_api.AddSlot("AllowHandGestures" + hand)), hand);
-            BuildHandGesturesToggleReceiver(new(_api.AddSlot("ToggleHandGestures" + hand)), hand);
-        }
         var reset = new ExpressionFlux(_api.AddSlot("Reset"));
         ReceiveUpdate(reset, ResetTag, reset.Trigger(reset.Ref(_internal), ResetStateTag));
     }
@@ -73,21 +67,13 @@ internal sealed partial class ExpressionSystemSetup
         Link(receiver, "OnTriggered", g.If(g.And(g.AvatarWornLocal, valid), select));
     }
 
-    private IWorldElement WriteHandGesturePermissions(ExpressionFlux g, IWorldElement value, string hand = null) =>
-        g.Sequence((hand == null ? new[] { "Left", "Right" } : new[] { hand })
+    private IWorldElement WriteHandGesturePermissions(ExpressionFlux g, IWorldElement value) =>
+        g.Sequence(new[] { "Left", "Right" }
             .Select(side => (IWorldElement)g.Write<bool>(g.Ref(_internal), SystemSpace, HandGesturePermission(side), value)).ToArray());
 
-    private void BuildHandGesturesToggleReceiver(ExpressionFlux g, string hand = null)
+    private void BuildHandGesturesToggleReceiver(ExpressionFlux g)
     {
         var core = g.Ref(_internal);
-        if (hand != null)
-        {
-            var toggle = WriteHandGesturePermissions(g,
-                g.Not(g.Read<bool>(core, SystemSpace, HandGesturePermission(hand))), hand);
-            ReceiveUpdate(g, ToggleHandGesturesHandTag(hand), toggle);
-            return;
-        }
-
         // Match the authored Salt graph: capture NAND once per impulse before either write.
         var enabled = g.Local<bool>();
         var capture = g.Set<bool>(enabled, g.Node("NAND_Bool", null,
@@ -95,12 +81,5 @@ internal sealed partial class ExpressionSystemSetup
             ("B", g.Read<bool>(core, SystemSpace, HandGesturePermission("Right")))));
         Link(capture, "OnWritten", WriteHandGesturePermissions(g, enabled));
         ReceiveUpdate(g, ToggleHandGesturesTag, capture);
-    }
-
-    private void BuildHandGesturesEnabledReceiver(ExpressionFlux g, string hand = null)
-    {
-        var receiver = g.Receiver<bool>(hand == null ? HandGesturesEnabledTag : HandGesturesEnabledHandTag(hand));
-        Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal,
-            WriteHandGesturePermissions(g, Out(receiver, "Value"), hand)));
     }
 }

@@ -122,8 +122,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         void Gesture(int hand, int gesture) => Request(hand == 0 ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, gesture);
         void Select(string name) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
             ExpressionSystemSetup.SelectTag, true, catalog.FindChild(name));
-        void AllowInput(bool enabled = true) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-            ExpressionSystemSetup.HandGesturesEnabledTag, true, enabled);
+        void AllowInput(bool enabled = true) => SetHandGesturesAllowed(core, enabled);
         async Task Frames(int count = 30) { for (int i = 0; i < count; i++) await default(NextUpdate); }
         Check(core.FindChild("SourceState") == null && core.FindChild("ParameterState") == null && expressions.FindChild("Rules") == null,
             "generic source arbitration and Animator graph are absent");
@@ -472,13 +471,12 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Set(core, "AllowHandGestures.Left", false); Set(core, "AllowHandGestures.Right", false);
         expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items").FindChild("Hand gestures")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
-        AllowInput();
         expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items").FindChild("Reset settings")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
         Check(NoHandsAllowed(core),
-            "input-mode, toggle and reset requests are ignored without a local wearer");
+            "toggle and reset requests are ignored without a local wearer");
         // Sentinel selection state proves wearer-only private stages did no work.
         var outputState = expressions.FindChild("Outputs").Children.Single();
         Set(core, "PairKey", "__unchanged");
@@ -550,7 +548,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<string>(restoredCore, "PairKey") == "L8R255" &&
             Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
             "saved external pair and unrestricted gesture receivers work after package reload");
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.HandGesturesEnabledTag, true, false);
+        SetHandGesturesAllowed(restoredCore, false);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.TrySetGestureRightTag, true, 0);
         Check(Get<int>(restoredCore, "RightGesture") == 255, "reloaded gesture permission blocks gesture API");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.SetGestureLeftTag, true, 0);

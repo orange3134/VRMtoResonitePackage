@@ -46,10 +46,7 @@ internal static class HandGesturePermissionChecks
             .OrderBy(label => label, StringComparer.Ordinal).ToArray();
         Check(Contents(menu.FindChild("Left")).SequenceEqual(Contents(menu.FindChild("Right"))),
             "both hand menus contain the complete expression, imported and settings menus");
-        void Allow(string hand, bool enabled) => Check(
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-                ExpressionSystemSetup.HandGesturesEnabledHandTag(hand), true, enabled) == 1,
-            "exactly one permission receiver for " + hand);
+        void Allow(string hand, bool enabled) => SetHandGesturesAllowed(core, enabled, hand);
         void Keyboard(string hand, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             api, hand == "Left" ? ExpressionSystemSetup.SetGestureLeftTag : ExpressionSystemSetup.SetGestureRightTag, true, value);
         int Gesture(string hand) => core.ExpressionVariables<DynamicValueVariable<int>>()
@@ -80,9 +77,6 @@ internal static class HandGesturePermissionChecks
             Allow("Left", left); Allow("Right", right);
             foreach (string hand in new[] { "Left", "Right" })
             {
-                Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-                    ExpressionSystemSetup.HandGesturesEnabledHandTag(hand), true, 1) == 0,
-                    "per-hand permission rejects non-bool payloads");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
                     hand == "Left" ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, true, hand == "Left" ? 1 : 2);
             }
@@ -95,9 +89,9 @@ internal static class HandGesturePermissionChecks
         var expression = expressions.FindChild("Catalog").Children.First();
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, expression);
         State(false, false);
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
+        bothToggles[0].Pressed(null, default);
         State(true, true);
-        Check(Reference<Slot>(core, "CurrentExpression") == expression, "global permission API resumes both hands without replacing the selected expression");
+        Check(Reference<Slot>(core, "CurrentExpression") == expression, "global toggle resumes both hands without replacing the selected expression");
         await CheckApiBeforeInitialization(expressions);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
         State(true, true); await Frames();
@@ -163,18 +157,18 @@ internal static class HandGesturePermissionChecks
                 Check(NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == selected,
                     "early direct selection disables gestures and selects without resetting hand state");
                 Preserved();
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-                    ExpressionSystemSetup.HandGesturesEnabledHandTag(hand), true, true);
+                var toggle = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild(hand)
+                    .FindChild("Items").FindChild(hand + " hand gestures").GetComponent<ButtonToggle>();
+                toggle.Pressed(null, default);
                 Check(HandGesturesAllowed(core, hand) && !HandGesturesAllowed(core, other),
-                    "early per-hand permission API changes only the requested permission");
+                    "early per-hand menu changes only the requested permission");
                 Preserved();
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesHandTag(hand), true);
+                toggle.Pressed(null, default);
                 Check(NoHandsAllowed(core), "early per-hand toggle reads the current permission without resetting");
                 Preserved();
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-                    ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesTag, true);
                 Check(BothHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == selected,
-                    "early global permission API preserves the selected expression");
+                    "early global toggle preserves the selected expression");
                 Preserved();
                 Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(fixture, updateTag, true) == 1,
                     "the fixture invokes the lifecycle event entry point");

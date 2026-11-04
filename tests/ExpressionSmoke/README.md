@@ -1,5 +1,12 @@
 # Expression integration checks
 
+Version 76 removes the five unused permission APIs: global/per-hand AllowHandGestures
+and per-hand ToggleHandGestures. Graph checks require seven public receivers and reject
+the removed boards and tags after generation, cloning and reload. Permission setup
+uses DynamicVariableSpace.TryWriteValue so bound inputs see changes synchronously;
+actual menu checks still press the individual ButtonToggle and combined-hand impulse
+buttons. Unworn API checks exercise the retained combined toggle.
+
 Version 75 uses ButtonToggle for Left/Right hand gestures menu entries. Checks require
 TargetValue to reference that avatar's corresponding DynamicValueVariable.Value and
 reject an impulse trigger on those entries. Actual button presses cover all four
@@ -136,9 +143,9 @@ Tag/target/ExcludeDisabled inputs must stay close to their consumers. A shuffled
 fixture covers creation-order independence, shallow inputs feeding deep nodes,
 feedback cycles, and repeatable arrangement. The synthetic run
 writes keyboard-layout.json for inspecting the generated coordinates and edges.
-Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Catalog Slot and AllowHandGestures receives bool; no Command slots may remain.
+Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Catalog Slot and the combined toggle receives no payload; no Command slots may remain.
 Each actual Flux group must stay within one logic board. Core lifecycle, selection,
-playback, the twelve public API receivers, and each controller hand have independent
+playback, the seven public API receivers, and each controller hand have independent
 boards. The test reports node/group counts and enforces a 256-node per-board budget,
 including after package reimport. Module diagnostic counts must match the graph.
 Each Output has its own sampling/mixing/fade board and a driven field exposed as Result.

@@ -42,7 +42,7 @@ internal static class KeyboardShortcutChecks
         try
         {
             foreach (var w in wearers) w.Reference.Target = expressions.World.LocalUser;
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, false);
+            SetHandGesturesAllowed(core, false);
             foreach (var hand in hands)
             {
                 var board = hand.FindChild("Logic");
@@ -130,8 +130,8 @@ internal static class KeyboardShortcutChecks
             foreach (var w in wearers) w.Reference.Target = w.Previous;
             mocks.Destroy();
             extendedRow?.Destroy();
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledHandTag("Left"), true, leftAllowedBefore);
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledHandTag("Right"), true, rightAllowedBefore);
+            SetHandGesturesAllowed(core, leftAllowedBefore, "Left");
+            SetHandGesturesAllowed(core, rightAllowedBefore, "Right");
         }
         for (int i = 0; i < 10; i++) await default(NextUpdate);
         Console.WriteLine("PASS: keyboard Shift=Left, Ctrl=Right, Ctrl+Shift=both; all keypad 0-9 combinations and editable Modifier keys");

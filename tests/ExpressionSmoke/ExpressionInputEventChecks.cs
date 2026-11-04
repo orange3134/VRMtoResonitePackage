@@ -23,8 +23,7 @@ internal static class ExpressionInputEventChecks
         var originalStability = modules.Children.ToDictionary(module => module, module => Get<float>(module, "StabilitySeconds"));
         void Gesture(string side, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             api, side == "Left" ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, true, value);
-        void Allow(bool value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
-            api, ExpressionSystemSetup.HandGesturesEnabledTag, true, value);
+        void Allow(bool value) => SetHandGesturesAllowed(core, value);
         Nodes.ValueInput<T> Replace<T>(Slot board, IWorldElement original) where T : unmanaged
         {
             var input = mocks.AddSlot("Sensor " + restore.Count).AttachComponent<Nodes.ValueInput<T>>();

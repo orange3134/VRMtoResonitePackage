@@ -47,7 +47,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 75 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 76 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -127,7 +127,7 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 
 | 名前 | 型 | 初期値 | 更新元・役割 |
 |---|---|---|---|
-| `AllowHandGestures.Left` / `AllowHandGestures.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとTrySetGesture APIだけの受付可否。SetGesture・メニューはこの設定で停止しない。表情の直接選択で両方false、初期化・リセットで両方true。許可 API でも個別に変更可能 |
+| `AllowHandGestures.Left` / `AllowHandGestures.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとTrySetGesture APIだけの受付可否。SetGesture・メニューはこの設定で停止しない。表情の直接選択で両方false、初期化・リセットで両方true。個別メニューのButtonToggleや変数の直接編集で変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューでは変更しない |
 | `PairKey` | string | L0R0 | 最後の左右入力イベントでSelectionが組み立てたキー。直接選択中の表情を示すものではない |
 | `CurrentExpression` | Slot | null | Playbackが受信した表情Slot。Selectionは対応表の参照をそのまま渡し、Select APIは自身のCatalog直下かだけ確認する。解除はnull |
@@ -137,7 +137,7 @@ MappedExpression／CandidateExpression の診断用 DynamicVariable は生成し
 左右入力の参照先確認にはPairKeyとGestureTableの行を使う。直接選択の確認にはCurrentExpressionを使う。
 
 AllowHandGestures.Left・Right 以外は状態として扱う。SelectionStatus は生成しない。入力モードは左右の許可設定、再生対象は CurrentExpression で確認する。未割当・参照先の削除は CurrentExpression=null となる。非アクティブな表情も選択できる。
-Version 64では旧 `ExpressionSystem/AllowHandGestures` を定義しない。旧bool APIのTagは引き続き両手を同じ値へ設定する。
+Version 64では旧 `ExpressionSystem/AllowHandGestures` を定義しない。両手を同じ値へ設定するbool APIはVersion 75まで維持し、Version 76で廃止した。
 Version 66の両手Toggle APIは、両手とも許可なら両手を停止し、それ以外は両手を許可する。
 Version 67では `NAND_Bool` の判定を `ValueWrite<bool>` で `LocalValue<bool>` に一度保存し、
 `OnWritten` から左右へ同じLocal値を書き込む。片手を書き換えた後の再判定を避ける。
@@ -306,10 +306,7 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `TrySetGestureLeftTag` / `TrySetGestureRightTag` | `ResoPon/Expression/TrySetGesture/Left` / `ResoPon/Expression/TrySetGesture/Right` | int（範囲制限なし）。対応するAllowHandGestures.Left・Right がtrueの場合だけSetGestureへ転送 |
 | `SetGestureLeftTag` / `SetGestureRightTag` | `ResoPon/Expression/SetGesture/Left` / `ResoPon/Expression/SetGesture/Right` | int（範囲制限なし）。入力元共通の更新処理。ジェスチャー許可に関係なく左右値を更新。フラグは維持 |
 | `SelectTag` | `ResoPon/Expression/Menu/Select` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してPlaybackへ渡す。null・範囲外は無視 |
-| `HandGesturesEnabledTag` | `ResoPon/Expression/AllowHandGestures` | bool。両手の許可を同じ値へ設定。左右値と表情は維持 |
-| `HandGesturesEnabledHandTag(hand)` | `ResoPon/Expression/AllowHandGestures/Left` / `Right` | bool。該当する手だけ許可・停止。左右値と表情は維持 |
 | `ToggleHandGesturesTag` | `ResoPon/Expression/ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
-| `ToggleHandGesturesHandTag(hand)` | `ResoPon/Expression/ToggleHandGestures/Left` / `Right` | 引数なし。該当する手だけ許可を反転。左右値と表情は維持 |
 | `ResetTag` | `ResoPon/Expression/Reset` | 引数なし。ローカル着用中に左右値・許可・表情を初期状態へ戻す |
 | `ResetStateTag` | `ResoPon/Expression/Internal/Reset` | 引数なし。公開Resetから呼び出すLifecycleのリセット処理 |
 | `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。左右入力イベントから選択更新を同期実行 |
@@ -318,6 +315,7 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 Internal の3つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
 Version 74で未使用の `ResoPon/Expression/Internal/Initialize` を廃止した。自動初期化はLifecycleのイベントから実行する。
 Version 75の個別ハンドメニューは `ButtonToggle.TargetValue` から自身の `AllowHandGestures.Left`・`Right` のValueを直接変更する。両手メニューは引き続きToggle APIを使う。
+Version 76で未使用のAllowHandGestures両手/左右とToggleHandGestures左右の5つのAPIを廃止した。設定用のDynamicVariableは維持する。
 選択中の一時候補、Catalog検索で見つけた表情参照は LocalObject、初期化済みフラグは StoredValue<bool> を使う。
 これらも DynamicVariable の保存変数とは区別する。
 

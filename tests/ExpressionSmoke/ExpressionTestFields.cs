@@ -9,6 +9,16 @@ internal static class ExpressionTestFields
     public static bool BothHandsAllowed(Slot slot) => HandGesturesAllowed(slot, "Left") && HandGesturesAllowed(slot, "Right");
     public static bool NoHandsAllowed(Slot slot) => !HandGesturesAllowed(slot, "Left") && !HandGesturesAllowed(slot, "Right");
 
+    // Prepare permissions without depending on removed public setter APIs.
+    // The standard space write also updates bound Dynamic Inputs synchronously.
+    public static void SetHandGesturesAllowed(Slot slot, bool value, string hand = null)
+    {
+        var space = slot.GetComponentInParents<DynamicVariableSpace>();
+        foreach (string side in hand == null ? new[] { "Left", "Right" } : new[] { hand })
+            if (space.TryWriteValue("AllowHandGestures." + side, value) != DynamicVariableWriteResult.Success)
+                throw new InvalidOperationException("Permission variable not writable: " + side);
+    }
+
     // Parenting below UserRoot alone is not equip. Exercise the identification's real equip hook.
     public static void EquipAvatar(Slot avatar)
     {

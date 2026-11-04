@@ -56,7 +56,7 @@ internal static class ImportedGestureAvatarChecks
         var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null, "Saved menu has no hand submenus");
         var receiverRoot = root.FindChild("API").FindChild("Receivers");
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
+        SetHandGesturesAllowed(core, true);
         var distinctPoses = new HashSet<string>();
         for (int l = 0; l < 8; l++)
             for (int r = 0; r < 8; r++)
@@ -169,8 +169,7 @@ internal static class ImportedGestureAvatarChecks
             {
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
                 Check(importedButton.PressedData.Reference.Target == selected, "Saved imported-menu Slot reference survives a label edit");
-                var api = root.FindChild("API").FindChild("Receivers");
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
+                SetHandGesturesAllowed(core, true);
                 Check(BothHandsAllowed(core), "Ordinary input is enabled before imported button verification");
                 importedButton.Pressed(null, default);
                 Check(NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == selected,
@@ -181,8 +180,7 @@ internal static class ImportedGestureAvatarChecks
             {
                 selectedItem.Label.Value = originalLabel;
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(root.FindChild("API").FindChild("Receivers"),
-                    ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
+                SetHandGesturesAllowed(core, true);
             }
             Check(importedButton.PressedData.Reference.Target == selected, "Imported-menu Slot reference survives restoring its expression label");
         }

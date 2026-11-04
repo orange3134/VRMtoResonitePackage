@@ -213,11 +213,11 @@ internal static class ExpressionOutputWriteChecks
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureRightTag, true, 1);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true,
                 catalog.FindChild("Short"));
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, false);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesTag, true);
             await Frames();
             Check(Get<int>(core, "RightGesture") == 0 && BothHandsAllowed(core) &&
                 Reference<Slot>(core, "CurrentExpression") == null,
-                "identification blocks gesture, keyboard, menu and permission APIs while unworn under UserRoot");
+                "identification blocks gesture, keyboard, menu and toggle APIs while unworn under UserRoot");
             tracking.Value = 0.65f; await Frames();
             Near(a.Value, 0.65f, "unworn tracking continues to follow Base");
             EquipAvatar(avatar); await Frames(30);

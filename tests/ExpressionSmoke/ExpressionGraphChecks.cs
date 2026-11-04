@@ -313,9 +313,7 @@ internal static class ExpressionGraphChecks
         foreach (string path in new[] { "Internal/Lifecycle", "Internal/Selection", "Internal/Playback",
             "API/Receivers/TrySetGestureLeft", "API/Receivers/TrySetGestureRight",
             "API/Receivers/SetGestureLeft", "API/Receivers/SetGestureRight",
-            "API/Receivers/Select", "API/Receivers/AllowHandGestures", "API/Receivers/ToggleHandGestures", "API/Receivers/Reset",
-            "API/Receivers/AllowHandGesturesLeft", "API/Receivers/AllowHandGesturesRight",
-            "API/Receivers/ToggleHandGesturesLeft", "API/Receivers/ToggleHandGesturesRight" })
+            "API/Receivers/Select", "API/Receivers/ToggleHandGestures", "API/Receivers/Reset" })
         {
             var board = Descendant(expressions, path);
             Check(board != null && boards.Any(g => g.Key == board), "independent logic board exists: " + path);
@@ -341,7 +339,17 @@ internal static class ExpressionGraphChecks
         }
         var publicReceivers = Descendant(expressions, "API/Receivers").GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
-        Check(publicReceivers.Length == 12, "exactly twelve public API receivers");
+        Check(publicReceivers.Length == 7, "exactly seven public API receivers");
+        foreach (string removed in new[] { "AllowHandGestures", "AllowHandGesturesLeft", "AllowHandGesturesRight",
+            "ToggleHandGesturesLeft", "ToggleHandGesturesRight" })
+            Check(Descendant(expressions, "API/Receivers/" + removed) == null,
+                "unused permission API board is absent: " + removed);
+        var tags = expressions.GetComponentsInChildren<GlobalValue<string>>().Select(value => value.Value.Value)
+            .Concat(nodes.OfType<Nodes.ValueObjectInput<string>>().Select(node => node.Value.Value));
+        Check(tags.All(tag => tag == null ||
+            (!tag.StartsWith("ResoPon/Expression/AllowHandGestures", StringComparison.Ordinal) &&
+             !tag.StartsWith("ResoPon/Expression/ToggleHandGestures/", StringComparison.Ordinal))),
+            "removed permission APIs have no senders or receivers after generation, clone and reload");
         foreach (string hand in new[] { "Left", "Right" })
         {
             var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == "TrySetGesture" + hand);
@@ -360,19 +368,10 @@ internal static class ExpressionGraphChecks
         }
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Select").GetType().GetGenericArguments().Single() == typeof(Slot),
             "direct Catalog selection receives a Slot");
-        Check(publicReceivers.Single(node => node.Slot.Parent.Name == "AllowHandGestures").GetType().GetGenericArguments().Single() == typeof(bool),
-            "input permission receives a bool");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Reset").GetType().Name == "DynamicImpulseReceiver",
             "reset receives an impulse without a payload");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "ToggleHandGestures").GetType().Name == "DynamicImpulseReceiver",
             "hand gesture toggle receives an impulse without a payload");
-        foreach (string hand in new[] { "Left", "Right" })
-        {
-            Check(publicReceivers.Single(node => node.Slot.Parent.Name == "AllowHandGestures" + hand).GetType().GetGenericArguments().Single() == typeof(bool),
-                hand + " input permission receives a bool");
-            Check(publicReceivers.Single(node => node.Slot.Parent.Name == "ToggleHandGestures" + hand).GetType().Name == "DynamicImpulseReceiver",
-                hand + " gesture toggle receives an impulse without a payload");
-        }
         foreach (string hand in new[] { "Left", "Right" })
         if (Descendant(expressions, "Inputs/ContextMenu/" + hand + "/Items") is { } menuItems)
         {

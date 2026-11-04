@@ -3,6 +3,12 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 76では、生成物内に呼び出し元のない `AllowHandGestures`・`AllowHandGesturesLeft/Right`・
+`ToggleHandGesturesLeft/Right` の5受信処理とTag定義を削除した。公開受信処理は12から7個になる。
+両手メニューが使う `ToggleHandGestures` は維持する。個別の許可設定は左右のButtonToggle、
+または `ExpressionSystem/AllowHandGestures.Left`・`Right` の直接変更を使う。
+新規生成物には廃止Tagの互換受信部を置かない。既存パッケージの更新には再変換・再インポートが必要。
+
 Version 75では、ContextMenuの `Left hand gestures`・`Right hand gestures` を `ButtonToggle` に変更した。
 `TargetValue` は自身のアバターの `ExpressionSystem/AllowHandGestures.Left`・`Right` のValueを直接参照する。
 個別メニューはAPIやその着用判定を経由せず、対応する許可だけを反転する。左右値・選択中の表情は保持する。
@@ -174,7 +180,8 @@ Expressions/
     TrySetGestureLeft|TrySetGestureRight/  許可判定付きのint入力・SetGestureへ転送
     SetGestureLeft|SetGestureRight/        共通のint入力・左右値更新と表情選択
     Select/                        表情Slotを検証してPlaybackへ送信
-    AllowHandGestures/            boolによるハンドジェスチャーの許可・停止
+    ToggleHandGestures/             両手の許可をまとめて切り替え
+    Reset/                         表情・左右値・許可を初期状態へ戻す
   API/Examples/                    左右の int イベントを送るボタンの例
   API/Templates/                   Catalog に複製する表情テンプレート
 ```
@@ -486,10 +493,7 @@ Selectの引数は表情Slot。旧string ID送信は受理しない。内部Play
 | `ResoPon/Expression/SetGesture/Left` | int（範囲制限なし） | フラグに関係なく左手を更新。フラグ自体は維持 |
 | `ResoPon/Expression/SetGesture/Right` | int（範囲制限なし） | フラグに関係なく右手を更新。フラグ自体は維持 |
 | `ResoPon/Expression/Menu/Select` | Slot: 自身のCatalog直下の表情 | 有効性を検証し、boolをfalseにしてPlaybackへ送信 |
-| `ResoPon/Expression/AllowHandGestures` | bool | 両手の許可を同じ値に設定。左右値・表情は維持 |
-| `ResoPon/Expression/AllowHandGestures/Left` / `Right` | bool | 対応する手だけ許可を設定。左右値・表情は維持 |
 | `ResoPon/Expression/ToggleHandGestures` | なし | 両手とも許可なら両手を停止、それ以外は両手を許可。左右値・表情は維持 |
-| `ResoPon/Expression/ToggleHandGestures/Left` / `Right` | なし | 対応する手だけ許可を反転。左右値・表情は維持 |
 | `ResoPon/Expression/Reset` | なし | 表情を解除してBaseへ戻し、左右を0、ジェスチャー入力を有効にする |
 
 0=Neutral、1=Fist、2=HandOpen、3=FingerPoint、4=Victory、5=RockNRoll、6=HandGun、7=ThumbsUp。
@@ -508,7 +512,8 @@ Resetもローカル装着者限定で、ジェスチャー無効時にも受け
 Dynamic Impulse はネットワーク RPC ではなく、装着者以外のクライアントからの実行は無視する。
 
 旧 `ResoPon/Expression/v3/Select` と `v3/Automatic` は生成しない。
-旧 Select 送信側は Menu/Select へ変更し、ハンドジェスチャーを再開する操作は AllowHandGestures に true を送る。
+旧 Select 送信側は Menu/Select へ変更する。ハンドジェスチャーを明示的に再開する場合は
+`ExpressionSystem/AllowHandGestures.Left`・`Right` をtrueに設定する。
 
 ## FaceEmo に合わせた表情候補の検出
 
