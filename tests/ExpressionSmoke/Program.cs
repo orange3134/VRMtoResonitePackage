@@ -483,7 +483,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var outputState = expressions.FindChild("Outputs").Children.Single();
         Set(core, "PairKey", "__unchanged");
         foreach (var (board, tag) in new[] { ("Selection", "ResoPon/Expression/Internal/Selection"),
-            ("Lifecycle", "ResoPon/Expression/Internal/Initialize") })
+            ("Lifecycle", "ResoPon/Expression/Internal/Reset") })
             Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core, tag, true) == 1,
                 "shared Internal hierarchy reaches exactly one private stage receiver: " + board);
         await Frames();

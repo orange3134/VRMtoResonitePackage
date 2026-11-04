@@ -120,6 +120,12 @@ internal static class HandGesturePermissionChecks
             var g = new ExpressionFlux(fixture);
             const string prepareTag = "Test/PrepareUninitializedGesture";
             ExpressionFlux.Link(g.Receiver(prepareTag, false), "OnTriggered", g.Set<bool>(initialized, g.Constant(false)));
+            // Invoke the real lifecycle event entry point without a production Initialize API.
+            var onStart = core.FindChild("Lifecycle").GetComponentsInChildren<ProtoFluxNode>()
+                .Single(node => node.GetType().Name == "OnStart");
+            var update = ((ISyncRef)ExpressionFlux.Member(onStart, "Trigger")).Target;
+            const string updateTag = "Test/UpdateLifecycle";
+            ExpressionFlux.Link(g.Receiver(updateTag, false), "OnTriggered", update);
             for (int i = 0; i < 5; i++) await default(NextUpdate);
             foreach (string hand in new[] { "Left", "Right" })
             {
@@ -169,9 +175,8 @@ internal static class HandGesturePermissionChecks
                 Check(BothHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == selected,
                     "early global permission API preserves the selected expression");
                 Preserved();
-                Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core,
-                    "ResoPon/Expression/Internal/Initialize", true) == 1,
-                    "the lifecycle initialization stage receives its impulse");
+                Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(fixture, updateTag, true) == 1,
+                    "the fixture invokes the lifecycle event entry point");
                 Check(BothHandsAllowed(core) && Gesture("Left") == 0 && Gesture("Right") == 0 && Pair() == "L0R0",
                     "lifecycle initialization clears early keyboard input without replaying the dropped gesture");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,

@@ -3,6 +3,12 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 74では、生成処理に呼び出し元がなくなった `ResoPon/Expression/Internal/Initialize` の
+受信部と定数を削除した。自動初期化はLifecycleのOnStart・着用状態変更、明示的な初期化はResetが担当する。
+Lifecycleの条件を「ローカル着用中 AND 未初期化」と「ローカル未着用 AND 初期化済み」にまとめ、
+Ifを8個から5個へ削減し、Lifecycle全体は45から43ノードになった。終了処理は2更新後にも後者の条件を再評価する。
+他ユーザーが着用中なら共有状態を消さずローカル初期化フラグだけを戻す分岐は維持する。
+
 Version 73では、`Expressions/API/Receivers/Logic` を廃止し、その子の12個の受信処理スロットを
 `Receivers` 直下へ置く。各処理内のノード構成・公開Tag・送信先の `References.API` は維持する。
 受信処理を直接参照する場合のパスは `API/Receivers/SetGestureLeft` などになる。

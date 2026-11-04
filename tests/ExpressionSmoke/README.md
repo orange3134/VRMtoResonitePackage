@@ -1,5 +1,13 @@
 # Expression integration checks
 
+Version 74 removes the unused Internal/Initialize receiver and combines lifecycle
+conditions with AND, reducing its If nodes from eight to five. Graph checks reject
+Initialize sender and receiver tags throughout generated, cloned and reloaded graphs.
+The early-input fixture invokes the actual OnStart action through a temporary receiver;
+it no longer depends on a production initialization API. Unworn private-stage checks
+exercise Internal/Reset. Existing equip/departure checks cover lifecycle initialization
+and cleanup with the two-update delay retained.
+
 Version 73 places all twelve API boards directly below Receivers, removing its Logic
 wrapper. Existing graph and toggle checks use the new paths through generation,
 cloning and package reload. Public tags, References.API and node counts are unchanged.
@@ -397,7 +405,7 @@ Version 40 represents null constants with unconnected object inputs. Checks reje
 
 Version 41 removes Core. from system state keys, renames fixed Slot references to References.* (excluding CurrentExpression and GestureTable.LnRm), and places Lifecycle/Selection/Playback directly under Internal. Space and graph checks assert this layout and reference naming; runtime, clone and package reload checks use the new state paths.
 
-Version 42 routes all internal impulses through References.Internal targeting the shared Internal parent. Reference checks reject per-board references and inspect internal triggers' TargetHierarchy. Runtime checks send Selection/Initialize/Playback to the parent, verify exactly one receiver, and cover API operations, cloning and package reload.
+Version 42 routes all internal impulses through References.Internal targeting the shared Internal parent. Reference checks reject per-board references and inspect internal triggers' TargetHierarchy. Runtime checks send Selection/Reset/Playback to the parent (Initialize was replaced by Reset in Version 74), verify exactly one receiver, and cover API operations, cloning and package reload.
 
 Version 43 renames the public impulse reference to References.API. Existing reference-edit and binding checks use this name before and after cloning and package reload.
 

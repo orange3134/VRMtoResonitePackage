@@ -30,25 +30,23 @@ internal sealed partial class ExpressionSystemSetup
 
         var clear = g.Sequence(cleanup.ToArray());
         var reset = g.Sequence(clear, g.Set<bool>(initialized, g.Constant(true)));
-        var initialize = g.If(g.Not(initialized), reset);
         // Explicit reset also works after initialization and does not select the neutral table entry.
         ReceiveUpdate(g, ResetStateTag, reset);
-        // Explicit internal initialization uses the same wearer gate as lifecycle events.
-        // Public API requests do not initialize implicitly.
-        ReceiveUpdate(g, InitializeTag, initialize);
         // Only the current local wearer runs selection/playback. On departure, the client
         // that initialized this instance clears it once, provided nobody else is wearing it.
         // Observers never initialize and therefore never write this cleanup state.
-        var stop = g.If(initialized, g.Sequence(
+        var stop = g.Sequence(
             g.If(g.Not(g.AvatarWorn), clear),
-            g.Set<bool>(initialized, g.Constant(false))));
+            g.Set<bool>(initialized, g.Constant(false)));
+        var shouldStop = g.And(g.Not(g.AvatarWornLocal), initialized);
         // The local drive can report departure before the shared AvatarWorn field updates.
         // Allow two updates for the drive chain and variable notifications to settle.
         // Recheck before discarding initialization or clearing shared state.
         var delayedStop = g.Node("StartAsyncTask", null, ("TaskStart",
             g.Node("DelayUpdates", null, ("Updates", g.Constant(2)),
-                ("Next", g.If(g.Not(g.AvatarWornLocal), stop)))));
-        var update = g.If(g.AvatarWornLocal, initialize, g.If(initialized, delayedStop));
+                ("Next", g.If(shouldStop, stop)))));
+        var update = g.If(g.And(g.AvatarWornLocal, g.Not(initialized)), reset,
+            g.If(shouldStop, delayedStop));
         g.OnChanged<bool>(g.AvatarWornLocal, update);
         g.OnChanged<bool>(g.AvatarWorn, update);
         g.OnStart(update);

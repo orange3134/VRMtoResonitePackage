@@ -26,7 +26,6 @@ internal sealed partial class ExpressionSystemSetup
     private const string PlaybackTickTag = "ResoPon/Expression/Internal/Playback";
     private const string SelectionTickTag = "ResoPon/Expression/Internal/Selection";
     private const string ResetStateTag = "ResoPon/Expression/Internal/Reset";
-    private const string InitializeTag = "ResoPon/Expression/Internal/Initialize";
     private GesturePairCompiler _compiled;
     private readonly Dictionary<string, Slot> _clips = new();
     private readonly Dictionary<string, Slot> _outputSlots = new();
@@ -54,7 +53,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "CurrentExpression", null);
         Data(_root, "PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 73);
+        Data(_root, "Version", 74);
         Reference(_root, "References.API", _api);
         Reference(_root, "References.Catalog", _catalog);
     }

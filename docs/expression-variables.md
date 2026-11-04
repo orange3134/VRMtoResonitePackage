@@ -47,7 +47,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 73 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 74 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -310,11 +310,13 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `HandGesturesEnabledHandTag(hand)` | `ResoPon/Expression/AllowHandGestures/Left` / `Right` | bool。該当する手だけ許可・停止。左右値と表情は維持 |
 | `ToggleHandGesturesTag` | `ResoPon/Expression/ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
 | `ToggleHandGesturesHandTag(hand)` | `ResoPon/Expression/ToggleHandGestures/Left` / `Right` | 引数なし。該当する手だけ許可を反転。左右値と表情は維持 |
-| `InitializeTag` | `ResoPon/Expression/Internal/Initialize` | 引数なし。Lifecycle の初期化確認 |
+| `ResetTag` | `ResoPon/Expression/Reset` | 引数なし。ローカル着用中に左右値・許可・表情を初期状態へ戻す |
+| `ResetStateTag` | `ResoPon/Expression/Internal/Reset` | 引数なし。公開Resetから呼び出すLifecycleのリセット処理 |
 | `SelectionTickTag` | `ResoPon/Expression/Internal/Selection` | 引数なし。左右入力イベントから選択更新を同期実行 |
 | `PlaybackTickTag` | `ResoPon/Expression/Internal/Playback` | Slot。受信SlotをCurrentExpressionへ設定し、終端ポーズを同期適用。nullは解除。非nullはローカル装着者だけが受理し、未装着時もnullは受理する |
 
 Internal の3つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
+Version 74で未使用の `ResoPon/Expression/Internal/Initialize` を廃止した。自動初期化はLifecycleのイベントから実行する。
 選択中の一時候補、Catalog検索で見つけた表情参照は LocalObject、初期化済みフラグは StoredValue<bool> を使う。
 これらも DynamicVariable の保存変数とは区別する。
 
@@ -372,7 +374,7 @@ CurrentExpressionなど、実行中に値が変わる参照変数は初期値が
 
 Lifecycle・Selection・Playbackへの固定参照はすべてDynamicImpulseTriggerのTargetHierarchy専用だったため、
 `ExpressionSystem/References.Internal` の1変数に統合した。参照先は `Expressions/Internal`。
-Initialize・Reset・Selection・Playbackの既存タグで子階層の受信処理を選ぶ。
+導入時はInitialize・Reset・Selection・Playbackのタグで子階層の受信処理を選んでいた。Version 74で未使用のInitializeを廃止した。
 `References.Internal.Lifecycle`・`References.Internal.Selection`・`References.Internal.Playback` は生成しない。
 
 ## Version 43：公開API参照の名前変更
