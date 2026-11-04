@@ -97,6 +97,9 @@ internal static class ExpressionGraphChecks
         Report(expressions);
         ExpressionLayoutChecks.CheckDirection(expressions);
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
+        Check(Descendant(expressions, "API/Receivers").GetComponentsInChildren<Nodes.ValueObjectInput<string>>()
+            .All(node => node.Value.Value != "ResoPon/Expression/Internal/Initialize"),
+            "public API boards do not initialize implicitly, including clones and package reloads");
         Check(nodes.OfType<Nodes.If>().All(node =>
             node.Condition.Target is not Nodes.ValueInput<bool> constant || !constant.Value.Value),
             "generated Flux has no If branches with a constant true condition, including clones and package reloads");

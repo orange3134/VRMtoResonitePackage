@@ -1,7 +1,16 @@
 # Expression integration checks
 
+Version 71 removes implicit Initialize calls from all public API receivers. Lifecycle
+startup/wearer events own automatic initialization; explicit Reset still works.
+Graph checks reject Initialize tags under API after generation, cloning and reload.
+Runtime checks cover early keyboard, selection, both/individual permission and toggle
+requests against saved state without resetting it, followed by lifecycle initialization
+clearing early input. The fixture settles direct permission field edits before resetting
+the local lifecycle flag so Dynamic Inputs observe the saved false values.
+
 Version 70 forwards Gesture API values behind only the corresponding hand permission
-If. Keyboard receivers handle wearer checks, initialization, hand writes and selection.
+If. Keyboard receivers handle wearer checks, hand writes and selection (and, until
+Version 71, initialization).
 Early gestures with saved false permissions are intentionally dropped without replay;
 unlike Version 69, gesture receivers do not initialize before checking permission.
 Runtime checks verify both early rejection and subsequent input after initialization

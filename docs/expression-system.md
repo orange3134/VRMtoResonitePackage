@@ -3,6 +3,16 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 71では、API受信部からInitializeの呼び出しと、そのためのSequenceを削除する。
+対象はKeyboard左右・Select・AllowHandGestures両手/左右・ToggleHandGestures両手/左右の9箇所。
+`ApplyRequest` は廃止し、着用判定の後に各操作を直接実行する。
+Keyboard左右は各13→10ノード、API全体は150→111ノードになる。
+自動初期化はInternal/LifecycleのOnStart・着用状態変更に任せ、明示的なResetは維持する。
+初期化前のKeyboard入力は保存済みの反対側の値と組み合わせて一時的に表情を選択し得るが、
+その後のLifecycle初期化で左右値・許可・表情が初期状態へ戻る。初期入力の保持・再送は行わない。
+許可変更・トグル・直接選択も、初期化前は現在の保存値に対して操作する。
+初期化完了後の通常入力、未着用時の更新拒否、左右の許可判定は維持する。
+
 Version 70では、Gesture APIのLeft・Rightを
 `AllowHandGestures.<hand> → Keyboard/<hand>` に単純化する。
 Gesture受信部には着用判定・Initialize・Sequenceを置かず、転送先のKeyboard受信部に任せる。

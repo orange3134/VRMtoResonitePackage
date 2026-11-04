@@ -97,13 +97,13 @@ internal static class HandGesturePermissionChecks
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
         State(true, true);
         Check(Reference<Slot>(core, "CurrentExpression") == expression, "global permission API resumes both hands without replacing the selected expression");
-        await CheckGestureBeforeInitialization(expressions);
+        await CheckApiBeforeInitialization(expressions);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
         State(true, true); await Frames();
         Console.WriteLine("PASS: per-hand gesture permissions, both/individual toggles, complete side-filtered submenus and keyboard bypass");
     }
 
-    private static async Task CheckGestureBeforeInitialization(Slot expressions)
+    private static async Task CheckApiBeforeInitialization(Slot expressions)
     {
         var core = expressions.FindChild("Internal");
         var api = expressions.FindChild("API").FindChild("Receivers");
@@ -138,11 +138,42 @@ internal static class HandGesturePermissionChecks
                 Check(NoHandsAllowed(core) && previous ==
                     (Gesture("Left"), Gesture("Right"), Pair(), Reference<Slot>(core, "CurrentExpression")),
                     hand + " early gesture with false permission is dropped without initialization or mutation");
+                string other = hand == "Left" ? "Right" : "Left";
+                int otherGesture = Gesture(other);
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
+                    hand == "Left" ? ExpressionSystemSetup.KeyboardLeftTag : ExpressionSystemSetup.KeyboardRightTag, true, 6);
+                Check(NoHandsAllowed(core) && Gesture(hand) == 6 && Gesture(other) == otherGesture &&
+                    Pair() == $"L{Gesture("Left")}R{Gesture("Right")}",
+                    hand + " early keyboard request updates only that hand without initializing permissions or opposite state");
+                var earlyPair = (Gesture("Left"), Gesture("Right"), Pair());
+                void Preserved() => Check(earlyPair == (Gesture("Left"), Gesture("Right"), Pair()),
+                    "early permission and selection APIs retain both hand values and their pair");
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesTag, true);
+                Check(BothHandsAllowed(core), "early global toggle enables saved false permissions without an implicit reset");
+                Preserved();
+                var selected = expressions.FindChild("Catalog").Children.First();
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, selected);
+                Check(NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == selected,
+                    "early direct selection disables gestures and selects without resetting hand state");
+                Preserved();
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
+                    ExpressionSystemSetup.HandGesturesEnabledHandTag(hand), true, true);
+                Check(HandGesturesAllowed(core, hand) && !HandGesturesAllowed(core, other),
+                    "early per-hand permission API changes only the requested permission");
+                Preserved();
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesHandTag(hand), true);
+                Check(NoHandsAllowed(core), "early per-hand toggle reads the current permission without resetting");
+                Preserved();
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
+                    ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
+                Check(BothHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == selected,
+                    "early global permission API preserves the selected expression");
+                Preserved();
                 Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core,
                     "ResoPon/Expression/Internal/Initialize", true) == 1,
                     "the lifecycle initialization stage receives its impulse");
                 Check(BothHandsAllowed(core) && Gesture("Left") == 0 && Gesture("Right") == 0 && Pair() == "L0R0",
-                    "initialization resets state without replaying the dropped gesture");
+                    "lifecycle initialization clears early keyboard input without replaying the dropped gesture");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
                     hand == "Left" ? ExpressionSystemSetup.LeftTag : ExpressionSystemSetup.RightTag, true, 7);
                 Check(Gesture(hand) == 7 && Pair() == (hand == "Left" ? "L7R0" : "L0R7"),
@@ -150,7 +181,7 @@ internal static class HandGesturePermissionChecks
             }
         }
         finally { fixture.Destroy(); }
-        Console.WriteLine("PASS: both gesture APIs drop early disabled input and resume after lifecycle initialization");
+        Console.WriteLine("PASS: public APIs do not initialize implicitly; lifecycle clears early input and restores defaults");
     }
     private static void CheckToggleGraph(Slot board)
     {

@@ -33,7 +33,8 @@ internal sealed partial class ExpressionSystemSetup
         var initialize = g.If(g.Not(initialized), reset);
         // Explicit reset also works after initialization and does not select the neutral table entry.
         ReceiveUpdate(g, ResetStateTag, reset);
-        // API events may arrive before the wearer-change event; initialize synchronously.
+        // Explicit internal initialization uses the same wearer gate as lifecycle events.
+        // Public API requests do not initialize implicitly.
         ReceiveUpdate(g, InitializeTag, initialize);
         // Only the current local wearer runs selection/playback. On departure, the client
         // that initialized this instance clears it once, provided nobody else is wearing it.

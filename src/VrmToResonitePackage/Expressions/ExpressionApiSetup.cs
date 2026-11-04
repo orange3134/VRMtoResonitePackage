@@ -27,11 +27,6 @@ internal sealed partial class ExpressionSystemSetup
         ReceiveUpdate(reset, ResetTag, reset.Trigger(reset.Ref(_internal), ResetStateTag));
     }
 
-    // Keyboard and other state-changing requests initialize before mutation.
-    private IWorldElement ApplyRequest(ExpressionFlux g, IWorldElement mutation) => g.Sequence(
-        g.Trigger(g.Ref(_internal), InitializeTag),
-        mutation);
-
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
         g.Write<int>(g.Ref(_internal), SystemSpace, hand + "Gesture", gesture);
 
@@ -40,7 +35,7 @@ internal sealed partial class ExpressionSystemSetup
         var receiver = g.Receiver<int>(tag);
         if (gestureInput)
         {
-            // The keyboard receiver owns wearer checks, initialization and mutation.
+            // The keyboard receiver owns wearer checks and mutation.
             // Early gestures with saved false permissions are intentionally dropped.
             Link(receiver, "OnTriggered", g.If(
                 g.Read<bool>(g.Ref(_internal), SystemSpace, HandGesturePermission(hand)),
@@ -49,7 +44,7 @@ internal sealed partial class ExpressionSystemSetup
         }
         var mutation = g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),
             g.Trigger(g.Ref(_internal), SelectionTickTag));
-        Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal, ApplyRequest(g, mutation)));
+        Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal, mutation));
     }
 
     private static IWorldElement FormatGesturePair(ExpressionFlux g, string format, IWorldElement left, IWorldElement right)
@@ -73,9 +68,9 @@ internal sealed partial class ExpressionSystemSetup
         var selected = Out(receiver, "Value");
         var valid = g.And(g.Not(g.IsNull<Slot>(selected)),
             g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", selected)), g.Ref(_catalog)));
-        var select = ApplyRequest(g, g.Sequence(
+        var select = g.Sequence(
             WriteHandGesturePermissions(g, g.Constant(false)),
-            g.Trigger<Slot>(g.Ref(_internal), g.Text(PlaybackTickTag), selected)));
+            g.Trigger<Slot>(g.Ref(_internal), g.Text(PlaybackTickTag), selected));
         Link(receiver, "OnTriggered", g.If(g.And(g.AvatarWornLocal, valid), select));
     }
 
@@ -90,7 +85,7 @@ internal sealed partial class ExpressionSystemSetup
         {
             var toggle = WriteHandGesturePermissions(g,
                 g.Not(g.Read<bool>(core, SystemSpace, HandGesturePermission(hand))), hand);
-            ReceiveUpdate(g, ToggleHandGesturesHandTag(hand), ApplyRequest(g, toggle));
+            ReceiveUpdate(g, ToggleHandGesturesHandTag(hand), toggle);
             return;
         }
 
@@ -100,14 +95,13 @@ internal sealed partial class ExpressionSystemSetup
             ("A", g.Read<bool>(core, SystemSpace, HandGesturePermission("Left"))),
             ("B", g.Read<bool>(core, SystemSpace, HandGesturePermission("Right")))));
         Link(capture, "OnWritten", WriteHandGesturePermissions(g, enabled));
-        ReceiveUpdate(g, ToggleHandGesturesTag,
-            g.Sequence(g.Trigger(core, InitializeTag), capture));
+        ReceiveUpdate(g, ToggleHandGesturesTag, capture);
     }
 
     private void BuildHandGesturesEnabledReceiver(ExpressionFlux g, string hand = null)
     {
         var receiver = g.Receiver<bool>(hand == null ? HandGesturesEnabledTag : HandGesturesEnabledHandTag(hand));
         Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal,
-            ApplyRequest(g, WriteHandGesturePermissions(g, Out(receiver, "Value"), hand))));
+            WriteHandGesturePermissions(g, Out(receiver, "Value"), hand)));
     }
 }
