@@ -3,6 +3,12 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 84ではSelectionのReadDynamicObjectVariable<Slot>のSourceを未接続にし、
+ノード自身の階層からExpressionSystem空間の `GestureTable.LnRm` を検索する。
+参照元がなくなった `ExpressionSystem/GestureTable` とその入力ノードを削除した。
+実DLLのReadDynamicVariableはSource未接続時にGetRootSlotContainerからFindSpaceを行う。
+対応表の行とDV/GestureTableスロットは維持する。
+
 Version 83ではAPI/ExamplesとAPI/Templatesを削除し、API直下にはReceiversだけを生成する。
 表情を追加する場合は既存のCatalogエントリーを複製する。
 
@@ -174,7 +180,7 @@ Expressions/
     LeftGesture・RightGesture      左右の入力状態
     AllowHandGestures.Left・Right          入力許可
     CurrentExpression              現在の表情（Slot参照）
-    GestureTable/                  自身へのSlot参照DVと、対応表の変数をまとめるスロット
+    GestureTable/                  対応表の変数をまとめるスロット
       L0R0〜L7R7                   64個の Catalog 参照
     Version・SmoothingSpeed        バージョンと補間速度
     References.*                   API・Catalog・内部Slotの固定参照

@@ -1,5 +1,10 @@
 # Expression integration checks
 
+Version 84 leaves Selection's ReadDynamicObjectVariable Source disconnected and
+removes the unused GestureTable self-reference and input. Reference checks verify
+the disconnected Source and removed variables after generation, cloning and reload;
+existing runtime checks cover table edits, selection, missing rows and avatar isolation.
+
 Version 83 removes API/Examples and API/Templates. Clip checks cover Catalog only;
 the existing copy/edit/select checks duplicate a Catalog entry directly.
 

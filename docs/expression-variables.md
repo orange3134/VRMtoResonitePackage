@@ -6,7 +6,7 @@
 
 変数名は `空間名/項目名`。以下の項目一覧では空間名を省略する。
 例えば状態変数の `LeftGesture` は `ExpressionSystem/LeftGesture`、Catalog の表情値 `Body.Smile` は `ExpressionSystem.Catalog.Clip/Body.Smile`。
-システム内で単一のモジュールは ExpressionSystem 空間を共有する。状態変数に接頭辞は付けず、固定参照には References.、対応表の行には GestureTable. を付ける。表自体への固定参照は例外として GestureTable を使う。
+システム内で単一のモジュールは ExpressionSystem 空間を共有する。状態変数に接頭辞は付けず、固定参照には References.、対応表の行には GestureTable. を付ける。
 複数インスタンスを持つレコードだけに別の空間を作り、空間名もドットで階層を表す。
 キーボードの左右の手や各表情は、それぞれ独立した DynamicVariableSpace を持つため、同じ名前でも値は別になる。ハンドジェスチャーの各手の処理状態はFlux内に保持する。
 
@@ -14,7 +14,7 @@
 |---|---|---|
 | Expressions 自身 | `ExpressionSystem` | バージョンと入口への参照 |
 | DV | `ExpressionSystem`（状態変数に接頭辞なし） | 入力・選択・再生状態 |
-| DV/GestureTable | `ExpressionSystem`（変数名 `GestureTable` と `GestureTable.*`） | 自身へのSlot参照と左右64通りの表情参照 |
+| DV/GestureTable | `ExpressionSystem`（変数名 `GestureTable.*`） | 左右64通りの表情参照 |
 | Catalog/各表情 | `ExpressionSystem.Catalog.Clip` | シェイプごとの固定値 |
 | Outputs/各項目 | `ExpressionSystem.Output` | BlendShape の基礎入力・混合・最終出力 |
 | Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と10キーの割当 |
@@ -23,7 +23,7 @@
 `Record()` は空間名を必須引数で受け取り、`OnlyDirectBinding=true` の空間を作る。
 例外は Expressions 自身（false）で、Internal と GestureTable には空間を追加せず、Expressions/DV の状態変数と `ExpressionSystem/GestureTable.LnRm` を共有空間へ登録する。
 DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot 直下の `DV` に、1変数1子 Slot で配置する。対応表だけは `DV/GestureTable` の子へまとめ、Clip の表情値はDV直下に置く。
-`DV/GestureTable` 自体にも `ExpressionSystem/GestureTable` のDynamicReferenceVariable<Slot>を付け、同じスロットを参照する。ここに独立したDynamicVariableSpaceは追加しない。
+`DV/GestureTable` 自体には自己参照変数や独立したDynamicVariableSpaceを追加しない。
 子 Slot 名は `/` 以降の変数名。対応表の子 Slot 名は `LnRm`。例：`Expressions/DV/LeftGesture`、`Expressions/DV/GestureTable/L0R0`、
 `Catalog/各表情/DV/Body.Smile`、`Outputs/各項目/DV/Result`。
 以下の配置先は論理的な所属を示し、変数の実体は各空間の `DV/変数名`（対応表は `DV/GestureTable/LnRm`、Clip の固定値は `DV/<Output.Id>`）に置く。
@@ -32,7 +32,7 @@ DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot
 ProtoFlux の読み書きは対象の空間名と変数名を明示し、変数生成は配置先の空間名を使う。単一モジュールの接頭辞は Slot 表示名から推測せず、明示的に付ける。
 固定の読み取り先がノード自身の祖先と同じ名前付き空間を指す場合は Dynamic Variable Input にする。
 各手のキーボード設定・装着状態、コントローラーの状態と親機種の設定、Internal 内の Selection／Playback の状態・表情参照、各 Output 内の入力値が対象。
-実行時に対象が変わるレコードと GestureTable.LnRm の可変名は ReadDynamicVariable を使う。状態変数と固定の表セルは、各モジュールから共通の ExpressionSystem 空間の Dynamic Variable Input で読める。
+実行時に対象が変わるレコードと GestureTable.LnRm の可変名は ReadDynamicVariable を使う。Selectionの対応表読み取りはSource未接続で、自身の階層からExpressionSystem空間を検索する。状態変数と固定の表セルは、各モジュールから共通の ExpressionSystem 空間の Dynamic Variable Input で読める。
 
 Version 17 で単一モジュールを統合・空間名を階層化し、Version 18 で DV 配下の1変数1スロット配置に統一した。旧形式の空間は新規生成しない。既存パッケージは再変換・再インポートで更新する。
 DynamicVariable を直接読む外部処理は新しい名前へ変更する。公開 Dynamic Impulse の Tag・引数は Version 4 と同じ。
@@ -48,10 +48,9 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 83 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 84 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
-| Expressions/DV/GestureTable | `GestureTable` | Slot | 自身のSlot | 定義。Selectionが対応表を読む参照先。Version 81で旧 `References.GestureTable` から変更し、このスロットへ直接配置 |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
 | Expressions/DV/GestureTable/LnRm | `L0R0`〜`L7R7` | Slot | コンパイルした表情、または null | 設定。n は左、m は右の int 値（生成時は各0〜7）。`FormatString` の `ExpressionSystem/GestureTable.L{0}R{1}` に左・右の順で渡し、変数名を直接検索する |
@@ -346,7 +345,7 @@ Selectionは対応表から読み取った表情Slotを送信ノードへ直接�
 
 実行対象のResonite DLLでの型名はDynamicVariableObjectInput<Slot>で、DynamicReferenceInput<Slot>という型は存在しない。
 固定の参照先はDynamicReferenceVariable<Slot>へ移し、各ボードの入力はその変数名を読む。共有参照はExpressionSystem空間を使う。
-References.API・References.Catalog・GestureTableは明示した変数を再利用する。それ以外はReferences.Outputs、References.InternalなどをExpressions/DV配下に生成する。
+References.API・References.Catalogは明示した変数を再利用する。それ以外はReferences.Outputs、References.InternalなどをExpressions/DV配下に生成する。Version 84でSource未接続の対応表検索へ変更し、参照元がなくなったGestureTable変数を削除した。
 null定数は入力未接続で表現し、References.Noneも参照入力ノードも生成しない。同じ非null参照先は1つのDVを共有し、参照名の禁止文字は置換して衝突時は連番を付ける。
 祖先空間を直接読むDynamicVariable入力は維持し、使われなくなった仮の参照にDVは作らない。
 保存・複製時は通常のSlot参照としてリマップされる。参照を編集すると、DynamicVariableの更新後に参照先の走査・書き込み・Impulse送信へ反映される。
@@ -372,7 +371,7 @@ CurrentExpressionなど、実行中に値が変わる参照変数は初期値が
 
 状態変数の `Core.` 接頭辞を削除した。`LeftGesture`、`RightGesture`、
 `AllowHandGestures.Left`・`Right`、`CurrentExpression` は ExpressionSystem 空間に直接登録する。
-`CurrentExpression` と `GestureTable`、`GestureTable.LnRm` は References 接頭辞の対象外。
+`CurrentExpression` と `GestureTable.LnRm` は References 接頭辞の対象外。
 固定参照は `References.Receiver`、`References.Catalog`、`References.Outputs`、
 `References.Internal.Lifecycle`、`References.Internal.Selection`、`References.Internal.Playback` などに統一する。
 `Core/Logic` は `Internal` に置き換え、Lifecycle・Selection・Playback をその直下へ配置する。

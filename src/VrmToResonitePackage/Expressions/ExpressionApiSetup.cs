@@ -52,7 +52,8 @@ internal sealed partial class ExpressionSystemSetup
     private IWorldElement ReadGesturePair(ExpressionFlux g, IWorldElement left, IWorldElement right)
     {
         var path = FormatGesturePair(g, Path(SystemSpace, "GestureTable.L{0}R{1}"), left, right);
-        return g.Read<Slot>(g.Ref(_table), path);
+        // With no Source, ReadDynamicVariable resolves the named ancestor space.
+        return g.Read<Slot>(null, path);
     }
 
     private void BuildSelectReceiver(ExpressionFlux g)

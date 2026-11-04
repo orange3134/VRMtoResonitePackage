@@ -95,16 +95,17 @@ internal static class ExpressionDynamicInputChecks
 
     private static void CheckSlotReferences(Slot root)
     {
-        var tableReference = root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Single(v => v.VariableName.Value == "ExpressionSystem/GestureTable");
-        Check(tableReference.Slot == root.FindChild("DV").FindChild("GestureTable") &&
-            tableReference.Reference.Target == tableReference.Slot &&
+        Check(root.FindChild("DV").FindChild("GestureTable").GetComponent<DynamicReferenceVariable<Slot>>() == null &&
             root.FindChild("DV").FindChild("References.GestureTable") == null &&
             root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v =>
-                v.VariableName.Value is not ("ExpressionSystem/References.DV.GestureTable" or "ExpressionSystem/References.GestureTable")) &&
+                v.VariableName.Value is not ("ExpressionSystem/GestureTable" or "ExpressionSystem/References.DV.GestureTable" or "ExpressionSystem/References.GestureTable")) &&
             root.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>().All(n =>
-                Name(n) is not ("ExpressionSystem/References.DV.GestureTable" or "ExpressionSystem/References.GestureTable")),
-            "GestureTable reference lives on and targets this avatar's DV/GestureTable without old names or slots");
+                Name(n) is not ("ExpressionSystem/GestureTable" or "ExpressionSystem/References.DV.GestureTable" or "ExpressionSystem/References.GestureTable")),
+            "GestureTable needs no Slot reference variable or input");
+        var tableRead = root.FindChild("Internal").FindChild("Selection")
+            .GetComponentInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Variables.ReadDynamicObjectVariable<Slot>>();
+        Check(tableRead != null && tableRead.Source.Target == null,
+            "Selection reads table rows from its ancestor space without a Source input");
         Check(root.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.RefObjectInput<Slot>>().Count == 0,
             "no fixed Slot reference inputs are exported");
         Check(!root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Any(v =>
@@ -142,8 +143,7 @@ internal static class ExpressionDynamicInputChecks
                 "only traversed Output writes require a Target: " + path.Value.Value);
         }
         var references = root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Where(v => v.VariableName.Value == "ExpressionSystem/GestureTable" ||
-                v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) ||
+            .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) ||
                 v.VariableName.Value.StartsWith("ExpressionSystem.Input.HandGestures/References.", StringComparison.Ordinal)).ToArray();
         Check(references.All(v => v.VariableName.Value != "ExpressionSystem/References.None"),
             "null constants generate no reference variable");
