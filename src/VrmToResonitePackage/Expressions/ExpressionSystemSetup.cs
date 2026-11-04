@@ -18,7 +18,7 @@ internal sealed partial class ExpressionSystemSetup
     internal const string ToggleHandGesturesTag = "ExpressionSystem/Method.ToggleHandGestures";
     internal static string HandGesturePermission(string hand) => "AllowHandGestures." + hand;
     private readonly ExpressionModel _model;
-    private readonly Slot _root, _catalog, _internal, _outputs, _table, _api, _inputs;
+    private readonly Slot _root, _catalog, _outputs, _table, _api, _method, _inputs;
     private readonly Slot _lifecycle, _selection, _playback;
     private const string PlaybackTickTag = "ExpressionSystem/Internal.ApplyExpression";
     private const string SelectionTickTag = "ExpressionSystem/Internal.UpdateSelection";
@@ -32,16 +32,17 @@ internal sealed partial class ExpressionSystemSetup
         _model = model;
         _root = Record(avatar, "Expressions", SystemSpace);
         _catalog = _root.AddSlot("Catalog");
-        _internal = _root.AddSlot("Internal");
+        _api = _root.AddSlot("API");
+        var internalSlot = _api.AddSlot("Internal");
+        _method = _api.AddSlot("Method");
         _outputs = _root.AddSlot("Outputs");
         _table = _root.AddSlot("DV").AddSlot("GestureTable");
         // State fields and table rows bind to the single system space.
         _root.GetComponent<DynamicVariableSpace>().OnlyDirectBinding.Value = false;
         _inputs = _root.AddSlot("Inputs");
-        _api = _root.AddSlot("Method");
-        _lifecycle = _internal.AddSlot("ResetState");
-        _selection = _internal.AddSlot("UpdateSelection");
-        _playback = _internal.AddSlot("ApplyExpression");
+        _lifecycle = internalSlot.AddSlot("ResetState");
+        _selection = internalSlot.AddSlot("UpdateSelection");
+        _playback = internalSlot.AddSlot("ApplyExpression");
         foreach (string hand in new[] { "Left", "Right" })
         {
             Data(_root, hand + "Gesture", 0);

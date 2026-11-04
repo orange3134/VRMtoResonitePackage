@@ -10,8 +10,8 @@ internal static class ExpressionInputEventChecks
 {
     public static async Task Run(Slot expressions)
     {
-        var core = expressions.FindChild("Internal");
-        var api = expressions.FindChild("Method");
+        var core = expressions.FindChild("API").FindChild("Internal");
+        var api = expressions.FindChild("API");
         var catalog = expressions.FindChild("Catalog");
         var modules = expressions.FindChild("Inputs").FindChild("HandGestures");
         var mocks = expressions.Parent.AddSlot("Temporary sensor inputs");

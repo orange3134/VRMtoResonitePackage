@@ -21,7 +21,7 @@
 | Inputs/HandGestures/各機種 | `ExpressionSystem.Input.HandGestures` | しきい値と安定待ち時間 |
 
 `Record()` は空間名を必須引数で受け取り、`OnlyDirectBinding=true` の空間を作る。
-例外は Expressions 自身（false）で、Internal と GestureTable には空間を追加せず、Expressions/DV の状態変数と `ExpressionSystem/GestureTable.LnRm` を共有空間へ登録する。
+例外は Expressions 自身（false）で、API・Internal・Method と GestureTable には空間を追加せず、Expressions/DV の状態変数と `ExpressionSystem/GestureTable.LnRm` を共有空間へ登録する。
 DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot 直下の `DV` に、1変数1子 Slot で配置する。対応表だけは `DV/GestureTable` の子へまとめ、Clip の表情値はDV直下に置く。
 `DV/GestureTable` 自体には自己参照変数や独立したDynamicVariableSpaceを追加しない。
 子 Slot 名は `/` 以降の変数名。対応表の子 Slot 名は `LnRm`。例：`Expressions/DV/LeftGesture`、`Expressions/DV/GestureTable/L0R0`、
@@ -48,7 +48,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `References.API` | Slot | Method | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
+| Expressions | `References.API` | Slot | API | 定義。公開・内部の全DynamicImpulseの共通送信先。子のMethod・Internalからタグに一致する受信処理を呼ぶ |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
@@ -347,7 +347,7 @@ UpdateSelectionは対応表から読み取った表情Slotを送信ノードへ�
 
 実行対象のResonite DLLでの型名はDynamicVariableObjectInput<Slot>で、DynamicReferenceInput<Slot>という型は存在しない。
 固定の参照先はDynamicReferenceVariable<Slot>へ移し、各ボードの入力はその変数名を読む。共有参照はExpressionSystem空間を使う。
-References.API・References.Catalogは明示した変数を再利用する。それ以外はReferences.Outputs、References.InternalなどをExpressions/DV配下に生成する。Version 84でSource未接続の対応表検索へ変更し、参照元がなくなったGestureTable変数を削除した。
+References.API・References.Catalogは明示した変数を再利用する。それ以外はReferences.OutputsなどをExpressions/DV配下に生成する。References.APIはExpressions/APIを指し、公開・内部の送信で共有する。References.InternalとそのDVスロット・入力ノードは生成しない。Version 84でSource未接続の対応表検索へ変更し、参照元がなくなったGestureTable変数を削除した。
 null定数は入力未接続で表現し、References.Noneも参照入力ノードも生成しない。同じ非null参照先は1つのDVを共有し、参照名の禁止文字は置換して衝突時は連番を付ける。
 祖先空間を直接読むDynamicVariable入力は維持し、使われなくなった仮の参照にDVは作らない。
 保存・複製時は通常のSlot参照としてリマップされる。参照を編集すると、DynamicVariableの更新後に参照先の走査・書き込み・Impulse送信へ反映される。

@@ -3,13 +3,18 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-05: `Expressions/API` を作成し、InternalとMethodをその直下へ移動した。
+公開・内部の全DynamicImpulseは `ExpressionSystem/References.API` が指すこのAPIを送信先とし、
+タグで受信処理を選ぶ。`References.Internal` のDVと入力ノードは生成しない。
+APIは整理用Slotで、DynamicVariableSpaceは追加しない。状態変数は従来のExpressionSystem空間を使う。
+
 2026-11-05: 実行時に未使用の `ExpressionSystem/Version` と `DV/Version` を削除した。
 旧パッケージとの比較ツールだけがVersionを形式判別に使っていたため、Versionなしは現行の
 Clip形式として読み、旧パッケージにVersionがある場合だけ従来の判別を行う。
 公開処理は `API/Receivers` を廃止して `Method` 直下へ移し、受信ボード名をタグ末尾へ統一した。
 内部の旧Selection・Playback・Lifecycleは、それぞれUpdateSelection・ApplyExpression・ResetStateとなる。
 ResetStateにはリセット受信に加えて、従来の自動初期化・着用監視も残る。
-送信先変数 `References.API` はMethodを参照する。タグ・引数・処理内容は維持する。
+この時点では送信先変数 `References.API` はMethodを参照していた。タグ・引数・処理内容は維持した。
 以下のVersion番号は過去の変更記録であり、現行の生成物にはVersion変数を持たせない。
 
 Version 85ではDynamicImpulseのタグを `ExpressionSystem/Method.*`（公開操作）と
@@ -204,10 +209,17 @@ Expressions/
     各表情/                        メニューのLabelに名前を直接保存
       DV/                          Clip空間のfloat変数
         Body.Smile                 Body.Smileの固定値（float）
-  Internal/                        入力・選択・再生ロジック
-    ResetState/                    リセット、初期化、装着状態の変更監視
-    UpdateSelection/               対応表からの選択と切り替え
-    ApplyExpression/               終端ポーズの取得・通常出力へのWrite
+  API/                             公開・内部Impulseの共通送信先
+    Internal/                      入力・選択・再生ロジック
+      ResetState/                  リセット、初期化、装着状態の変更監視
+      UpdateSelection/             対応表からの選択と切り替え
+      ApplyExpression/             終端ポーズの取得・通常出力へのWrite
+    Method/
+      TrySetGesture.Left|TrySetGesture.Right/  許可判定付きのint入力・SetGestureへ転送
+      SetGesture.Left|SetGesture.Right/        共通のint入力・左右値更新と表情選択
+      SelectExpression/            表情Slotを検証してApplyExpressionへ送信
+      ToggleHandGestures/           両手の許可をまとめて切り替え
+      Reset/                       表情・左右値・許可を初期状態へ戻す
   Outputs/                         BlendShape ごとのベース入力と最終出力
     各 BlendShape/                 出力定義・Base・Result
       Tracking/                    既存の追跡がある出力だけ自動合成するDrive
@@ -225,12 +237,6 @@ Expressions/
       Touch|Index|Vive|WindowsMR|Cosmos/   削除できる機種別入力
         Left/Logic/                左手の入力検出・安定化・通知
         Right/Logic/               右手の入力検出・安定化・通知
-  Method/
-    TrySetGesture.Left|TrySetGesture.Right/  許可判定付きのint入力・SetGestureへ転送
-    SetGesture.Left|SetGesture.Right/        共通のint入力・左右値更新と表情選択
-    SelectExpression/              表情Slotを検証してApplyExpressionへ送信
-    ToggleHandGestures/             両手の許可をまとめて切り替え
-    Reset/                         表情・左右値・許可を初期状態へ戻す
 ```
 
 Internal に入力元の一覧・優先順位・有効期限・汎用 Animator パラメーターは持たない。
@@ -254,7 +260,7 @@ ProtoFlux Tool では調べたい `UpdateSelection`、`ApplyExpression` など�
 1つの入力や再生処理を開くだけで全機種・APIまでつながった巨大なグラフにはならない。
 
 初回起動・装着開始時は `ResetState` が左右値と選択状態を初期化する。UpdateSelection は左右の入力イベントを受理したときだけ実行する。
-呼び出しには対象モジュールだけを宛先とする同期 Dynamic Impulse を使い、
+呼び出しには共通のAPIを宛先とし、タグで対象処理を選ぶ同期 Dynamic Impulse を使い、
 選択状態をイベント内で確定し、ApplyExpression も同期呼び出しして選んだ表情の各トラックの終端値を即時に書き込む。
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → UpdateSelection → ApplyExpression を同期実行する。
 同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態・固定ポーズ・出力目標が確定する。
@@ -299,7 +305,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 物理入力・時刻・実行時の Source を読む DynamicVariable など、連続変化扱いの入力は検出のための評価が残る。
 毎フレームの評価をすべてなくすものではない。監視を独立させるため、グラフのノード数は増える。
 Version 21では `GestureTable/Logic` のメニュー用監視を生成しない。
-現在の組み合わせの選択更新は `Internal/UpdateSelection` が担当する。
+現在の組み合わせの選択更新は `API/Internal/UpdateSelection` が担当する。
 
 ## 入力・列挙ノード
 
@@ -345,7 +351,7 @@ Inspector 上の状態変数名は `ExpressionSystem/LeftGesture` などで、Co
 | AllowHandGestures.Left / Right | true=該当する手のジェスチャーを許可、false=停止。キーボード・表情メニューは常に使用可能 |
 | `CurrentExpression` | 対応表または直接選択から渡された再生対象。未割当・削除済みなら null |
 
-1. 左右の番号が違う場合は、`Method/TrySetGesture.Left`／`TrySetGesture.Right`、転送先の `SetGesture.Left`／`SetGesture.Right` と該当入力の `Logic` を調べる。
+1. 左右の番号が違う場合は、`API/Method/TrySetGesture.Left`／`TrySetGesture.Right`、転送先の `SetGesture.Left`／`SetGesture.Right` と該当入力の `Logic` を調べる。
 2. 左右値が正しく表情が違う場合は、`GestureTable.L{左}R{右}` の参照と `AllowHandGestures.Left`・`Right` を確認し、`UpdateSelection` を調べる。
 3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（nはLeftGesture、mはRightGesture）の参照があるか確認する。表情Slotのアクティブ状態は選択に影響しない。参照先が削除されていないか確認する。
 4. 選択が正しく見た目が違う場合は、`Internal/ApplyExpression` と該当出力の `Base`、`TrackingWeight`、`Result` と、Resultの参照先からメッシュまでの駆動接続を調べる。
@@ -524,7 +530,7 @@ VariableNameはExpressionSystem.Catalog.Clip/と対応するOutput.Idを連結�
 例：ExpressionSystem.Catalog.Clip/Body.Smile。独立したBinding空間やBindings参照は生成しない。
 新しいシェイプを追加する場合は、対応する Outputs とメッシュへの接続も用意する。
 通常出力の名前付き変数・子レコードの編集後は表情を再選択する。追跡出力の名前付き変数の編集は自動反映する。
-外部から直接適用する場合は、ApplyExpressionスロットへExpressionSystem/Internal.ApplyExpressionを表情Slot付きで送る。CurrentExpressionを先に編集する必要はない。
+外部から直接適用する場合は、References.APIが指すAPIスロットへExpressionSystem/Internal.ApplyExpressionを表情Slot付きで送る。CurrentExpressionを先に編集する必要はない。
 
 ## 外部イベント API（タグ名はVersion 85）
 

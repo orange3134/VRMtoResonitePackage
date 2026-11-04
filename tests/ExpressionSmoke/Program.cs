@@ -111,7 +111,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await HandGesturePermissionChecks.Run(expressions);
         await KeyboardShortcutChecks.Run(expressions);
         await ExpressionInputEventChecks.Run(expressions);
-        var core = expressions.FindChild("Internal"); var api = expressions.FindChild("Method");
+        var core = expressions.FindChild("API").FindChild("Internal"); var api = expressions.FindChild("API");
         var catalog = expressions.FindChild("Catalog"); var table = expressions.FindChild("DV").FindChild("GestureTable");
         string[] gestureNames = { "Neutral", "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
         void Request(string tag, int gesture)
@@ -425,10 +425,10 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         ExpressionDynamicInputChecks.CheckBindings(expressions);
         ExpressionGraphChecks.CheckMenuColors(clone.FindChild("Expressions"));
         ExpressionGraphChecks.CheckMenuColors(expressions);
-        var cloneCore = clone.FindChild("Expressions").FindChild("Internal");
+        var cloneCore = clone.FindChild("Expressions").FindChild("API").FindChild("Internal");
         Check(Gestures(cloneCore) == (0, 0) && BothHandsAllowed(cloneCore),
             "clone resets hand inputs and enables ordinary input");
-        var cloneApi = clone.FindChild("Expressions").FindChild("Method");
+        var cloneApi = clone.FindChild("Expressions").FindChild("API");
         Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(cloneApi,
             ExpressionSystemSetup.TrySetGestureLeftTag, true, 1) == 1, "clone has its own int request receiver");
         Check(Get<int>(cloneCore, "LeftGesture") == 1 && Get<int>(cloneCore, "RightGesture") == 0 &&
@@ -491,8 +491,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var outputState = expressions.FindChild("Outputs").Children.Single();
         foreach (var (board, tag) in new[] { ("UpdateSelection", "ExpressionSystem/Internal.UpdateSelection"),
             ("ResetState", "ExpressionSystem/Internal.ResetState") })
-            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core, tag, true) == 1,
-                "shared Internal hierarchy reaches exactly one private stage receiver: " + board);
+            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, tag, true) == 1,
+                "shared API hierarchy reaches exactly one private stage receiver: " + board);
         await Frames();
         Check(Gestures(core) == (3, 4) && NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == null &&
             Math.Abs(Get<float>(outputState, "Result") - 0.4f) < 0.01f,
@@ -501,7 +501,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         // because its local initialization flag starts false.
         var unwornClone = avatar.Duplicate(world.RootSlot);
         await Frames();
-        var unwornCore = unwornClone.FindChild("Expressions").FindChild("Internal");
+        var unwornCore = unwornClone.FindChild("Expressions").FindChild("API").FindChild("Internal");
         Check(Gestures(unwornCore) == (3, 4) && Reference<Slot>(unwornCore, "CurrentExpression") == null && NoHandsAllowed(unwornCore),
             "an unworn clone does not initialize or repeatedly clear stored state");
         unwornClone.Parent = wearer;
@@ -539,19 +539,19 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var restoredExpressions = restored.FindChild("Expressions");
         ExpressionGraphChecks.CheckLayout(restoredExpressions);
         await ExpressionDynamicInputChecks.CheckEdits(restoredExpressions);
-        var restoredCore = restoredExpressions.FindChild("Internal");
+        var restoredCore = restoredExpressions.FindChild("API").FindChild("Internal");
         Check(Gestures(restoredCore) == (0, 0) &&
             Reference<Slot>(restoredCore, "CurrentExpression") == null && BothHandsAllowed(restoredCore),
             "package reload resets hand inputs and selection with the edited empty table row");
         Set(restoredExpressions.FindChild("DV").FindChild("GestureTable"), "L0R2", restoredExpressions.FindChild("Catalog").FindChild("Angry"));
-        Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredExpressions.FindChild("Method"),
+        Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredExpressions.FindChild("API"),
             ExpressionSystemSetup.TrySetGestureRightTag, true, 2) == 1, "reloaded int request receiver is connected");
         Check(Gestures(restoredCore) == (0, 2) &&
             Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
             "reloaded receiver evaluates the pair before the next frame");
         for (int i = 0; i < 60; i++) await default(NextUpdate);
         Check(Math.Abs(restored.GetComponent<ValueField<float>>().Value.Value - 0.7f) < 0.01, "reloaded stock ProtoFlux applies a fixed pose without converter callbacks");
-        var restoredApi = restoredExpressions.FindChild("Method");
+        var restoredApi = restoredExpressions.FindChild("API");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.TrySetGestureLeftTag, true, 8);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.TrySetGestureRightTag, true, 255);
         Check(Gestures(restoredCore) == (8, 255) &&

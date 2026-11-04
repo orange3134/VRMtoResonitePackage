@@ -10,7 +10,7 @@ internal sealed partial class ExpressionSystemSetup
     {
         // Fixed system state binds to the named ancestor space; selected clips stay dynamic.
         var g = new ExpressionFlux(_selection);
-        var core = g.Ref(_internal);
+        var core = g.Ref(_api);
         var left = g.Read<int>(core, SystemSpace, "LeftGesture");
         var right = g.Read<int>(core, SystemSpace, "RightGesture");
         var candidate = ReadGesturePair(g, left, right);
@@ -21,7 +21,7 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildPlayback()
     {
         var g = new ExpressionFlux(_playback);
-        var core = g.Ref(_internal);
+        var core = g.Ref(_api);
         // Apply static outputs as one selection operation. Tracking outputs have a
         // separate live driver, without per-shape change detectors or impulses.
         var value = g.Local<float>();
@@ -62,7 +62,7 @@ internal sealed partial class ExpressionSystemSetup
         // Read the selected expression by name; missing variables follow live Base.
         // No per-shape state, binding scans or synchronized per-frame impulses.
         var g = new ExpressionFlux(output.AddSlot("Tracking"));
-        var current = g.Read<Slot>(g.Ref(_internal), SystemSpace, "CurrentExpression");
+        var current = g.Read<Slot>(g.Ref(_api), SystemSpace, "CurrentExpression");
         var target = output.FindChild("DV").GetComponentsInChildren<DynamicField<float>>()
             .Single(v => v.VariableName.Value == Path(OutputSpace, "Result")).TargetField.Target;
         var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>)

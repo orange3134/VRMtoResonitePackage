@@ -9,9 +9,9 @@ internal static class HandGesturePermissionChecks
 {
     public static async Task Run(Slot expressions)
     {
-        var core = expressions.FindChild("Internal");
-        var api = expressions.FindChild("Method");
-        CheckToggleGraph(api.FindChild("ToggleHandGestures"));
+        var core = expressions.FindChild("API").FindChild("Internal");
+        var api = expressions.FindChild("API");
+        CheckToggleGraph(api.FindChild("Method").FindChild("ToggleHandGestures"));
         var menu = expressions.FindChild("Inputs").FindChild("ContextMenu");
         var bothToggles = new List<ButtonDynamicImpulseTrigger>();
         var toggles = new Dictionary<string, ButtonToggle>();
@@ -100,8 +100,8 @@ internal static class HandGesturePermissionChecks
 
     private static async Task CheckApiBeforeInitialization(Slot expressions)
     {
-        var core = expressions.FindChild("Internal");
-        var api = expressions.FindChild("Method");
+        var core = expressions.FindChild("API").FindChild("Internal");
+        var api = expressions.FindChild("API");
         var initialized = core.GetComponentsInChildren<Nodes.StoredValue<bool>>().Single();
         int Gesture(string hand) => core.ExpressionVariables<DynamicValueVariable<int>>()
             .Single(v => v.VariableName.Value == "ExpressionSystem/" + hand + "Gesture").Value.Value;

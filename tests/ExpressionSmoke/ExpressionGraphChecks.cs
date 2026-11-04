@@ -14,7 +14,7 @@ internal static class ExpressionGraphChecks
     public static void CheckMenuColors(Slot expressions)
     {
         if (Descendant(expressions, "Inputs/ContextMenu") == null) return;
-        var current = ExpressionTestFields.Reference<Slot>(expressions.FindChild("Internal"), "CurrentExpression");
+        var current = ExpressionTestFields.Reference<Slot>(expressions.FindChild("API").FindChild("Internal"), "CurrentExpression");
         var green = new colorX(0f, 1f, 0f, 1f, Renderite.Shared.ColorProfile.Linear);
         foreach (var item in expressions.GetComponentsInChildren<ContextMenuItemSource>())
         {
@@ -137,14 +137,14 @@ internal static class ExpressionGraphChecks
         {
             Check(expressions.GetComponentsInChildren<GlobalValue<string>>().Any(v => v.Value.Value == "modular_avatar/" + flag),
                 "expression boards read identification flag: " + flag);
-            Check(Descendant(expressions, "Method").GetComponentsInChildren<GlobalValue<string>>()
+            Check(Descendant(expressions, "API/Method").GetComponentsInChildren<GlobalValue<string>>()
                 .All(value => value.Value.Value != "modular_avatar/" + flag),
                 "API contains no wearer flag binding after generation, clone and reload: " + flag);
         }
         Check(nodes.Count > 0 && nodes.GroupBy(n => n.Slot).All(g => g.Count() == 1), "one Flux node per slot");
         Check(!expressions.GetComponentsInChildren<DynamicValueVariable<int>>().Any(v =>
             v.VariableName.Value == "ExpressionSystem/PairIndex"), "numeric PairIndex state is absent");
-        foreach (string path in new[] { "Internal/UpdateSelection" })
+        foreach (string path in new[] { "API/Internal/UpdateSelection" })
         {
             var lookupNodes = Descendant(expressions, path).GetComponentsInChildren<ProtoFluxNode>();
             Check(lookupNodes.All(node =>
@@ -159,10 +159,10 @@ internal static class ExpressionGraphChecks
             Check(formatter.Parameters.Count == 2 && formatter.Parameters.All(p => p is Nodes.Box<int>),
                 "pair lookup formats two gesture integers into the full variable path: " + path);
         }
-        Check(Descendant(expressions, "Internal/UpdateSelection").GetComponentsInChildren<ProtoFluxNode>()
+        Check(Descendant(expressions, "API/Internal/UpdateSelection").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => !n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "gesture selection has no state-change monitors");
-        Check(Descendant(expressions, "Method/SelectExpression").GetComponentsInChildren<ProtoFluxNode>()
+        Check(Descendant(expressions, "API/Method/SelectExpression").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => n is not Nodes.Strings.FormatString), "direct selection does not look up gesture pairs");
         Check(nodes.All(n => n.Group?.IsValid == true), "all expression Flux groups are valid");
         Check(nodes.All(n => n.Slot.Parent.GetComponents<ProtoFluxNode>().Count == 0), "Flux nodes belong to logic boards, not other nodes");
@@ -330,10 +330,10 @@ internal static class ExpressionGraphChecks
                 string.Join(", ", owners.Select(b => RelativePath(expressions, b))));
         }
 
-        foreach (string path in new[] { "Internal/ResetState", "Internal/UpdateSelection", "Internal/ApplyExpression",
-            "Method/TrySetGesture.Left", "Method/TrySetGesture.Right",
-            "Method/SetGesture.Left", "Method/SetGesture.Right",
-            "Method/SelectExpression", "Method/ToggleHandGestures", "Method/Reset" })
+        foreach (string path in new[] { "API/Internal/ResetState", "API/Internal/UpdateSelection", "API/Internal/ApplyExpression",
+            "API/Method/TrySetGesture.Left", "API/Method/TrySetGesture.Right",
+            "API/Method/SetGesture.Left", "API/Method/SetGesture.Right",
+            "API/Method/SelectExpression", "API/Method/ToggleHandGestures", "API/Method/Reset" })
         {
             var board = Descendant(expressions, path);
             Check(board != null && boards.Any(g => g.Key == board), "independent logic board exists: " + path);
@@ -357,15 +357,20 @@ internal static class ExpressionGraphChecks
             Check(slot.Name != "Command", "expression API contains no Command slots");
             foreach (var child in slot.Children) pending.Push(child);
         }
-        var method = Descendant(expressions, "Method");
-        Check(expressions.FindChild("API") == null && method.FindChild("Receivers") == null && method.Children.Count == 7,
-            "Method directly contains seven operation boards without API or Receivers wrappers");
+        var method = Descendant(expressions, "API/Method");
+        Check(ExpressionTestFields.Reference<Slot>(expressions, "References.API") == expressions.FindChild("API"),
+            "shared API reference targets this avatar's API root after generation, clone and reload");
+        Check(expressions.FindChild("Method") == null && expressions.FindChild("Internal") == null &&
+            expressions.FindChild("API").Children.Select(child => child.Name).OrderBy(name => name)
+                .SequenceEqual(new[] { "Internal", "Method" }) &&
+            method.FindChild("Receivers") == null && method.Children.Count == 7,
+            "API contains Internal and Method, with seven direct public operation boards");
         var publicReceivers = method.GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
         Check(publicReceivers.Length == 7, "exactly seven public API receivers");
         foreach (string removed in new[] { "AllowHandGestures", "AllowHandGesturesLeft", "AllowHandGesturesRight",
             "ToggleHandGesturesLeft", "ToggleHandGesturesRight" })
-            Check(Descendant(expressions, "Method/" + removed) == null,
+            Check(Descendant(expressions, "API/Method/" + removed) == null,
                 "unused permission API board is absent: " + removed);
         var tags = expressions.GetComponentsInChildren<GlobalValue<string>>().Select(value => value.Value.Value)
             .Concat(nodes.OfType<Nodes.ValueObjectInput<string>>().Select(node => node.Value.Value));
@@ -403,12 +408,12 @@ internal static class ExpressionGraphChecks
             Check(menuItems.FindChild("Allow hand gestures") == null && menuItems.FindChild("Disable hand gestures") == null,
                 "separate allow and disable menu items are absent");
             var toggle = menuItems.FindChild("Hand gestures")?.GetComponent<ButtonDynamicImpulseTrigger>();
-            Check(toggle?.Target.Target == Descendant(expressions, "Method") &&
+            Check(toggle?.Target.Target == Descendant(expressions, "API") &&
                 toggle.PressedTag.Value == "ExpressionSystem/Method.ToggleHandGestures" &&
                 menuItems.GetComponentsInChildren<ButtonDynamicImpulseTrigger>().Count(b => b.PressedTag.Value == toggle.PressedTag.Value) == 1,
                 "one toggle menu targets this avatar's gesture permission API");
             var resetButton = menuItems.FindChild("Reset settings")?.GetComponent<ButtonDynamicImpulseTrigger>();
-            Check(resetButton?.Target.Target == Descendant(expressions, "Method") &&
+            Check(resetButton?.Target.Target == Descendant(expressions, "API") &&
                 resetButton.PressedTag.Value == "ExpressionSystem/Method.Reset", "reset menu targets this avatar's reset API");
         }
         Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value != "ExpressionSystem/Override"),
@@ -418,7 +423,7 @@ internal static class ExpressionGraphChecks
         Check(expressions.GetComponentsInChildren<DynamicValueVariable<int>>()
             .All(v => !v.VariableName.Value.EndsWith("Revision", StringComparison.Ordinal)),
             "expression state retains no input revisions");
-        var core = Descendant(expressions, "Internal");
+        var core = Descendant(expressions, "API/Internal");
         Check(core.ExpressionVariables<DynamicValueVariable<int>>().All(v => v.VariableName.Value != "ExpressionSystem/SelectionStatus"),
             "Core contains no SelectionStatus diagnostic variable");
         Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().Where(v => !v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) &&
@@ -428,10 +433,10 @@ internal static class ExpressionGraphChecks
         Check(!core.ExpressionVariables<DynamicValueVariable<float>>().Any(v =>
             v.VariableName.Value is "ExpressionSystem/PlaybackStart" or "ExpressionSystem/PlaybackElapsed" or "ExpressionSystem/AnimationTime"),
             "Core has no playback clocks");
-        var playback = Descendant(expressions, "Internal/ApplyExpression").GetComponentsInChildren<ProtoFluxNode>();
+        var playback = Descendant(expressions, "API/Internal/ApplyExpression").GetComponentsInChildren<ProtoFluxNode>();
         Check(playback.Single(n => n.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal))
             .GetType().GetGenericArguments().SequenceEqual(new[] { typeof(Slot) }), "Playback receives a Slot");
-        Check(Descendant(expressions, "Method/SelectExpression").GetComponentsInChildren<ProtoFluxNode>()
+        Check(Descendant(expressions, "API/Method/SelectExpression").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => n.GetType().Name != "Children" && !n.GetType().Name.StartsWith("ForEachObject", StringComparison.Ordinal)),
             "Select validates the supplied Slot without scanning Catalog");
         var currentWrites = nodes.Where(n => n.GetType().Name == "WriteDynamicObjectVariable`1" &&

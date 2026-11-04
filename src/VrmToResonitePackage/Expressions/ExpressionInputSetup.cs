@@ -223,7 +223,7 @@ internal sealed partial class ExpressionSystemSetup
         var gesture = BuildControllerGesture(g, controller, device, side, module);
         var accepting = g.And(g.AvatarWornLocal, Out(controller, "IsActive"),
             g.Node("UserVR_Active", null, ("User", g.Owner(_root))),
-            g.Read<bool>(g.Ref(_internal), SystemSpace, HandGesturePermission(side.ToString())));
+            g.Read<bool>(g.Ref(_api), SystemSpace, HandGesturePermission(side.ToString())));
         var current = g.Choose<int>(accepting, gesture, g.Constant(-1));
         var send = SendHandInput(g, g.Text(TrySetGestureTag(kind)), current);
         // The authored graph drops changes during the timeout; it neither queues

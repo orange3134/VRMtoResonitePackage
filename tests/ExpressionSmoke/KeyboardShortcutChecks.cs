@@ -14,8 +14,8 @@ internal static class KeyboardShortcutChecks
         var modifiers = hands.Select(h => h.FindChild("DV").FindChild("Modifier").GetComponent<DynamicValueVariable<InputKey>>()).ToArray();
         Check(modifiers[0].Value.Value == InputKey.Shift && modifiers[1].Value.Value == InputKey.Control,
             "keyboard defaults always use Shift for Left and Ctrl for Right");
-        var core = expressions.FindChild("Internal");
-        var api = expressions.FindChild("Method");
+        var core = expressions.FindChild("API").FindChild("Internal");
+        var api = expressions.FindChild("API");
         var mocks = expressions.Parent.AddSlot("Keyboard test sensors");
         var ports = new List<(ISyncRef Port, IWorldElement Target)>();
         var sensors = new List<(ProtoFluxNode KeyInput, Nodes.ValueInput<bool> Sensor)>();

@@ -16,7 +16,7 @@ internal sealed partial class ExpressionSystemSetup
     {
         // Clearing the selected expression invokes the shared playback operation.
         var g = new ExpressionFlux(_lifecycle);
-        var core = g.Ref(_internal);
+        var core = g.Ref(_api);
         // Local, unserialized state: no User reference survives cloning or loading.
         var initialized = g.Node("StoredValue", typeof(bool));
         var cleanup = new List<IWorldElement>();
@@ -25,7 +25,7 @@ internal sealed partial class ExpressionSystemSetup
             cleanup.Add(g.Write<int>(core, SystemSpace, hand + "Gesture", g.Constant(0)));
         }
         cleanup.Add(WriteHandGesturePermissions(g, g.Constant(true)));
-        cleanup.Add(g.Trigger<Slot>(g.Ref(_internal), g.Text(PlaybackTickTag), g.Ref<Slot>(null)));
+        cleanup.Add(g.Trigger<Slot>(g.Ref(_api), g.Text(PlaybackTickTag), g.Ref<Slot>(null)));
 
         var clear = g.Sequence(cleanup.ToArray());
         var reset = g.Sequence(clear, g.Set<bool>(initialized, g.Constant(true)));

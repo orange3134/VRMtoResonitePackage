@@ -1,5 +1,10 @@
 # Expression integration checks
 
+2026-11-05: Parent Internal and Method under a shared API slot. References.API
+targets that slot for every public/internal impulse. Checks verify the nested
+layout, absence of References.Internal variables/inputs, shared sender bindings,
+menu targets and exact receiver dispatch through generation, cloning and reload.
+
 2026-11-05: Remove the unused Version dynamic variable and flatten API/Receivers
 into Method. Receiver boards match tag suffixes (SetGesture.Left, SelectExpression,
 UpdateSelection, ApplyExpression and ResetState). Layout checks reject the old

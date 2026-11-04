@@ -83,7 +83,7 @@ internal static class ExpressionTestFields
     public static bool TryReadSelectedValue(Slot output, out float value)
     {
         value = 0;
-        var current = Reference<Slot>(output.Parent.Parent.FindChild("Internal"), "CurrentExpression");
+        var current = Reference<Slot>(output.Parent.Parent.FindChild("API").FindChild("Internal"), "CurrentExpression");
         if (current == null) return false;
         string id = output.ExpressionVariables<DynamicValueVariable<string>>()
             .Single(v => v.VariableName.Value == VariablePath(output, "Id")).Value.Value;

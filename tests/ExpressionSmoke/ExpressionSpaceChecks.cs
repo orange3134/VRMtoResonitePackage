@@ -50,7 +50,7 @@ internal static class ExpressionSpaceChecks
         }
         Check(root.FindChild("Diagnostics") == null, "diagnostics are logged rather than exported into the avatar");
 
-        var internalSlot = root.FindChild("Internal");
+        var internalSlot = root.FindChild("API").FindChild("Internal");
         Check(root.FindChild("Core") == null && internalSlot != null &&
             internalSlot.Children.Select(child => child.Name).OrderBy(name => name)
                 .SequenceEqual(new[] { "ApplyExpression", "ResetState", "UpdateSelection" }),
@@ -122,7 +122,7 @@ internal static class ExpressionSpaceChecks
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),
             "table rows are readable from the system root");
-        var core = root.FindChild("Internal");
+        var core = root.FindChild("API").FindChild("Internal");
         Check(core.WriteDynamicVariable("Expr/AllowExternalInput", false) != DynamicVariableWriteResult.Success,
             "legacy shared-space writes cannot modify the new Core");
         Console.WriteLine("SPACES: explicit record schemas and variable prefixes verified");

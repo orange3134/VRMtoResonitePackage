@@ -54,7 +54,7 @@ internal static class ExpressionBindingNameChecks
                 Check(names.Values.Distinct().Count() == bindings.Length, "all colliding sources get distinct keys");
                 if (firstNames == null) firstNames = names;
                 else Check(names.All(p => firstNames[p.Key] == p.Value), "keys are stable when source curve order changes");
-                var api = root.FindChild("Method");
+                var api = root.FindChild("API");
                 Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
                     ExpressionSystemSetup.SelectTag, true, root.FindChild("Catalog").FindChild("Named")) == 1, "select named expression");
                 for (int i = 0; i < bindings.Length; i++)

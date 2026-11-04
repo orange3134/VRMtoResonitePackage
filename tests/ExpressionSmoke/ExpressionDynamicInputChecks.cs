@@ -41,15 +41,15 @@ internal static class ExpressionDynamicInputChecks
         }
         foreach (string board in new[] { "ApplyExpression" })
         {
-            var logic = root.FindChild("Internal").FindChild(board);
+            var logic = root.FindChild("API").FindChild("Internal").FindChild(board);
             var current = logic.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>()
                 .Single(node => Name(node) == "ExpressionSystem/CurrentExpression");
             var proxy = current.Slot.GetComponent<global::ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Variables.DynamicVariableInputProxy<Slot>>();
-            var field = root.FindChild("Internal").ExpressionVariables<DynamicReferenceVariable<Slot>>()
+            var field = root.FindChild("API").FindChild("Internal").ExpressionVariables<DynamicReferenceVariable<Slot>>()
                 .Single(variable => variable.VariableName.Value == "ExpressionSystem/CurrentExpression");
             Check(proxy != null && proxy.HasValue && proxy.DynamicValue == field.Reference.Target,
                 "Core object input follows this avatar's selected expression: " + board);
-            Check(root.FindChild("Internal").FindChild("UpdateSelection").GetComponentsInChildren<DynamicVariableValueInput<int>>().Count > 0,
+            Check(root.FindChild("API").FindChild("Internal").FindChild("UpdateSelection").GetComponentsInChildren<DynamicVariableValueInput<int>>().Count > 0,
                 "Selection uses Dynamic Inputs for hand values");
         }
     }
@@ -70,7 +70,7 @@ internal static class ExpressionDynamicInputChecks
         float original = field.Value.Value;
         var receiver = root.FindChild("DV").FindChild("References.API").GetComponent<DynamicReferenceVariable<Slot>>();
         var originalReceiver = receiver.Reference.Target;
-        var alternateReceiver = root.FindChild("Internal");
+        var alternateReceiver = root.FindChild("API").FindChild("Internal");
         try
         {
             receiver.Reference.Target = alternateReceiver;
@@ -102,7 +102,7 @@ internal static class ExpressionDynamicInputChecks
             root.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>().All(n =>
                 Name(n) is not ("ExpressionSystem/GestureTable" or "ExpressionSystem/References.DV.GestureTable" or "ExpressionSystem/References.GestureTable")),
             "GestureTable needs no Slot reference variable or input");
-        var tableRead = root.FindChild("Internal").FindChild("UpdateSelection")
+        var tableRead = root.FindChild("API").FindChild("Internal").FindChild("UpdateSelection")
             .GetComponentInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Variables.ReadDynamicObjectVariable<Slot>>();
         Check(tableRead != null && tableRead.Source.Target == null,
             "Selection reads table rows from its ancestor space without a Source input");
@@ -116,22 +116,27 @@ internal static class ExpressionDynamicInputChecks
             var local = module.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>();
             Check(local.Count == 0, "local writes need no hand references: " + module.Name);
         }
-        var internalReferences = root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Where(v => v.VariableName.Value == "ExpressionSystem/References.Internal" ||
-                v.VariableName.Value.StartsWith("ExpressionSystem/References.Internal.", StringComparison.Ordinal)).ToArray();
-        Check(internalReferences.Length == 1 && internalReferences[0].VariableName.Value == "ExpressionSystem/References.Internal" &&
-            internalReferences[0].Reference.Target == root.FindChild("Internal"),
-            "internal impulses share one parent reference without per-board references");
+        var apiReferences = root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+            .Where(v => v.VariableName.Value == "ExpressionSystem/References.API" ||
+                v.VariableName.Value.StartsWith("ExpressionSystem/References.API.", StringComparison.Ordinal)).ToArray();
+        Check(apiReferences.Length == 1 && apiReferences[0].VariableName.Value == "ExpressionSystem/References.API",
+            "public and internal impulses share one API root reference");
+        Check(root.FindChild("DV").FindChild("References.Internal") == null &&
+            root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v =>
+                !v.VariableName.Value.StartsWith("ExpressionSystem/References.Internal", StringComparison.Ordinal)) &&
+            root.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>().All(n =>
+                !Name(n).StartsWith("ExpressionSystem/References.Internal", StringComparison.Ordinal)),
+            "removed Internal reference has no variable, slot or inputs");
         foreach (var trigger in root.GetComponentsInChildren<ProtoFluxNode>().Where(n =>
             n.GetType().Name.StartsWith("DynamicImpulseTrigger", StringComparison.Ordinal)))
         {
             var tag = ((ISyncRef)VrmToResonitePackage.Expressions.ExpressionFlux.Member(trigger, "Tag")).Target
                 as FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueObjectInput<string>;
-            if (tag?.Value.Value?.StartsWith("ExpressionSystem/Internal.", StringComparison.Ordinal) != true) continue;
+            if (tag?.Value.Value?.StartsWith("ExpressionSystem/", StringComparison.Ordinal) != true) continue;
             var target = ((ISyncRef)VrmToResonitePackage.Expressions.ExpressionFlux.Member(trigger, "TargetHierarchy")).Target;
             while (target != null && target is not ProtoFluxNode) target = target.Parent;
-            Check(target is DynamicVariableObjectInput<Slot> input && Name(input) == "ExpressionSystem/References.Internal",
-                "internal impulse targets the shared Internal hierarchy: " + tag.Value.Value);
+            Check(target is DynamicVariableObjectInput<Slot> input && Name(input) == "ExpressionSystem/References.API",
+                "expression impulse targets the shared API hierarchy: " + tag.Value.Value);
         }
         foreach (var write in root.GetComponentsInChildren<ProtoFluxNode>().Where(n =>
             n.GetType().Name is "WriteDynamicValueVariable`1" or "WriteDynamicObjectVariable`1"))
