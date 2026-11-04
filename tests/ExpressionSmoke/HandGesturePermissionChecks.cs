@@ -196,8 +196,8 @@ internal static class HandGesturePermissionChecks
         Check(sequence != null && sequence.Calls.Count == 2 &&
             sequence.Calls.All(call => writes.Any(write => call == write)),
             "permission writes run only after the local snapshot is captured");
-        Check(board.GetComponentsInChildren<Nodes.If>().Count == 1,
-            "shared toggle keeps only the wearer gate, without duplicated true/false write branches");
+        Check(board.GetComponentsInChildren<Nodes.If>().Count == 0,
+            "shared toggle writes the NAND snapshot without wearer or duplicated true/false branches");
     }
 
     private static void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }

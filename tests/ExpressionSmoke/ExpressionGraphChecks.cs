@@ -128,8 +128,13 @@ internal static class ExpressionGraphChecks
                 "GetActiveUserSelf is used only by sensors requiring a User");
         }
         foreach (string flag in new[] { "AvatarWorn", "AvatarWornLocal" })
+        {
             Check(expressions.GetComponentsInChildren<GlobalValue<string>>().Any(v => v.Value.Value == "modular_avatar/" + flag),
                 "expression boards read identification flag: " + flag);
+            Check(Descendant(expressions, "API").GetComponentsInChildren<GlobalValue<string>>()
+                .All(value => value.Value.Value != "modular_avatar/" + flag),
+                "API contains no wearer flag binding after generation, clone and reload: " + flag);
+        }
         Check(nodes.Count > 0 && nodes.GroupBy(n => n.Slot).All(g => g.Count() == 1), "one Flux node per slot");
         Check(!expressions.GetComponentsInChildren<DynamicValueVariable<int>>().Any(v =>
             v.VariableName.Value == "ExpressionSystem/PairIndex"), "numeric PairIndex state is absent");

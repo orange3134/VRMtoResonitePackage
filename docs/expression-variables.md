@@ -47,7 +47,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 76 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 77 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -143,9 +143,9 @@ Version 67では `NAND_Bool` の判定を `ValueWrite<bool>` で `LocalValue<boo
 `OnWritten` から左右へ同じLocal値を書き込む。片手を書き換えた後の再判定を避ける。
 PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の時間再生は行わない。
 
-Lifecycle は OnStart とローカル装着状態の変更時に動き、現在の装着者がローカルユーザーの場合だけ、初期化確認 → Selection を実行する。
+LifecycleはOnStartと着用状態の変更時に動き、現在の装着者がローカルユーザーで未初期化の場合に初期化する。初期化でSelectionは実行しない。
 初期化済みかは保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。
-公開 API も入力許可を判定する前に同じ初期化確認を呼ぶため、装着状態の変更イベントより早い左右入力も保持する。
+公開APIは暗黙の初期化を行わず、初期化前の入力は後続のLifecycle初期化でクリアされる。Version 77以降はAPI内で着用判定せず、未着用でも左右値・許可を更新する。Internalの表情適用・リセットには着用判定が残る。
 
 初期化時は左右値を 0、PairKey を L0R0、AllowHandGestures.Left・Right を両方true、
 Playbackへnullを送り、CurrentExpressionの解除と通常出力のBase復帰をまとめて実行する。追跡出力は専用DriveがBaseを反映する。

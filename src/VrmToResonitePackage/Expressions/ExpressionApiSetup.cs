@@ -17,7 +17,7 @@ internal sealed partial class ExpressionSystemSetup
         BuildSelectReceiver(new(_api.AddSlot("Select")));
         BuildHandGesturesToggleReceiver(new(_api.AddSlot("ToggleHandGestures")));
         var reset = new ExpressionFlux(_api.AddSlot("Reset"));
-        ReceiveUpdate(reset, ResetTag, reset.Trigger(reset.Ref(_internal), ResetStateTag));
+        Link(reset.Receiver(ResetTag, false), "OnTriggered", reset.Trigger(reset.Ref(_internal), ResetStateTag));
     }
 
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
@@ -28,7 +28,7 @@ internal sealed partial class ExpressionSystemSetup
         var receiver = g.Receiver<int>(tag);
         if (checkPermission)
         {
-            // SetGesture owns wearer checks and mutation for every input source.
+            // SetGesture owns hand mutation for every input source.
             // Early gestures with saved false permissions are intentionally dropped.
             Link(receiver, "OnTriggered", g.If(
                 g.Read<bool>(g.Ref(_internal), SystemSpace, HandGesturePermission(hand)),
@@ -37,7 +37,7 @@ internal sealed partial class ExpressionSystemSetup
         }
         var mutation = g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),
             g.Trigger(g.Ref(_internal), SelectionTickTag));
-        Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal, mutation));
+        Link(receiver, "OnTriggered", mutation);
     }
 
     private static IWorldElement FormatGesturePair(ExpressionFlux g, string format, IWorldElement left, IWorldElement right)
@@ -64,7 +64,7 @@ internal sealed partial class ExpressionSystemSetup
         var select = g.Sequence(
             WriteHandGesturePermissions(g, g.Constant(false)),
             g.Trigger<Slot>(g.Ref(_internal), g.Text(PlaybackTickTag), selected));
-        Link(receiver, "OnTriggered", g.If(g.And(g.AvatarWornLocal, valid), select));
+        Link(receiver, "OnTriggered", g.If(valid, select));
     }
 
     private IWorldElement WriteHandGesturePermissions(ExpressionFlux g, IWorldElement value) =>
@@ -80,6 +80,6 @@ internal sealed partial class ExpressionSystemSetup
             ("A", g.Read<bool>(core, SystemSpace, HandGesturePermission("Left"))),
             ("B", g.Read<bool>(core, SystemSpace, HandGesturePermission("Right")))));
         Link(capture, "OnWritten", WriteHandGesturePermissions(g, enabled));
-        ReceiveUpdate(g, ToggleHandGesturesTag, capture);
+        Link(g.Receiver(ToggleHandGesturesTag, false), "OnTriggered", capture);
     }
 }

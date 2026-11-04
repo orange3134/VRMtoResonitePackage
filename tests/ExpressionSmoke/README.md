@@ -1,5 +1,13 @@
 # Expression integration checks
 
+Version 77 removes wearer gates from API receivers. Graph checks reject AvatarWorn
+and AvatarWornLocal bindings anywhere under API after generation, cloning and reload.
+Unworn runtime checks cover both TrySetGesture/SetGesture hands, per-hand permission
+rejection, Select disabling permissions, and the combined toggle in both directions.
+Internal Selection/Playback/Reset still reject unworn updates; their tests verify that
+API-written values persist while the pose stays cleared and outputs follow Base.
+Input-module wearer gates and lifecycle initialization remain covered separately.
+
 Version 76 removes the five unused permission APIs: global/per-hand AllowHandGestures
 and per-hand ToggleHandGestures. Graph checks require seven public receivers and reject
 the removed boards and tags after generation, cloning and reload. Permission setup

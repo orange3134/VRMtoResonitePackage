@@ -500,7 +500,8 @@ internal static class ExpressionInputEventChecks
             Gesture("Left", 6);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 0, "AvatarWornLocal false blocks both gesture API and keyboard even under UserRoot");
+            Check(Get<int>(core, "LeftGesture") == 6 && Reference<Slot>(core, "CurrentExpression") == null,
+                "AvatarWornLocal false permits direct API values while keyboard input and Internal selection stay gated");
             foreach (var entry in wearerReferences) entry.Reference.Target = expressions.World.LocalUser;
             await Frames(5);
             Check(Get<int>(core, "LeftGesture") == 1, "AvatarWornLocal true accepts a held chord when wearing begins");

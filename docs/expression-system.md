@@ -3,6 +3,13 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 77では、API内の `modular_avatar/AvatarWornLocal` 判定を削除した。
+SetGesture左右・Select・ToggleHandGestures・Resetが対象で、API内にはAvatarWorn/AvatarWornLocalの参照を生成しない。
+未着用でもSetGestureは左右値を更新し、TrySetGestureは各手の許可があればSetGestureへ転送する。
+SelectはCatalog検証後に両手の許可をfalseへ変更し、ToggleHandGesturesは両手の許可を切り替える。
+InternalのSelection・Playback・LifecycleとInputsの着用判定は維持するため、未着用時は表情の適用やResetは実行されない。
+API全体は75から65ノードになる。初期化前のAPI更新は、その後のLifecycle初期化でクリアされる。
+
 Version 76では、生成物内に呼び出し元のない `AllowHandGestures`・`AllowHandGesturesLeft/Right`・
 `ToggleHandGesturesLeft/Right` の5受信処理とTag定義を削除した。公開受信処理は12から7個になる。
 両手メニューが使う `ToggleHandGestures` は維持する。個別の許可設定は左右のButtonToggle、
@@ -245,7 +252,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 入力・装着状態の変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
 比較用の前回値はローカルな実行状態で、DynamicVariable や同期・保存対象の変数には追加しない。
 初期値の設定だけでは発火しない。Inputsは変更イベントだけを使い、LifecycleとPlaybackの初期処理には `OnStart` を使う。
-装着者の確認は各処理の入口に残す。
+装着者の確認はInputsとInternalに残す。Version 77以降、API内では着用判定しない。
 
 この構成で、無変化時の Impulse 実行・変数への書き込みを減らす。メニュー全走査は行わない。
 物理入力・時刻・実行時の Source を読む DynamicVariable など、連続変化扱いの入力は検出のための評価が残る。
@@ -346,10 +353,10 @@ Lifecycle 内の保存されない `StoredValue<bool>` が初期化済みかを�
 - 装着開始・初回起動：AvatarWornLocal=true になれば初期化する。入力イベントがなければ CurrentExpression=null のままにする。
 - 取り外し：初期化済みのクライアントが一度だけ入力・選択状態をクリアし、出力を Base に戻す。初期化済みフラグを解除する。
 - 未装着中：選択更新は停止する。通常出力は初期化・権限取得時にホストがBaseをWriteし、追跡対象は専用DriveがBaseに追従する。閲覧者は共有の選択状態を書き換えない。
-- 再装着・複製・読み込み：初回に左右値を 0、入力許可を true に戻して再開する。API が先に届いた場合も同じ初期化を行う。
+- 再装着・複製・読み込み：初回のローカル着用時に左右値を 0、入力許可を true に戻して再開する。APIが先に届いても初期化は呼ばず、先行入力は後続のLifecycle初期化でクリアされる。
 
 取り外し時はローカルDriveと共有AvatarWornの反映順が異なるため、Driveと変数通知が反映される2更新後に両フラグを再確認して終了処理を行う。再装着済みならクリアせず、別の装着者が既にいる場合は共有値をクリアせずローカルの初期化済みフラグだけを解除する。
-装着者の履歴は比較せず、AvatarWorn／AvatarWornLocal の変化を FireOnLocalValueChange で検出する。API は受信時点の AvatarWornLocal が true の場合だけ処理する。
+装着者の履歴は比較せず、AvatarWorn／AvatarWornLocal の変化を FireOnLocalValueChange で検出する。APIは着用状態にかかわらず受信処理を実行し、表情適用・リセットの可否はInternal側で判定する。
 変更イベントが処理される前に外して同じユーザーへ戻し、判定結果が変わらなかった場合は連続した装着として扱う。
 未装着中も追跡用Driveは各クライアントのBaseに追従する。
 既存パッケージへ反映するには再変換・再インポートが必要。
@@ -364,7 +371,7 @@ bool APIも `ResoPon/Expression/AllowHandGestures` に変更する。旧変数�
 ジェスチャー番号は次の対応になる。
 Version 23では左右ジェスチャーのコンテキストメニューと専用のMenu/Left・Menu/Right APIを生成しない。
 コントローラーはTrySetGesture/Left・TrySetGesture/Rightを使い、対応するAllowHandGestures.Left・Right=trueのときだけ受け付ける。
-キーボードはSetGesture/Left・SetGesture/Rightのint APIを使い、フラグに関係なく受け付ける。どちらも装着者限定で、受理したイベントごとに左右値から表情を選ぶ。
+キーボードはSetGesture/Left・SetGesture/Rightのint APIを使い、許可フラグに関係なく受け付ける。Inputs側の送信は装着者限定。APIを直接呼ぶと未着用でも左右値を更新するが、表情選択はInternalで装着者に限定する。
 動作確認では `Core/LeftGesture`、`RightGesture`、`CurrentExpression` と対応表の参照先を見る。
 
 | 番号 | 状態 |
@@ -400,7 +407,7 @@ Version 23では左右ジェスチャーのコンテキストメニューと専�
   Control・Shift は左右どちらの物理キーでもよい。各手の設定は独立して変更できる。
 - コントローラー: 不要な `Modules/Touch|Index|Vive|WindowsMR` を削除できる。
   Version 51では機器の切断・非アクティブ化・VRモード終了時に、その手へ-1を即送信する。
-  対応表に行がなければBaseへ戻る。入力禁止・未着用時はAPIがこの送信を拒否する。
+  対応表に行がなければBaseへ戻る。入力禁止時はTrySetGestureが拒否し、未着用時はInputs側が送信を停止する。
   再接続・VR復帰後は、安定待ちを通過した手形でその手の値を更新する。
   モジュール自体の削除・無効化でも手の状態は残る。解除したい場合は Neutral を明示的に送る。
   Grip/Trigger の押し込み・解放しきい値と安定待ち時間を機種ごとに編集できる。
@@ -501,15 +508,15 @@ Tag は大文字・小文字を含めて完全一致。引数型違い、無効�
 固定したいときは Menu 側の Tag を使い、手入力など固定しない送信元は Gesture 側を使う。
 メニューの送信にも専用の Tag を使うため、ハンドジェスチャーを無効にしてもメニューは操作できる。
 
-左右入力は片手の値を更新してSelectionを実行する。直接選択メニューはboolとCurrentExpressionを同じImpulse内で更新する。
+左右入力は片手の値を更新してSelectionへ通知する。直接選択メニューはboolを更新してPlaybackへ通知する。Internalがローカル着用を認めた場合、同じImpulse内でCurrentExpressionと出力を更新する。
 直接選択ではSelectionを経由せず、Playbackが固定ポーズと通常出力を同期更新する。追跡対象は通常のドライバー更新で反映する。
 boolの変更だけでは左右値も表情も変更しない。
 Version 25のコンテキストメニュー「Reset settings」は引数なしのReset APIを送る。
 CurrentExpression=null、左右のGesture=0、PairKey=L0R0、AllowHandGestures.Left・Rightを両方trueへ一括で戻し、各出力にBaseを反映する。
 GestureTableの割り当てやCatalog、キー設定は変更しない。L0R0に表情が割り当てられていてもリセットでは再選択せず、次の左右入力イベントで再評価する。
 Resetもローカル装着者限定で、ジェスチャー無効時にも受け付ける。
-初期化は入力許可の判定より前に行い、複製・再ロード・再装着時には bool=true、左右=0 に戻す。
-Dynamic Impulse はネットワーク RPC ではなく、装着者以外のクライアントからの実行は無視する。
+初期化はLifecycleが担当し、複製・再ロード・再装着後のローカル着用時に bool=true、左右=0 に戻す。APIから暗黙の初期化は行わない。
+Dynamic ImpulseはネットワークRPCではない。API内の左右値・許可の更新は呼び出したクライアントで実行し、Internalの表情適用とリセットにはローカル着用条件が残る。
 
 旧 `ResoPon/Expression/v3/Select` と `v3/Automatic` は生成しない。
 旧 Select 送信側は Menu/Select へ変更する。ハンドジェスチャーを明示的に再開する場合は

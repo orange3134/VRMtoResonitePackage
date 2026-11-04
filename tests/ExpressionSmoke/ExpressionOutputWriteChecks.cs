@@ -52,8 +52,8 @@ internal static class ExpressionOutputWriteChecks
                 ExpressionSystemSetup.TrySetGestureRightTag, true, index) == 1, "int receiver selects test clip " + index);
 
             Select(1); await Frames();
-            Check(Get<int>(core, "RightGesture") == 0 && Reference<Slot>(core, "CurrentExpression") == null,
-                "parenting below UserRoot without equip does not accept gesture requests");
+            Check(Get<int>(core, "RightGesture") == 1 && Reference<Slot>(core, "CurrentExpression") == null,
+                "before equip the API accepts the gesture value while Internal Selection rejects the pose");
             Near(a.Value, 0.2f, "unassigned avatar retains tracking Base");
             EquipAvatar(avatar); await Frames(30);
             Select(1); await Frames(); Near(a.Value, 1, "short clip reaches its final pose");
@@ -215,9 +215,9 @@ internal static class ExpressionOutputWriteChecks
                 catalog.FindChild("Short"));
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesTag, true);
             await Frames();
-            Check(Get<int>(core, "RightGesture") == 0 && BothHandsAllowed(core) &&
+            Check(Get<int>(core, "RightGesture") == 1 && BothHandsAllowed(core) &&
                 Reference<Slot>(core, "CurrentExpression") == null,
-                "identification blocks gesture, keyboard, menu and toggle APIs while unworn under UserRoot");
+                "unworn APIs update input and permissions while Internal Playback keeps the pose cleared");
             tracking.Value = 0.65f; await Frames();
             Near(a.Value, 0.65f, "unworn tracking continues to follow Base");
             EquipAvatar(avatar); await Frames(30);

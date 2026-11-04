@@ -465,18 +465,31 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             Math.Abs(field.Value - 0.4f) < 0.01,
             "wearer departure restores base instead of playing the mapped Neutral expression");
         Set(table, "L0R0", (Slot)null);
-        Gesture(0, 1); Select("Angry"); await Frames();
-        Check(Get<int>(core, "LeftGesture") == 0 && BothHandsAllowed(core),
-            "gesture and select requests are ignored without a local wearer");
-        Set(core, "AllowHandGestures.Left", false); Set(core, "AllowHandGestures.Right", false);
+        Gesture(0, 1); Gesture(1, 2);
+        Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 2 &&
+            Get<string>(core, "PairKey") == "L0R0" && Reference<Slot>(core, "CurrentExpression") == null,
+            "unworn gesture APIs update both hands while Internal Selection retains its wearer gate");
+        Select("Angry");
+        Check(NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == null,
+            "unworn Select disables gestures while Internal Playback rejects the pose");
+        Gesture(0, 7); Gesture(1, 7);
+        Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 2,
+            "unworn TrySetGesture still checks each hand permission");
+        Request(ExpressionSystemSetup.SetGestureLeftTag, 3); Request(ExpressionSystemSetup.SetGestureRightTag, 4);
+        Check(Get<int>(core, "LeftGesture") == 3 && Get<int>(core, "RightGesture") == 4 && NoHandsAllowed(core),
+            "unworn SetGesture updates both hands independently of permission");
         expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items").FindChild("Hand gestures")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
+        Check(BothHandsAllowed(core), "unworn combined toggle enables both hands");
+        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items").FindChild("Hand gestures")
+            .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
+        Check(NoHandsAllowed(core), "unworn combined toggle disables both hands");
         expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items").FindChild("Reset settings")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
-        Check(NoHandsAllowed(core),
-            "toggle and reset requests are ignored without a local wearer");
+        Check(NoHandsAllowed(core) && Get<int>(core, "LeftGesture") == 3 && Get<int>(core, "RightGesture") == 4,
+            "unworn Reset reaches the still-gated Internal Lifecycle without clearing API-written state");
         // Sentinel selection state proves wearer-only private stages did no work.
         var outputState = expressions.FindChild("Outputs").Children.Single();
         Set(core, "PairKey", "__unchanged");
