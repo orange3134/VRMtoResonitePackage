@@ -109,8 +109,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 69,
-            "forwarded gesture API requests are identified by package version 69");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 70,
+            "permission-only gesture forwarding is identified by package version 70");
         Check(root.ExpressionVariables<DynamicValueVariable<bool>>().Count(v =>
             v.VariableName.Value is "ExpressionSystem/AllowHandGestures.Left" or "ExpressionSystem/AllowHandGestures.Right") == 2 &&
             root.ExpressionVariables<DynamicValueVariable<bool>>().All(v => v.VariableName.Value != "ExpressionSystem/AllowHandGestures"),

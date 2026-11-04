@@ -27,11 +27,10 @@ internal sealed partial class ExpressionSystemSetup
         ReceiveUpdate(reset, ResetTag, reset.Trigger(reset.Ref(_internal), ResetStateTag));
     }
 
-    // Initialization runs before checking the input gate so the first event after
-    // cloning or reattachment can restore the default enabled state.
-    private IWorldElement ApplyRequest(ExpressionFlux g, IWorldElement mutation, IWorldElement allowed = null) => g.Sequence(
+    // Keyboard and other state-changing requests initialize before mutation.
+    private IWorldElement ApplyRequest(ExpressionFlux g, IWorldElement mutation) => g.Sequence(
         g.Trigger(g.Ref(_internal), InitializeTag),
-        allowed == null ? mutation : g.If(allowed, mutation));
+        mutation);
 
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
         g.Write<int>(g.Ref(_internal), SystemSpace, hand + "Gesture", gesture);
@@ -39,16 +38,18 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildHandReceiver(ExpressionFlux g, string hand, string tag, bool gestureInput)
     {
         var receiver = g.Receiver<int>(tag);
-        // Reuse the keyboard receiver's write/selection path, as in the authored
-        // Salt graph. Keep initialization before the permission check: a fresh
-        // instance can still carry false permission values from its saved state.
-        var mutation = gestureInput
-            ? SendHandInput(g, g.Text(hand == "Left" ? KeyboardLeftTag : KeyboardRightTag), Out(receiver, "Value"))
-            : g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),
-                g.Trigger(g.Ref(_internal), SelectionTickTag));
-        Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal,
-            ApplyRequest(g, mutation, gestureInput
-                ? g.Read<bool>(g.Ref(_internal), SystemSpace, HandGesturePermission(hand)) : null)));
+        if (gestureInput)
+        {
+            // The keyboard receiver owns wearer checks, initialization and mutation.
+            // Early gestures with saved false permissions are intentionally dropped.
+            Link(receiver, "OnTriggered", g.If(
+                g.Read<bool>(g.Ref(_internal), SystemSpace, HandGesturePermission(hand)),
+                SendHandInput(g, g.Text(hand == "Left" ? KeyboardLeftTag : KeyboardRightTag), Out(receiver, "Value"))));
+            return;
+        }
+        var mutation = g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),
+            g.Trigger(g.Ref(_internal), SelectionTickTag));
+        Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal, ApplyRequest(g, mutation)));
     }
 
     private static IWorldElement FormatGesturePair(ExpressionFlux g, string format, IWorldElement left, IWorldElement right)

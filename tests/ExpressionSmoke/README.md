@@ -1,10 +1,11 @@
 # Expression integration checks
 
-Version 69 forwards permitted Gesture API values to the corresponding Keyboard API,
-sharing hand writes and selection. The outer wearer/initialization/permission order
-is preserved: forwarding solely behind a permission If would drop the first event
-when an uninitialized instance still carries saved false permissions. Runtime checks
-reproduce that state on both hands before generation/clone/reload checks complete.
+Version 70 forwards Gesture API values behind only the corresponding hand permission
+If. Keyboard receivers handle wearer checks, initialization, hand writes and selection.
+Early gestures with saved false permissions are intentionally dropped without replay;
+unlike Version 69, gesture receivers do not initialize before checking permission.
+Runtime checks verify both early rejection and subsequent input after initialization
+on both hands, including clones and package reloads.
 Existing checks cover disabled-hand retention, keyboard bypass, same-frame events,
 controller stop sentinels, wearer isolation and unrestricted integer payloads.
 

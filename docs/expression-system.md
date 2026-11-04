@@ -3,12 +3,22 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 70では、Gesture APIのLeft・Rightを
+`AllowHandGestures.<hand> → Keyboard/<hand>` に単純化する。
+Gesture受信部には着用判定・Initialize・Sequenceを置かず、転送先のKeyboard受信部に任せる。
+標準生成構成のLeft・Rightはそれぞれ13ノードから7ノードになる。
+初期化より前に保存済みの許可値falseで届いた入力は破棄し、後から再送しない。
+初回着用時のLifecycle初期化後に届く入力から通常どおり受け付ける。
+未着用時の状態更新はKeyboard受信部のAvatarWornLocal判定で防ぐ。
+Version 69の初回入力保護は不要という仕様に合わせた変更であり、
+禁止中の表情維持・左右独立・Keyboard入力の許可判定迂回は継続する。
+
 Version 69では、Gesture APIのLeft・Rightが許可された値を同じ手のKeyboard APIへ転送し、
 左右値の書き込みとSelectionの処理を共有する。2026-11-04にresoloopで読み取った
 `Root/Salt/Expressions/API/Receivers/Logic/Left` の転送方式を両手に適用する。
 ただし、観測したグラフは許可判定がInitializeより先に走るため、そのままでは同等ではない。
 複製・再読込・再装着時にローカル初期化が未完了かつ保存された許可値がfalseの場合、
-最初のGesture入力が破棄される。生成コードでは従来どおり
+最初のGesture入力が破棄される。Version 69の生成コードでは従来どおり
 `AvatarWornLocal → Initialize → AllowHandGestures.<hand> → Keyboard/<hand>` の順序を維持する。
 転送先のInitializeは初期化済みなら何もせず、同じインパルス内で左右値と表情を更新する。
 初期化済みで禁止中の入力（停止時の-1を含む）は引き続き拒否する。
