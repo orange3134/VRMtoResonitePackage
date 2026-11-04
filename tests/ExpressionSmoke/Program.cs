@@ -111,7 +111,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await HandGesturePermissionChecks.Run(expressions);
         await KeyboardShortcutChecks.Run(expressions);
         await ExpressionInputEventChecks.Run(expressions);
-        var core = expressions.FindChild("Internal"); var api = expressions.FindChild("API").FindChild("Receivers");
+        var core = expressions.FindChild("Internal"); var api = expressions.FindChild("Method");
         var catalog = expressions.FindChild("Catalog"); var table = expressions.FindChild("DV").FindChild("GestureTable");
         string[] gestureNames = { "Neutral", "Fist", "HandOpen", "FingerPoint", "Victory", "RockNRoll", "HandGun", "ThumbsUp" };
         void Request(string tag, int gesture)
@@ -428,7 +428,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var cloneCore = clone.FindChild("Expressions").FindChild("Internal");
         Check(Gestures(cloneCore) == (0, 0) && BothHandsAllowed(cloneCore),
             "clone resets hand inputs and enables ordinary input");
-        var cloneApi = clone.FindChild("Expressions").FindChild("API").FindChild("Receivers");
+        var cloneApi = clone.FindChild("Expressions").FindChild("Method");
         Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(cloneApi,
             ExpressionSystemSetup.TrySetGestureLeftTag, true, 1) == 1, "clone has its own int request receiver");
         Check(Get<int>(cloneCore, "LeftGesture") == 1 && Get<int>(cloneCore, "RightGesture") == 0 &&
@@ -489,8 +489,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "unworn Reset reaches the still-gated Internal Lifecycle without clearing API-written state");
         // Non-neutral hand state must survive rejected wearer-only private updates.
         var outputState = expressions.FindChild("Outputs").Children.Single();
-        foreach (var (board, tag) in new[] { ("Selection", "ExpressionSystem/Internal.UpdateSelection"),
-            ("Lifecycle", "ExpressionSystem/Internal.ResetState") })
+        foreach (var (board, tag) in new[] { ("UpdateSelection", "ExpressionSystem/Internal.UpdateSelection"),
+            ("ResetState", "ExpressionSystem/Internal.ResetState") })
             Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(core, tag, true) == 1,
                 "shared Internal hierarchy reaches exactly one private stage receiver: " + board);
         await Frames();
@@ -544,14 +544,14 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             Reference<Slot>(restoredCore, "CurrentExpression") == null && BothHandsAllowed(restoredCore),
             "package reload resets hand inputs and selection with the edited empty table row");
         Set(restoredExpressions.FindChild("DV").FindChild("GestureTable"), "L0R2", restoredExpressions.FindChild("Catalog").FindChild("Angry"));
-        Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredExpressions.FindChild("API").FindChild("Receivers"),
+        Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredExpressions.FindChild("Method"),
             ExpressionSystemSetup.TrySetGestureRightTag, true, 2) == 1, "reloaded int request receiver is connected");
         Check(Gestures(restoredCore) == (0, 2) &&
             Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
             "reloaded receiver evaluates the pair before the next frame");
         for (int i = 0; i < 60; i++) await default(NextUpdate);
         Check(Math.Abs(restored.GetComponent<ValueField<float>>().Value.Value - 0.7f) < 0.01, "reloaded stock ProtoFlux applies a fixed pose without converter callbacks");
-        var restoredApi = restoredExpressions.FindChild("API").FindChild("Receivers");
+        var restoredApi = restoredExpressions.FindChild("Method");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.TrySetGestureLeftTag, true, 8);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.TrySetGestureRightTag, true, 255);
         Check(Gestures(restoredCore) == (8, 255) &&

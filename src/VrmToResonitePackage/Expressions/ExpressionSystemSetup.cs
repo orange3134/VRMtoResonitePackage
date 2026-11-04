@@ -38,10 +38,10 @@ internal sealed partial class ExpressionSystemSetup
         // State fields and table rows bind to the single system space.
         _root.GetComponent<DynamicVariableSpace>().OnlyDirectBinding.Value = false;
         _inputs = _root.AddSlot("Inputs");
-        _api = _root.AddSlot("API").AddSlot("Receivers");
-        _lifecycle = _internal.AddSlot("Lifecycle");
-        _selection = _internal.AddSlot("Selection");
-        _playback = _internal.AddSlot("Playback");
+        _api = _root.AddSlot("Method");
+        _lifecycle = _internal.AddSlot("ResetState");
+        _selection = _internal.AddSlot("UpdateSelection");
+        _playback = _internal.AddSlot("ApplyExpression");
         foreach (string hand in new[] { "Left", "Right" })
         {
             Data(_root, hand + "Gesture", 0);
@@ -49,7 +49,6 @@ internal sealed partial class ExpressionSystemSetup
         }
         Reference<Slot>(_root, "CurrentExpression", null);
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 85);
         Reference(_root, "References.API", _api);
         Reference(_root, "References.Catalog", _catalog);
     }

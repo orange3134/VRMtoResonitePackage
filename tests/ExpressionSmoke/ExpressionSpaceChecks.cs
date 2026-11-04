@@ -53,7 +53,7 @@ internal static class ExpressionSpaceChecks
         var internalSlot = root.FindChild("Internal");
         Check(root.FindChild("Core") == null && internalSlot != null &&
             internalSlot.Children.Select(child => child.Name).OrderBy(name => name)
-                .SequenceEqual(new[] { "Lifecycle", "Playback", "Selection" }),
+                .SequenceEqual(new[] { "ApplyExpression", "ResetState", "UpdateSelection" }),
             "Internal directly contains exactly the three logic boards");
         Check(root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/", StringComparison.Ordinal))
@@ -111,8 +111,9 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 85,
-            "renamed expression impulse tags use package version 85");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().All(v => v.VariableName.Value != "ExpressionSystem/Version") &&
+            root.FindChild("DV").FindChild("Version") == null,
+            "unused Version variable and its slot are absent");
         Check(root.ExpressionVariables<DynamicValueVariable<bool>>().Count(v =>
             v.VariableName.Value is "ExpressionSystem/AllowHandGestures.Left" or "ExpressionSystem/AllowHandGestures.Right") == 2 &&
             root.ExpressionVariables<DynamicValueVariable<bool>>().All(v => v.VariableName.Value != "ExpressionSystem/AllowHandGestures"),

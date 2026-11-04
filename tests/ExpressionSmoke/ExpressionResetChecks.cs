@@ -8,7 +8,7 @@ internal static class ExpressionResetChecks
     public static async Task Run(Slot expressions)
     {
         var core = expressions.FindChild("Internal");
-        var api = expressions.FindChild("API").FindChild("Receivers");
+        var api = expressions.FindChild("Method");
         var table = expressions.FindChild("DV").FindChild("GestureTable");
         var outputs = expressions.FindChild("Outputs").Children.ToArray();
         var expression = expressions.FindChild("Catalog").Children.First(c =>

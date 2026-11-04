@@ -136,7 +136,7 @@ internal static class ExpressionMeshDriverChecks
         Set(table, "L0R1", catalog.FindChild("First pose")); Set(table, "L0R2", catalog.FindChild("Second pose"));
         Set(table, "L0R3", catalog.FindChild("Closed pose"));
         void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
-            expressions.FindChild("API").FindChild("Receivers"), ExpressionSystemSetup.TrySetGestureRightTag, true, index) == 1, "select mesh test pose");
+            expressions.FindChild("Method"), ExpressionSystemSetup.TrySetGestureRightTag, true, index) == 1, "select mesh test pose");
         manager.LeftEyeCloseOverride.Value = manager.RightEyeCloseOverride.Value = 0.1f;
         Select(1); await Frames();
         Near(first.GetBlendShapeWeight("ActualSmile"), 0.2f, "first renderer drives its shape");

@@ -39,7 +39,7 @@ internal static class ExpressionDynamicInputChecks
                     "keyboard key input follows its own hand: " + hand.Name + "/" + Name(input));
             }
         }
-        foreach (string board in new[] { "Playback" })
+        foreach (string board in new[] { "ApplyExpression" })
         {
             var logic = root.FindChild("Internal").FindChild(board);
             var current = logic.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>()
@@ -49,7 +49,7 @@ internal static class ExpressionDynamicInputChecks
                 .Single(variable => variable.VariableName.Value == "ExpressionSystem/CurrentExpression");
             Check(proxy != null && proxy.HasValue && proxy.DynamicValue == field.Reference.Target,
                 "Core object input follows this avatar's selected expression: " + board);
-            Check(root.FindChild("Internal").FindChild("Selection").GetComponentsInChildren<DynamicVariableValueInput<int>>().Count > 0,
+            Check(root.FindChild("Internal").FindChild("UpdateSelection").GetComponentsInChildren<DynamicVariableValueInput<int>>().Count > 0,
                 "Selection uses Dynamic Inputs for hand values");
         }
     }
@@ -102,7 +102,7 @@ internal static class ExpressionDynamicInputChecks
             root.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>().All(n =>
                 Name(n) is not ("ExpressionSystem/GestureTable" or "ExpressionSystem/References.DV.GestureTable" or "ExpressionSystem/References.GestureTable")),
             "GestureTable needs no Slot reference variable or input");
-        var tableRead = root.FindChild("Internal").FindChild("Selection")
+        var tableRead = root.FindChild("Internal").FindChild("UpdateSelection")
             .GetComponentInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Variables.ReadDynamicObjectVariable<Slot>>();
         Check(tableRead != null && tableRead.Source.Target == null,
             "Selection reads table rows from its ancestor space without a Source input");

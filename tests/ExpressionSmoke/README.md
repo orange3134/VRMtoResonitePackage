@@ -1,5 +1,12 @@
 # Expression integration checks
 
+2026-11-05: Remove the unused Version dynamic variable and flatten API/Receivers
+into Method. Receiver boards match tag suffixes (SetGesture.Left, SelectExpression,
+UpdateSelection, ApplyExpression and ResetState). Layout checks reject the old
+wrappers and Version slot; runtime checks use the new paths through clone/reload.
+References.API now targets Method. Snapshot comparisons treat a missing Version as
+the current flat Clip layout while retaining versioned legacy readers.
+
 Version 85 renames public impulse tags to ExpressionSystem/Method.* and internal
 tags to ExpressionSystem/Internal.*. Existing API, menu, keyboard, controller and
 internal-stage checks use the new names through generation, cloning and reload.

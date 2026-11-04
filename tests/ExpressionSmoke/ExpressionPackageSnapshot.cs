@@ -47,10 +47,11 @@ internal static class ExpressionPackageSnapshot
     {
         var values = new SortedDictionary<string, float>(StringComparer.Ordinal);
         var bindings = entry.FindChild("Bindings");
-        // Version 45 uses unprefixed Clip keys; retain older snapshot layouts.
+        // Current packages omit Version; Version 45+ also uses unprefixed Clip keys.
+        // Keep the version discriminator only for comparisons with legacy packages.
         if (bindings == null || bindings.GetComponent<DynamicVariableSpace>()?.SpaceName.Value == "ExpressionSystem.Catalog.Clip.Binding")
         {
-            bool flat = entry.Parent.Parent.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Version", out int version) && version >= 45;
+            bool flat = !entry.Parent.Parent.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Version", out int version) || version >= 45;
             string prefix = bindings != null ? "ExpressionSystem.Catalog.Clip.Binding/" :
                 flat ? "ExpressionSystem.Catalog.Clip/" : "ExpressionSystem.Catalog.Clip/Binding.";
             var outputs = entry.Parent.Parent.FindChild("Outputs").Children.ToDictionary(o => Value<string>(o, "Id"));

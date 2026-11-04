@@ -10,11 +10,11 @@ internal sealed partial class ExpressionSystemSetup
 {
     private void BuildApi()
     {
-        BuildHandReceiver(new(_api.AddSlot("TrySetGestureLeft")), "Left", TrySetGestureLeftTag, checkPermission: true);
-        BuildHandReceiver(new(_api.AddSlot("TrySetGestureRight")), "Right", TrySetGestureRightTag, checkPermission: true);
-        BuildHandReceiver(new(_api.AddSlot("SetGestureLeft")), "Left", SetGestureLeftTag, checkPermission: false);
-        BuildHandReceiver(new(_api.AddSlot("SetGestureRight")), "Right", SetGestureRightTag, checkPermission: false);
-        BuildSelectReceiver(new(_api.AddSlot("Select")));
+        BuildHandReceiver(new(_api.AddSlot("TrySetGesture.Left")), "Left", TrySetGestureLeftTag, checkPermission: true);
+        BuildHandReceiver(new(_api.AddSlot("TrySetGesture.Right")), "Right", TrySetGestureRightTag, checkPermission: true);
+        BuildHandReceiver(new(_api.AddSlot("SetGesture.Left")), "Left", SetGestureLeftTag, checkPermission: false);
+        BuildHandReceiver(new(_api.AddSlot("SetGesture.Right")), "Right", SetGestureRightTag, checkPermission: false);
+        BuildSelectReceiver(new(_api.AddSlot("SelectExpression")));
         BuildHandGesturesToggleReceiver(new(_api.AddSlot("ToggleHandGestures")));
         var reset = new ExpressionFlux(_api.AddSlot("Reset"));
         Link(reset.Receiver(ResetTag, false), "OnTriggered", reset.Trigger(reset.Ref(_internal), ResetStateTag));

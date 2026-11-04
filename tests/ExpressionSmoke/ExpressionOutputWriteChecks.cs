@@ -39,7 +39,7 @@ internal static class ExpressionOutputWriteChecks
             var core = expressions.FindChild("Internal"); var catalog = expressions.FindChild("Catalog");
             var table = expressions.FindChild("DV").FindChild("GestureTable"); var outputs = expressions.FindChild("Outputs");
             var outputA = outputs.FindChild("A"); var outputB = outputs.FindChild("B");
-            var api = expressions.FindChild("API").FindChild("Receivers");
+            var api = expressions.FindChild("Method");
             void Playback(Slot expression) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(
                 core, "ExpressionSystem/Internal.ApplyExpression", true, expression) == 1,
                 "explicit playback impulse reaches the receiver");
