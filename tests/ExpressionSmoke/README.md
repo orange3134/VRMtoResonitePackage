@@ -1,5 +1,12 @@
 # Expression integration checks
 
+Version 75 uses ButtonToggle for Left/Right hand gestures menu entries. Checks require
+TargetValue to reference that avatar's corresponding DynamicValueVariable.Value and
+reject an impulse trigger on those entries. Actual button presses cover all four
+permission combinations, independent sides, unchanged hand values/selection, and
+green/red colors, including cloned and reloaded avatars. The combined-hand menu and
+public permission APIs retain their existing checks.
+
 Version 74 removes the unused Internal/Initialize receiver and combines lifecycle
 conditions with AND, reducing its If nodes from eight to five. Graph checks reject
 Initialize sender and receiver tags throughout generated, cloned and reloaded graphs.

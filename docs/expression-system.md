@@ -3,6 +3,11 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 75では、ContextMenuの `Left hand gestures`・`Right hand gestures` を `ButtonToggle` に変更した。
+`TargetValue` は自身のアバターの `ExpressionSystem/AllowHandGestures.Left`・`Right` のValueを直接参照する。
+個別メニューはAPIやその着用判定を経由せず、対応する許可だけを反転する。左右値・選択中の表情は保持する。
+色表示も同じValueを参照するため、APIからの変更にも追従する。両手用 `Hand gestures` と公開APIは従来どおり。
+
 Version 74では、生成処理に呼び出し元がなくなった `ResoPon/Expression/Internal/Initialize` の
 受信部と定数を削除した。自動初期化はLifecycleのOnStart・着用状態変更、明示的な初期化はResetが担当する。
 Lifecycleの条件を「ローカル着用中 AND 未初期化」と「ローカル未着用 AND 初期化済み」にまとめ、

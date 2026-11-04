@@ -14,7 +14,7 @@ internal static class HandGesturePermissionChecks
         CheckToggleGraph(api.FindChild("ToggleHandGestures"));
         var menu = expressions.FindChild("Inputs").FindChild("ContextMenu");
         var bothToggles = new List<ButtonDynamicImpulseTrigger>();
-        var toggles = new Dictionary<string, ButtonDynamicImpulseTrigger>();
+        var toggles = new Dictionary<string, ButtonToggle>();
         Check(menu.GetComponentsInChildren<RootContextMenuItem>().Count == 2 &&
             menu.GetComponent<RootContextMenuItem>() == null,
             "only the two side-filtered Expressions entries are root menu items");
@@ -26,17 +26,18 @@ internal static class HandGesturePermissionChecks
             var source = handMenu.GetComponent<ContextMenuItemSource>();
             var items = handMenu.FindChild("Items");
             var item = items.FindChild(hand + " hand gestures");
-            var toggle = item.GetComponent<ButtonDynamicImpulseTrigger>();
+            var toggle = item.GetComponent<ButtonToggle>();
+            var permission = expressions.FindChild("DV").FindChild("AllowHandGestures." + hand).GetComponent<DynamicValueVariable<bool>>();
             Check(root.OnlyForSide.Value == side && root.Item.Target == source && source.Label.Value == "Expressions" &&
                 handMenu.GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == items &&
-                toggle.Target.Target == api && toggle.PressedTag.Value == "ResoPon/Expression/ToggleHandGestures/" + hand,
-                hand + " Expressions submenu contains its own toggle and targets this avatar");
+                toggle != null && toggle.TargetValue.Target == permission.Value &&
+                item.GetComponent<ButtonDynamicImpulseTrigger>() == null,
+                hand + " Expressions submenu toggles its own avatar permission field directly");
             Check(items.FindChild((side == Chirality.Left ? "Right" : "Left") + " hand gestures") == null &&
                 items.GetComponentsInChildren<RootContextMenuItem>().Count == 0,
                 "individual toggles stay inside their own submenu without extra root entries");
             bothToggles.Add(items.FindChild("Hand gestures").GetComponent<ButtonDynamicImpulseTrigger>());
             var color = item.GetComponent<ValueOptionDescriptionDriver<bool>>();
-            var permission = expressions.FindChild("DV").FindChild("AllowHandGestures." + hand).GetComponent<DynamicValueVariable<bool>>();
             Check(color.Value.Target == permission.Value, hand + " menu color follows its own avatar's permission field");
             toggles.Add(hand, toggle);
         }

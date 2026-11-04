@@ -28,22 +28,31 @@ internal static class ExpressionGraphChecks
                 Check(!driver.Label.IsLinkValid && !driver.Sprite.IsLinkValid,
                     "expression color driver preserves label and sprite bindings");
             }
+            else if (item.Slot.GetComponent<ButtonToggle>() is { } direct)
+            {
+                CheckPermissionColor(item, direct.TargetValue.Target.Value);
+                continue;
+            }
             else if (item.Slot.GetComponent<ButtonDynamicImpulseTrigger>() is { } toggle &&
                 toggle.PressedTag.Value.StartsWith("ResoPon/Expression/ToggleHandGestures", StringComparison.Ordinal))
             {
                 bool allow = toggle.PressedTag.Value == "ResoPon/Expression/ToggleHandGestures"
                     ? ExpressionTestFields.BothHandsAllowed(expressions)
                     : ExpressionTestFields.HandGesturesAllowed(expressions, toggle.PressedTag.Value.Split('/').Last());
-                var driver = item.Slot.GetComponent<ValueOptionDescriptionDriver<bool>>();
-                Check(driver != null && driver.Color.IsLinkValid && driver.Color.Target == item.Color,
-                    "permission menu Color uses ValueOptionDescriptionDriver: " + item.Slot.Name);
-                var red = new colorX(1f, 0f, 0f, 1f, Renderite.Shared.ColorProfile.Linear);
-                Check(item.Color.Value.Equals(allow ? green : red), "hand gesture toggle is green when on and red when off");
+                CheckPermissionColor(item, allow);
                 continue;
             }
             else continue;
             Check(item.Color.Value.Equals(active ? green : colorX.White),
                 "only the currently selected menu option is green: " + item.Slot.Name);
+        }
+        void CheckPermissionColor(ContextMenuItemSource item, bool allow)
+        {
+            var driver = item.Slot.GetComponent<ValueOptionDescriptionDriver<bool>>();
+            Check(driver != null && driver.Color.IsLinkValid && driver.Color.Target == item.Color,
+                "permission menu Color uses ValueOptionDescriptionDriver: " + item.Slot.Name);
+            var red = new colorX(1f, 0f, 0f, 1f, Renderite.Shared.ColorProfile.Linear);
+            Check(item.Color.Value.Equals(allow ? green : red), "hand gesture toggle is green when on and red when off");
         }
     }
 

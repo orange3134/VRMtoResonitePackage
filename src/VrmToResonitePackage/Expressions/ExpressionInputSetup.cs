@@ -51,19 +51,21 @@ internal sealed partial class ExpressionSystemSetup
         driver.Color.Target = item.GetComponent<ContextMenuItemSource>().Color;
     }
 
+    private IField<bool> HandGesturePermissionField(string hand) =>
+        _root.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>()
+            .Single(v => v.VariableName.Value == Path(SystemSpace, HandGesturePermission(hand))).Value;
+
     private void GesturePermissionMenuColor(Slot item, string hand = null)
     {
         var driver = item.AttachComponent<ValueOptionDescriptionDriver<bool>>();
-        IField<bool> Permission(string side) => _root.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>()
-            .Single(v => v.VariableName.Value == Path(SystemSpace, HandGesturePermission(side))).Value;
-        if (hand != null) driver.Value.Target = Permission(hand);
+        if (hand != null) driver.Value.Target = HandGesturePermissionField(hand);
         else
         {
             var both = item.AttachComponent<ValueField<bool>>();
             var condition = item.AttachComponent<MultiBoolConditionDriver>();
             condition.Mode.Value = MultiBoolConditionDriver.ConditionMode.All;
-            condition.Conditions.Add().Field.Target = Permission("Left");
-            condition.Conditions.Add().Field.Target = Permission("Right");
+            condition.Conditions.Add().Field.Target = HandGesturePermissionField("Left");
+            condition.Conditions.Add().Field.Target = HandGesturePermissionField("Right");
             condition.Target.Target = both.Value;
             driver.Value.Target = both.Value;
         }
@@ -132,10 +134,8 @@ internal sealed partial class ExpressionSystemSetup
         GesturePermissionMenuColor(mode);
         var single = items.AddSlot(side + " hand gestures");
         MenuItem(single, single.Name);
-        var toggle = single.AttachComponent<ButtonDynamicImpulseTrigger>();
-        toggle.Target.Target = _api;
-        toggle.ExcludeDisabled.Value = true;
-        toggle.PressedTag.Value = ToggleHandGesturesHandTag(side.ToString());
+        var toggle = single.AttachComponent<ButtonToggle>();
+        toggle.TargetValue.Target = HandGesturePermissionField(side.ToString());
         GesturePermissionMenuColor(single, side.ToString());
         var reset = items.AddSlot("Reset settings"); MenuItem(reset, reset.Name);
         var resetButton = reset.AttachComponent<ButtonDynamicImpulseTrigger>();
