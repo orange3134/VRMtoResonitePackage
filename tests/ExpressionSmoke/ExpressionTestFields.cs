@@ -61,8 +61,8 @@ internal static class ExpressionTestFields
         if (legacy != null) return legacy.Reference.Target;
         var result = output.ExpressionVariables<DynamicField<float>>()
             .Single(v => v.VariableName.Value == VariablePath(output, "Result")).TargetField.Target;
-        if (result.Parent is not SmoothValue<float> smooth) return result;
-        return ((DynamicBlendShapeDriver.BlendShape)smooth.Value.Target.Parent)._drive.Target;
+        if (result.Parent is SmoothValue<float> smooth) result = smooth.Value.Target;
+        return result.Parent is DynamicBlendShapeDriver.BlendShape shape ? shape._drive.Target : result;
     }
 
     public static DynamicValueVariable<float> BindingVariable(Slot bindings, Slot output)

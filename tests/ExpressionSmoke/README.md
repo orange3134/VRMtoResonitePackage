@@ -1,5 +1,11 @@
 # Expression integration checks
 
+Version 78 bypasses SmoothValue for mesh outputs originally driven by an
+EyeLinearDriver.OpenCloseTarget. Real meshes test short closing/reopening pulses,
+independent left/right eyes, reversed ranges, half/fully closed expressions, missing
+tracks and cleared selections with SmoothingSpeed=0.0001. These checks repeat after
+cloning and package reload. Other mesh outputs retain interpolation and shared speed.
+
 Version 77 removes wearer gates from API receivers. Graph checks reject AvatarWorn
 and AvatarWornLocal bindings anywhere under API after generation, cloning and reload.
 Unworn runtime checks cover both TrySetGesture/SetGesture hands, per-hand permission

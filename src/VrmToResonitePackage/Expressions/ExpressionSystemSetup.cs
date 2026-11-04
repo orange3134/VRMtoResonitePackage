@@ -50,7 +50,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "CurrentExpression", null);
         Data(_root, "PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 77);
+        Data(_root, "Version", 78);
         Reference(_root, "References.API", _api);
         Reference(_root, "References.Catalog", _catalog);
     }
@@ -177,7 +177,7 @@ internal sealed partial class ExpressionSystemSetup
                 }
                 var result = VariableSlot(output, "Result").AttachComponent<DynamicField<float>>();
                 result.VariableName.Value = Path(OutputSpace, "Result");
-                result.TargetField.Target = BuildOutputTarget(field, initialValue);
+                result.TargetField.Target = BuildOutputTarget(field, initialValue, blinkMode != 0);
                 _outputSlots[id] = output; fields[field] = output;
             }
             // A partially resolved face must not be presented as a faithfully imported clip.

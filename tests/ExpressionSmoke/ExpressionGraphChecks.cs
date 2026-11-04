@@ -1,5 +1,6 @@
 using Elements.Core;
 using FrooxEngine;
+using FrooxEngine.CommonAvatar;
 using FrooxEngine.ProtoFlux;
 using VrmToResonitePackage.Expressions;
 using Nodes = FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes;
@@ -205,13 +206,19 @@ internal static class ExpressionGraphChecks
             if (renderer != null)
             {
                 var smooth = result.Parent as SmoothValue<float>;
-                var entry = smooth?.Value.Target?.Parent as DynamicBlendShapeDriver.BlendShape;
+                var entry = (smooth?.Value.Target ?? result).Parent as DynamicBlendShapeDriver.BlendShape;
                 var meshDriver = entry?.FindNearestParent<DynamicBlendShapeDriver>();
-                Check(smooth != null && result == smooth.TargetValue && smooth.Value.IsLinkValid &&
-                    !smooth.WriteBack.Value && smooth.Speed.Value > 0 && entry != null && entry.Value == smooth.Value.Target &&
+                var original = output.ExpressionVariables<DynamicReferenceVariable<ISyncRef>>()
+                    .SingleOrDefault(v => v.VariableName.Value == "ExpressionSystem.Output/OriginalDriver")?.Reference.Target;
+                bool blink = original?.Parent is EyeLinearDriver.Eye eye && original == eye.OpenCloseTarget;
+                Check(blink ? smooth == null && entry?.Value == result :
+                    smooth != null && result == smooth.TargetValue && smooth.Value.IsLinkValid &&
+                    !smooth.WriteBack.Value && smooth.Speed.Value > 0 && entry?.Value == smooth.Value.Target,
+                    $"Only blink mesh outputs bypass smoothing: {output.Name}");
+                Check(entry != null &&
                     meshDriver?.Renderer.Target == renderer && entry._drive.Target == target && entry._drive.IsLinkValid &&
                     renderer.TryGetBlendShape(entry.BlendShapeName.Value) == target,
-                    $"Result targets SmoothValue, which drives the correct renderer's named blendshape: {output.Name}");
+                    $"Result drives the correct renderer's named blendshape: {output.Name}");
             }
             else Check(result == target, "standalone field outputs are driven directly");
         }
@@ -221,8 +228,11 @@ internal static class ExpressionGraphChecks
             .Where(r => r != null).ToArray();
         Check(meshDrivers.Select(d => d.Renderer.Target).Distinct().Count() == meshDrivers.Count &&
             meshDrivers.Count == meshOutputs.Distinct().Count(), "exactly one driver per output renderer");
-        Check(expressions.GetComponentsInChildren<SmoothValue<float>>().Count == meshOutputs.Length,
-            "exactly one SmoothValue per mesh output");
+        int directMeshOutputs = expressions.FindChild("Outputs").Children.Count(o =>
+            o.ExpressionVariables<DynamicField<float>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Result")
+                .TargetField.Target.Parent is DynamicBlendShapeDriver.BlendShape);
+        Check(expressions.GetComponentsInChildren<SmoothValue<float>>().Count == meshOutputs.Length - directMeshOutputs,
+            "exactly one SmoothValue per non-blink mesh output");
         foreach (var meshDriver in meshDrivers)
             Check(meshDriver.BlendShapes.Count == meshOutputs.Count(r => r == meshDriver.Renderer.Target),
                 "mesh driver contains only required shape entries");

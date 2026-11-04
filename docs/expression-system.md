@@ -3,6 +3,8 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 78では、生成時に瞬き接続を検出したメッシュ出力のSmoothValueを省略する。瞬きのタイミングと振幅を保ち、表情とのmax/min合成を維持する。詳細は出力構築の説明を参照。
+
 Version 77では、API内の `modular_avatar/AvatarWornLocal` 判定を削除した。
 SetGesture左右・Select・ToggleHandGestures・Resetが対象で、API内にはAvatarWorn/AvatarWornLocalの参照を生成しない。
 未着用でもSetGestureは左右値を更新し、TrySetGestureは各手の許可があればSetGestureへ転送する。
@@ -170,7 +172,7 @@ Expressions/
     各 BlendShape/                 出力定義・Base・Result
       Tracking/                    既存の追跡がある出力だけ自動合成するDrive
   Drivers/各 Renderer/            DynamicBlendShapeDriver、必要なシェイプのみ登録
-    各シェイプ/                   SmoothValue<float>、TargetValue → BlendShapes[].Value
+    瞬き以外の各シェイプ/         SmoothValue<float>、TargetValue → BlendShapes[].Value
   Inputs/
     ContextMenu/                   表情の直接選択・入力許可（項目の自動選択可否制御なし）
       Left|Right/                  手別のExpressions入口（OnlyForSideで表示を制限）
@@ -218,7 +220,7 @@ ProtoFlux Tool では調べたい `Selection`、`Playback` などのモジュー
 選択状態をイベント内で確定し、Playback も同期呼び出しして選んだ表情の各トラックの終端値を即時に書き込む。
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → Selection → Playback を同期実行する。
 同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態・固定ポーズ・出力目標が確定する。
-追跡対象の出力目標は通常のドライバー更新で反映する。メッシュの実ウェイトはSmoothValueで補間する。
+追跡対象の出力目標は通常のドライバー更新で反映する。瞬き以外のメッシュの実ウェイトはSmoothValueで補間する。
 表情Slotを引数としてResoPon/Expression/Internal/Playbackを送る。PlaybackがCurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情のアクティブ状態は選択条件にしない。
 
 Version 47 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
@@ -228,8 +230,9 @@ Playbackは表情Slot付きDynamicImpulseを受信し、CurrentExpressionへ設�
 元から瞬き・口パク等のドライバーがある出力だけTrackingボードを生成し、
 CurrentExpressionの名前付き変数と追跡BaseをValueFieldDriveで合成する。アニメーションの途中値は評価しない。
 AnimX・AnimationProvider・AssetLoader・トラック検索・サンプラーも生成しない。
-メッシュ出力のResultはSmoothValue<float>.TargetValueを参照するDynamicField<float>。
+瞬き以外のメッシュ出力のResultはSmoothValue<float>.TargetValueを参照するDynamicField<float>。
 SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、標準ドライバーが実メッシュへ反映する。
+瞬き出力のResultはBlendShapes[].Valueを直接参照し、Trackingの合成結果を補間せず反映する。
 通常出力は装着者だけが値をWriteし、未装着時はホストがBaseを適用する。
 追跡対象は各クライアントで選択中の表情の名前付き変数と各自のBaseを合成し、未装着時はBaseを使う。
 切り替え補間はSmoothValueに任せ、FadeIn / FadeOut / FadeDuration / FadeWeight / Snapshot は生成しない。
@@ -663,8 +666,15 @@ DynamicBlendShapeDriver は Expressions/Drivers 以下に SkinnedMeshRenderer �
 表情で使用するシェイプだけを登録する。同名 renderer は名前ではなく Component の同一性で区別する。
 Output と Drivers の同名 Slot には連番を付け、診断パスの重複も避ける。binding の Id・Path・Shape は変更しない。
 VRM の binding は数値インデックスの場合があるため、登録名は解決済みメッシュフィールドから実メッシュ名を取得する。
-各OutputのResultは対応するSmoothValue.TargetValueへのDynamicFieldで、目標値を重複保存しない。
-SmoothValueは各Rendererの子にシェイプ名で1つずつ生成する。初期目標とBlendShapes[].Valueは解決済みフィールドの現在値で初期化し、
+通常のメッシュOutputのResultは対応するSmoothValue.TargetValueへのDynamicFieldで、目標値を重複保存しない。
+Version 78では、生成時にEyeLinearDriver.Eyes[].OpenCloseTargetが接続されている瞬き出力だけ、
+ResultからDynamicBlendShapeDriver.BlendShapes[].Valueを直接参照する。SmoothValueは生成しない。
+EyeLinearDriver → Base → Trackingのmax/min合成 → Result → DynamicBlendShapeDriver → BlendShapeの経路にし、
+瞬きの閉じる・開く動きに補間遅延や振幅低下を加えない。半目・閉眼表情との合成は維持する。
+このシェイプを共有する表情の切り替えも即時になる。瞬き以外の出力と口パクの補間は従来どおり。
+BlinkModeの実行時編集だけではSmoothValueの有無は変わらない。既存パッケージや変換後に追加した瞬きでは、
+瞬き接続を設定した状態で表情システムを再生成する必要がある。
+SmoothValueは瞬き以外の各Rendererの子にシェイプ名で1つずつ生成する。初期目標とBlendShapes[].Valueは解決済みフィールドの現在値で初期化し、
 Speedの初期値は10、WriteBack=falseでValueをBlendShapes[].ValueへTryLinkする。補間途中の値をTargetValueへ書き戻さない。
 Version 20では `Expressions/DV/SmoothingSpeed` の `ExpressionSystem/SmoothingSpeed`（float、初期値10）を共通設定にする。
 各SmoothValueのSpeedは同じSlotのDynamicValueVariableDriver<float>でこの変数へ接続し、未解決時も10を使う。
@@ -672,9 +682,14 @@ Version 20では `Expressions/DV/SmoothingSpeed` の `ExpressionSystem/Smoothing
 Speedは秒数ではなく追従速度。小さくするとゆっくり、大きくすると速くなる。
 複製したアバターや保存再読込後も各アバター内で完結する。
 連続して表情を変えた場合は現在の補間値から新しい目標へ追従する。未装着・未割り当て時のBase復帰にも同じ補間を使う。
-瞬き・口パクの混合は従来どおりTargetValueを追従更新し、その結果にも同じスムージングがかかる。
+口パクなど瞬き以外の混合は従来どおりTargetValueを追従更新し、その結果にも同じスムージングがかかる。
 非メッシュの汎用フィールド出力は直接書き込む。
 Playback は通常出力の ExpressionSystem.Output/Result を読み、値が変わる場合だけWriteする。追跡対象のResultはTrackingのDriveが駆動する。
+
+瞬きの応答テストはResultや単独ValueFieldだけではなく、実SkinnedMeshRendererのウェイトを読む。
+単独フィールドには元からSmoothValueが付かないため、合成だけのテストではメッシュ出力の遅延を検出できない。
+ExpressionMeshDriverChecksではSmoothingSpeedを0.0001にし、通常／逆方向の左右独立した短い閉眼・開眼入力を4更新後に比較する。
+半目・閉眼・トラック欠落・選択解除について、生成直後・複製後・保存再読込後に同じ検証を行う。
 
 2026-09-27: Version 16の実メッシュ検証では、選択直後のTargetValue更新、実ウェイトの中間値、
 遷移途中の再選択、瞬き合成、複製・保存再読込を確認した。Legniaの実変換・inspectでは138個の

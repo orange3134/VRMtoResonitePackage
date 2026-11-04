@@ -16,20 +16,25 @@ internal static class ExpressionMeshDriverChecks
         Slot clone = null, restored = null;
         try
         {
-            var first = await Mesh(avatar.AddSlot("First"), new[] { "ActualSmile", "ActualBlink", "Untouched" });
+            var first = await Mesh(avatar.AddSlot("First"), new[] { "ActualSmile", "ActualBlink", "Untouched", "ReverseBlink" });
             var second = await Mesh(avatar.AddSlot("Second"), new[] { "ActualBlink", "ActualSmile", "Untouched" });
             first.GetBlendShape("Untouched").Value = 0.37f; second.GetBlendShape("Untouched").Value = 0.63f;
             second.GetBlendShape("ActualBlink").Value = 0.21f;
             var manager = avatar.AttachComponent<EyeManager>();
             manager.MinBlinkInterval.Value = manager.MaxBlinkInterval.Value = 1000000;
             var eyeDriver = avatar.AttachComponent<EyeLinearDriver>(); eyeDriver.EyeManager.Target = manager;
-            eyeDriver.Eyes.Add().OpenCloseTarget.Target = first.GetBlendShape("ActualBlink");
+            var leftEye = eyeDriver.Eyes.Add(); leftEye.Side.Value = EyeSide.Left;
+            leftEye.OpenCloseTarget.Target = first.GetBlendShape("ActualBlink");
+            var rightEye = eyeDriver.Eyes.Add(); rightEye.Side.Value = EyeSide.Right;
+            rightEye.OpenState.Value = 1; rightEye.ClosedState.Value = 0;
+            rightEye.OpenCloseTarget.Target = first.GetBlendShape("ReverseBlink");
             var smileA = new ExpressionBinding("First/Face", "0");
             var smileB = new ExpressionBinding("Second/Face", "1");
             var blinkA = new ExpressionBinding("First/Face", "1");
+            var reverseA = new ExpressionBinding("First/Face", "3");
             var targets = new Dictionary<ExpressionBinding, IField<float>> {
                 [smileA] = first.GetBlendShape("ActualSmile"), [smileB] = second.GetBlendShape("ActualSmile"),
-                [blinkA] = first.GetBlendShape("ActualBlink") };
+                [blinkA] = first.GetBlendShape("ActualBlink"), [reverseA] = first.GetBlendShape("ReverseBlink") };
             var model = new ExpressionModel();
             void Clip(string name, params (ExpressionBinding Binding, float Value)[] values)
             {
@@ -43,8 +48,10 @@ internal static class ExpressionMeshDriverChecks
             }
             Clip("First pose", (smileA, 0.2f), (smileB, 0.8f));
             // The blink entry is added after BuildCatalog has awaited the first clip asset.
-            Clip("Second pose", (smileA, 0.7f), (smileB, 0.4f), (blinkA, 0.3f));
-            await ExpressionSystemSetup.BuildAsync(avatar, model, b => targets[b], initialWeight: _ => 0f);
+            Clip("Second pose", (smileA, 0.7f), (smileB, 0.4f), (blinkA, 0.3f), (reverseA, 0.7f));
+            Clip("Closed pose", (blinkA, 1f), (reverseA, 0f));
+            await ExpressionSystemSetup.BuildAsync(avatar, model, b => targets[b],
+                initialWeight: f => f == targets[reverseA] ? 1f : 0f);
             await Frames(90); await Verify(avatar);
             await CheckSmoothingSpeed(avatar, 10f, 37f);
             clone = avatar.Duplicate(parent); await Frames(90); await Verify(clone);
@@ -70,7 +77,7 @@ internal static class ExpressionMeshDriverChecks
     private static void CheckSpeeds(Slot avatar, float expected)
     {
         var smoothers = avatar.FindChild("Expressions").GetComponentsInChildren<SmoothValue<float>>();
-        Check(smoothers.Count == 3, "speed check covers both renderers and tracked blink output");
+        Check(smoothers.Count == 2, "only non-blink mesh outputs have smoothing");
         foreach (var smooth in smoothers)
         {
             Near(smooth.Speed.Value, expected, "all mesh SmoothValues follow this avatar's shared speed");
@@ -127,6 +134,7 @@ internal static class ExpressionMeshDriverChecks
         Check(eye.OpenCloseTarget.Target == baseValue && eye.OpenCloseTarget.IsLinkValid, "blink still drives its independent Base");
         var dynamicResult = smile.ExpressionVariables<DynamicField<float>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Result");
         Set(table, "L0R1", catalog.FindChild("First pose")); Set(table, "L0R2", catalog.FindChild("Second pose"));
+        Set(table, "L0R3", catalog.FindChild("Closed pose"));
         void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             expressions.FindChild("API").FindChild("Receivers"), ExpressionSystemSetup.TrySetGestureRightTag, true, index) == 1, "select mesh test pose");
         manager.LeftEyeCloseOverride.Value = manager.RightEyeCloseOverride.Value = 0.1f;
@@ -166,6 +174,25 @@ internal static class ExpressionMeshDriverChecks
         Near(read, 0.7f, "dynamic variable reads remain current after Drive");
         manager.LeftEyeCloseOverride.Value = manager.RightEyeCloseOverride.Value = 0.9f; await Frames();
         Near(first.GetBlendShapeWeight("ActualBlink"), 0.9f, "native mesh driver and eye blink compose");
+        // Make smoothing far too slow to hide an accidental smoother on either eyelid.
+        // Check short pulses against a mesh, not just the intermediate Result/Base fields.
+        sharedSpeed.Value.Value = 0.0001f; await Frames(3);
+        foreach (int pose in new[] { 1, 2, 3, 0 })
+        {
+            Select(pose); await Frames(4);
+            float leftPose = pose == 2 ? 0.3f : pose == 3 ? 1f : 0f;
+            float rightPose = 1 - leftPose;
+            foreach (var (left, right) in new[] { (0f, 0f), (1f, 0.4f), (0f, 1f), (0f, 0f) })
+            {
+                manager.LeftEyeCloseOverride.Value = left; manager.RightEyeCloseOverride.Value = right;
+                await Frames(4);
+                Near(first.GetBlendShapeWeight("ActualBlink"), Math.Max(leftPose, left),
+                    $"blink closes/reopens without smoothing, pose {pose}");
+                Near(first.GetBlendShapeWeight("ReverseBlink"), Math.Min(rightPose, 1 - right),
+                    $"reversed blink follows its own eye without smoothing, pose {pose}");
+            }
+        }
+        sharedSpeed.Value.Value = configuredSpeed;
         Select(1);
         Near(dynamicResult.DynamicValue, 0.2f, "Selection immediately writes the new DynamicField value");
         await Frames();

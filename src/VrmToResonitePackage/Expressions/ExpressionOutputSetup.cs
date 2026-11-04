@@ -28,7 +28,7 @@ internal sealed partial class ExpressionSystemSetup
         return (renderer, name);
     }
 
-    private IField<float> BuildOutputTarget(IField<float> field, float initialValue)
+    private IField<float> BuildOutputTarget(IField<float> field, float initialValue, bool blink)
     {
         var (renderer, name) = ResolveShape(field);
         // Standalone fields are written directly; meshes remain grouped by identity.
@@ -47,6 +47,10 @@ internal sealed partial class ExpressionSystemSetup
         // Link each entry explicitly, including entries added after an asset await.
         if (!shape._drive.TryLink(field))
             throw new InvalidOperationException($"Cannot drive blendshape: {renderer.Slot.Name}/{name}");
+        // EyeLinearDriver already supplies the blink's timing. Smoothing the mixed
+        // output delays both edges and attenuates short blinks. Keep expression
+        // max/min composition, but pass eyelid values straight to the native driver.
+        if (blink) return shape.Value;
         var smooth = driver.Slot.AddSlot(UniqueChildName(driver.Slot, name)).AttachComponent<SmoothValue<float>>();
         smooth.Speed.Value = DefaultSmoothingSpeed;
         var speed = smooth.Slot.AttachComponent<DynamicValueVariableDriver<float>>();

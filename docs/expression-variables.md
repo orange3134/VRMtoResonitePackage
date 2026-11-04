@@ -47,7 +47,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 77 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 78 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -165,11 +165,11 @@ Playbackへnullを送り、CurrentExpressionの解除と通常出力のBase復�
 | `Base` | float | 元フィールド値 | 状態／基礎入力。既存の瞬き・viseme ドライバーがあれば出力先をここへ移す。表情にトラックがない場合の値でもある |
 | `TrackingWeight` | float | 0 | 設定。表情値から Base へ寄せる割合。使用時に 0〜1 に制限。0=表情値、1=Base。自動更新処理はない |
 | `BlinkMode` | int | 通常0、既存の OpenCloseTarget は1または2 | 設定。0=通常の混合、1=max(追跡混合値, Base)、2=min(追跡混合値, Base)。生成時の Eye.ClosedState が OpenState より小さい場合は2。それ以外の瞬きは1 |
-| `Result` | float | 元フィールド値 | 状態。DynamicField<float> が SmoothValue<float>.TargetValue を参照する。通常出力は共有PlaybackがWriteし、既存の追跡がある出力だけTrackingのDriveが駆動する |
+| `Result` | float | 元フィールド値 | 状態。DynamicField<float> が SmoothValue<float>.TargetValue を参照する。生成時に瞬きが接続された出力はDynamicBlendShapeDriver.BlendShapes[].Valueを直接参照する。通常出力は共有PlaybackがWriteし、既存の追跡がある出力だけTrackingのDriveが駆動する |
 | `OriginalDriver` | ISyncRef | 元のドライバー | 定義。既存 ActiveLink が ISyncRef の場合だけ作成。Baseへ付け替えた駆動参照の記録。生成時は変数の存在でTrackingを作り、実行時は参照がnullでない出力をPlaybackのWrite対象から除外する |
 
 Version 34では実行処理に使わないPath・Shape・Target・BaselineのDVを生成しない。
-元の基準値はCatalogのresopon:neutral表情に保持し、実際の出力先はResultからSmoothValueとDynamicBlendShapeDriverの接続を辿って確認する。
+元の基準値はCatalogのresopon:neutral表情に保持し、実際の出力先はResultからSmoothValue（瞬き出力は省略）とDynamicBlendShapeDriverの接続を辿って確認する。
 
 Result 以外の数値レコードは DynamicValueVariable、Result だけは外部フィールドを参照する DynamicField。
 DynamicVariable としてのパスと float 型は同じなので、Read Dynamic Variable で引き続き読み取れる。
@@ -187,7 +187,13 @@ desired = lerp(sample, Base, clamp01(TrackingWeight))
 Result  = BlinkMode == 1 ? max(desired, Base) : BlinkMode == 2 ? min(desired, Base) : desired
 通常出力: Playback → WriteDynamicValueVariable(Result) → SmoothValue.TargetValue → SmoothValue.Value → DynamicBlendShapeDriver.BlendShapes[].Value → BlendShape
 Result (DynamicField<float>) ──参照──> SmoothValue.TargetValue
+瞬き出力: EyeLinearDriver → Base → Trackingのmax/min合成 → DynamicBlendShapeDriver.BlendShapes[].Value → BlendShape
+瞬きのResult (DynamicField<float>) ──参照──> DynamicBlendShapeDriver.BlendShapes[].Value
 ```
+
+Version 78では生成時にOpenCloseTargetの接続を検出したメッシュ出力のSmoothValueを省略する。
+瞬きの閉眼・開眼と、このシェイプを共有する表情の切り替えはSmoothingSpeedに影響されない。
+後からBlinkModeを変更してもSmoothValueの有無は変わらないため、瞬き接続を設定して再生成する。
 
 Trackingボードのある出力で EyeLinearDriver の OpenCloseTarget を変更する場合は、該当 Output の Base の Value フィールドへ接続し、
 BlinkMode を閉じる方向に合わせて1または2にする。TrackingWeight=0でも瞬きが合成される。
