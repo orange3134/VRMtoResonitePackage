@@ -1,5 +1,13 @@
 # Expression integration checks
 
+Version 69 forwards permitted Gesture API values to the corresponding Keyboard API,
+sharing hand writes and selection. The outer wearer/initialization/permission order
+is preserved: forwarding solely behind a permission If would drop the first event
+when an uninitialized instance still carries saved false permissions. Runtime checks
+reproduce that state on both hands before generation/clone/reload checks complete.
+Existing checks cover disabled-hand retention, keyboard bypass, same-frame events,
+controller stop sentinels, wearer isolation and unrestricted integer payloads.
+
 Version 68 removes eight unconditional If nodes from API request handling. Graph
 checks reject constant-true If conditions after generation, cloning and package reload.
 Existing event checks cover initialization order, wearer gates, keyboard bypass,

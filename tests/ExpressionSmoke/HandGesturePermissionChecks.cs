@@ -97,9 +97,47 @@ internal static class HandGesturePermissionChecks
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, true);
         State(true, true);
         Check(Reference<Slot>(core, "CurrentExpression") == expression, "global permission API resumes both hands without replacing the selected expression");
+        await CheckFirstGestureAfterInitialization(expressions);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
         State(true, true); await Frames();
         Console.WriteLine("PASS: per-hand gesture permissions, both/individual toggles, complete side-filtered submenus and keyboard bypass");
+    }
+
+    private static async Task CheckFirstGestureAfterInitialization(Slot expressions)
+    {
+        var core = expressions.FindChild("Internal");
+        var api = expressions.FindChild("API").FindChild("Receivers");
+        var initialized = core.GetComponentsInChildren<Nodes.StoredValue<bool>>().Single();
+        var fixture = expressions.Parent.AddSlot("Temporary uninitialized gesture fixture");
+        try
+        {
+            // Reproduce a fresh local lifecycle with saved false permissions,
+            // without waiting for OnStart/wearer notifications to initialize it.
+            var g = new ExpressionFlux(fixture);
+            const string prepareTag = "Test/PrepareUninitializedGesture";
+            ExpressionFlux.Link(g.Receiver(prepareTag, false), "OnTriggered", g.Set<bool>(initialized, g.Constant(false)));
+            for (int i = 0; i < 5; i++) await default(NextUpdate);
+            foreach (string hand in new[] { "Left", "Right" })
+            {
+                Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(fixture, prepareTag, true) == 1,
+                    "the fresh-lifecycle fixture receives its preparation impulse");
+                foreach (string side in new[] { "Left", "Right" })
+                    core.ExpressionVariables<DynamicValueVariable<bool>>()
+                        .Single(v => v.VariableName.Value == "ExpressionSystem/AllowHandGestures." + side).Value.Value = false;
+                Check(NoHandsAllowed(core), "fresh lifecycle starts with saved false permission values");
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
+                    hand == "Left" ? ExpressionSystemSetup.LeftTag : ExpressionSystemSetup.RightTag, true, 7);
+                Check(BothHandsAllowed(core) &&
+                    core.ExpressionVariables<DynamicValueVariable<int>>()
+                        .Single(v => v.VariableName.Value == "ExpressionSystem/" + hand + "Gesture").Value.Value == 7 &&
+                    core.ExpressionVariables<DynamicValueVariable<string>>()
+                        .Single(v => v.VariableName.Value == "ExpressionSystem/PairKey").Value.Value ==
+                            (hand == "Left" ? "L7R0" : "L0R7"),
+                    hand + " first gesture initializes before permission gating and selects synchronously");
+            }
+        }
+        finally { fixture.Destroy(); }
+        Console.WriteLine("PASS: both forwarded gesture APIs initialize before checking saved false permissions");
     }
     private static void CheckToggleGraph(Slot board)
     {

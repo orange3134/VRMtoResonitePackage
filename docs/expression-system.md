@@ -3,6 +3,19 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 69では、Gesture APIのLeft・Rightが許可された値を同じ手のKeyboard APIへ転送し、
+左右値の書き込みとSelectionの処理を共有する。2026-11-04にresoloopで読み取った
+`Root/Salt/Expressions/API/Receivers/Logic/Left` の転送方式を両手に適用する。
+ただし、観測したグラフは許可判定がInitializeより先に走るため、そのままでは同等ではない。
+複製・再読込・再装着時にローカル初期化が未完了かつ保存された許可値がfalseの場合、
+最初のGesture入力が破棄される。生成コードでは従来どおり
+`AvatarWornLocal → Initialize → AllowHandGestures.<hand> → Keyboard/<hand>` の順序を維持する。
+転送先のInitializeは初期化済みなら何もせず、同じインパルス内で左右値と表情を更新する。
+初期化済みで禁止中の入力（停止時の-1を含む）は引き続き拒否する。
+Keyboard受信部もGesture入力の共通処理になるため、削除・無効化・Tag変更はGestureにも影響する。
+転送先の階層に同じKeyboard Tagの受信部を追加している場合は、Gesture経由でも発火する。
+標準生成構成のLeft・Rightはそれぞれ15ノードから13ノードになる。
+
 Version 68では、API共通の `ApplyRequest` が追加条件を受け取らない場合、Initializeの次に
 処理を直接接続する。Keyboard左右・Select・AllowHandGestures両手/左右・ToggleHandGestures左右の
 計8個の固定true条件のIfを生成しない。装着判定と、Gesture入力に対する各手の許可判定は維持する。

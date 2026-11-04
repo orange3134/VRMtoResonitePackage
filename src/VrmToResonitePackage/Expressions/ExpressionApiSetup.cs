@@ -39,8 +39,13 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildHandReceiver(ExpressionFlux g, string hand, string tag, bool gestureInput)
     {
         var receiver = g.Receiver<int>(tag);
-        var mutation = g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),
-            g.Trigger(g.Ref(_internal), SelectionTickTag));
+        // Reuse the keyboard receiver's write/selection path, as in the authored
+        // Salt graph. Keep initialization before the permission check: a fresh
+        // instance can still carry false permission values from its saved state.
+        var mutation = gestureInput
+            ? SendHandInput(g, g.Text(hand == "Left" ? KeyboardLeftTag : KeyboardRightTag), Out(receiver, "Value"))
+            : g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),
+                g.Trigger(g.Ref(_internal), SelectionTickTag));
         Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal,
             ApplyRequest(g, mutation, gestureInput
                 ? g.Read<bool>(g.Ref(_internal), SystemSpace, HandGesturePermission(hand)) : null)));
