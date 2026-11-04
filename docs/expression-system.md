@@ -3,6 +3,9 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 83ではAPI/ExamplesとAPI/Templatesを削除し、API直下にはReceiversだけを生成する。
+表情を追加する場合は既存のCatalogエントリーを複製する。
+
 Version 82ではSelectionの対応表読み取り結果をPlayback送信ノードのValueへ直接接続する。
 一時保存用のLocalObject・ObjectWrite・Sequenceを省き、着用判定と同期通知は維持する。
 
@@ -206,8 +209,6 @@ Expressions/
     Select/                        表情Slotを検証してPlaybackへ送信
     ToggleHandGestures/             両手の許可をまとめて切り替え
     Reset/                         表情・左右値・許可を初期状態へ戻す
-  API/Examples/                    左右の int イベントを送るボタンの例
-  API/Templates/                   Catalog に複製する表情テンプレート
 ```
 
 Internal に入力元の一覧・優先順位・有効期限・汎用 Animator パラメーターは持たない。
@@ -447,7 +448,7 @@ Catalog・Imported menuともに選択中の表情は緑、それ以外は白。
 参照先の表情を削除した項目が未選択状態で緑にならないようにする。
 ジェスチャー許可トグルのColorは `ValueOptionDescriptionDriver<bool>` が片手の許可、または両手のANDを読み、
 有効（true）なら緑、無効（false）なら赤にする。両DriverともLabel・Spriteは駆動せず、Enabledの自動制御も追加しない。
-参照はアバター複製時に複製先へ再対応し、Catalogテンプレートを複製した項目は自分自身の表情を比較対象にする。
+参照はアバター複製時に複製先へ再対応し、Catalogエントリーを複製した項目は自分自身の表情を比較対象にする。
 Catalog の Slot を固定用に保持する Override 変数は生成しない。
 
 Version 26の `Hand gestures` は単一のトグル項目で、押すたびに現在のboolを反転する。
@@ -486,11 +487,11 @@ Select APIは表情Slotを直接受け取るため、ジェスチャーの値・
 行が未設定、または表情の参照先が削除されている場合は Outputs のベース入力を使う。
 表の参照の編集は次の左右入力イベントで反映される。異なる行でも同じ表情を指す場合は同じ固定値を適用する。
 
-表情の追加は `API/Templates` または既存の Catalog エントリーを Catalog へ複製し、
+表情の追加は既存の Catalog エントリーを Catalog へ複製し、
 DV直下のfloat値とContextMenuItemSource.Labelを設定する。
 Clipの識別子変数は持たず、外部からの直接選択には表情Slotを送る。
 直接選択ボタンからの適用にGestureTableの割り当ては不要。対応表の編集でメニュー項目の Enabled は変更しない。直接選択は即時に反映する。削除は表情スロットごと行える。
-テンプレートから複製したメニューのLabelは直接編集でき、送信するSlot参照は複製先自身へリマップされる。項目の Enabled は駆動しない。
+複製したメニューのLabelは直接編集でき、送信するSlot参照は複製先自身へリマップされる。項目の Enabled は駆動しない。
 Version 57でCatalogへ表情を追加した場合は、直接選択サブメニューのItemsにも既存項目を複製し、
 ButtonDynamicImpulseTriggerWithReference<Slot>のPressedData.Reference、選択色DriverのReferenceTarget、
 Label用ValueCopyのSourceを追加した表情へ設定する。Catalogへの追加だけではサブメニューに項目は増えない。

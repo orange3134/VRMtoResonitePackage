@@ -19,21 +19,12 @@ internal sealed partial class ExpressionSystemSetup
     {
         if (menu) BuildMenus();
         BuildKeyboard(); BuildGestures();
-        var examples = _root.FindChild("API").AddSlot("Examples");
-        foreach (var (hand, tag) in new[] { ("Left", TrySetGestureLeftTag), ("Right", TrySetGestureRightTag) })
-            MenuTrigger(examples.AddSlot(hand + " Fist (int 1)"), _api, tag, 1);
     }
     private static ContextMenuItemSource MenuItem(Slot slot, string label)
     {
         var item = slot.AttachComponent<ContextMenuItemSource>();
         item.Label.Value = label; item.CloseMenuOnPress.Value = false;
         return item;
-    }
-    private static void MenuTrigger<T>(Slot item, Slot target, string tag, T payload)
-    {
-        var trigger = item.AttachComponent<ButtonDynamicImpulseTriggerWithValue<T>>();
-        trigger.Target.Target = target; trigger.ExcludeDisabled.Value = true;
-        trigger.PressedData.Tag.Value = tag; trigger.PressedData.Value.Value = payload;
     }
     private static readonly colorX SelectedMenuColor = new(0f, 1f, 0f, 1f, ColorProfile.Linear);
 

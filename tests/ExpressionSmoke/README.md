@@ -1,5 +1,8 @@
 # Expression integration checks
 
+Version 83 removes API/Examples and API/Templates. Clip checks cover Catalog only;
+the existing copy/edit/select checks duplicate a Catalog entry directly.
+
 Version 81 attaches the ExpressionSystem/GestureTable reference directly to the
 DV/GestureTable slot and targets that slot itself. Checks verify placement, absence
 of both old reference names, root-space reads alongside GestureTable.LnRm rows,

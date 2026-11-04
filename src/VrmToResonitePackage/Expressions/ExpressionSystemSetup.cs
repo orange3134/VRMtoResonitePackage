@@ -49,7 +49,7 @@ internal sealed partial class ExpressionSystemSetup
         }
         Reference<Slot>(_root, "CurrentExpression", null);
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 82);
+        Data(_root, "Version", 83);
         Reference(_root, "References.API", _api);
         Reference(_root, "References.Catalog", _catalog);
         var tableReference = _table.AttachComponent<DynamicReferenceVariable<Slot>>();
@@ -81,11 +81,6 @@ internal sealed partial class ExpressionSystemSetup
         ExpressionFlux.BindSlotReferences(setup._root);
         ExpressionFlux.Arrange(setup._root);
         setup.LogDiagnostics();
-        if (setup._clips.Count > 0)
-        {
-            var template = setup._clips.Values.First().Duplicate(setup._root.FindChild("API").AddSlot("Templates"));
-            template.Name = "Expression (copy into Catalog)";
-        }
         int assigned = setup._compiled.Pairs.Count(id => id != null && setup._clips.ContainsKey(id));
         Console.WriteLine($"Expression system: {setup._clips.Count} clips, {setup._outputSlots.Count} outputs, {assigned}/64 gesture pairs assigned, " +
             $"{setup._root.GetComponentsInChildren<ProtoFluxNode>().Count} Flux nodes");

@@ -397,20 +397,19 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         directItem.Label.Value = originalLabel;
         await Frames(2);
 
-        var template = expressions.FindChild("API").FindChild("Templates").Children.Single();
-        var addedExpression = template.Duplicate(catalog);
-        addedExpression.Name = "Added expression from template";
+        var addedExpression = catalog.Children.First().Duplicate(catalog);
+        addedExpression.Name = "Added expression from Catalog";
         addedExpression.GetComponent<ContextMenuItemSource>().Label.Value = "Added expression";
         await Frames(30);
         var addedButton = addedExpression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
         Check(addedButton.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && addedButton.PressedData.Reference.Target == addedExpression,
-            "copied template menu reference remaps to the new Catalog entry");
+            "copied Catalog menu reference remaps to the new entry");
         AllowInput();
         addedButton.Pressed(null, default);
         Check(NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == addedExpression,
-            "copied template is directly selectable without a GestureTable mapping");
+            "copied Catalog entry is directly selectable without a GestureTable mapping");
         var addedBinding = addedExpression.ExpressionVariables<DynamicValueVariable<float>>().First();
-        Check(addedBinding.Slot.WriteDynamicVariable(addedBinding.VariableName.Value, 0.65f) == DynamicVariableWriteResult.Success, "write the named template value");
+        Check(addedBinding.Slot.WriteDynamicVariable(addedBinding.VariableName.Value, 0.65f) == DynamicVariableWriteResult.Success, "write the named copied value");
         addedButton.Pressed(null, default); await Frames();
         Check(Math.Abs(field.Value - 0.65f) < 0.01, "reselecting the same expression refreshes edited bindings");
         ExpressionGraphChecks.CheckMenuColors(expressions);

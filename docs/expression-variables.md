@@ -15,7 +15,7 @@
 | Expressions 自身 | `ExpressionSystem` | バージョンと入口への参照 |
 | DV | `ExpressionSystem`（状態変数に接頭辞なし） | 入力・選択・再生状態 |
 | DV/GestureTable | `ExpressionSystem`（変数名 `GestureTable` と `GestureTable.*`） | 自身へのSlot参照と左右64通りの表情参照 |
-| Catalog/各表情、API/Templates/各表情 | `ExpressionSystem.Catalog.Clip` | シェイプごとの固定値 |
+| Catalog/各表情 | `ExpressionSystem.Catalog.Clip` | シェイプごとの固定値 |
 | Outputs/各項目 | `ExpressionSystem.Output` | BlendShape の基礎入力・混合・最終出力 |
 | Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と10キーの割当 |
 | Inputs/HandGestures/各機種 | `ExpressionSystem.Input.HandGestures` | しきい値と安定待ち時間 |
@@ -48,7 +48,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 82 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 83 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions/DV/GestureTable | `GestureTable` | Slot | 自身のSlot | 定義。Selectionが対応表を読む参照先。Version 81で旧 `References.GestureTable` から変更し、このスロットへ直接配置 |
@@ -122,7 +122,7 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 実DLLはUTF-16のchar単位で判定するため制御文字や一部の絵文字を通すが、上記の生成規則では置換する。
 公開仕様は[Resonite Wikiの命名制限](https://wiki.resonite.com/Dynamic_variables#Naming_restrictions)も参照。
 
-`API/Templates/Expression (copy into Catalog)` は最初の表情を複製し、Slot名だけ変更する。
+表情を追加するには既存のCatalogエントリーをCatalogへ複製する。Version 83ではAPI/TemplatesとAPI/Examplesを生成しない。
 コピー後はDV直下のfloat値とメニューのLabelを整える。Select APIには複製先のSlotを送る。GestureTableへの割り当ては任意。選択にはSlot参照を使い、識別子変数は持たない。
 
 ## 入力・選択・再生の状態（Expressions/DV）

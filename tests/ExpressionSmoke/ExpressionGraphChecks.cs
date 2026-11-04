@@ -246,7 +246,7 @@ internal static class ExpressionGraphChecks
             v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Enabled") &&
             !expressions.GetComponentsInChildren<DynamicValueVariable<string>>().Any(v =>
                 v.VariableName.Value is "ExpressionSystem.Catalog.Clip/Source" or "ExpressionSystem.Catalog.Clip/Id" or "ExpressionSystem.Catalog.Clip/DisplayName"),
-            "clips and templates contain no metadata variables");
+            "clips contain no metadata variables");
         Check(expressions.GetComponentsInChildren<Nodes.ValueObjectInput<string>>().All(v =>
             v.Value.Value is not "ExpressionSystem.Catalog.Clip/Enabled" and not "ExpressionSystem.Catalog.Clip/Source" and
                 not "ExpressionSystem.Catalog.Clip/Id" and not "ExpressionSystem.Catalog.Clip/DisplayName"),
@@ -257,7 +257,7 @@ internal static class ExpressionGraphChecks
             expressions.GetComponentsInChildren<AssetLoader<Animation>>().Count == 0 &&
             expressions.GetComponentsInChildren<DynamicReferenceVariable<IAssetProvider<Animation>>>().Count == 0,
             "expressions contain no animation providers, loaders or asset references");
-        foreach (var entry in expressions.FindChild("Catalog").Children.Concat(expressions.FindChild("API").FindChild("Templates").Children))
+        foreach (var entry in expressions.FindChild("Catalog").Children)
         {
             Check(entry.FindChild("Bindings") == null &&
                 !entry.ExpressionVariables<DynamicReferenceVariable<Slot>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Bindings"),

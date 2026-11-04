@@ -18,7 +18,6 @@ internal static class ExpressionSpaceChecks
             Records(parent, "ExpressionSystem.Catalog.Clip");
         }
         Clips(root.FindChild("Catalog"));
-        Clips(root.FindChild("API").FindChild("Templates"));
         Records(root.FindChild("Outputs"), "ExpressionSystem.Output");
         var inputs = root.FindChild("Inputs");
         Records(inputs.FindChild("Keyboard"), "ExpressionSystem.Input.Keyboard");
@@ -113,8 +112,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 82,
-            "direct gesture selection payload uses package version 82");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 83,
+            "API without examples and templates uses package version 83");
         Check(root.ExpressionVariables<DynamicValueVariable<bool>>().Count(v =>
             v.VariableName.Value is "ExpressionSystem/AllowHandGestures.Left" or "ExpressionSystem/AllowHandGestures.Right") == 2 &&
             root.ExpressionVariables<DynamicValueVariable<bool>>().All(v => v.VariableName.Value != "ExpressionSystem/AllowHandGestures"),
