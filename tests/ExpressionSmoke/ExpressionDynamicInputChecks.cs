@@ -7,7 +7,7 @@ internal static class ExpressionDynamicInputChecks
     public static void CheckBindings(Slot root)
     {
         CheckSlotReferences(root);
-        var modules = root.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");
+        var modules = root.FindChild("Inputs").FindChild("HandGestures");
         foreach (var module in modules.Children)
         {
             var settings = module.ExpressionVariables<DynamicValueVariable<float>>();
@@ -57,7 +57,7 @@ internal static class ExpressionDynamicInputChecks
     public static async Task CheckEdits(Slot root)
     {
         CheckSlotReferences(root);
-        var modules = root.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");
+        var modules = root.FindChild("Inputs").FindChild("HandGestures");
         var module = modules.Children.First();
         var field = module.ExpressionVariables<DynamicValueVariable<float>>()
             .Single(value => value.VariableName.Value == "ExpressionSystem.Input.HandGestures/StabilitySeconds");
@@ -95,12 +95,21 @@ internal static class ExpressionDynamicInputChecks
 
     private static void CheckSlotReferences(Slot root)
     {
+        var tableReference = root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+            .Single(v => v.VariableName.Value == "ExpressionSystem/References.GestureTable");
+        Check(tableReference.Slot.Name == "References.GestureTable" &&
+            tableReference.Reference.Target == root.FindChild("DV").FindChild("GestureTable") &&
+            root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v =>
+                v.VariableName.Value != "ExpressionSystem/References.DV.GestureTable") &&
+            root.GetComponentsInChildren<DynamicVariableObjectInput<Slot>>().All(n =>
+                Name(n) != "ExpressionSystem/References.DV.GestureTable"),
+            "References.GestureTable binds to this avatar's DV/GestureTable without the old reference name");
         Check(root.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.RefObjectInput<Slot>>().Count == 0,
             "no fixed Slot reference inputs are exported");
         Check(!root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Any(v =>
-            v.VariableName.Value.StartsWith("ExpressionSystem/References.Inputs.HandGestures.Modules.", StringComparison.Ordinal)),
+            v.VariableName.Value.StartsWith("ExpressionSystem/References.Inputs.HandGestures.", StringComparison.Ordinal)),
             "hand-module references are absent from the system space");
-        foreach (var module in root.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules").Children)
+        foreach (var module in root.FindChild("Inputs").FindChild("HandGestures").Children)
         {
             var local = module.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>();
             Check(local.Count == 0, "local writes need no hand references: " + module.Name);

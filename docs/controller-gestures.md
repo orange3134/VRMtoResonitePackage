@@ -86,7 +86,7 @@ RockNRollは既存互換のため親指を判定せず、親指が中間でも5�
 `NOR_Multi_Bool`でNeutralを明示し、8行の`IndexOfFirstValueMatch<bool>`から0〜7を直接出力する。
 中間域への移行にも共通の`StabilitySeconds`を適用する。
 初期20度はResoPonの調整値であり、VRChatの非公開しきい値を再現する保証はない。
-設定は`Expressions/Inputs/HandGestures/Modules/Index/DV`で変更できる。
+設定は`Expressions/Inputs/HandGestures/Index/DV`で変更できる（Version 80でModules階層を廃止）。
 生成済みパッケージへ適用するには再変換・再インポートする。
 
 Version 60ではEuler角比較のboolを1つの`ComposeBits_byte`へまとめ、

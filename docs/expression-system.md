@@ -3,6 +3,11 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+Version 80では対応表への固定参照を `ExpressionSystem/References.GestureTable` として明示する。
+参照先は `Expressions/DV/GestureTable` のままで、スロット配置由来の `References.DV.GestureTable` は生成しない。
+`Inputs/HandGestures/Modules` を廃止し、Touch・Index・Vive・WindowsMR・Cosmosを `Inputs/HandGestures` 直下へ配置する。
+各機種のDV・左右Logic・名前空間は維持する。既存パッケージへ反映するには再変換が必要。
+
 Version 79では診断専用だった `ExpressionSystem/PairKey` を削除した。実行処理からの読み取りはなく、
 Selectionは左右のGestureから `GestureTable.L{左}R{右}` を直接参照する。確認には左右値とCurrentExpressionを使う。
 
@@ -184,7 +189,7 @@ Expressions/
       Left|Right/                  各手の共通設定用の変数空間
         DV/                        Tag、Modifier、Key.0〜Key.9
         Logic/                     着用・修飾キー・押下成立の変更監視と送信
-    HandGestures/Modules/
+    HandGestures/
       Touch|Index|Vive|WindowsMR|Cosmos/   削除できる機種別入力
         Left/Logic/                左手の入力検出・安定化・通知
         Right/Logic/               右手の入力検出・安定化・通知
@@ -410,7 +415,7 @@ Version 23では左右ジェスチャーのコンテキストメニューと専�
   1つの FireOnLocalValueChange<bool> で監視する。条件成立時は最小番号のキーの添字を一度送る。
   条件が成立したまま他のキーを追加・解放しても再送しない。全キーを離すなどして条件を false に戻すと再度送信できる。
   Control・Shift は左右どちらの物理キーでもよい。各手の設定は独立して変更できる。
-- コントローラー: 不要な `Modules/Touch|Index|Vive|WindowsMR` を削除できる。
+- コントローラー: `Inputs/HandGestures` 直下の不要な `Touch|Index|Vive|WindowsMR|Cosmos` を削除できる。
   Version 51では機器の切断・非アクティブ化・VRモード終了時に、その手へ-1を即送信する。
   対応表に行がなければBaseへ戻る。入力禁止時はTrySetGestureが拒否し、未着用時はInputs側が送信を停止する。
   再接続・VR復帰後は、安定待ちを通過した手形でその手の値を更新する。
@@ -1381,7 +1386,7 @@ ExpressionSmokeの全回帰テストでSlot受信・即時設定と解除・無�
 ### Version 38: 手入力モジュールの参照を各空間へ集約
 
 References.Inputs.HandGestures.Modules.*は各モジュール内の左右状態の更新だけで使用しているため、共有ExpressionSystem空間への生成を廃止した。
-各Inputs/HandGestures/Modules/<機種>/DVへReferences.Left・References.Rightを置き、ExpressionSystem.Input.HandGestures空間へ登録する。
+各Inputs/HandGestures/Modules/<機種>/DVへReferences.Left・References.Rightを置き、ExpressionSystem.Input.HandGestures空間へ登録する（Version 80ではModulesを省略）。
 全消費先が対象モジュール内にあることを生成時に判定する。外部からも使われる参照は共有空間へ残す。
 各機種と複製アバターは同じ変数名を使っても、自分の空間のSlot参照にバインドする。
 ExpressionSmokeの全回帰テストで、共有空間の旧参照の不在、モジュール内参照の編集、機種間の分離、複製・保存再読込後のバインドが成功した。
@@ -1441,7 +1446,7 @@ Output側のIdと変換処理内の識別子は維持し、メニュー操作と
 
 ## Version 46：入力モジュールのOnStartを削除
 
-Inputs/Keyboardの左右2つとInputs/HandGestures/Modulesの5機種×左右のOnStartを削除する。
+Inputs/Keyboardの左右2つとInputs/HandGesturesの5機種×左右のOnStartを削除する。
 入力処理は既存の変更検知イベントから実行する。Internal/LifecycleとInternal/PlaybackのOnStartは維持する。
 生成・複製・保存再読込後のInputs配下にOnStartがないことと、キー入力・機種別入力・再装着の動作を検証する。
 

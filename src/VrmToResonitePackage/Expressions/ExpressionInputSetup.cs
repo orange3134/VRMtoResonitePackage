@@ -204,12 +204,12 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildGestures()
     {
-        var root = _inputs.AddSlot("HandGestures"); var modules = root.AddSlot("Modules");
+        var root = _inputs.AddSlot("HandGestures");
         using (var notice = new StreamReader(typeof(ExpressionSystemSetup).Assembly.GetManifestResourceStream("ResoPon.ControllerGestureNotice")))
             root.AttachComponent<Comment>().Text.Value = notice.ReadToEnd();
         foreach (string device in new[] { "TouchController", "IndexController", "ViveController", "WindowsMRController", "CosmosController" })
         {
-            var module = Record(modules, device.Replace("Controller", ""), GestureSettingsSpace);
+            var module = Record(root, device.Replace("Controller", ""), GestureSettingsSpace);
             Data(module, "StabilitySeconds", 0.05f);
             if (device == "IndexController")
             {

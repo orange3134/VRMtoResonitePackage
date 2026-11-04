@@ -22,7 +22,10 @@ internal static class ExpressionSpaceChecks
         Records(root.FindChild("Outputs"), "ExpressionSystem.Output");
         var inputs = root.FindChild("Inputs");
         Records(inputs.FindChild("Keyboard"), "ExpressionSystem.Input.Keyboard");
-        var modules = inputs.FindChild("HandGestures").FindChild("Modules");
+        var modules = inputs.FindChild("HandGestures");
+        Check(modules.FindChild("Modules") == null && modules.Children.All(module =>
+            new[] { "Touch", "Index", "Vive", "WindowsMR", "Cosmos" }.Contains(module.Name)),
+            "controller modules live directly under HandGestures without a Modules wrapper");
         Records(modules, "ExpressionSystem.Input.HandGestures");
         foreach (var module in modules.Children)
         foreach (string side in new[] { "Left", "Right" })
@@ -109,8 +112,8 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 79,
-            "removal of PairKey diagnostics is identified by package version 79");
+        Check(root.ExpressionVariables<DynamicValueVariable<int>>().Single(v => v.VariableName.Value == "ExpressionSystem/Version").Value.Value == 80,
+            "renamed gesture table reference and flat controller hierarchy use package version 80");
         Check(root.ExpressionVariables<DynamicValueVariable<bool>>().Count(v =>
             v.VariableName.Value is "ExpressionSystem/AllowHandGestures.Left" or "ExpressionSystem/AllowHandGestures.Right") == 2 &&
             root.ExpressionVariables<DynamicValueVariable<bool>>().All(v => v.VariableName.Value != "ExpressionSystem/AllowHandGestures"),

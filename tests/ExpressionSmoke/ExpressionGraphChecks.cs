@@ -306,7 +306,7 @@ internal static class ExpressionGraphChecks
         }
         foreach (string side in new[] { "Left", "Right" })
         {
-            var indexBoard = Descendant(expressions, "Inputs/HandGestures/Modules/Index/" + side + "/Logic");
+            var indexBoard = Descendant(expressions, "Inputs/HandGestures/Index/" + side + "/Logic");
             var selector = indexBoard.GetComponentsInChildren<Nodes.Utility.IndexOfFirstValueMatch<bool>>().Single();
             var neutral = indexBoard.GetComponentsInChildren<Nodes.Operators.NOR_Multi_Bool>().Single();
             Check(selector.Values.Count == 8 && selector.Values[0] == neutral && neutral.Operands.Count == 7,
@@ -347,7 +347,7 @@ internal static class ExpressionGraphChecks
             Check(board.Count() <= MaximumBoardNodes, $"board node budget ({MaximumBoardNodes}): {path} has {board.Count()}");
 
         }
-        foreach (var module in Descendant(expressions, "Inputs/HandGestures/Modules").Children)
+        foreach (var module in Descendant(expressions, "Inputs/HandGestures").Children)
             foreach (string hand in new[] { "Left", "Right" })
                 Check(boards.Any(b => b.Key == Descendant(module, hand + "/Logic")),
                     "controller hand has an independent board: " + module.Name + "/" + hand);

@@ -53,7 +53,7 @@ internal static class ExpressionLayoutChecks
 
     private static void CheckControllerInputs(Slot expressions)
     {
-        var modules = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");
+        var modules = expressions.FindChild("Inputs").FindChild("HandGestures");
         foreach (var module in modules.Children)
         foreach (var hand in module.Children.Where(s => s.Name is "Left" or "Right"))
         {

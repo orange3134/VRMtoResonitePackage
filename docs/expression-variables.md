@@ -18,7 +18,7 @@
 | Catalog/各表情、API/Templates/各表情 | `ExpressionSystem.Catalog.Clip` | シェイプごとの固定値 |
 | Outputs/各項目 | `ExpressionSystem.Output` | BlendShape の基礎入力・混合・最終出力 |
 | Inputs/Keyboard/Left・Right | `ExpressionSystem.Input.Keyboard` | 各手の共通設定と10キーの割当 |
-| Inputs/HandGestures/Modules/各機種 | `ExpressionSystem.Input.HandGestures` | しきい値と安定待ち時間 |
+| Inputs/HandGestures/各機種 | `ExpressionSystem.Input.HandGestures` | しきい値と安定待ち時間 |
 
 `Record()` は空間名を必須引数で受け取り、`OnlyDirectBinding=true` の空間を作る。
 例外は Expressions 自身（false）で、Internal と GestureTable には空間を追加せず、Expressions/DV の状態変数と `ExpressionSystem/GestureTable.LnRm` を共有空間へ登録する。
@@ -47,9 +47,10 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 79 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 80 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
+| Expressions | `References.GestureTable` | Slot | DV/GestureTable | 定義。Selectionが対応表を読む参照先。Version 80で旧 `References.DV.GestureTable` から変更 |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
 | Expressions/DV/SmoothingSpeed | `SmoothingSpeed` | float | 10 | 設定。全Rendererの表情用SmoothValue.Speedをまとめて変更。変数名は `ExpressionSystem/SmoothingSpeed` |
 | Expressions/DV/GestureTable/LnRm | `L0R0`〜`L7R7` | Slot | コンパイルした表情、または null | 設定。n は左、m は右の int 値（生成時は各0〜7）。`FormatString` の `ExpressionSystem/GestureTable.L{0}R{1}` に左・右の順で渡し、変数名を直接検索する |
@@ -232,7 +233,9 @@ Modifierは各手で独立して編集でき、Altなどに変更したり、両
 未着用では送信せず、押したまま着用した場合は条件成立時に送信する。
 Held や前回マスクなどの DynamicVariable は作らず、変更検出の状態はローカルに保持する。
 
-## Inputs/HandGestures/Modules：機種別入力
+## Inputs/HandGestures：機種別入力
+
+Version 80ではModulesスロットを廃止し、各機種をHandGestures直下に置く。
 
 Touch・Index・Vive・WindowsMR・Cosmosの各モジュールに、使用する設定を置く。
 Version 48では各手の状態用DynamicVariableを廃止し、Left/RightのLogic内で判定・保持する。
@@ -342,7 +345,7 @@ Version 76で未使用のAllowHandGestures両手/左右とToggleHandGestures左�
 
 実行対象のResonite DLLでの型名はDynamicVariableObjectInput<Slot>で、DynamicReferenceInput<Slot>という型は存在しない。
 固定の参照先はDynamicReferenceVariable<Slot>へ移し、各ボードの入力はその変数名を読む。共有参照はExpressionSystem空間を使う。
-References.APIとReferences.Catalogは既存の変数を再利用する。それ以外はReferences.Outputs、References.InternalなどをExpressions/DV配下に生成する。
+References.API・References.Catalog・References.GestureTableは明示した変数を再利用する。それ以外はReferences.Outputs、References.InternalなどをExpressions/DV配下に生成する。
 null定数は入力未接続で表現し、References.Noneも参照入力ノードも生成しない。同じ非null参照先は1つのDVを共有し、参照名の禁止文字は置換して衝突時は連番を付ける。
 祖先空間を直接読むDynamicVariable入力は維持し、使われなくなった仮の参照にDVは作らない。
 保存・複製時は通常のSlot参照としてリマップされる。参照を編集すると、DynamicVariableの更新後に参照先の走査・書き込み・Impulse送信へ反映される。

@@ -1,5 +1,11 @@
 # Expression integration checks
 
+Version 80 explicitly binds References.GestureTable to DV/GestureTable and places
+Touch/Index/Vive/WindowsMR/Cosmos directly below Inputs/HandGestures. Structure and
+reference checks reject the old reference name and Modules wrapper after generation,
+cloning and reload. Existing controller input, settings edit and deletion checks use
+the flattened hierarchy.
+
 Version 79 removes the write-only PairKey diagnostic. Graph checks reject its
 variable and references after generation, cloning and reload. Runtime checks assert
 stored hand values and actual CurrentExpression selection, including all 64 table

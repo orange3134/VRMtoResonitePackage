@@ -13,7 +13,7 @@ internal static class ExpressionInputEventChecks
         var core = expressions.FindChild("Internal");
         var api = expressions.FindChild("API").FindChild("Receivers");
         var catalog = expressions.FindChild("Catalog");
-        var modules = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules");
+        var modules = expressions.FindChild("Inputs").FindChild("HandGestures");
         var mocks = expressions.Parent.AddSlot("Temporary sensor inputs");
         var restore = new List<(ISyncRef Port, IWorldElement Target)>();
         // Save the equip-assigned reference so the worn flags can also exercise dequip.

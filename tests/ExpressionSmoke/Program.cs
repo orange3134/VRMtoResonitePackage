@@ -328,7 +328,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         ExpressionGraphChecks.CheckMenuColors(expressions);
         Check(Math.Abs(field.Value - 1) < 0.01, "deleting row 8 does not shift row 9");
 
-        var touch = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Modules").FindChild("Touch");
+        var touch = expressions.FindChild("Inputs").FindChild("HandGestures").FindChild("Touch");
 
         await Frames();
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
