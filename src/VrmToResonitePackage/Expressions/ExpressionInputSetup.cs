@@ -11,7 +11,7 @@ namespace VrmToResonitePackage.Expressions;
 internal sealed partial class ExpressionSystemSetup
 {
     private const int KeyboardGestureCount = 10;
-    private static string GestureTag(int hand) => hand == 0 ? LeftTag : RightTag;
+    private static string TrySetGestureTag(int hand) => hand == 0 ? TrySetGestureLeftTag : TrySetGestureRightTag;
     private IWorldElement SendHandInput(ExpressionFlux g, IWorldElement tag, IWorldElement gesture) =>
         g.Trigger<int>(g.Ref(_api), tag, gesture);
 
@@ -20,7 +20,7 @@ internal sealed partial class ExpressionSystemSetup
         if (menu) BuildMenus();
         BuildKeyboard(); BuildGestures();
         var examples = _root.FindChild("API").AddSlot("Examples");
-        foreach (var (hand, tag) in new[] { ("Left", LeftTag), ("Right", RightTag) })
+        foreach (var (hand, tag) in new[] { ("Left", TrySetGestureLeftTag), ("Right", TrySetGestureRightTag) })
             MenuTrigger(examples.AddSlot(hand + " Fist (int 1)"), _api, tag, 1);
     }
     private static ContextMenuItemSource MenuItem(Slot slot, string label)
@@ -175,7 +175,7 @@ internal sealed partial class ExpressionSystemSetup
         for (int hand = 0; hand < 2; hand++)
         {
             var settings = Record(root, hand == 0 ? "Left" : "Right", KeyboardSpace);
-            Data(settings, "Tag", hand == 0 ? KeyboardLeftTag : KeyboardRightTag);
+            Data(settings, "Tag", hand == 0 ? SetGestureLeftTag : SetGestureRightTag);
             Data(settings, "Modifier", hand == 0 ? InputKey.Shift : InputKey.Control);
             for (int gesture = 0; gesture < KeyboardGestureCount; gesture++)
                 Data(settings, "Key." + gesture, (InputKey)((int)InputKey.Keypad0 + gesture));
@@ -234,7 +234,7 @@ internal sealed partial class ExpressionSystemSetup
             g.Node("UserVR_Active", null, ("User", g.Owner(_root))),
             g.Read<bool>(g.Ref(_internal), SystemSpace, HandGesturePermission(side.ToString())));
         var current = g.Choose<int>(accepting, gesture, g.Constant(-1));
-        var send = SendHandInput(g, g.Text(GestureTag(kind)), current);
+        var send = SendHandInput(g, g.Text(TrySetGestureTag(kind)), current);
         // The authored graph drops changes during the timeout; it neither queues
         // them nor restarts the interval. Reset stays unconnected, including when
         // input stops. Only admitted impulses capture a delayed gesture value.

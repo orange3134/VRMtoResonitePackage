@@ -47,7 +47,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 
 | 配置先 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|---|
-| Expressions | `Version` | int | 71 | 定義。生成システムのバージョン。実行時の分岐には使わない |
+| Expressions | `Version` | int | 72 | 定義。生成システムのバージョン。実行時の分岐には使わない |
 | Expressions | `References.API` | Slot | API/Receivers | 定義。公開 Dynamic Impulse の送信先。Fluxの送信処理もこの変数を読む |
 | Expressions | `References.Catalog` | Slot | Catalog | 定義。表情一覧への参照。Fluxの一覧走査もこの変数を読む |
 | Expressions | `References.*` | Slot | 対応する内部Slot | 定義。Outputs、内部Impulseの宛先、追跡出力などの共有参照。実際に使うものだけ生成 |
@@ -127,7 +127,7 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 
 | 名前 | 型 | 初期値 | 更新元・役割 |
 |---|---|---|---|
-| `AllowHandGestures.Left` / `AllowHandGestures.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとGesture APIだけの受付可否。キーボード・メニューは常に受け付ける。表情の直接選択で両方false、初期化・リセットで両方true。許可 API でも個別に変更可能 |
+| `AllowHandGestures.Left` / `AllowHandGestures.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとTrySetGesture APIだけの受付可否。SetGesture・メニューはこの設定で停止しない。表情の直接選択で両方false、初期化・リセットで両方true。許可 API でも個別に変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューでは変更しない |
 | `PairKey` | string | L0R0 | 最後の左右入力イベントでSelectionが組み立てたキー。直接選択中の表情を示すものではない |
 | `CurrentExpression` | Slot | null | Playbackが受信した表情Slot。Selectionは対応表の参照をそのまま渡し、Select APIは自身のCatalog直下かだけ確認する。解除はnull |
@@ -201,14 +201,14 @@ OriginalDriverは元コンポーネント自体ではなく、元のActiveLink�
 
 ## Inputs/Keyboard/Left・Right
 
-Version 24ではTagの既定値を `ResoPon/Expression/Keyboard/Left`・`Right` とする。Gesture APIと違い、AllowHandGestures=falseでも受け付ける。
+Version 72のTagの既定値は `ResoPon/Expression/SetGesture/Left`・`Right`。TrySetGesture APIと違い、AllowHandGestures=falseでも受け付ける。Version 24～71の旧名は `ResoPon/Expression/Keyboard/Left`・`Right`。
 
 各手の DynamicVariableSpace は `ExpressionSystem.Input.Keyboard`。
 Version 63の変数は `DV/Tag`、`DV/Modifier`、`DV/Key.0`〜`DV/Key.9` の各 Slot に置く。
 
 | 名前 | 型 | 初期値 | 区分・役割 |
 |---|---|---|---|
-| `Tag` | string | 左右の Keyboard API Tag | 設定。イベントの送信先 Tag |
+| `Tag` | string | 左右の SetGesture API Tag | 設定。イベントの送信先 Tag |
 | `Key.0`〜`Key.9` | Renderite.Shared.Key | Keypad0〜Keypad9 | 設定。添字が送信する手の状態（0=Neutral、1=Fist、7=ThumbsUp、8・9は拡張用）。None は未割当 |
 | `Modifier` | Renderite.Shared.Key | 左=Shift、右=Control | 設定。その手の全キーに共通で押下を要求するキー。Noneは未割当 |
 
@@ -303,8 +303,8 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 
 | C# 定数 | Tag | 引数・役割 |
 |---|---|---|
-| `LeftTag` / `RightTag` | `ResoPon/Expression/Gesture/Left` / `ResoPon/Expression/Gesture/Right` | int（範囲制限なし）。ハンドジェスチャー入力。対応するAllowHandGestures.Left・Right に従う |
-| `KeyboardLeftTag` / `KeyboardRightTag` | `ResoPon/Expression/Keyboard/Left` / `ResoPon/Expression/Keyboard/Right` | int（範囲制限なし）。左右のジェスチャー許可に関係なく左右値を更新。フラグは維持 |
+| `TrySetGestureLeftTag` / `TrySetGestureRightTag` | `ResoPon/Expression/TrySetGesture/Left` / `ResoPon/Expression/TrySetGesture/Right` | int（範囲制限なし）。対応するAllowHandGestures.Left・Right がtrueの場合だけSetGestureへ転送 |
+| `SetGestureLeftTag` / `SetGestureRightTag` | `ResoPon/Expression/SetGesture/Left` / `ResoPon/Expression/SetGesture/Right` | int（範囲制限なし）。入力元共通の更新処理。ジェスチャー許可に関係なく左右値を更新。フラグは維持 |
 | `SelectTag` | `ResoPon/Expression/Menu/Select` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してPlaybackへ渡す。null・範囲外は無視 |
 | `HandGesturesEnabledTag` | `ResoPon/Expression/AllowHandGestures` | bool。両手の許可を同じ値へ設定。左右値と表情は維持 |
 | `HandGesturesEnabledHandTag(hand)` | `ResoPon/Expression/AllowHandGestures/Left` / `Right` | bool。該当する手だけ許可・停止。左右値と表情は維持 |

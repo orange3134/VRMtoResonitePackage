@@ -22,7 +22,7 @@ internal static class ExpressionInputEventChecks
         var wearerReferences = assigner.References.Select(r => (Reference: r, User: r.Target)).ToArray();
         var originalStability = modules.Children.ToDictionary(module => module, module => Get<float>(module, "StabilitySeconds"));
         void Gesture(string side, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
-            api, side == "Left" ? ExpressionSystemSetup.LeftTag : ExpressionSystemSetup.RightTag, true, value);
+            api, side == "Left" ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, true, value);
         void Allow(bool value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             api, ExpressionSystemSetup.HandGesturesEnabledTag, true, value);
         Nodes.ValueInput<T> Replace<T>(Slot board, IWorldElement original) where T : unmanaged
@@ -467,12 +467,12 @@ internal static class ExpressionInputEventChecks
             await Frames(5);
             var leftSettings = keyboard.FindChild("Left").FindChild("DV");
             var rightSettings = keyboard.FindChild("Right").FindChild("DV");
-            Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.KeyboardRightTag);
+            Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.SetGestureRightTag);
             Key(InputKey.Keypad1, true);
             await Frames(5);
             Check(Get<int>(core, "RightGesture") == 1, "keyboard sender reads the edited hand tag");
             Key(InputKey.Keypad1, false);
-            Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.KeyboardLeftTag);
+            Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.SetGestureLeftTag);
             await Frames(5);
             Check(Get<InputKey>(rightSettings.FindChild("Modifier"), "Modifier") == InputKey.Control,
                 "right-hand modifier remains Ctrl");

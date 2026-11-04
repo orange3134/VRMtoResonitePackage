@@ -49,7 +49,7 @@ internal static class ExpressionOutputWriteChecks
                 Set(table, $"L0R{i + 1}", entry);
             }
             void Select(int index) => Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-                ExpressionSystemSetup.RightTag, true, index) == 1, "int receiver selects test clip " + index);
+                ExpressionSystemSetup.TrySetGestureRightTag, true, index) == 1, "int receiver selects test clip " + index);
 
             Select(1); await Frames();
             Check(Get<int>(core, "RightGesture") == 0 && Reference<Slot>(core, "CurrentExpression") == null,
@@ -210,7 +210,7 @@ internal static class ExpressionOutputWriteChecks
             Playback(null);
             Check(Reference<Slot>(core, "CurrentExpression") == null, "unworn Playback accepts explicit clearing");
             Select(1);
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.KeyboardRightTag, true, 1);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureRightTag, true, 1);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true,
                 catalog.FindChild("Short"));
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.HandGesturesEnabledTag, true, false);

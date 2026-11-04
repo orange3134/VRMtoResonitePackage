@@ -119,7 +119,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, tag, true, gesture) == 1,
                 "exactly one int gesture receiver for " + tag);
         }
-        void Gesture(int hand, int gesture) => Request(hand == 0 ? ExpressionSystemSetup.LeftTag : ExpressionSystemSetup.RightTag, gesture);
+        void Gesture(int hand, int gesture) => Request(hand == 0 ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, gesture);
         void Select(string name) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
             ExpressionSystemSetup.SelectTag, true, catalog.FindChild(name));
         void AllowInput(bool enabled = true) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
@@ -130,7 +130,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Console.WriteLine($"Flux nodes: {expressions.GetComponentsInChildren<ProtoFluxNode>().Count}; Core: {core.GetComponentsInChildren<ProtoFluxNode>().Count}");
         Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value is not "ExpressionSystem/LeftInput" and not "ExpressionSystem/RightInput"),
             "int requests retain no input Slot references");
-        foreach (string tag in new[] { ExpressionSystemSetup.LeftTag, ExpressionSystemSetup.RightTag })
+        foreach (string tag in new[] { ExpressionSystemSetup.TrySetGestureLeftTag, ExpressionSystemSetup.TrySetGestureRightTag })
         {
             Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, tag, true) == 0 &&
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, tag, true, "Left.Fist") == 0 &&
@@ -434,7 +434,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "clone diagnostics reflect reset hand inputs and ordinary input enabled");
         var cloneApi = clone.FindChild("Expressions").FindChild("API").FindChild("Receivers");
         Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(cloneApi,
-            ExpressionSystemSetup.LeftTag, true, 1) == 1, "clone has its own int request receiver");
+            ExpressionSystemSetup.TrySetGestureLeftTag, true, 1) == 1, "clone has its own int request receiver");
         Check(Get<int>(cloneCore, "LeftGesture") == 1 && Get<int>(cloneCore, "RightGesture") == 0 && Get<string>(cloneCore, "PairKey") == "L1R0" &&
             Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 7 && NoHandsAllowed(core),
             "clone int requests update only the clone and leave the original hand state and input mode unchanged");
@@ -538,23 +538,23 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "package reload recomputes diagnostics from reset inputs and the edited empty table row");
         Set(restoredExpressions.FindChild("DV").FindChild("GestureTable"), "L0R2", restoredExpressions.FindChild("Catalog").FindChild("Angry"));
         Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredExpressions.FindChild("API").FindChild("Receivers"),
-            ExpressionSystemSetup.RightTag, true, 2) == 1, "reloaded int request receiver is connected");
+            ExpressionSystemSetup.TrySetGestureRightTag, true, 2) == 1, "reloaded int request receiver is connected");
         Check(Get<int>(restoredCore, "RightGesture") == 2 && Get<string>(restoredCore, "PairKey") == "L0R2" &&
             Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
             "reloaded receiver evaluates the pair before the next frame");
         for (int i = 0; i < 60; i++) await default(NextUpdate);
         Check(Math.Abs(restored.GetComponent<ValueField<float>>().Value.Value - 0.7f) < 0.01, "reloaded stock ProtoFlux applies a fixed pose without converter callbacks");
         var restoredApi = restoredExpressions.FindChild("API").FindChild("Receivers");
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.LeftTag, true, 8);
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.RightTag, true, 255);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.TrySetGestureLeftTag, true, 8);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.TrySetGestureRightTag, true, 255);
         Check(Get<string>(restoredCore, "PairKey") == "L8R255" &&
             Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
             "saved external pair and unrestricted gesture receivers work after package reload");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.HandGesturesEnabledTag, true, false);
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.RightTag, true, 0);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.TrySetGestureRightTag, true, 0);
         Check(Get<int>(restoredCore, "RightGesture") == 255, "reloaded gesture permission blocks gesture API");
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.KeyboardLeftTag, true, 0);
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.KeyboardRightTag, true, 2);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.SetGestureLeftTag, true, 0);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredApi, ExpressionSystemSetup.SetGestureRightTag, true, 2);
         Check(Get<string>(restoredCore, "PairKey") == "L0R2" && NoHandsAllowed(restoredCore) &&
             Reference<Slot>(restoredCore, "CurrentExpression") == restoredExpressions.FindChild("Catalog").FindChild("Angry"),
             "reloaded keyboard API selects a pose without enabling hand gestures");

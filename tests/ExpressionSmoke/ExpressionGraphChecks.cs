@@ -300,8 +300,8 @@ internal static class ExpressionGraphChecks
         }
 
         foreach (string path in new[] { "Internal/Lifecycle", "Internal/Selection", "Internal/Playback",
-            "API/Receivers/Logic/Left", "API/Receivers/Logic/Right",
-            "API/Receivers/Logic/KeyboardLeft", "API/Receivers/Logic/KeyboardRight",
+            "API/Receivers/Logic/TrySetGestureLeft", "API/Receivers/Logic/TrySetGestureRight",
+            "API/Receivers/Logic/SetGestureLeft", "API/Receivers/Logic/SetGestureRight",
             "API/Receivers/Logic/Select", "API/Receivers/Logic/AllowHandGestures", "API/Receivers/Logic/ToggleHandGestures", "API/Receivers/Logic/Reset",
             "API/Receivers/Logic/AllowHandGesturesLeft", "API/Receivers/Logic/AllowHandGesturesRight",
             "API/Receivers/Logic/ToggleHandGesturesLeft", "API/Receivers/Logic/ToggleHandGesturesRight" })
@@ -333,19 +333,19 @@ internal static class ExpressionGraphChecks
         Check(publicReceivers.Length == 12, "exactly twelve public API receivers");
         foreach (string hand in new[] { "Left", "Right" })
         {
-            var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == hand);
+            var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == "TrySetGesture" + hand);
             Check(receiver.GetType().Name == "DynamicImpulseReceiverWithValue`1" &&
                 receiver.GetType().GetGenericArguments().SequenceEqual(new[] { typeof(int) }),
                 hand + " receives int directly");
-            Check(receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/Gesture/" + hand,
+            Check(receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/TrySetGesture/" + hand,
                 hand + " uses the exact hand Tag");
         }
         foreach (string hand in new[] { "Left", "Right" })
         {
-            var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == "Keyboard" + hand);
+            var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == "SetGesture" + hand);
             Check(receiver.GetType().GetGenericArguments().Single() == typeof(int) &&
-                receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/Keyboard/" + hand,
-                "keyboard has a separate int receiver: " + hand);
+                receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ResoPon/Expression/SetGesture/" + hand,
+                "SetGesture has a shared int receiver independent of the input source: " + hand);
         }
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Select").GetType().GetGenericArguments().Single() == typeof(Slot),
             "direct Catalog selection receives a Slot");

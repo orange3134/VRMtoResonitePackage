@@ -9,10 +9,10 @@ namespace VrmToResonitePackage.Expressions;
 
 internal sealed partial class ExpressionSystemSetup
 {
-    internal const string LeftTag = "ResoPon/Expression/Gesture/Left";
-    internal const string RightTag = "ResoPon/Expression/Gesture/Right";
-    internal const string KeyboardLeftTag = "ResoPon/Expression/Keyboard/Left";
-    internal const string KeyboardRightTag = "ResoPon/Expression/Keyboard/Right";
+    internal const string TrySetGestureLeftTag = "ResoPon/Expression/TrySetGesture/Left";
+    internal const string TrySetGestureRightTag = "ResoPon/Expression/TrySetGesture/Right";
+    internal const string SetGestureLeftTag = "ResoPon/Expression/SetGesture/Left";
+    internal const string SetGestureRightTag = "ResoPon/Expression/SetGesture/Right";
     internal const string SelectTag = "ResoPon/Expression/Menu/Select";
     internal const string ResetTag = "ResoPon/Expression/Reset";
     internal const string ToggleHandGesturesTag = "ResoPon/Expression/ToggleHandGestures";
@@ -54,7 +54,7 @@ internal sealed partial class ExpressionSystemSetup
         Reference<Slot>(_root, "CurrentExpression", null);
         Data(_root, "PairKey", "L0R0");
         Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Data(_root, "Version", 71);
+        Data(_root, "Version", 72);
         Reference(_root, "References.API", _api);
         Reference(_root, "References.Catalog", _catalog);
     }

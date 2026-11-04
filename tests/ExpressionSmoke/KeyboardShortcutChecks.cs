@@ -35,7 +35,7 @@ internal static class KeyboardShortcutChecks
         async Task Frames() { for (int i = 0; i < 10; i++) { RefreshSensors(); await default(NextUpdate); } }
         void Key(InputKey key, bool held) { if (held) heldKeys.Add(key); else heldKeys.Remove(key); }
         void Gesture(int hand, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
-            api, hand == 0 ? ExpressionSystemSetup.KeyboardLeftTag : ExpressionSystemSetup.KeyboardRightTag, true, value);
+            api, hand == 0 ? ExpressionSystemSetup.SetGestureLeftTag : ExpressionSystemSetup.SetGestureRightTag, true, value);
         int GestureValue(int hand) => Get<int>(core, hand == 0 ? "LeftGesture" : "RightGesture");
         bool leftAllowedBefore = HandGesturesAllowed(core, "Left"), rightAllowedBefore = HandGesturesAllowed(core, "Right");
         Slot extendedRow = null;

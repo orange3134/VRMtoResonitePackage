@@ -23,8 +23,8 @@ internal static class ExpressionResetChecks
         {
             // Reset must return to Base even if neutral has an assigned expression.
             neutral.Reference.Target = expression;
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.KeyboardLeftTag, true, 5);
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.KeyboardRightTag, true, 6);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureLeftTag, true, 5);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureRightTag, true, 6);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, expression);
             Check(Get<int>(core, "LeftGesture") == 5 && Get<int>(core, "RightGesture") == 6 &&
                 NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == expression,
@@ -63,7 +63,7 @@ internal static class ExpressionResetChecks
             Check(neutral.Reference.Target == expression && mappings.All(pair => pair.Key == neutral || pair.Key.Reference.Target == pair.Value),
                 "reset preserves gesture mappings, including the neutral entry");
             ExpressionGraphChecks.CheckMenuColors(expressions);
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.RightTag, true, 0);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.TrySetGestureRightTag, true, 0);
             Check(Reference<Slot>(core, "CurrentExpression") == expression,
                 "next gesture event resumes selection using the retained neutral mapping");
         }

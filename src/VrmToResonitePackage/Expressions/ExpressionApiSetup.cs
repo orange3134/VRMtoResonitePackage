@@ -11,10 +11,10 @@ internal sealed partial class ExpressionSystemSetup
     private void BuildApi()
     {
         var logic = _api.AddSlot("Logic");
-        BuildHandReceiver(new(logic.AddSlot("Left")), "Left", LeftTag, gestureInput: true);
-        BuildHandReceiver(new(logic.AddSlot("Right")), "Right", RightTag, gestureInput: true);
-        BuildHandReceiver(new(logic.AddSlot("KeyboardLeft")), "Left", KeyboardLeftTag, gestureInput: false);
-        BuildHandReceiver(new(logic.AddSlot("KeyboardRight")), "Right", KeyboardRightTag, gestureInput: false);
+        BuildHandReceiver(new(logic.AddSlot("TrySetGestureLeft")), "Left", TrySetGestureLeftTag, checkPermission: true);
+        BuildHandReceiver(new(logic.AddSlot("TrySetGestureRight")), "Right", TrySetGestureRightTag, checkPermission: true);
+        BuildHandReceiver(new(logic.AddSlot("SetGestureLeft")), "Left", SetGestureLeftTag, checkPermission: false);
+        BuildHandReceiver(new(logic.AddSlot("SetGestureRight")), "Right", SetGestureRightTag, checkPermission: false);
         BuildSelectReceiver(new(logic.AddSlot("Select")));
         BuildHandGesturesEnabledReceiver(new(logic.AddSlot("AllowHandGestures")));
         BuildHandGesturesToggleReceiver(new(logic.AddSlot("ToggleHandGestures")));
@@ -30,16 +30,16 @@ internal sealed partial class ExpressionSystemSetup
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
         g.Write<int>(g.Ref(_internal), SystemSpace, hand + "Gesture", gesture);
 
-    private void BuildHandReceiver(ExpressionFlux g, string hand, string tag, bool gestureInput)
+    private void BuildHandReceiver(ExpressionFlux g, string hand, string tag, bool checkPermission)
     {
         var receiver = g.Receiver<int>(tag);
-        if (gestureInput)
+        if (checkPermission)
         {
-            // The keyboard receiver owns wearer checks and mutation.
+            // SetGesture owns wearer checks and mutation for every input source.
             // Early gestures with saved false permissions are intentionally dropped.
             Link(receiver, "OnTriggered", g.If(
                 g.Read<bool>(g.Ref(_internal), SystemSpace, HandGesturePermission(hand)),
-                SendHandInput(g, g.Text(hand == "Left" ? KeyboardLeftTag : KeyboardRightTag), Out(receiver, "Value"))));
+                SendHandInput(g, g.Text(hand == "Left" ? SetGestureLeftTag : SetGestureRightTag), Out(receiver, "Value"))));
             return;
         }
         var mutation = g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),

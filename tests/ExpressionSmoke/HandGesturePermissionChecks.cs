@@ -50,7 +50,7 @@ internal static class HandGesturePermissionChecks
                 ExpressionSystemSetup.HandGesturesEnabledHandTag(hand), true, enabled) == 1,
             "exactly one permission receiver for " + hand);
         void Keyboard(string hand, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
-            api, hand == "Left" ? ExpressionSystemSetup.KeyboardLeftTag : ExpressionSystemSetup.KeyboardRightTag, true, value);
+            api, hand == "Left" ? ExpressionSystemSetup.SetGestureLeftTag : ExpressionSystemSetup.SetGestureRightTag, true, value);
         int Gesture(string hand) => core.ExpressionVariables<DynamicValueVariable<int>>()
             .Single(v => v.VariableName.Value == "ExpressionSystem/" + hand + "Gesture").Value.Value;
         void State(bool left, bool right) => Check(HandGesturesAllowed(core, "Left") == left && HandGesturesAllowed(core, "Right") == right,
@@ -83,7 +83,7 @@ internal static class HandGesturePermissionChecks
                     ExpressionSystemSetup.HandGesturesEnabledHandTag(hand), true, 1) == 0,
                     "per-hand permission rejects non-bool payloads");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-                    hand == "Left" ? ExpressionSystemSetup.LeftTag : ExpressionSystemSetup.RightTag, true, hand == "Left" ? 1 : 2);
+                    hand == "Left" ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, true, hand == "Left" ? 1 : 2);
             }
             Check(Gesture("Left") == (left ? 1 : 6) && Gesture("Right") == (right ? 2 : 7),
                 "Gesture API gates each hand independently");
@@ -134,14 +134,14 @@ internal static class HandGesturePermissionChecks
                 Check(NoHandsAllowed(core), "fresh lifecycle starts with saved false permission values");
                 var previous = (Gesture("Left"), Gesture("Right"), Pair(), Reference<Slot>(core, "CurrentExpression"));
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-                    hand == "Left" ? ExpressionSystemSetup.LeftTag : ExpressionSystemSetup.RightTag, true, 7);
+                    hand == "Left" ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, true, 7);
                 Check(NoHandsAllowed(core) && previous ==
                     (Gesture("Left"), Gesture("Right"), Pair(), Reference<Slot>(core, "CurrentExpression")),
                     hand + " early gesture with false permission is dropped without initialization or mutation");
                 string other = hand == "Left" ? "Right" : "Left";
                 int otherGesture = Gesture(other);
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-                    hand == "Left" ? ExpressionSystemSetup.KeyboardLeftTag : ExpressionSystemSetup.KeyboardRightTag, true, 6);
+                    hand == "Left" ? ExpressionSystemSetup.SetGestureLeftTag : ExpressionSystemSetup.SetGestureRightTag, true, 6);
                 Check(NoHandsAllowed(core) && Gesture(hand) == 6 && Gesture(other) == otherGesture &&
                     Pair() == $"L{Gesture("Left")}R{Gesture("Right")}",
                     hand + " early keyboard request updates only that hand without initializing permissions or opposite state");
@@ -175,7 +175,7 @@ internal static class HandGesturePermissionChecks
                 Check(BothHandsAllowed(core) && Gesture("Left") == 0 && Gesture("Right") == 0 && Pair() == "L0R0",
                     "lifecycle initialization clears early keyboard input without replaying the dropped gesture");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-                    hand == "Left" ? ExpressionSystemSetup.LeftTag : ExpressionSystemSetup.RightTag, true, 7);
+                    hand == "Left" ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, true, 7);
                 Check(Gesture(hand) == 7 && Pair() == (hand == "Left" ? "L7R0" : "L0R7"),
                     hand + " subsequent gesture selects synchronously after initialization");
             }
