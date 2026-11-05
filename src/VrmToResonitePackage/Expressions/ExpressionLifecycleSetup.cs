@@ -21,10 +21,10 @@ internal sealed partial class ExpressionSystemSetup
         {
             cleanup.Add(g.Write<int>(core, SystemSpace, hand + "Gesture", g.Constant(0)));
         }
-        cleanup.AddRange(HandGesturePermissionWrites(g, g.Constant(true)));
         cleanup.Add(g.Trigger<Slot>(g.Ref(_api), g.Text(PlaybackTickTag), g.Ref<Slot>(null)));
         // Reset is shared by explicit requests and wear initialization.
-        // It does not select the neutral table entry or depend on local wear state.
+        // It preserves hand permissions, does not select the neutral table entry,
+        // and does not depend on local wear state.
         var receiver = g.Receiver(ResetStateTag, false);
         Link(receiver, "OnTriggered", g.Sequence(cleanup.ToArray()));
     }
@@ -37,7 +37,7 @@ internal sealed partial class ExpressionSystemSetup
         var start = g.Sequence(g.Set<bool>(initialized, g.Constant(true)),
             g.Trigger(g.Ref(_api), ResetStateTag));
         // Losing local wear only rearms initialization for the next wear.
-        // Shared gesture, permission and selection state is retained until reset.
+        // Shared state is retained; the next wear resets gestures and selection only.
         var update = g.If(g.AvatarWornLocal, g.If(g.Not(initialized), start),
             g.Set<bool>(initialized, g.Constant(false)));
         g.OnChanged<bool>(g.AvatarWornLocal, update);

@@ -130,7 +130,7 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 
 | 名前 | 型 | 初期値 | 更新元・役割 |
 |---|---|---|---|
-| `AllowHandGestures.Left` / `AllowHandGestures.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとTrySetGesture APIだけの受付可否。SetGesture・メニューはこの設定で停止しない。表情の直接選択で両方false、初期化・リセットで両方true。個別メニューのButtonToggleや変数の直接編集で変更可能 |
+| `AllowHandGestures.Left` / `AllowHandGestures.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとTrySetGesture APIだけの受付可否。SetGesture・メニューはこの設定で停止しない。表情の直接選択で両方false。初期化・リセット・再着用・複製・保存読込では各設定値を維持する。個別メニューのButtonToggleや変数の直接編集で変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューでは変更しない |
 | `CurrentExpression` | Slot | null | ApplyExpressionが受信した表情Slot。UpdateSelectionは対応表の参照をそのまま渡し、Select APIは非nullの場合に自身のCatalog直下か確認する。解除はnull |
 
@@ -152,7 +152,7 @@ ResetStateには着用監視や初期化済みフラグ、AvatarWornLocal条件�
 公開APIは暗黙の初期化を行わず、初期化前の入力は後続のResetState初期化でクリアされる。Version 77以降はAPI内で着用判定せず、未着用でも左右値・許可を更新する。
 現在は公開Reset・直接のResetStateも未着用時に受理する。Internalの選択・表情適用には従来の着用条件が残る。
 
-初期化時は左右値を 0、AllowHandGestures.Left・Right を両方true、
+初期化時は左右値を0へ戻し、AllowHandGestures.Left・Rightは変更せず、
 ApplyExpressionへnullを送り、CurrentExpressionの解除と通常出力のBase復帰をまとめて実行する。追跡出力は専用DriveがBaseを反映する。
 その後の UpdateSelection と ApplyExpression の同期Writeで現在の対応表に応じた状態になる。
 
@@ -319,8 +319,8 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `SetGestureLeftTag` / `SetGestureRightTag` | `ExpressionSystem/Method.SetGesture.Left` / `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし）。入力元共通の更新処理。ジェスチャー許可に関係なく左右値を更新。フラグは維持 |
 | `SelectTag` | `ExpressionSystem/Method.SelectExpression` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してApplyExpressionへ渡す。nullは表情解除、非nullの範囲外は無視 |
 | `ToggleHandGesturesTag` | `ExpressionSystem/Method.ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
-| `ResetTag` | `ExpressionSystem/Method.Reset` | 引数なし。ResetStateへ転送し、未着用時も左右値・許可・表情を初期状態へ戻す |
-| `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Resetと着用開始のEventから共用する。着用判定なしで左右値・許可を戻し、ApplyExpressionへnullを送る。表情解除はApplyExpressionの受付条件に従う |
+| `ResetTag` | `ExpressionSystem/Method.Reset` | 引数なし。ResetStateへ転送し、未着用時も左右値・表情を初期状態へ戻す。許可設定は維持する |
+| `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Resetと着用開始のEventから共用する。着用判定なしで左右値を0に戻し、ApplyExpressionへnullを送る。許可設定は維持する。表情解除はApplyExpressionの受付条件に従う |
 | `SelectionTickTag` | `ExpressionSystem/Internal.UpdateSelection` | 引数なし。左右入力イベントから選択更新を同期実行 |
 | `PlaybackTickTag` | `ExpressionSystem/Internal.ApplyExpression` | Slot。受信SlotをCurrentExpressionへ設定し、終端ポーズを同期適用。nullは解除。非nullはローカル装着者だけが受理し、未装着時もnullは受理する |
 

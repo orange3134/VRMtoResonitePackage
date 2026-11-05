@@ -44,15 +44,16 @@ internal static class ExpressionResetChecks
             Toggle(false); Toggle(true); Toggle(false); // Each press reads current state, even in one frame.
             await Frames(2); ExpressionGraphChecks.CheckMenuColors(expressions);
             button.Pressed(null, default);
-            void CheckReset()
+            void CheckReset(bool left = false, bool right = false)
             {
-                Check(Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 0 && BothHandsAllowed(core) &&
+                Check(Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 0 &&
+                    HandGesturesAllowed(core, "Left") == left && HandGesturesAllowed(core, "Right") == right &&
                     Reference<Slot>(core, "CurrentExpression") == null,
-                    "reset button synchronously clears expression and hands and enables hand gestures");
+                    "reset synchronously clears expression and hands while preserving each hand permission");
                 Check(outputs.All(o => !TryReadSelectedValue(o, out _)), "reset clears every resolved output binding");
             }
             CheckReset();
-            button.Pressed(null, default); // Repeated reset also works while gestures are already enabled.
+            button.Pressed(null, default); // Repeated reset also preserves disabled gestures.
             CheckReset();
             await Frames(30);
             CheckReset();
@@ -62,6 +63,22 @@ internal static class ExpressionResetChecks
             Check(neutral.Reference.Target == expression && mappings.All(pair => pair.Key == neutral || pair.Key.Reference.Target == pair.Value),
                 "reset preserves gesture mappings, including the neutral entry");
             ExpressionGraphChecks.CheckMenuColors(expressions);
+            for (int combination = 0; combination < 4; combination++)
+            {
+                bool left = (combination & 1) != 0, right = (combination & 2) != 0;
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureLeftTag, true, 5);
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureRightTag, true, 6);
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, expression);
+                SetHandGesturesAllowed(core, left, "Left");
+                SetHandGesturesAllowed(core, right, "Right");
+                button.Pressed(null, default);
+                CheckReset(left, right);
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, "ExpressionSystem/Internal.ResetState", true);
+                CheckReset(left, right);
+                await Frames(2);
+                CheckReset(left, right);
+                ExpressionGraphChecks.CheckMenuColors(expressions);
+            }
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.TrySetGestureRightTag, true, 0);
             Check(Reference<Slot>(core, "CurrentExpression") == expression,
                 "next gesture event resumes selection using the retained neutral mapping");
@@ -72,7 +89,7 @@ internal static class ExpressionResetChecks
             button.Pressed(null, default);
         }
         await Frames(5);
-        Console.WriteLine("RESET: actual menu button resets both hands, expression and permission; Base and mappings verified");
+        Console.WriteLine("RESET: menu and direct reset clear hands and expression, preserve all four permission combinations, Base and mappings");
     }
 
     private static T Get<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicVariableBase<T>>()

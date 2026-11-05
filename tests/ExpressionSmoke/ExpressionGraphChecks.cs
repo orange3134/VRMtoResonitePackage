@@ -372,6 +372,8 @@ internal static class ExpressionGraphChecks
             method.FindChild("Receivers") == null && method.Children.Count == 7,
             "API contains Event, Internal and Method, with seven direct public operation boards");
         var resetNodes = Descendant(expressions, "API/Internal/ResetState").GetComponentsInChildren<ProtoFluxNode>();
+        Check(!resetNodes.OfType<Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<bool>>().Any(),
+            "ResetState preserves hand gesture permission settings without bool writes");
         Check(resetNodes.All(node => node.GetType().Name is not ("OnStart" or "StoredValue`1" or "FireOnLocalValueChange`1" or "DelayUpdates")),
             "ResetState contains only impulse-driven reset logic, without lifecycle monitoring");
         Check(resetNodes.All(node => node.GetType().Name != "If") &&

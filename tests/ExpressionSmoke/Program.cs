@@ -442,8 +442,9 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         ExpressionGraphChecks.CheckMenuColors(clone.FindChild("Expressions"));
         ExpressionGraphChecks.CheckMenuColors(expressions);
         var cloneCore = clone.FindChild("Expressions").FindChild("API").FindChild("Internal");
-        Check(Gestures(cloneCore) == (0, 0) && BothHandsAllowed(cloneCore),
-            "clone resets hand inputs and enables ordinary input");
+        Check(Gestures(cloneCore) == (0, 0) && NoHandsAllowed(cloneCore),
+            "clone resets hand inputs and preserves disabled ordinary input");
+        SetHandGesturesAllowed(cloneCore, true);
         var cloneApi = clone.FindChild("Expressions").FindChild("API");
         Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(cloneApi,
             ExpressionSystemSetup.TrySetGestureLeftTag, true, 1) == 1, "clone has its own int request receiver");
@@ -508,9 +509,9 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
-        Check(BothHandsAllowed(core) && Gestures(core) == (0, 0) &&
+        Check(NoHandsAllowed(core) && Gestures(core) == (0, 0) &&
             Reference<Slot>(core, "CurrentExpression") == null && Math.Abs(field.Value - 0.4f) < 0.01,
-            "unworn Reset clears hands and saved selection, enables gestures and restores Base without selecting Neutral");
+            "unworn Reset clears hands and saved selection, preserves permissions and restores Base without selecting Neutral");
         Set(table, "L0R0", (Slot)null);
         Request(ExpressionSystemSetup.SetGestureLeftTag, 3); Request(ExpressionSystemSetup.SetGestureRightTag, 4);
         AllowInput(false);
@@ -525,7 +526,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Set(core, "CurrentExpression", catalog.FindChild("Angry"));
         Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, "ExpressionSystem/Internal.ResetState", true) == 1,
             "shared API hierarchy reaches exactly one ResetState receiver");
-        Check(Gestures(core) == (0, 0) && BothHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == null,
+        Check(Gestures(core) == (0, 0) && NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == null,
             "direct ResetState synchronously resets an unworn avatar");
         Request(ExpressionSystemSetup.SetGestureLeftTag, 3); Request(ExpressionSystemSetup.SetGestureRightTag, 4);
         AllowInput(false);
@@ -539,14 +540,15 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         unwornClone.Parent = wearer;
         EquipAvatar(unwornClone);
         await Frames();
-        Check(Gestures(unwornCore) == (0, 0) && BothHandsAllowed(unwornCore) &&
+        Check(Gestures(unwornCore) == (0, 0) && NoHandsAllowed(unwornCore) &&
             Math.Abs(unwornClone.GetComponent<ValueField<float>>().Value.Value - 0.4f) < 0.01,
-            "first wear initializes a previously unworn clone and restores its base output");
+            "first wear initializes a previously unworn clone and restores Base while preserving permissions");
         unwornClone.Destroy();
         avatar.Parent = wearer;
         await Frames();
-        Check(Gestures(core) == (0, 0) && BothHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == null,
-            "rewear resets retained state before accepting new input");
+        Check(Gestures(core) == (0, 0) && NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == null,
+            "rewear resets retained gestures and expression while preserving disabled permissions");
+        AllowInput();
         Gesture(0, 1); Gesture(1, 1);
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
             BothHandsAllowed(core),
@@ -575,8 +577,9 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await ExpressionDynamicInputChecks.CheckEdits(restoredExpressions);
         var restoredCore = restoredExpressions.FindChild("API").FindChild("Internal");
         Check(Gestures(restoredCore) == (0, 0) &&
-            Reference<Slot>(restoredCore, "CurrentExpression") == null && BothHandsAllowed(restoredCore),
-            "package reload resets hand inputs and selection with the edited empty table row");
+            Reference<Slot>(restoredCore, "CurrentExpression") == null && NoHandsAllowed(restoredCore),
+            "package reload resets hand inputs and selection while preserving saved permissions");
+        SetHandGesturesAllowed(restoredCore, true);
         Set(restoredExpressions.FindChild("DV").FindChild("GestureTable"), "L0R2", restoredExpressions.FindChild("Catalog").FindChild("Angry"));
         Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(restoredExpressions.FindChild("API"),
             ExpressionSystemSetup.TrySetGestureRightTag, true, 2) == 1, "reloaded int request receiver is connected");

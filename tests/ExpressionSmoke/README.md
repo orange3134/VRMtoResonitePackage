@@ -1,5 +1,11 @@
 # Expression integration checks
 
+2026-11-06: ResetState preserves AllowHandGestures.Left/Right. Menu and direct
+reset checks cover all four permission combinations while still clearing hand
+values and selection. Lifecycle checks retain asymmetric permissions; clone,
+first wear, rewear and package reload retain saved disabled permissions.
+Tests enable gestures explicitly when preparing later input checks.
+
 2026-11-06: Remove OnAvatarRemoved, its delay and both lifecycle notification tags.
 OnAvatarWorn rearms its local initialization flag when local wear becomes false;
 shared gestures, permissions and selection survive dequip until reset or rewear.

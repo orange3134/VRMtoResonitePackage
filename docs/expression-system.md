@@ -3,6 +3,10 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-06: ResetStateからAllowHandGestures.Left/Rightへの書き込みを削除した。
+手動Reset・着用開始・再着用・複製・保存読込では左右のGesture値と表情だけをリセットし、許可設定は保存値を維持する。
+新規生成時の許可設定の既定値は両方trueのまま。直接選択で停止したジェスチャーはReset後も停止し、再開は許可メニューや変数編集で行う。
+
 2026-11-06: OnAvatarRemovedとイベント間の2つの通知タグを削除した。
 脱着時は左右値・許可・CurrentExpressionを保持し、OnAvatarWornのローカル初期化フラグだけを解除する。
 次の着用時にResetStateで初期化する。脱着の2更新待機と遅延タスクは生成しない。
@@ -173,7 +177,7 @@ Version 64ではジェスチャー許可を `AllowHandGestures.Left`・`Right` �
 コントローラー入力とGesture APIに適用する。キーボードは左右の許可に関係なく受け付ける。
 Version 66の「Hand gestures」は両手とも許可されていれば両手を停止し、それ以外は両手を許可する。
 片手だけ変更した後も両手を同じ状態に揃えられる。「Left hand gestures」「Right hand gestures」は
-該当する手だけ反転する。表情の直接選択では両方を停止し、初期化・Resetでは両方を許可する。
+該当する手だけ反転する。表情の直接選択では両方を停止する。初期化・Reset時も現在の許可設定を維持する。
 旧 `ExpressionSystem/AllowHandGestures` は定義せず、両手を同じ値にする既存bool APIは維持する。
 
 Version 67ではSaltで編集された共通トグルを採用する。2026-11-04にResoLoopで
@@ -260,7 +264,7 @@ Expressions/
       SetGesture.Left|SetGesture.Right/        共通のint入力・左右値更新と表情選択
       SelectExpression/            表情Slotを検証してApplyExpressionへ送信
       ToggleHandGestures/           両手の許可をまとめて切り替え
-      Reset/                       表情・左右値・許可を初期状態へ戻す
+      Reset/                       表情・左右値を初期状態へ戻す（許可設定は維持）
   Outputs/                         BlendShape ごとのベース入力と最終出力
     各 BlendShape/                 出力定義・Base・Result
       Tracking/                    既存の追跡がある出力だけ自動合成するDrive
@@ -445,7 +449,7 @@ OnAvatarRemovedやイベント間の通知タグ、脱着用の遅延タスク�
 - 装着開始・初回起動：AvatarWornLocal=true になれば初期化する。入力イベントがなければ CurrentExpression=null のままにする。
 - 取り外し：左右値・入力許可・CurrentExpressionを保持し、初期化済みフラグだけを解除する。出力側の着用判定で見た目をBaseへ戻す。
 - 未装着中：選択更新は停止する。通常出力は初期化・権限取得・ローカル着用状態の変化時にホストがBaseをWriteし、追跡対象は専用DriveがBaseに追従する。明示API呼び出しがなければ共有状態を維持する。
-- 再装着・複製・読み込み：初回のローカル着用時に左右値を 0、入力許可を true に戻して再開する。APIが先に届いても初期化は呼ばず、先行入力は後続のResetState初期化でクリアされる。
+- 再装着・複製・読み込み：初回のローカル着用時に左右値を0、CurrentExpressionをnullに戻す。左右の入力許可は保存値を維持する。APIが先に届いても初期化は呼ばず、先行入力のGesture値と表情は後続のResetState初期化でクリアされる。
 
 OnAvatarWornはAvatarWornLocalの変化をFireOnLocalValueChangeで検出し、装着者の履歴は保持しない。
 一度falseを検出した後の再着用は、以前の2更新待機内であっても新しい着用として初期化する。
@@ -458,9 +462,9 @@ APIは着用状態にかかわらず受信処理を実行し、選択・表情�
 ### ResetStateの共通化と受付条件
 
 着用開始の分岐は初期化済みフラグの設定とResetStateの同期呼び出しだけで、状態リセットを重ねて実行してはいない。
-左右値・許可・表情のクリア操作はResetStateだけに生成し、脱着時には呼ばない。
-ResetStateのAvatarWornLocal条件を削除したことで、未着用時の公開Resetと直接のResetStateも左右値を0、許可をtrueへ戻し、表情を解除する。
-別のクライアントからの明示Resetも左右値・許可の更新を受け付ける。ApplyExpressionの条件は変更せず、
+左右値・表情のクリア操作はResetStateだけに生成し、脱着時には呼ばない。AllowHandGestures.Left/Rightには書き込まない。
+ResetStateのAvatarWornLocal条件を削除したことで、未着用時の公開Resetと直接のResetStateも左右値を0へ戻し、表情を解除する。左右の許可設定は維持する。
+別のクライアントからの明示Resetも左右値の更新を受け付ける。ApplyExpressionの条件は変更せず、
 表情解除のnullはローカル着用中または誰も着用していない場合に受理する。他者着用中の閲覧側では表情の更新を拒否する。
 初期化済みフラグは同じ着用中の繰り返し初期化を防ぐ。着用条件によって閲覧者側の自動初期化を防ぐ。
 
@@ -616,10 +620,10 @@ Tag は大文字・小文字を含めて完全一致。引数型違い、無効�
 直接選択ではUpdateSelectionを経由せず、ApplyExpressionが固定ポーズと通常出力を同期更新する。追跡対象は通常のドライバー更新で反映する。
 boolの変更だけでは左右値も表情も変更しない。
 Version 25のコンテキストメニュー「Reset settings」は引数なしのReset APIを送る。
-CurrentExpression=null、左右のGesture=0、AllowHandGestures.Left・Rightを両方trueへ一括で戻し、各出力にBaseを反映する。
+CurrentExpression=null、左右のGesture=0へ一括で戻し、各出力にBaseを反映する。AllowHandGestures.Left・Rightはそれぞれ現在値を維持する。
 GestureTableの割り当てやCatalog、キー設定は変更しない。L0R0に表情が割り当てられていてもリセットでは再選択せず、次の左右入力イベントで再評価する。
-Resetもローカル装着者限定で、ジェスチャー無効時にも受け付ける。
-着用監視はEvent、状態の初期化はResetStateが担当し、複製・再ロード・再装着後のローカル着用時に bool=true、左右=0 に戻す。公開APIから暗黙の初期化は行わない。
+Resetは未着用時やジェスチャー無効時にも受け付ける。停止中のジェスチャーを再開する場合は許可メニューを使う。
+着用監視はEvent、状態の初期化はResetStateが担当し、複製・再ロード・再装着後のローカル着用時に左右値と表情をクリアする。許可設定は変更しない。公開APIから暗黙の初期化は行わない。
 Dynamic ImpulseはネットワークRPCではない。API内の左右値・許可の更新は呼び出したクライアントで実行する。Internalの表情適用には着用条件が残るが、ResetStateには着用条件を置かない。
 
 旧 `ResoPon/Expression/v3/Select` と `v3/Automatic` は生成しない。

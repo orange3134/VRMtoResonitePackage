@@ -93,6 +93,7 @@ internal static class HandGesturePermissionChecks
         State(true, true);
         Check(Reference<Slot>(core, "CurrentExpression") == expression, "global toggle resumes both hands without replacing the selected expression");
         await CheckApiBeforeInitialization(expressions);
+        SetHandGesturesAllowed(core, true);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
         State(true, true); await Frames();
         Console.WriteLine("PASS: per-hand gesture permissions, both/individual toggles, complete side-filtered submenus and keyboard bypass");
@@ -168,10 +169,12 @@ internal static class HandGesturePermissionChecks
                 Check(BothHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == selected,
                     "early global toggle preserves the selected expression");
                 Preserved();
+                SetHandGesturesAllowed(core, false, other);
                 Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(fixture, updateTag, true) == 1,
                     "the fixture invokes the lifecycle event entry point");
-                Check(BothHandsAllowed(core) && Gesture("Left") == 0 && Gesture("Right") == 0,
-                    "lifecycle initialization clears early keyboard input without replaying the dropped gesture");
+                Check(HandGesturesAllowed(core, hand) && !HandGesturesAllowed(core, other) &&
+                    Gesture("Left") == 0 && Gesture("Right") == 0,
+                    "lifecycle initialization clears early input while preserving asymmetric permissions");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
                     hand == "Left" ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, true, 7);
                 Check(Gesture(hand) == 7 && Gesture(other) == 0 &&
@@ -180,7 +183,7 @@ internal static class HandGesturePermissionChecks
             }
         }
         finally { fixture.Destroy(); }
-        Console.WriteLine("PASS: public APIs do not initialize implicitly; lifecycle clears early input and restores defaults");
+        Console.WriteLine("PASS: public APIs do not initialize implicitly; lifecycle clears early input and preserves permissions");
     }
     private static void CheckToggleGraph(Slot board)
     {
