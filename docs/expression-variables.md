@@ -145,8 +145,8 @@ Version 67では `NAND_Bool` の判定を `ValueWrite<bool>` で `LocalValue<boo
 `OnWritten` から左右へ同じLocal値を書き込む。片手を書き換えた後の再判定を避ける。
 PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の時間再生は行わない。
 
-API/EventはOnStartと着用状態の変更時に動き、現在の装着者がローカルユーザーで未初期化の場合にフラグを立て、最後にInternal/ResetStateへ引数なしDynamicImpulseを送る。初期化でUpdateSelectionは実行しない。
-初期化済みかはEvent内の保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。ResetStateには着用監視や初期化済みフラグを置かず、Impulse受信時の状態リセットだけを行う。
+API/Event/OnAvatarWornはOnStartと着用状態の変更時に動き、現在の装着者がローカルユーザーで未初期化の場合にフラグを立て、最後にInternal/ResetStateへ引数なしDynamicImpulseを送る。初期化でUpdateSelectionは実行しない。
+初期化済みかはOnAvatarWorn内の保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。ResetStateには着用監視や初期化済みフラグを置かず、Impulse受信時の状態リセットだけを行う。
 公開APIは暗黙の初期化を行わず、初期化前の入力は後続のResetState初期化でクリアされる。Version 77以降はAPI内で着用判定せず、未着用でも左右値・許可を更新する。Internalの表情適用・リセットには着用判定が残る。
 
 初期化時は左右値を 0、AllowHandGestures.Left・Right を両方true、
@@ -323,7 +323,7 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `PlaybackTickTag` | `ExpressionSystem/Internal.ApplyExpression` | Slot。受信SlotをCurrentExpressionへ設定し、終端ポーズを同期適用。nullは解除。非nullはローカル装着者だけが受理し、未装着時もnullは受理する |
 
 Internal の3つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
-Version 74で未使用の `ResoPon/Expression/Internal/Initialize` を廃止した。現在の自動初期化はAPI/EventからInternal/ResetStateを呼び出して実行する。
+Version 74で未使用の `ResoPon/Expression/Internal/Initialize` を廃止した。現在の自動初期化はAPI/Event/OnAvatarWornからInternal/ResetStateを呼び出して実行する。
 Version 75の個別ハンドメニューは `ButtonToggle.TargetValue` から自身の `AllowHandGestures.Left`・`Right` のValueを直接変更する。両手メニューは引き続きToggle APIを使う。
 Version 76で未使用のAllowHandGestures両手/左右とToggleHandGestures左右の5つのAPIを廃止した。設定用のDynamicVariableは維持する。
 UpdateSelectionは対応表から読み取った表情Slotを送信ノードへ直接渡し、一時候補のLocalObjectは使わない。

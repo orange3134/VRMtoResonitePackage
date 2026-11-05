@@ -3,6 +3,10 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-05: Event直下のノードを子スロット `API/Event/OnAvatarWorn` へ移した。
+Eventはイベントの格納先、OnAvatarWornは着用開始・脱着を監視するライフサイクルボードとする。
+公開タグ、状態更新順序、初期化・脱着の条件は変更しない。
+
 2026-11-05: 着用イベントを `API/Event` へ分離した。OnStart、着用状態の変更監視、
 保存されない初期化済みフラグ、脱着時の遅延後片付けはEventが担当する。
 ローカル着用開始時はフラグを立て、最後に共通のAPIを宛先として
@@ -227,7 +231,8 @@ Expressions/
       DV/                          Clip空間のfloat変数
         Body.Smile                 Body.Smileの固定値（float）
   API/                             公開・内部Impulseの共通送信先
-    Event/                         初期化・着用監視・脱着時の後片付け
+    Event/                         イベントの格納先
+      OnAvatarWorn/                初期化・着用監視・脱着時の後片付け
     Internal/                      入力・選択・再生ロジック
       ResetState/                  Impulse受信による状態リセット
       UpdateSelection/             対応表からの選択と切り替え
@@ -277,7 +282,7 @@ ProtoFlux Tool では調べたい `UpdateSelection`、`ApplyExpression` など�
 モジュール間では ProtoFlux ノードを直接接続しない。共有値はフィールド経由で参照し、所有者・定数の取得は各モジュール内で完結するため、
 1つの入力や再生処理を開くだけで全機種・APIまでつながった巨大なグラフにはならない。
 
-初回起動・装着開始時は `API/Event` が `Internal/ResetState` を呼び、左右値と選択状態を初期化する。UpdateSelection は左右の入力イベントを受理したときだけ実行する。
+初回起動・装着開始時は `API/Event/OnAvatarWorn` が `Internal/ResetState` を呼び、左右値と選択状態を初期化する。UpdateSelection は左右の入力イベントを受理したときだけ実行する。
 呼び出しには共通のAPIを宛先とし、タグで対象処理を選ぶ同期 Dynamic Impulse を使い、
 選択状態をイベント内で確定し、ApplyExpression も同期呼び出しして選んだ表情の各トラックの終端値を即時に書き込む。
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → UpdateSelection → ApplyExpression を同期実行する。
@@ -413,7 +418,7 @@ SelectionStatus は生成・計算しない。入力モードは AllowHandGestur
 Event・UpdateSelection・ResetState・キーボード・機種別入力は `AvatarWornLocal` で更新を制御する。
 `AvatarWorn` は誰かが装着中かの判定に使い、取り外し時のクリア、未装着時のホストによるBase適用、各クライアントの追跡合成を切り替える。
 UserRoot配下への配置だけでは装着とみなさない。AvatarUserReferenceAssigner の装着通知と階層からIdentificationが算出した値を共通の判定元とする。
-API/Event 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。着用開始時にEventがResetStateへImpulseを送る。
+API/Event/OnAvatarWorn 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。着用開始時にEventがResetStateへImpulseを送る。
 
 - 装着開始・初回起動：AvatarWornLocal=true になれば初期化する。入力イベントがなければ CurrentExpression=null のままにする。
 - 取り外し：初期化済みのクライアントが一度だけ入力・選択状態をクリアし、出力を Base に戻す。初期化済みフラグを解除する。
@@ -425,6 +430,22 @@ API/Event 内の保存されない `StoredValue<bool>` が初期化済みかを�
 変更イベントが処理される前に外して同じユーザーへ戻し、判定結果が変わらなかった場合は連続した装着として扱う。
 未装着中も追跡用Driveは各クライアントのBaseに追従する。
 既存パッケージへ反映するには再変換・再インポートが必要。
+
+### OnAvatarWornとResetStateの重複を簡略化する場合の影響
+
+着用開始の分岐は初期化済みフラグの設定とResetStateの同期呼び出しだけで、状態リセットを重ねて実行してはいない。
+OnAvatarWorn内にある左右値・許可・表情のクリアは脱着時の処理であり、ローカル着用中だけ受け付けるResetStateを呼んでも実行されない。
+生成コードは `ResetStateActions` を共用しているが、両ボードを独立させるため、生成物にはそれぞれ操作ノードを置いている。
+
+| 簡略化案 | 影響 |
+|---|---|
+| ResetStateの着用判定を削除し、脱着時も呼ぶ | 未着用時の公開ResetやInternalへの直接呼び出しでも左右値・入力許可が変わる。別のクライアントからのリセットも受け付けるため、現在の受付条件を変更する |
+| OnAvatarWornの着用判定を削除 | 閲覧側でも初期化済みフラグが立ち得る。ResetState側で状態更新を拒否しても、イベント側の初期化状態は変わるので同等ではない |
+| 脱着時の後片付けを省く | 左右値・許可・CurrentExpressionが残る。特に元の装着者がホストの場合、ApplyExpressionのcanWriteが脱着前後でtrueのままになり、通常出力の再評価が発火せず最後の表情が残る可能性がある |
+| 判定を各入口に残し、状態クリアを別の共通内部処理へ移す | 着用開始・手動Reset・脱着の受付条件を維持して重複を減らせる。ただし内部Impulseと処理スロットが増え、共通処理へ直接送った場合の受付契約も設計する必要がある |
+
+単純な削除では挙動が変わるため、今回は命名と配置変更だけを行い、判定・脱着処理は維持する。
+初期化済みフラグは閲覧者の書き込みと繰り返し初期化を防ぎ、2更新の待機と再判定は着用フラグの反映順や再着用・装着者交代を扱うために残す。
 
 ## 入力の動作
 

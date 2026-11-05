@@ -34,7 +34,7 @@ internal sealed partial class ExpressionSystemSetup
 
     private void BuildLifecycle()
     {
-        var g = new ExpressionFlux(_events);
+        var g = new ExpressionFlux(_events.AddSlot("OnAvatarWorn"));
         // Local, unserialized state: no User reference survives cloning or loading.
         var initialized = g.Node("StoredValue", typeof(bool));
         var start = g.Sequence(g.Set<bool>(initialized, g.Constant(true)),

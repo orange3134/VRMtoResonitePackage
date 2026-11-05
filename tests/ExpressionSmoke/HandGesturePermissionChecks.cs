@@ -102,7 +102,7 @@ internal static class HandGesturePermissionChecks
     {
         var core = expressions.FindChild("API").FindChild("Internal");
         var api = expressions.FindChild("API");
-        var events = api.FindChild("Event");
+        var events = api.FindChild("Event").FindChild("OnAvatarWorn");
         var initialized = events.GetComponentsInChildren<Nodes.StoredValue<bool>>().Single();
         int Gesture(string hand) => core.ExpressionVariables<DynamicValueVariable<int>>()
             .Single(v => v.VariableName.Value == "ExpressionSystem/" + hand + "Gesture").Value.Value;

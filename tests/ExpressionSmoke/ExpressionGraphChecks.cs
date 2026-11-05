@@ -336,7 +336,7 @@ internal static class ExpressionGraphChecks
                 string.Join(", ", owners.Select(b => RelativePath(expressions, b))));
         }
 
-        foreach (string path in new[] { "API/Event", "API/Internal/ResetState", "API/Internal/UpdateSelection", "API/Internal/ApplyExpression",
+        foreach (string path in new[] { "API/Event/OnAvatarWorn", "API/Internal/ResetState", "API/Internal/UpdateSelection", "API/Internal/ApplyExpression",
             "API/Method/TrySetGesture.Left", "API/Method/TrySetGesture.Right",
             "API/Method/SetGesture.Left", "API/Method/SetGesture.Right",
             "API/Method/SelectExpression", "API/Method/ToggleHandGestures", "API/Method/Reset" })
@@ -374,7 +374,10 @@ internal static class ExpressionGraphChecks
         var resetNodes = Descendant(expressions, "API/Internal/ResetState").GetComponentsInChildren<ProtoFluxNode>();
         Check(resetNodes.All(node => node.GetType().Name is not ("OnStart" or "StoredValue`1" or "FireOnLocalValueChange`1" or "DelayUpdates")),
             "ResetState contains only impulse-driven reset logic, without lifecycle monitoring");
-        var eventNodes = Descendant(expressions, "API/Event").GetComponentsInChildren<ProtoFluxNode>();
+        var events = Descendant(expressions, "API/Event");
+        Check(events.Children.Select(child => child.Name).SequenceEqual(new[] { "OnAvatarWorn" }),
+            "Event contains a named OnAvatarWorn board instead of anonymous node slots");
+        var eventNodes = events.FindChild("OnAvatarWorn").GetComponentsInChildren<ProtoFluxNode>();
         Check(eventNodes.Count(node => node.GetType().Name == "OnStart") == 1 &&
             eventNodes.OfType<Nodes.StoredValue<bool>>().Count() == 1 &&
             eventNodes.All(node => !node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)),

@@ -1,5 +1,9 @@
 # Expression integration checks
 
+2026-11-05: Name the lifecycle board API/Event/OnAvatarWorn. Event is a container;
+its child owns the existing wear/departure lifecycle without changing behavior.
+Layout and early-input checks follow the named board through cloning and reload.
+
 2026-11-05: Move lifecycle monitoring to API/Event. Event owns OnStart, wearer
 changes, the unsaved initialization flag and delayed departure cleanup. Wearing
 sets the flag and sends Internal.ResetState through the shared API reference.
