@@ -336,7 +336,7 @@ internal static class ExpressionGraphChecks
                 string.Join(", ", owners.Select(b => RelativePath(expressions, b))));
         }
 
-        foreach (string path in new[] { "API/Event/OnAvatarWorn", "API/Internal/ResetState", "API/Internal/UpdateSelection", "API/Internal/ApplyExpression",
+        foreach (string path in new[] { "API/Event/OnAvatarWorn", "API/Event/OnAvatarRemoved", "API/Internal/ResetState", "API/Internal/UpdateSelection", "API/Internal/ApplyExpression",
             "API/Method/TrySetGesture.Left", "API/Method/TrySetGesture.Right",
             "API/Method/SetGesture.Left", "API/Method/SetGesture.Right",
             "API/Method/SelectExpression", "API/Method/ToggleHandGestures", "API/Method/Reset" })
@@ -375,17 +375,32 @@ internal static class ExpressionGraphChecks
         Check(resetNodes.All(node => node.GetType().Name is not ("OnStart" or "StoredValue`1" or "FireOnLocalValueChange`1" or "DelayUpdates")),
             "ResetState contains only impulse-driven reset logic, without lifecycle monitoring");
         var events = Descendant(expressions, "API/Event");
-        Check(events.Children.Select(child => child.Name).SequenceEqual(new[] { "OnAvatarWorn" }),
-            "Event contains a named OnAvatarWorn board instead of anonymous node slots");
+        Check(events.Children.Select(child => child.Name).OrderBy(name => name)
+                .SequenceEqual(new[] { "OnAvatarRemoved", "OnAvatarWorn" }),
+            "Event contains separate wear and removal boards");
         var eventNodes = events.FindChild("OnAvatarWorn").GetComponentsInChildren<ProtoFluxNode>();
         Check(eventNodes.Count(node => node.GetType().Name == "OnStart") == 1 &&
             eventNodes.OfType<Nodes.StoredValue<bool>>().Count() == 1 &&
-            eventNodes.All(node => !node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)),
-            "Event owns startup, wearer monitoring and local initialization state without an impulse receiver");
-        var eventReset = eventNodes.Single(node => node.GetType().Name == "DynamicImpulseTrigger");
-        Check(((ISyncRef)ExpressionFlux.Member(eventReset, "Tag")).Target is Nodes.ValueObjectInput<string> resetTag &&
-            resetTag.Value.Value == "ExpressionSystem/Internal.ResetState",
-            "Event initializes the avatar by sending the internal ResetState impulse");
+            eventNodes.All(node => node.GetType().Name is not ("DelayUpdates" or "WriteDynamicValueVariable`1")),
+            "OnAvatarWorn owns startup and initialization without departure delay or state cleanup");
+        var removedNodes = events.FindChild("OnAvatarRemoved").GetComponentsInChildren<ProtoFluxNode>();
+        Check(removedNodes.OfType<Nodes.StoredValue<bool>>().Count() == 1 &&
+            removedNodes.Count(node => node.GetType().Name == "DelayUpdates") == 1 &&
+            removedNodes.All(node => node.GetType().Name != "OnStart"),
+            "OnAvatarRemoved owns its local arming flag and delayed departure cleanup");
+        string[] TriggerTags(IEnumerable<ProtoFluxNode> boardNodes) => boardNodes
+            .Where(node => node.GetType().Name == "DynamicImpulseTrigger")
+            .Select(node => ((Nodes.ValueObjectInput<string>)((ISyncRef)ExpressionFlux.Member(node, "Tag")).Target).Value.Value)
+            .OrderBy(tag => tag).ToArray();
+        string ReceiverTag(IEnumerable<ProtoFluxNode> boardNodes) => boardNodes
+            .Single(node => node.GetType().Name == "DynamicImpulseReceiver")
+            .Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value;
+        Check(TriggerTags(eventNodes).SequenceEqual(new[] { "ExpressionSystem/Event.OnAvatarWorn", "ExpressionSystem/Internal.ResetState" }) &&
+            ReceiverTag(removedNodes) == "ExpressionSystem/Event.OnAvatarWorn",
+            "OnAvatarWorn arms removal through an impulse and calls ResetState");
+        Check(TriggerTags(removedNodes).SequenceEqual(new[] { "ExpressionSystem/Event.OnAvatarRemoved" }) &&
+            ReceiverTag(eventNodes) == "ExpressionSystem/Event.OnAvatarRemoved",
+            "OnAvatarRemoved notifies wear initialization after cleanup without calling wearer-only ResetState");
         var publicReceivers = method.GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
         Check(publicReceivers.Length == 7, "exactly seven public API receivers");

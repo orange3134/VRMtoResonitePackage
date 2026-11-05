@@ -1,5 +1,11 @@
 # Expression integration checks
 
+2026-11-05: Split departure monitoring and delayed cleanup into OnAvatarRemoved.
+OnAvatarWorn notifies removal monitoring before ResetState; removal completion
+notifies OnAvatarWorn to allow initialization on the next wear. Graph checks
+require independent boards, local flags and matching notification receivers.
+Equip/dequip, unworn clone, rewear and package reload checks cover the split.
+
 2026-11-05: Name the lifecycle board API/Event/OnAvatarWorn. Event is a container;
 its child owns the existing wear/departure lifecycle without changing behavior.
 Layout and early-input checks follow the named board through cloning and reload.

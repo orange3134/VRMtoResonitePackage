@@ -146,7 +146,9 @@ Version 67では `NAND_Bool` の判定を `ValueWrite<bool>` で `LocalValue<boo
 PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の時間再生は行わない。
 
 API/Event/OnAvatarWornはOnStartと着用状態の変更時に動き、現在の装着者がローカルユーザーで未初期化の場合にフラグを立て、最後にInternal/ResetStateへ引数なしDynamicImpulseを送る。初期化でUpdateSelectionは実行しない。
-初期化済みかはOnAvatarWorn内の保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。ResetStateには着用監視や初期化済みフラグを置かず、Impulse受信時の状態リセットだけを行う。
+初期化済みかはOnAvatarWorn内の保存されない `StoredValue<bool>` で管理し、PreviousOwner は保持しない。
+OnAvatarRemovedは別の保存されないフラグを持ち、着用開始の通知で有効化する。脱着から2更新後に再判定し、後片付けとフラグ解除を行ってOnAvatarWornへ終了を通知する。
+ResetStateには着用監視や初期化済みフラグを置かず、Impulse受信時の状態リセットだけを行う。
 公開APIは暗黙の初期化を行わず、初期化前の入力は後続のResetState初期化でクリアされる。Version 77以降はAPI内で着用判定せず、未着用でも左右値・許可を更新する。Internalの表情適用・リセットには着用判定が残る。
 
 初期化時は左右値を 0、AllowHandGestures.Left・Right を両方true、
@@ -319,10 +321,13 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `ToggleHandGesturesTag` | `ExpressionSystem/Method.ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
 | `ResetTag` | `ExpressionSystem/Method.Reset` | 引数なし。ローカル着用中に左右値・許可・表情を初期状態へ戻す |
 | `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Resetまたは着用時のEventから呼び出す、ローカル着用中の状態リセット |
+| `AvatarWornTag` | `ExpressionSystem/Event.OnAvatarWorn` | 引数なし。OnAvatarWornからOnAvatarRemovedへのローカル着用開始通知。脱着監視フラグを立てる |
+| `AvatarRemovedTag` | `ExpressionSystem/Event.OnAvatarRemoved` | 引数なし。OnAvatarRemovedからOnAvatarWornへの終了通知。初期化済みフラグを解除する |
 | `SelectionTickTag` | `ExpressionSystem/Internal.UpdateSelection` | 引数なし。左右入力イベントから選択更新を同期実行 |
 | `PlaybackTickTag` | `ExpressionSystem/Internal.ApplyExpression` | Slot。受信SlotをCurrentExpressionへ設定し、終端ポーズを同期適用。nullは解除。非nullはローカル装着者だけが受理し、未装着時もnullは受理する |
 
 Internal の3つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
+Eventの2つもイベント間の内部通知であり、公開操作用ではない。どちらもAPIを送信先に使う。
 Version 74で未使用の `ResoPon/Expression/Internal/Initialize` を廃止した。現在の自動初期化はAPI/Event/OnAvatarWornからInternal/ResetStateを呼び出して実行する。
 Version 75の個別ハンドメニューは `ButtonToggle.TargetValue` から自身の `AllowHandGestures.Left`・`Right` のValueを直接変更する。両手メニューは引き続きToggle APIを使う。
 Version 76で未使用のAllowHandGestures両手/左右とToggleHandGestures左右の5つのAPIを廃止した。設定用のDynamicVariableは維持する。

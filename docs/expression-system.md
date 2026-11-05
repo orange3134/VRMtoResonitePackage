@@ -3,6 +3,13 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-05: 脱着時の処理を `API/Event/OnAvatarRemoved` へ分離した。
+OnAvatarWornは着用開始時にローカル初期化フラグを立て、Event.OnAvatarWornを通知し、最後にResetStateを呼ぶ。
+OnAvatarRemovedはその通知で自身のローカルフラグを立て、脱着検出から2更新後に再判定して後片付けする。
+終了時はEvent.OnAvatarRemovedを通知してOnAvatarWornの初期化フラグを解除する。
+通知は引数なしDynamicImpulseでAPIへ送り、両ボードのFluxGroupを直接接続しない。
+再着用時のクリア中止、装着者交代時の共有値保護、未着用・閲覧側でのクリア抑止は維持する。
+
 2026-11-05: Event直下のノードを子スロット `API/Event/OnAvatarWorn` へ移した。
 Eventはイベントの格納先、OnAvatarWornは着用開始・脱着を監視するライフサイクルボードとする。
 公開タグ、状態更新順序、初期化・脱着の条件は変更しない。
@@ -232,7 +239,8 @@ Expressions/
         Body.Smile                 Body.Smileの固定値（float）
   API/                             公開・内部Impulseの共通送信先
     Event/                         イベントの格納先
-      OnAvatarWorn/                初期化・着用監視・脱着時の後片付け
+      OnAvatarWorn/                初期化・着用開始の監視・ResetState呼び出し
+      OnAvatarRemoved/             脱着の監視・遅延再判定・後片付け
     Internal/                      入力・選択・再生ロジック
       ResetState/                  Impulse受信による状態リセット
       UpdateSelection/             対応表からの選択と切り替え
@@ -312,7 +320,8 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 
 | 処理 | 実行するきっかけ |
 |---|---|
-| Event | OnStart、ローカル装着状態の変化。着用開始時にResetStateを呼ぶ |
+| Event/OnAvatarWorn | OnStart、ローカル装着状態の変化。着用開始を通知してResetStateを呼ぶ |
+| Event/OnAvatarRemoved | 着用開始通知で監視を有効化。脱着検出から2更新後に後片付けし、終了を通知する |
 | ResetState | 公開Reset APIまたはEventからの引数なしDynamicImpulse |
 | UpdateSelection | 受理した左右のSetGesture APIイベントからの同期呼び出しのみ（TrySetGestureからの転送も含む） |
 | キーボード | 左右それぞれの10キーの条件が変化したとき。新しく成立した割当だけ送信 |
@@ -418,7 +427,9 @@ SelectionStatus は生成・計算しない。入力モードは AllowHandGestur
 Event・UpdateSelection・ResetState・キーボード・機種別入力は `AvatarWornLocal` で更新を制御する。
 `AvatarWorn` は誰かが装着中かの判定に使い、取り外し時のクリア、未装着時のホストによるBase適用、各クライアントの追跡合成を切り替える。
 UserRoot配下への配置だけでは装着とみなさない。AvatarUserReferenceAssigner の装着通知と階層からIdentificationが算出した値を共通の判定元とする。
-API/Event/OnAvatarWorn 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。着用開始時にEventがResetStateへImpulseを送る。
+API/Event/OnAvatarWorn 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。
+着用開始時はEvent.OnAvatarWornの通知でOnAvatarRemoved内の別のローカルフラグを立て、最後にResetStateへImpulseを送る。
+OnAvatarRemovedは着用終了の遅延再判定と後片付けを担当し、Event.OnAvatarRemovedの通知で初期化済みフラグを解除する。
 
 - 装着開始・初回起動：AvatarWornLocal=true になれば初期化する。入力イベントがなければ CurrentExpression=null のままにする。
 - 取り外し：初期化済みのクライアントが一度だけ入力・選択状態をクリアし、出力を Base に戻す。初期化済みフラグを解除する。
@@ -433,8 +444,8 @@ API/Event/OnAvatarWorn 内の保存されない `StoredValue<bool>` が初期化
 
 ### OnAvatarWornとResetStateの重複を簡略化する場合の影響
 
-着用開始の分岐は初期化済みフラグの設定とResetStateの同期呼び出しだけで、状態リセットを重ねて実行してはいない。
-OnAvatarWorn内にある左右値・許可・表情のクリアは脱着時の処理であり、ローカル着用中だけ受け付けるResetStateを呼んでも実行されない。
+着用開始の分岐は初期化済みフラグの設定・脱着監視の有効化とResetStateの同期呼び出しだけで、状態リセットを重ねて実行してはいない。
+OnAvatarRemoved内にある左右値・許可・表情のクリアは脱着時の処理であり、ローカル着用中だけ受け付けるResetStateを呼んでも実行されない。
 生成コードは `ResetStateActions` を共用しているが、両ボードを独立させるため、生成物にはそれぞれ操作ノードを置いている。
 
 | 簡略化案 | 影響 |
@@ -444,7 +455,7 @@ OnAvatarWorn内にある左右値・許可・表情のクリアは脱着時の�
 | 脱着時の後片付けを省く | 左右値・許可・CurrentExpressionが残る。特に元の装着者がホストの場合、ApplyExpressionのcanWriteが脱着前後でtrueのままになり、通常出力の再評価が発火せず最後の表情が残る可能性がある |
 | 判定を各入口に残し、状態クリアを別の共通内部処理へ移す | 着用開始・手動Reset・脱着の受付条件を維持して重複を減らせる。ただし内部Impulseと処理スロットが増え、共通処理へ直接送った場合の受付契約も設計する必要がある |
 
-単純な削除では挙動が変わるため、今回は命名と配置変更だけを行い、判定・脱着処理は維持する。
+単純な削除では挙動が変わるため、イベントの命名と分離を行い、判定・脱着処理は維持する。
 初期化済みフラグは閲覧者の書き込みと繰り返し初期化を防ぎ、2更新の待機と再判定は着用フラグの反映順や再着用・装着者交代を扱うために残す。
 
 ## 入力の動作
