@@ -111,6 +111,8 @@ internal static class ExpressionGraphChecks
         Report(expressions);
         ExpressionLayoutChecks.CheckDirection(expressions);
         var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
+        Check(nodes.OfType<Nodes.Sequence>().All(sequence => sequence.Calls.All(call => call is not Nodes.Sequence)),
+            "consecutive Sequence nodes are flattened after generation, cloning and package reload");
         Check(expressions.GetComponentsInChildren<DynamicValueVariable<string>>().All(v =>
                 v.VariableName.Value != "ExpressionSystem/PairKey") &&
             expressions.GetComponentsInChildren<GlobalValue<string>>().All(v => v.Value.Value != "ExpressionSystem/PairKey") &&

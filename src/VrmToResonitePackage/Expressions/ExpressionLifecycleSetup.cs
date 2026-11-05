@@ -24,11 +24,12 @@ internal sealed partial class ExpressionSystemSetup
         {
             cleanup.Add(g.Write<int>(core, SystemSpace, hand + "Gesture", g.Constant(0)));
         }
-        cleanup.Add(WriteHandGesturePermissions(g, g.Constant(true)));
+        cleanup.AddRange(HandGesturePermissionWrites(g, g.Constant(true)));
         cleanup.Add(g.Trigger<Slot>(g.Ref(_api), g.Text(PlaybackTickTag), g.Ref<Slot>(null)));
 
         var clear = g.Sequence(cleanup.ToArray());
-        var reset = g.Sequence(clear, g.Set<bool>(initialized, g.Constant(true)));
+        // Reuse the operations, not the cleanup Sequence, so reset has one flat call list.
+        var reset = g.Sequence(cleanup.Append(g.Set<bool>(initialized, g.Constant(true))).ToArray());
         // Explicit reset also works after initialization and does not select the neutral table entry.
         ReceiveUpdate(g, ResetStateTag, reset);
         // Only the current local wearer runs selection/playback. On departure, the client

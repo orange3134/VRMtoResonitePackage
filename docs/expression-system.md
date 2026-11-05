@@ -3,6 +3,14 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-05: Sequenceから別のSequenceを直接呼ぶ構成を廃止した。
+SelectExpressionは左右のジェスチャー許可をfalseにする書き込みとApplyExpression送信を、
+1つのSequenceで順番に実行する。ResetStateも左右の値のクリア、左右の許可の復元、
+表情解除、初期化済みフラグの設定を同じSequenceへ並べる。
+装着解除時は条件付きのクリア処理と初期化済みフラグの解除が必要なため、条件分岐は維持する。
+クリア処理の各操作ノードはリセット時と共有し、Sequence自体は入れ子にしない。
+ExpressionSmokeで生成・複製・保存再読込後にSequence同士の直結がないことを確認する。
+
 2026-11-05: `Expressions/API` を作成し、InternalとMethodをその直下へ移動した。
 公開・内部の全DynamicImpulseは `ExpressionSystem/References.API` が指すこのAPIを送信先とし、
 タグで受信処理を選ぶ。`References.Internal` のDVと入力ノードは生成しない。

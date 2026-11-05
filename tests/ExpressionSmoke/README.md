@@ -1,5 +1,10 @@
 # Expression integration checks
 
+2026-11-05: SelectExpression and ResetState use flat Sequence call lists. Graph
+checks reject Sequence-to-Sequence calls after generation, cloning and package
+reload. Existing permission, reset, lifecycle and pose checks verify execution
+order; the departure cleanup remains guarded by its wearer condition.
+
 2026-11-05: Expression menu buttons send null while their expression is selected.
 Select accepts null to clear the pose while keeping gestures disabled and hand
 values unchanged. Runtime checks cover select/clear/reselect for Catalog entries,

@@ -62,15 +62,14 @@ internal sealed partial class ExpressionSystemSetup
         var selected = Out(receiver, "Value");
         var valid = g.Or(g.IsNull<Slot>(selected),
             g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", selected)), g.Ref(_catalog)));
-        var select = g.Sequence(
-            WriteHandGesturePermissions(g, g.Constant(false)),
-            g.Trigger<Slot>(g.Ref(_api), g.Text(PlaybackTickTag), selected));
+        var select = g.Sequence(HandGesturePermissionWrites(g, g.Constant(false))
+            .Append(g.Trigger<Slot>(g.Ref(_api), g.Text(PlaybackTickTag), selected)).ToArray());
         Link(receiver, "OnTriggered", g.If(valid, select));
     }
 
-    private IWorldElement WriteHandGesturePermissions(ExpressionFlux g, IWorldElement value) =>
-        g.Sequence(new[] { "Left", "Right" }
-            .Select(side => (IWorldElement)g.Write<bool>(g.Ref(_api), SystemSpace, HandGesturePermission(side), value)).ToArray());
+    private IWorldElement[] HandGesturePermissionWrites(ExpressionFlux g, IWorldElement value) =>
+        new[] { "Left", "Right" }
+            .Select(side => (IWorldElement)g.Write<bool>(g.Ref(_api), SystemSpace, HandGesturePermission(side), value)).ToArray();
 
     private void BuildHandGesturesToggleReceiver(ExpressionFlux g)
     {
@@ -80,7 +79,7 @@ internal sealed partial class ExpressionSystemSetup
         var capture = g.Set<bool>(enabled, g.Node("NAND_Bool", null,
             ("A", g.Read<bool>(core, SystemSpace, HandGesturePermission("Left"))),
             ("B", g.Read<bool>(core, SystemSpace, HandGesturePermission("Right")))));
-        Link(capture, "OnWritten", WriteHandGesturePermissions(g, enabled));
+        Link(capture, "OnWritten", g.Sequence(HandGesturePermissionWrites(g, enabled)));
         Link(g.Receiver(ToggleHandGesturesTag, false), "OnTriggered", capture);
     }
 }
