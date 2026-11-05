@@ -200,12 +200,12 @@ internal static class ExpressionOutputWriteChecks
             avatar.FindChild("Avatar Root Identification")
                 .GetComponent<FrooxEngine.CommonAvatar.AvatarUserReferenceAssigner>().OnDequip(null);
             await Frames(30);
-            Check(Get<int>(core, "RightGesture") == 0 && Reference<Slot>(core, "CurrentExpression") == null,
-                "identification dequip clears selection without a hierarchy change");
+            Check(Get<int>(core, "RightGesture") == 1 && Reference<Slot>(core, "CurrentExpression") == shortClip,
+                "identification dequip retains selection without a hierarchy change");
             Near(a.Value, 0.8f, "dequip restores tracked output Base");
             Near(b.Value, 0.3f, "dequip restores static output Base");
             Playback(ramp);
-            Check(Reference<Slot>(core, "CurrentExpression") == null, "unworn Playback rejects non-null payloads");
+            Check(Reference<Slot>(core, "CurrentExpression") == shortClip, "unworn Playback rejects non-null payloads and retains selection");
             Set<Slot>(core, "CurrentExpression", ramp);
             Playback(null);
             Check(Reference<Slot>(core, "CurrentExpression") == null, "unworn Playback accepts explicit clearing");
@@ -224,10 +224,13 @@ internal static class ExpressionOutputWriteChecks
             Select(1); await Frames();
             Near(a.Value, 1, "re-equip re-enables selection without a hierarchy change");
             avatar.Parent = avatar.World.RootSlot; await Frames(30);
-            Check(Get<int>(core, "RightGesture") == 0 && Reference<Slot>(core, "CurrentExpression") == null,
-                "hierarchy departure clears state despite different worn-flag update order");
+            Check(Get<int>(core, "RightGesture") == 1 && Reference<Slot>(core, "CurrentExpression") == shortClip,
+                "hierarchy departure retains state despite different worn-flag update order");
             Near(a.Value, 0.65f, "hierarchy departure restores tracking Base");
+            Near(b.Value, 0.3f, "hierarchy departure restores static Base without a reset impulse");
             avatar.Parent = parent; await Frames(30);
+            Check(Get<int>(core, "RightGesture") == 0 && Reference<Slot>(core, "CurrentExpression") == null,
+                "reattachment resets retained state before input");
             Select(1); await Frames(); Near(a.Value, 1, "reattachment accepts input after worn flags update");
             Check(expressions.GetComponentsInChildren<ProtoFluxNode>().Count(n => n.GetType().Name == "LocalUpdate") == 0,
                 "output updates are event driven without LocalUpdate");

@@ -500,12 +500,14 @@ internal static class ExpressionInputEventChecks
             await Frames(5);
             Key(InputKey.Control, false);
             await Frames(5);
+            var retainedExpression = Reference<Slot>(core, "CurrentExpression");
+            Check(retainedExpression != null, "wearer gate check begins with a selected expression");
             foreach (var entry in wearerReferences) entry.Reference.Target = null;
             await Frames(5);
             Gesture("Left", 6);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "LeftGesture") == 6 && Reference<Slot>(core, "CurrentExpression") == null,
+            Check(Get<int>(core, "LeftGesture") == 6 && Reference<Slot>(core, "CurrentExpression") == retainedExpression,
                 "AvatarWornLocal false permits direct API values while keyboard input and Internal selection stay gated");
             foreach (var entry in wearerReferences) entry.Reference.Target = expressions.World.LocalUser;
             await Frames(5);

@@ -470,21 +470,24 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await Frames();
         Check(Math.Abs(field.Value - 0.7f) < 0.001f, "tracking applies the final pose without interpolation");
         var wearer = avatar.Parent;
-        // Departure must clear output directly, even when Neutral maps to a clip.
+        // Departure retains state but suppresses the pose, even with mapped Neutral.
+        Request(ExpressionSystemSetup.SetGestureLeftTag, 3); Request(ExpressionSystemSetup.SetGestureRightTag, 4);
+        Select("Angry");
         Set(table, "L0R0", catalog.FindChild("Angry"));
         avatar.Parent = world.RootSlot;
         await Frames();
-        Check(BothHandsAllowed(core) && Gestures(core) == (0, 0) &&
-            Reference<Slot>(core, "CurrentExpression") == null &&
+        Check(NoHandsAllowed(core) && Gestures(core) == (3, 4) &&
+            Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry") &&
             Math.Abs(field.Value - 0.4f) < 0.01,
-            "wearer departure restores base instead of playing the mapped Neutral expression");
+            "wearer departure retains state while the output returns to Base");
         Set(table, "L0R0", (Slot)null);
+        AllowInput();
         Gesture(0, 1); Gesture(1, 2);
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 2 &&
-            Reference<Slot>(core, "CurrentExpression") == null,
+            Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry"),
             "unworn gesture APIs update both hands while Internal Selection retains its wearer gate");
-        Select("Angry");
-        Check(NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == null,
+        Select("Animated");
+        Check(NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Angry"),
             "unworn Select disables gestures while Internal Playback rejects the pose");
         Gesture(0, 7); Gesture(1, 7);
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 2,
@@ -542,6 +545,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         unwornClone.Destroy();
         avatar.Parent = wearer;
         await Frames();
+        Check(Gestures(core) == (0, 0) && BothHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == null,
+            "rewear resets retained state before accepting new input");
         Gesture(0, 1); Gesture(1, 1);
         Check(Get<int>(core, "LeftGesture") == 1 && Get<int>(core, "RightGesture") == 1 &&
             BothHandsAllowed(core),

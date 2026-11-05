@@ -40,13 +40,16 @@ internal sealed partial class ExpressionSystemSetup
         // Only the wearer writes a pose. The host follows Base on unworn copies.
         var receiver = g.Receiver<Slot>(PlaybackTickTag);
         var selected = Out(receiver, "Value");
-        // A departing wearer may clear state even after losing write authority.
+        // Explicit reset may clear state even without local wear authority.
         // Non-null selections require the local wearer; unworn instances accept only clearing.
         var accept = g.Or(wearer, g.And(g.Not(g.AvatarWorn), g.IsNull<Slot>(selected)));
         Link(receiver, "OnTriggered", g.If(accept, g.Sequence(
             g.Write<Slot>(core, SystemSpace, "CurrentExpression", selected),
             g.If(canWrite, refresh))));
         g.OnChanged<bool>(canWrite, g.If(canWrite, refresh));
+        // A host can keep write authority across dequip. Refresh Base even when
+        // canWrite stays true, without clearing the saved expression state.
+        g.OnChanged<bool>(wearer, g.If(canWrite, refresh));
         g.OnStart(g.If(canWrite, refresh));
         foreach (var output in _outputSlots.Values)
         {

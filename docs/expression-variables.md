@@ -147,7 +147,7 @@ PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の�
 
 API/Event/OnAvatarWornはOnStartと着用状態の変更時に動き、現在の装着者がローカルユーザーで未初期化の場合にフラグを立て、最後にInternal/ResetStateへ引数なしDynamicImpulseを送る。初期化でUpdateSelectionは実行しない。
 初期化済みかはOnAvatarWorn内の保存されない `StoredValue<bool>` で管理し、PreviousOwner は保持しない。
-OnAvatarRemovedは別の保存されないフラグを持ち、着用開始の通知で有効化する。脱着から2更新後に再判定し、後片付けとフラグ解除を行ってOnAvatarWornへ終了を通知する。
+AvatarWornLocal=falseのときはOnAvatarWorn内の初期化済みフラグだけを解除する。OnAvatarRemovedとイベント間の通知タグは生成しない。
 ResetStateには着用監視や初期化済みフラグ、AvatarWornLocal条件を置かず、Impulse受信時の状態リセットだけを行う。
 公開APIは暗黙の初期化を行わず、初期化前の入力は後続のResetState初期化でクリアされる。Version 77以降はAPI内で着用判定せず、未着用でも左右値・許可を更新する。
 現在は公開Reset・直接のResetStateも未着用時に受理する。Internalの選択・表情適用には従来の着用条件が残る。
@@ -156,10 +156,9 @@ ResetStateには着用監視や初期化済みフラグ、AvatarWornLocal条件�
 ApplyExpressionへnullを送り、CurrentExpressionの解除と通常出力のBase復帰をまとめて実行する。追跡出力は専用DriveがBaseを反映する。
 その後の UpdateSelection と ApplyExpression の同期Writeで現在の対応表に応じた状態になる。
 
-装着が終了すると、OnAvatarRemovedが初期化済みのクライアントでだけ一度ResetStateを呼び、フラグを false に戻す。クリア操作はResetStateだけに生成する。
-既に別のユーザーが装着している場合は共有値をクリアせず、ローカルフラグだけを戻す。
-未装着で生成・複製したインスタンスや閲覧者のクライアントはクリアを書き込まない。
-未装着中は UpdateSelection を実行しない。通常出力は初期化・権限取得時にホストがBaseをWriteし、追跡出力は専用DriveがBaseに追従する。
+装着が終了しても左右値・入力許可・CurrentExpressionは保持し、ResetStateは呼ばない。
+未装着で生成・複製したインスタンスや閲覧者のクライアントも自動クリアを書き込まない。
+未装着中はUpdateSelectionを実行しない。通常出力は初期化・権限取得・AvatarWornLocalの変化時にホストがBaseをWriteし、追跡出力は専用DriveがBaseに追従する。
 再装着・複製・読み込み後の最初の処理では再び初期化する。
 
 ## Outputs/各 BlendShape
@@ -321,14 +320,12 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `SelectTag` | `ExpressionSystem/Method.SelectExpression` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してApplyExpressionへ渡す。nullは表情解除、非nullの範囲外は無視 |
 | `ToggleHandGesturesTag` | `ExpressionSystem/Method.ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
 | `ResetTag` | `ExpressionSystem/Method.Reset` | 引数なし。ResetStateへ転送し、未着用時も左右値・許可・表情を初期状態へ戻す |
-| `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Reset・着用開始・脱着時のEventから共用する。着用判定なしで左右値・許可を戻し、ApplyExpressionへnullを送る。表情解除はApplyExpressionの受付条件に従う |
-| `AvatarWornTag` | `ExpressionSystem/Event.OnAvatarWorn` | 引数なし。OnAvatarWornからOnAvatarRemovedへのローカル着用開始通知。脱着監視フラグを立てる |
-| `AvatarRemovedTag` | `ExpressionSystem/Event.OnAvatarRemoved` | 引数なし。OnAvatarRemovedからOnAvatarWornへの終了通知。初期化済みフラグを解除する |
+| `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Resetと着用開始のEventから共用する。着用判定なしで左右値・許可を戻し、ApplyExpressionへnullを送る。表情解除はApplyExpressionの受付条件に従う |
 | `SelectionTickTag` | `ExpressionSystem/Internal.UpdateSelection` | 引数なし。左右入力イベントから選択更新を同期実行 |
 | `PlaybackTickTag` | `ExpressionSystem/Internal.ApplyExpression` | Slot。受信SlotをCurrentExpressionへ設定し、終端ポーズを同期適用。nullは解除。非nullはローカル装着者だけが受理し、未装着時もnullは受理する |
 
 Internal の3つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
-Eventの2つもイベント間の内部通知であり、公開操作用ではない。どちらもAPIを送信先に使う。
+イベント間の通知タグはOnAvatarRemovedの削除とともに廃止した。
 Version 74で未使用の `ResoPon/Expression/Internal/Initialize` を廃止した。現在の自動初期化はAPI/Event/OnAvatarWornからInternal/ResetStateを呼び出して実行する。
 Version 75の個別ハンドメニューは `ButtonToggle.TargetValue` から自身の `AllowHandGestures.Left`・`Right` のValueを直接変更する。両手メニューは引き続きToggle APIを使う。
 Version 76で未使用のAllowHandGestures両手/左右とToggleHandGestures左右の5つのAPIを廃止した。設定用のDynamicVariableは維持する。

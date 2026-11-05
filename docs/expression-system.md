@@ -3,6 +3,12 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-06: OnAvatarRemovedとイベント間の2つの通知タグを削除した。
+脱着時は左右値・許可・CurrentExpressionを保持し、OnAvatarWornのローカル初期化フラグだけを解除する。
+次の着用時にResetStateで初期化する。脱着の2更新待機と遅延タスクは生成しない。
+通常出力はApplyExpressionでAvatarWornLocalの変化も監視し、ホストの書き込み権限が脱着前後で変わらなくてもBaseへ戻す。
+追跡出力は従来どおり未着用時にBaseへ追従する。保持した表情は未着用中の見た目へ適用しない。
+
 2026-11-05: ResetStateのAvatarWornLocal条件を削除した。公開Resetと直接のResetStateは未着用時にも受理する。
 OnAvatarRemovedの左右値・許可・表情のクリアはResetStateへのDynamicImpulse呼び出しに置き換えた。
 脱着イベント側の2更新後の再判定、別の装着者がいる場合のリセット抑止、ローカルフラグの解除は維持する。
@@ -245,7 +251,6 @@ Expressions/
   API/                             公開・内部Impulseの共通送信先
     Event/                         イベントの格納先
       OnAvatarWorn/                初期化・着用開始の監視・ResetState呼び出し
-      OnAvatarRemoved/             脱着の監視・遅延再判定・後片付け
     Internal/                      入力・選択・再生ロジック
       ResetState/                  Impulse受信による状態リセット
       UpdateSelection/             対応表からの選択と切り替え
@@ -325,8 +330,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 
 | 処理 | 実行するきっかけ |
 |---|---|
-| Event/OnAvatarWorn | OnStart、ローカル装着状態の変化。着用開始を通知してResetStateを呼ぶ |
-| Event/OnAvatarRemoved | 着用開始通知で監視を有効化。脱着検出から2更新後に後片付けし、終了を通知する |
+| Event/OnAvatarWorn | OnStart、AvatarWornLocalの変化。着用開始時にResetStateを呼び、未着用時は初期化済みフラグだけ解除する |
 | ResetState | 公開Reset APIまたはEventからの引数なしDynamicImpulse |
 | UpdateSelection | 受理した左右のSetGesture APIイベントからの同期呼び出しのみ（TrySetGestureからの転送も含む） |
 | キーボード | 左右それぞれの10キーの条件が変化したとき。新しく成立した割当だけ送信 |
@@ -430,34 +434,35 @@ SelectionStatus は生成・計算しない。入力モードは AllowHandGestur
 ## 装着状態と Event・ResetState
 
 Event・UpdateSelection・キーボード・機種別入力は `AvatarWornLocal` で更新を制御する。
-ResetState自体は着用状態で制限せず、公開Reset・着用開始・脱着処理から共用する。
-`AvatarWorn` は誰かが装着中かの判定に使い、取り外し時のクリア、未装着時のホストによるBase適用、各クライアントの追跡合成を切り替える。
+ResetState自体は着用状態で制限せず、公開Resetと着用開始から共用する。
+`AvatarWorn` は誰かが装着中かの判定に使い、未装着時のホストによるBase適用と各クライアントの追跡合成を切り替える。
 UserRoot配下への配置だけでは装着とみなさない。AvatarUserReferenceAssigner の装着通知と階層からIdentificationが算出した値を共通の判定元とする。
 API/Event/OnAvatarWorn 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。
-着用開始時はEvent.OnAvatarWornの通知でOnAvatarRemoved内の別のローカルフラグを立て、最後にResetStateへImpulseを送る。
-OnAvatarRemovedは着用終了の遅延再判定を担当し、誰も着用していなければResetStateを呼ぶ。
-その後、Event.OnAvatarRemovedの通知で初期化済みフラグを解除する。
+着用開始時は初期化済みフラグを立て、最後にResetStateへImpulseを送る。
+AvatarWornLocal=falseのときは初期化済みフラグだけを解除し、共有状態は書き換えない。
+OnAvatarRemovedやイベント間の通知タグ、脱着用の遅延タスクは生成しない。
 
 - 装着開始・初回起動：AvatarWornLocal=true になれば初期化する。入力イベントがなければ CurrentExpression=null のままにする。
-- 取り外し：初期化済みのクライアントが一度だけ入力・選択状態をクリアし、出力を Base に戻す。初期化済みフラグを解除する。
-- 未装着中：選択更新は停止する。通常出力は初期化・権限取得時にホストがBaseをWriteし、追跡対象は専用DriveがBaseに追従する。閲覧者は共有の選択状態を書き換えない。
+- 取り外し：左右値・入力許可・CurrentExpressionを保持し、初期化済みフラグだけを解除する。出力側の着用判定で見た目をBaseへ戻す。
+- 未装着中：選択更新は停止する。通常出力は初期化・権限取得・ローカル着用状態の変化時にホストがBaseをWriteし、追跡対象は専用DriveがBaseに追従する。明示API呼び出しがなければ共有状態を維持する。
 - 再装着・複製・読み込み：初回のローカル着用時に左右値を 0、入力許可を true に戻して再開する。APIが先に届いても初期化は呼ばず、先行入力は後続のResetState初期化でクリアされる。
 
-取り外し時はローカルDriveと共有AvatarWornの反映順が異なるため、Driveと変数通知が反映される2更新後に両フラグを再確認して終了処理を行う。再装着済みならクリアせず、別の装着者が既にいる場合は共有値をクリアせずローカルの初期化済みフラグだけを解除する。
-装着者の履歴は比較せず、AvatarWorn／AvatarWornLocal の変化を FireOnLocalValueChange で検出する。APIは着用状態にかかわらず受信処理を実行し、表情適用・リセットの可否はInternal側で判定する。
+OnAvatarWornはAvatarWornLocalの変化をFireOnLocalValueChangeで検出し、装着者の履歴は保持しない。
+一度falseを検出した後の再着用は、以前の2更新待機内であっても新しい着用として初期化する。
+通常出力はcanWriteとAvatarWornLocalの両方の変化を監視する。元の装着者がホストの場合にcanWriteがtrueのままでもBaseを反映し、別の装着者がいる間は書き込まない。
+APIは着用状態にかかわらず受信処理を実行し、選択・表情適用はInternal側の条件に従う。ResetStateには着用条件を置かない。
 変更イベントが処理される前に外して同じユーザーへ戻し、判定結果が変わらなかった場合は連続した装着として扱う。
 未装着中も追跡用Driveは各クライアントのBaseに追従する。
 既存パッケージへ反映するには再変換・再インポートが必要。
 
 ### ResetStateの共通化と受付条件
 
-着用開始の分岐は初期化済みフラグの設定・脱着監視の有効化とResetStateの同期呼び出しだけで、状態リセットを重ねて実行してはいない。
-OnAvatarRemovedもResetStateを呼ぶため、左右値・許可・表情のクリア操作はResetStateだけに生成する。
+着用開始の分岐は初期化済みフラグの設定とResetStateの同期呼び出しだけで、状態リセットを重ねて実行してはいない。
+左右値・許可・表情のクリア操作はResetStateだけに生成し、脱着時には呼ばない。
 ResetStateのAvatarWornLocal条件を削除したことで、未着用時の公開Resetと直接のResetStateも左右値を0、許可をtrueへ戻し、表情を解除する。
 別のクライアントからの明示Resetも左右値・許可の更新を受け付ける。ApplyExpressionの条件は変更せず、
 表情解除のnullはローカル着用中または誰も着用していない場合に受理する。他者着用中の閲覧側では表情の更新を拒否する。
-脱着イベントには誰も着用していないことの確認を残すため、装着者交代時には共有状態をリセットしない。
-初期化済みフラグは閲覧者の書き込みと繰り返し初期化を防ぎ、2更新の待機と再判定は着用フラグの反映順や再着用・装着者交代を扱うために残す。
+初期化済みフラグは同じ着用中の繰り返し初期化を防ぐ。着用条件によって閲覧者側の自動初期化を防ぐ。
 
 ## 入力の動作
 
@@ -615,7 +620,7 @@ CurrentExpression=null、左右のGesture=0、AllowHandGestures.Left・Rightを�
 GestureTableの割り当てやCatalog、キー設定は変更しない。L0R0に表情が割り当てられていてもリセットでは再選択せず、次の左右入力イベントで再評価する。
 Resetもローカル装着者限定で、ジェスチャー無効時にも受け付ける。
 着用監視はEvent、状態の初期化はResetStateが担当し、複製・再ロード・再装着後のローカル着用時に bool=true、左右=0 に戻す。公開APIから暗黙の初期化は行わない。
-Dynamic ImpulseはネットワークRPCではない。API内の左右値・許可の更新は呼び出したクライアントで実行し、Internalの表情適用とリセットにはローカル着用条件が残る。
+Dynamic ImpulseはネットワークRPCではない。API内の左右値・許可の更新は呼び出したクライアントで実行する。Internalの表情適用には着用条件が残るが、ResetStateには着用条件を置かない。
 
 旧 `ResoPon/Expression/v3/Select` と `v3/Automatic` は生成しない。
 旧 Select 送信側は `ExpressionSystem/Method.SelectExpression` へ変更する。ハンドジェスチャーを明示的に再開する場合は

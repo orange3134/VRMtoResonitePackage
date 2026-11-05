@@ -336,7 +336,7 @@ internal static class ExpressionGraphChecks
                 string.Join(", ", owners.Select(b => RelativePath(expressions, b))));
         }
 
-        foreach (string path in new[] { "API/Event/OnAvatarWorn", "API/Event/OnAvatarRemoved", "API/Internal/ResetState", "API/Internal/UpdateSelection", "API/Internal/ApplyExpression",
+        foreach (string path in new[] { "API/Event/OnAvatarWorn", "API/Internal/ResetState", "API/Internal/UpdateSelection", "API/Internal/ApplyExpression",
             "API/Method/TrySetGesture.Left", "API/Method/TrySetGesture.Right",
             "API/Method/SetGesture.Left", "API/Method/SetGesture.Right",
             "API/Method/SelectExpression", "API/Method/ToggleHandGestures", "API/Method/Reset" })
@@ -380,31 +380,19 @@ internal static class ExpressionGraphChecks
             "ResetState receives requests without a local-wearer condition");
         var events = Descendant(expressions, "API/Event");
         Check(events.Children.Select(child => child.Name).OrderBy(name => name)
-                .SequenceEqual(new[] { "OnAvatarRemoved", "OnAvatarWorn" }),
-            "Event contains separate wear and removal boards");
+                .SequenceEqual(new[] { "OnAvatarWorn" }),
+            "Event contains only the wear initialization board");
         var eventNodes = events.FindChild("OnAvatarWorn").GetComponentsInChildren<ProtoFluxNode>();
         Check(eventNodes.Count(node => node.GetType().Name == "OnStart") == 1 &&
             eventNodes.OfType<Nodes.StoredValue<bool>>().Count() == 1 &&
-            eventNodes.All(node => node.GetType().Name is not ("DelayUpdates" or "WriteDynamicValueVariable`1")),
+            eventNodes.All(node => node.GetType().Name is not ("DelayUpdates" or "WriteDynamicValueVariable`1" or "DynamicImpulseReceiver")),
             "OnAvatarWorn owns startup and initialization without departure delay or state cleanup");
-        var removedNodes = events.FindChild("OnAvatarRemoved").GetComponentsInChildren<ProtoFluxNode>();
-        Check(removedNodes.OfType<Nodes.StoredValue<bool>>().Count() == 1 &&
-            removedNodes.Count(node => node.GetType().Name == "DelayUpdates") == 1 &&
-            removedNodes.All(node => node.GetType().Name is not ("OnStart" or "WriteDynamicValueVariable`1" or "DynamicImpulseTriggerWithObject`1")),
-            "OnAvatarRemoved owns its local arming flag and delay without duplicating reset operations");
         string[] TriggerTags(IEnumerable<ProtoFluxNode> boardNodes) => boardNodes
             .Where(node => node.GetType().Name == "DynamicImpulseTrigger")
             .Select(node => ((Nodes.ValueObjectInput<string>)((ISyncRef)ExpressionFlux.Member(node, "Tag")).Target).Value.Value)
             .OrderBy(tag => tag).ToArray();
-        string ReceiverTag(IEnumerable<ProtoFluxNode> boardNodes) => boardNodes
-            .Single(node => node.GetType().Name == "DynamicImpulseReceiver")
-            .Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value;
-        Check(TriggerTags(eventNodes).SequenceEqual(new[] { "ExpressionSystem/Event.OnAvatarWorn", "ExpressionSystem/Internal.ResetState" }) &&
-            ReceiverTag(removedNodes) == "ExpressionSystem/Event.OnAvatarWorn",
-            "OnAvatarWorn arms removal through an impulse and calls ResetState");
-        Check(TriggerTags(removedNodes).SequenceEqual(new[] { "ExpressionSystem/Event.OnAvatarRemoved", "ExpressionSystem/Internal.ResetState" }) &&
-            ReceiverTag(eventNodes) == "ExpressionSystem/Event.OnAvatarRemoved",
-            "OnAvatarRemoved calls ResetState and notifies wear initialization after cleanup");
+        Check(TriggerTags(eventNodes).SequenceEqual(new[] { "ExpressionSystem/Internal.ResetState" }),
+            "OnAvatarWorn only sends ResetState, without removal notifications");
         var publicReceivers = method.GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
         Check(publicReceivers.Length == 7, "exactly seven public API receivers");
@@ -414,6 +402,8 @@ internal static class ExpressionGraphChecks
                 "unused permission API board is absent: " + removed);
         var tags = expressions.GetComponentsInChildren<GlobalValue<string>>().Select(value => value.Value.Value)
             .Concat(nodes.OfType<Nodes.ValueObjectInput<string>>().Select(node => node.Value.Value));
+        Check(tags.All(tag => tag is not ("ExpressionSystem/Event.OnAvatarWorn" or "ExpressionSystem/Event.OnAvatarRemoved")),
+            "removed lifecycle notifications have no senders or receivers");
         Check(tags.All(tag => tag == null ||
             (!tag.StartsWith("ResoPon/Expression/AllowHandGestures", StringComparison.Ordinal) &&
              !tag.StartsWith("ExpressionSystem/Method.ToggleHandGestures.", StringComparison.Ordinal))),
