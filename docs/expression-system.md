@@ -3,12 +3,21 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-05: 着用イベントを `API/Event` へ分離した。OnStart、着用状態の変更監視、
+保存されない初期化済みフラグ、脱着時の遅延後片付けはEventが担当する。
+ローカル着用開始時はフラグを立て、最後に共通のAPIを宛先として
+`ExpressionSystem/Internal.ResetState` を引数なしDynamicImpulseで同期送信する。
+`Internal/ResetState` はImpulse受信、ローカル着用判定、左右値・入力許可・表情のリセットだけを持つ。
+明示的なResetはEventのフラグを変更しない。未着用中のResetは従来どおり無視するため、
+脱着時の後片付けはEvent内で生成する。状態クリアの生成コードは共通化するが、
+EventとResetStateのノードを直接接続せず、独立したFluxGroupを維持する。
+
 2026-11-05: Sequenceから別のSequenceを直接呼ぶ構成を廃止した。
 SelectExpressionは左右のジェスチャー許可をfalseにする書き込みとApplyExpression送信を、
 1つのSequenceで順番に実行する。ResetStateも左右の値のクリア、左右の許可の復元、
-表情解除、初期化済みフラグの設定を同じSequenceへ並べる。
+表情解除を同じSequenceへ並べる。初期化済みフラグは現在API/Event側で設定する。
 装着解除時は条件付きのクリア処理と初期化済みフラグの解除が必要なため、条件分岐は維持する。
-クリア処理の各操作ノードはリセット時と共有し、Sequence自体は入れ子にしない。
+Sequence自体は入れ子にしない。現在はEventとResetStateの各ボード内で必要な操作を生成する。
 ExpressionSmokeで生成・複製・保存再読込後にSequence同士の直結がないことを確認する。
 
 2026-11-05: `Expressions/API` を作成し、InternalとMethodをその直下へ移動した。
@@ -21,7 +30,7 @@ APIは整理用Slotで、DynamicVariableSpaceは追加しない。状態変数�
 Clip形式として読み、旧パッケージにVersionがある場合だけ従来の判別を行う。
 公開処理は `API/Receivers` を廃止して `Method` 直下へ移し、受信ボード名をタグ末尾へ統一した。
 内部の旧Selection・Playback・Lifecycleは、それぞれUpdateSelection・ApplyExpression・ResetStateとなる。
-ResetStateにはリセット受信に加えて、従来の自動初期化・着用監視も残る。
+この時点ではResetStateに自動初期化・着用監視も残っていたが、現在はAPI/Eventへ分離している。
 この時点では送信先変数 `References.API` はMethodを参照していた。タグ・引数・処理内容は維持した。
 以下のVersion番号は過去の変更記録であり、現行の生成物にはVersion変数を持たせない。
 
@@ -218,8 +227,9 @@ Expressions/
       DV/                          Clip空間のfloat変数
         Body.Smile                 Body.Smileの固定値（float）
   API/                             公開・内部Impulseの共通送信先
+    Event/                         初期化・着用監視・脱着時の後片付け
     Internal/                      入力・選択・再生ロジック
-      ResetState/                  リセット、初期化、装着状態の変更監視
+      ResetState/                  Impulse受信による状態リセット
       UpdateSelection/             対応表からの選択と切り替え
       ApplyExpression/             終端ポーズの取得・通常出力へのWrite
     Method/
@@ -267,7 +277,7 @@ ProtoFlux Tool では調べたい `UpdateSelection`、`ApplyExpression` など�
 モジュール間では ProtoFlux ノードを直接接続しない。共有値はフィールド経由で参照し、所有者・定数の取得は各モジュール内で完結するため、
 1つの入力や再生処理を開くだけで全機種・APIまでつながった巨大なグラフにはならない。
 
-初回起動・装着開始時は `ResetState` が左右値と選択状態を初期化する。UpdateSelection は左右の入力イベントを受理したときだけ実行する。
+初回起動・装着開始時は `API/Event` が `Internal/ResetState` を呼び、左右値と選択状態を初期化する。UpdateSelection は左右の入力イベントを受理したときだけ実行する。
 呼び出しには共通のAPIを宛先とし、タグで対象処理を選ぶ同期 Dynamic Impulse を使い、
 選択状態をイベント内で確定し、ApplyExpression も同期呼び出しして選んだ表情の各トラックの終端値を即時に書き込む。
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → UpdateSelection → ApplyExpression を同期実行する。
@@ -297,7 +307,8 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 
 | 処理 | 実行するきっかけ |
 |---|---|
-| ResetState | 公開Reset APIからの明示的な呼び出し、OnStart、ローカル装着状態の変化 |
+| Event | OnStart、ローカル装着状態の変化。着用開始時にResetStateを呼ぶ |
+| ResetState | 公開Reset APIまたはEventからの引数なしDynamicImpulse |
 | UpdateSelection | 受理した左右のSetGesture APIイベントからの同期呼び出しのみ（TrySetGestureからの転送も含む） |
 | キーボード | 左右それぞれの10キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
@@ -306,8 +317,8 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 
 入力・装着状態の変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
 比較用の前回値はローカルな実行状態で、DynamicVariable や同期・保存対象の変数には追加しない。
-初期値の設定だけでは発火しない。Inputsは変更イベントだけを使い、ResetStateとApplyExpressionの初期処理には `OnStart` を使う。
-装着者の確認はInputsとInternalに残す。Version 77以降、API内では着用判定しない。
+初期値の設定だけでは発火しない。Inputsは変更イベントだけを使い、EventとApplyExpressionの初期処理には `OnStart` を使う。ResetStateにはOnStartを置かない。
+装着者の確認はEvent・Inputs・Internalで行う。Version 77以降、公開Method内では着用判定しない。
 
 この構成で、無変化時の Impulse 実行・変数への書き込みを減らす。メニュー全走査は行わない。
 物理入力・時刻・実行時の Source を読む DynamicVariable など、連続変化扱いの入力は検出のための評価が残る。
@@ -397,12 +408,12 @@ ApplyExpressionがCurrentExpressionへ設定し、終端値を即時にWriteす�
 SelectionStatus は生成・計算しない。入力モードは AllowHandGestures.Left・Right、再生対象は CurrentExpression で確認する。
 未割当・参照先の削除は CurrentExpression=null となる。表情SlotやCatalogが非アクティブでも選択・適用できる。
 
-## 装着状態と ResetState
+## 装着状態と Event・ResetState
 
-UpdateSelection・ResetState・API・キーボード・機種別入力は `AvatarWornLocal` で更新を制御する。
+Event・UpdateSelection・ResetState・キーボード・機種別入力は `AvatarWornLocal` で更新を制御する。
 `AvatarWorn` は誰かが装着中かの判定に使い、取り外し時のクリア、未装着時のホストによるBase適用、各クライアントの追跡合成を切り替える。
 UserRoot配下への配置だけでは装着とみなさない。AvatarUserReferenceAssigner の装着通知と階層からIdentificationが算出した値を共通の判定元とする。
-ResetState 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。
+API/Event 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。着用開始時にEventがResetStateへImpulseを送る。
 
 - 装着開始・初回起動：AvatarWornLocal=true になれば初期化する。入力イベントがなければ CurrentExpression=null のままにする。
 - 取り外し：初期化済みのクライアントが一度だけ入力・選択状態をクリアし、出力を Base に戻す。初期化済みフラグを解除する。
@@ -570,7 +581,7 @@ Version 25のコンテキストメニュー「Reset settings」は引数なし�
 CurrentExpression=null、左右のGesture=0、AllowHandGestures.Left・Rightを両方trueへ一括で戻し、各出力にBaseを反映する。
 GestureTableの割り当てやCatalog、キー設定は変更しない。L0R0に表情が割り当てられていてもリセットでは再選択せず、次の左右入力イベントで再評価する。
 Resetもローカル装着者限定で、ジェスチャー無効時にも受け付ける。
-初期化はResetStateが担当し、複製・再ロード・再装着後のローカル着用時に bool=true、左右=0 に戻す。APIから暗黙の初期化は行わない。
+着用監視はEvent、状態の初期化はResetStateが担当し、複製・再ロード・再装着後のローカル着用時に bool=true、左右=0 に戻す。公開APIから暗黙の初期化は行わない。
 Dynamic ImpulseはネットワークRPCではない。API内の左右値・許可の更新は呼び出したクライアントで実行し、Internalの表情適用とリセットにはローカル着用条件が残る。
 
 旧 `ResoPon/Expression/v3/Select` と `v3/Automatic` は生成しない。

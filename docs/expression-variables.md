@@ -21,7 +21,7 @@
 | Inputs/HandGestures/各機種 | `ExpressionSystem.Input.HandGestures` | しきい値と安定待ち時間 |
 
 `Record()` は空間名を必須引数で受け取り、`OnlyDirectBinding=true` の空間を作る。
-例外は Expressions 自身（false）で、API・Internal・Method と GestureTable には空間を追加せず、Expressions/DV の状態変数と `ExpressionSystem/GestureTable.LnRm` を共有空間へ登録する。
+例外は Expressions 自身（false）で、API・Event・Internal・Method と GestureTable には空間を追加せず、Expressions/DV の状態変数と `ExpressionSystem/GestureTable.LnRm` を共有空間へ登録する。
 DynamicVariable（値・参照・DynamicField）は、所属する空間の Slot 直下の `DV` に、1変数1子 Slot で配置する。対応表だけは `DV/GestureTable` の子へまとめ、Clip の表情値はDV直下に置く。
 `DV/GestureTable` 自体には自己参照変数や独立したDynamicVariableSpaceを追加しない。
 子 Slot 名は `/` 以降の変数名。対応表の子 Slot 名は `LnRm`。例：`Expressions/DV/LeftGesture`、`Expressions/DV/GestureTable/L0R0`、
@@ -145,15 +145,15 @@ Version 67では `NAND_Bool` の判定を `ValueWrite<bool>` で `LocalValue<boo
 `OnWritten` から左右へ同じLocal値を書き込む。片手を書き換えた後の再判定を避ける。
 PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の時間再生は行わない。
 
-ResetStateはOnStartと着用状態の変更時に動き、現在の装着者がローカルユーザーで未初期化の場合に初期化する。初期化でUpdateSelectionは実行しない。
-初期化済みかは保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。
+API/EventはOnStartと着用状態の変更時に動き、現在の装着者がローカルユーザーで未初期化の場合にフラグを立て、最後にInternal/ResetStateへ引数なしDynamicImpulseを送る。初期化でUpdateSelectionは実行しない。
+初期化済みかはEvent内の保存されない `StoredValue<bool>` だけで管理し、PreviousOwner は保持しない。ResetStateには着用監視や初期化済みフラグを置かず、Impulse受信時の状態リセットだけを行う。
 公開APIは暗黙の初期化を行わず、初期化前の入力は後続のResetState初期化でクリアされる。Version 77以降はAPI内で着用判定せず、未着用でも左右値・許可を更新する。Internalの表情適用・リセットには着用判定が残る。
 
 初期化時は左右値を 0、AllowHandGestures.Left・Right を両方true、
 ApplyExpressionへnullを送り、CurrentExpressionの解除と通常出力のBase復帰をまとめて実行する。追跡出力は専用DriveがBaseを反映する。
 その後の UpdateSelection と ApplyExpression の同期Writeで現在の対応表に応じた状態になる。
 
-装着が終了すると、初期化済みのクライアントだけが一度このクリア処理を実行し、フラグを false に戻す。
+装着が終了すると、Eventが初期化済みのクライアントでだけ一度このクリア処理を実行し、フラグを false に戻す。未着用中のResetStateは受理されないため、この後片付けはEvent内で実行する。
 既に別のユーザーが装着している場合は共有値をクリアせず、ローカルフラグだけを戻す。
 未装着で生成・複製したインスタンスや閲覧者のクライアントはクリアを書き込まない。
 未装着中は UpdateSelection を実行しない。通常出力は初期化・権限取得時にホストがBaseをWriteし、追跡出力は専用DriveがBaseに追従する。
@@ -318,12 +318,12 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `SelectTag` | `ExpressionSystem/Method.SelectExpression` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してApplyExpressionへ渡す。nullは表情解除、非nullの範囲外は無視 |
 | `ToggleHandGesturesTag` | `ExpressionSystem/Method.ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
 | `ResetTag` | `ExpressionSystem/Method.Reset` | 引数なし。ローカル着用中に左右値・許可・表情を初期状態へ戻す |
-| `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Resetから呼び出すResetStateのリセット処理 |
+| `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Resetまたは着用時のEventから呼び出す、ローカル着用中の状態リセット |
 | `SelectionTickTag` | `ExpressionSystem/Internal.UpdateSelection` | 引数なし。左右入力イベントから選択更新を同期実行 |
 | `PlaybackTickTag` | `ExpressionSystem/Internal.ApplyExpression` | Slot。受信SlotをCurrentExpressionへ設定し、終端ポーズを同期適用。nullは解除。非nullはローカル装着者だけが受理し、未装着時もnullは受理する |
 
 Internal の3つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
-Version 74で未使用の `ResoPon/Expression/Internal/Initialize` を廃止した。自動初期化はResetStateのイベントから実行する。
+Version 74で未使用の `ResoPon/Expression/Internal/Initialize` を廃止した。現在の自動初期化はAPI/EventからInternal/ResetStateを呼び出して実行する。
 Version 75の個別ハンドメニューは `ButtonToggle.TargetValue` から自身の `AllowHandGestures.Left`・`Right` のValueを直接変更する。両手メニューは引き続きToggle APIを使う。
 Version 76で未使用のAllowHandGestures両手/左右とToggleHandGestures左右の5つのAPIを廃止した。設定用のDynamicVariableは維持する。
 UpdateSelectionは対応表から読み取った表情Slotを送信ノードへ直接渡し、一時候補のLocalObjectは使わない。

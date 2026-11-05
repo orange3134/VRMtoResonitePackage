@@ -1,5 +1,13 @@
 # Expression integration checks
 
+2026-11-05: Move lifecycle monitoring to API/Event. Event owns OnStart, wearer
+changes, the unsaved initialization flag and delayed departure cleanup. Wearing
+sets the flag and sends Internal.ResetState through the shared API reference.
+ResetState only receives the impulse and resets state behind its local-wearer
+gate. Layout checks require separate Flux groups and no lifecycle nodes in
+ResetState. Early-input, equip/dequip, manual reset, clone and reload tests cover
+the split, with the early-input fixture invoking Event's actual startup path.
+
 2026-11-05: SelectExpression and ResetState use flat Sequence call lists. Graph
 checks reject Sequence-to-Sequence calls after generation, cloning and package
 reload. Existing permission, reset, lifecycle and pose checks verify execution

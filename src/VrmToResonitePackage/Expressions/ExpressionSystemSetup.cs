@@ -19,7 +19,7 @@ internal sealed partial class ExpressionSystemSetup
     internal static string HandGesturePermission(string hand) => "AllowHandGestures." + hand;
     private readonly ExpressionModel _model;
     private readonly Slot _root, _catalog, _outputs, _table, _api, _method, _inputs;
-    private readonly Slot _lifecycle, _selection, _playback;
+    private readonly Slot _events, _resetState, _selection, _playback;
     private const string PlaybackTickTag = "ExpressionSystem/Internal.ApplyExpression";
     private const string SelectionTickTag = "ExpressionSystem/Internal.UpdateSelection";
     private const string ResetStateTag = "ExpressionSystem/Internal.ResetState";
@@ -35,12 +35,13 @@ internal sealed partial class ExpressionSystemSetup
         _api = _root.AddSlot("API");
         var internalSlot = _api.AddSlot("Internal");
         _method = _api.AddSlot("Method");
+        _events = _api.AddSlot("Event");
         _outputs = _root.AddSlot("Outputs");
         _table = _root.AddSlot("DV").AddSlot("GestureTable");
         // State fields and table rows bind to the single system space.
         _root.GetComponent<DynamicVariableSpace>().OnlyDirectBinding.Value = false;
         _inputs = _root.AddSlot("Inputs");
-        _lifecycle = internalSlot.AddSlot("ResetState");
+        _resetState = internalSlot.AddSlot("ResetState");
         _selection = internalSlot.AddSlot("UpdateSelection");
         _playback = internalSlot.AddSlot("ApplyExpression");
         foreach (string hand in new[] { "Left", "Right" })
@@ -74,6 +75,7 @@ internal sealed partial class ExpressionSystemSetup
         setup.BuildInputs(menu);
         setup.BuildSelection();
         setup.BuildPlayback();
+        setup.BuildResetState();
         setup.BuildLifecycle();
         ExpressionFlux.BindSlotReferences(setup._root);
         ExpressionFlux.Arrange(setup._root);

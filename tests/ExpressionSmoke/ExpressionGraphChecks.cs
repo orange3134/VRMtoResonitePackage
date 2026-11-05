@@ -336,7 +336,7 @@ internal static class ExpressionGraphChecks
                 string.Join(", ", owners.Select(b => RelativePath(expressions, b))));
         }
 
-        foreach (string path in new[] { "API/Internal/ResetState", "API/Internal/UpdateSelection", "API/Internal/ApplyExpression",
+        foreach (string path in new[] { "API/Event", "API/Internal/ResetState", "API/Internal/UpdateSelection", "API/Internal/ApplyExpression",
             "API/Method/TrySetGesture.Left", "API/Method/TrySetGesture.Right",
             "API/Method/SetGesture.Left", "API/Method/SetGesture.Right",
             "API/Method/SelectExpression", "API/Method/ToggleHandGestures", "API/Method/Reset" })
@@ -368,9 +368,21 @@ internal static class ExpressionGraphChecks
             "shared API reference targets this avatar's API root after generation, clone and reload");
         Check(expressions.FindChild("Method") == null && expressions.FindChild("Internal") == null &&
             expressions.FindChild("API").Children.Select(child => child.Name).OrderBy(name => name)
-                .SequenceEqual(new[] { "Internal", "Method" }) &&
+                .SequenceEqual(new[] { "Event", "Internal", "Method" }) &&
             method.FindChild("Receivers") == null && method.Children.Count == 7,
-            "API contains Internal and Method, with seven direct public operation boards");
+            "API contains Event, Internal and Method, with seven direct public operation boards");
+        var resetNodes = Descendant(expressions, "API/Internal/ResetState").GetComponentsInChildren<ProtoFluxNode>();
+        Check(resetNodes.All(node => node.GetType().Name is not ("OnStart" or "StoredValue`1" or "FireOnLocalValueChange`1" or "DelayUpdates")),
+            "ResetState contains only impulse-driven reset logic, without lifecycle monitoring");
+        var eventNodes = Descendant(expressions, "API/Event").GetComponentsInChildren<ProtoFluxNode>();
+        Check(eventNodes.Count(node => node.GetType().Name == "OnStart") == 1 &&
+            eventNodes.OfType<Nodes.StoredValue<bool>>().Count() == 1 &&
+            eventNodes.All(node => !node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)),
+            "Event owns startup, wearer monitoring and local initialization state without an impulse receiver");
+        var eventReset = eventNodes.Single(node => node.GetType().Name == "DynamicImpulseTrigger");
+        Check(((ISyncRef)ExpressionFlux.Member(eventReset, "Tag")).Target is Nodes.ValueObjectInput<string> resetTag &&
+            resetTag.Value.Value == "ExpressionSystem/Internal.ResetState",
+            "Event initializes the avatar by sending the internal ResetState impulse");
         var publicReceivers = method.GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
         Check(publicReceivers.Length == 7, "exactly seven public API receivers");

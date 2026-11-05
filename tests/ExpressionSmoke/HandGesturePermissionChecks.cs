@@ -102,7 +102,8 @@ internal static class HandGesturePermissionChecks
     {
         var core = expressions.FindChild("API").FindChild("Internal");
         var api = expressions.FindChild("API");
-        var initialized = core.GetComponentsInChildren<Nodes.StoredValue<bool>>().Single();
+        var events = api.FindChild("Event");
+        var initialized = events.GetComponentsInChildren<Nodes.StoredValue<bool>>().Single();
         int Gesture(string hand) => core.ExpressionVariables<DynamicValueVariable<int>>()
             .Single(v => v.VariableName.Value == "ExpressionSystem/" + hand + "Gesture").Value.Value;
         var fixture = expressions.Parent.AddSlot("Temporary uninitialized gesture fixture");
@@ -114,7 +115,7 @@ internal static class HandGesturePermissionChecks
             const string prepareTag = "Test/PrepareUninitializedGesture";
             ExpressionFlux.Link(g.Receiver(prepareTag, false), "OnTriggered", g.Set<bool>(initialized, g.Constant(false)));
             // Invoke the real lifecycle event entry point without a production Initialize API.
-            var onStart = core.FindChild("ResetState").GetComponentsInChildren<ProtoFluxNode>()
+            var onStart = events.GetComponentsInChildren<ProtoFluxNode>()
                 .Single(node => node.GetType().Name == "OnStart");
             var update = ((ISyncRef)ExpressionFlux.Member(onStart, "Trigger")).Target;
             const string updateTag = "Test/UpdateLifecycle";
