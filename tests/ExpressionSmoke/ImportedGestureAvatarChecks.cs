@@ -110,6 +110,8 @@ internal static class ImportedGestureAvatarChecks
         }
         else Check(distinctPoses.Count >= 8, "Gesture inputs did not produce eight distinct visible poses");
         int visible = 0;
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(receiverRoot, ExpressionSystemSetup.SelectTag, true, null);
+        for (int i = 0; i < 5; i++) await default(NextUpdate);
         foreach (var expression in root.FindChild("Catalog").Children)
         {
             Check(expression.GetComponent<ContextMenuItemSource>().EnabledField.Value &&
@@ -149,15 +151,15 @@ internal static class ImportedGestureAvatarChecks
         var mappedExpressions = root.FindChild("Catalog").Children
             .ToHashSet();
         if (importedMenu != null && !importedMenu.GetComponentsInChildren<ContextMenuItemSource>().Any(item =>
-            item.Enabled && mappedExpressions.Contains(item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>()?.PressedData.Reference.Target)))
+            item.Enabled && mappedExpressions.Contains(item.Slot.GetComponent<BooleanReferenceDriver<Slot>>()?.FalseTarget.Target)))
             importedMenu = null;
         if (importedMenu != null)
         {
             var importedButton = importedMenu.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithReference<Slot>>()
-                .FirstOrDefault(button => button.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && mappedExpressions.Contains(button.PressedData.Reference.Target) &&
+                .FirstOrDefault(button => button.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && mappedExpressions.Contains(button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target) &&
                     button.Slot.GetComponent<ContextMenuItemSource>().Enabled);
             Check(importedButton != null, "Imported menu contains an actual Slot selection button");
-            var selected = importedButton.PressedData.Reference.Target;
+            var selected = importedButton.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target;
             var selectedItem = selected.GetComponent<ContextMenuItemSource>();
             string originalLabel = selectedItem.Label.Value;
             const string editedLabel = "Edited imported expression label";
@@ -165,6 +167,7 @@ internal static class ImportedGestureAvatarChecks
             Check(selectedItem.Label.ActiveLink == null && selectedItem.Label.Value == editedLabel, "Can edit imported menu label directly");
             try
             {
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(receiverRoot, ExpressionSystemSetup.SelectTag, true, null);
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
                 Check(importedButton.PressedData.Reference.Target == selected, "Saved imported-menu Slot reference survives a label edit");
                 SetHandGesturesAllowed(core, true);
@@ -180,7 +183,8 @@ internal static class ImportedGestureAvatarChecks
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
                 SetHandGesturesAllowed(core, true);
             }
-            Check(importedButton.PressedData.Reference.Target == selected, "Imported-menu Slot reference survives restoring its expression label");
+            Check(importedButton.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target == selected &&
+                importedButton.PressedData.Reference.Target == null, "Selected imported menu retains its expression but sends null after label edits");
         }
         Check(root.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "Invalid imported Flux group");
         await ExpressionResetChecks.Run(root);

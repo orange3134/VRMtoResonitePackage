@@ -1,5 +1,13 @@
 # Expression integration checks
 
+2026-11-05: Expression menu buttons send null while their expression is selected.
+Select accepts null to clear the pose while keeping gestures disabled and hand
+values unchanged. Runtime checks cover select/clear/reselect for Catalog entries,
+both hand menus and imported controls, including cloned and reloaded avatars.
+Color checks use the authored expression reference rather than the mutable payload.
+Copied Catalog entries also clear and reselect; repeated non-null API calls still
+apply the expression. Menu payload drivers settle on component updates between presses.
+
 2026-11-05: Parent Internal and Method under a shared API slot. References.API
 targets that slot for every public/internal impulse. Checks verify the nested
 layout, absence of References.Internal variables/inputs, shared sender bindings,
@@ -185,7 +193,7 @@ serialized VRChat menu enum values, gesture conditions, Hermite curves, public
 impulse validation, all 64 compiled gesture pairs, layer composition and history rejection,
 all eight int values on each of the ExpressionSystem/Method.TrySetGesture.Left and ExpressionSystem/Method.TrySetGesture.Right Tags, immediate evaluation of each
 received hand pair (including back-to-back events before the next frame), unchanged-expression
-playback, unrestricted integers (including externally added table rows and missing rows), invalid/null selection Slots, argument-type mismatches, controller inactivity sentinels, last-input retention across removable modules, editable table references, original tracking drivers, same-wearer clones,
+playback, unrestricted integers (including externally added table rows and missing rows), invalid selection Slots and null deselection, argument-type mismatches, controller inactivity sentinels, last-input retention across removable modules, editable table references, original tracking drivers, same-wearer clones,
 and saving/reimporting/replaying an actual `.resonitepackage`.
 It also verifies one Flux node per slot, node slots directly under each logic board,
 and distinct node positions within each board before and after package reimport.

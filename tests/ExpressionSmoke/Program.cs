@@ -79,6 +79,17 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             layerModel.Transitions.Add(transition);
         }
         model.Layers.Add(layerModel);
+        var menuLayer = new ExpressionLayer { Id = "menu", Name = "Menu" };
+        menuLayer.States.Add(new("Neutral", null, 1, true));
+        menuLayer.States.Add(new("Angry", "Angry", 1, true));
+        foreach (var (mode, destination) in new[] { (6, 1), (7, 0) })
+        {
+            var transition = new ExpressionTransition { Destination = destination };
+            transition.Conditions.Add(new("FaceMenu", mode, 1));
+            menuLayer.Transitions.Add(transition);
+        }
+        model.Layers.Add(menuLayer);
+        model.Menu.Add(new ExpressionMenuControl { Name = "Imported angry", Parameter = "FaceMenu", Value = 1, Type = 1 });
         var animatedClip = new ExpressionClip { Id = "Animated", Name = "Animated", Duration = 10 };
         var animatedCurve = new ExpressionCurve { Binding = new("Face", "Smile") };
         animatedCurve.Keys.Add(new(0, 0, 0.1f, 0.1f)); animatedCurve.Keys.Add(new(10, 1, 0.1f, 0.1f));
@@ -235,7 +246,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         try
         {
             await Frames(3);
-            foreach (Slot invalid in new[] { null, avatar, catalog, foreign })
+            foreach (Slot invalid in new[] { avatar, catalog, foreign })
             {
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, ExpressionSystemSetup.SelectTag, true, invalid);
                 Check(NoHandsAllowed(core) && Gestures(core) == (1, 1) &&
@@ -349,7 +360,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "context menu has no hand submenus");
         var menuButton = directGroups.FindChild("Hand sign expressions").FindChild("Items").FindChild("Smile")
             .GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
-        Gesture(0, 0);
+        Gesture(0, 0); await Frames(2);
         menuButton.Pressed(null, default);
         Check(Get<int>(core, "LeftGesture") == 0 && Get<int>(core, "RightGesture") == 1 &&
             Reference<Slot>(core, "CurrentExpression") == catalog.FindChild("Smile"),
@@ -410,8 +421,13 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "copied Catalog entry is directly selectable without a GestureTable mapping");
         var addedBinding = addedExpression.ExpressionVariables<DynamicValueVariable<float>>().First();
         Check(addedBinding.Slot.WriteDynamicVariable(addedBinding.VariableName.Value, 0.65f) == DynamicVariableWriteResult.Success, "write the named copied value");
+        await Frames();
+        Check(addedButton.PressedData.Reference.Target == null, "copied selected entry sends null");
         addedButton.Pressed(null, default); await Frames();
-        Check(Math.Abs(field.Value - 0.65f) < 0.01, "reselecting the same expression refreshes edited bindings");
+        Check(Reference<Slot>(core, "CurrentExpression") == null && Math.Abs(field.Value - 0.2f) < 0.01,
+            "pressing the copied entry again clears its pose");
+        addedButton.Pressed(null, default); await Frames();
+        Check(Math.Abs(field.Value - 0.65f) < 0.01, "selecting the copied entry again applies edited bindings");
         ExpressionGraphChecks.CheckMenuColors(expressions);
         addedExpression.Destroy(); AllowInput(); await Frames();
 
@@ -437,6 +453,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await KeyboardShortcutChecks.Run(clone.FindChild("Expressions"));
         await HandGesturePermissionChecks.Run(clone.FindChild("Expressions"));
         await ExpressionResetChecks.Run(clone.FindChild("Expressions"));
+        await ExpressionMenuToggleChecks.Run(clone.FindChild("Expressions"));
         Check(Get<int>(core, "RightGesture") == 7 && NoHandsAllowed(core),
             "clone reset leaves the original input state unchanged");
         clone.Destroy();
@@ -569,6 +586,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await HandGesturePermissionChecks.Run(restoredExpressions);
         await KeyboardShortcutChecks.Run(restoredExpressions);
         await ExpressionResetChecks.Run(restoredExpressions);
+        await ExpressionMenuToggleChecks.Run(expressions);
+        await ExpressionMenuToggleChecks.Run(restoredExpressions);
         // Curves with equal endpoints may still have a tangent excursion.
         var testCurve = new ExpressionCurve { Binding = new("Face", "Curve") };
         testCurve.Keys.Add(new(0, 0, 0, 4)); testCurve.Keys.Add(new(1, 0, -4, 0));

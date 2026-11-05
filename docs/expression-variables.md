@@ -132,7 +132,7 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 |---|---|---|---|
 | `AllowHandGestures.Left` / `AllowHandGestures.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとTrySetGesture APIだけの受付可否。SetGesture・メニューはこの設定で停止しない。表情の直接選択で両方false、初期化・リセットで両方true。個別メニューのButtonToggleや変数の直接編集で変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューでは変更しない |
-| `CurrentExpression` | Slot | null | ApplyExpressionが受信した表情Slot。UpdateSelectionは対応表の参照をそのまま渡し、Select APIは自身のCatalog直下かだけ確認する。解除はnull |
+| `CurrentExpression` | Slot | null | ApplyExpressionが受信した表情Slot。UpdateSelectionは対応表の参照をそのまま渡し、Select APIは非nullの場合に自身のCatalog直下か確認する。解除はnull |
 
 状態の DynamicVariable に保持する表情参照は CurrentExpression だけ。UpdateSelection は対応表から読み取ったSlot（未割当・削除済みならnull）をそのままApplyExpressionへ送り、ApplyExpressionがCurrentExpressionへ設定する。
 MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
@@ -315,7 +315,7 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 |---|---|---|
 | `TrySetGestureLeftTag` / `TrySetGestureRightTag` | `ExpressionSystem/Method.TrySetGesture.Left` / `ExpressionSystem/Method.TrySetGesture.Right` | int（範囲制限なし）。対応するAllowHandGestures.Left・Right がtrueの場合だけSetGestureへ転送 |
 | `SetGestureLeftTag` / `SetGestureRightTag` | `ExpressionSystem/Method.SetGesture.Left` / `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし）。入力元共通の更新処理。ジェスチャー許可に関係なく左右値を更新。フラグは維持 |
-| `SelectTag` | `ExpressionSystem/Method.SelectExpression` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してApplyExpressionへ渡す。null・範囲外は無視 |
+| `SelectTag` | `ExpressionSystem/Method.SelectExpression` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してApplyExpressionへ渡す。nullは表情解除、非nullの範囲外は無視 |
 | `ToggleHandGesturesTag` | `ExpressionSystem/Method.ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
 | `ResetTag` | `ExpressionSystem/Method.Reset` | 引数なし。ローカル着用中に左右値・許可・表情を初期状態へ戻す |
 | `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Resetから呼び出すResetStateのリセット処理 |
@@ -395,7 +395,7 @@ Lifecycle・Selection・Playbackへの固定参照はすべてDynamicImpulseTrig
 
 `ExpressionSystem.Catalog.Clip/Enabled` と `ExpressionSystem.Catalog.Clip/Source` は生成しない。
 Enabledの読み取りとSlotのアクティブ状態による選択判定も削除した。
-GestureTableから取得したSlotはそのままPlaybackへ送る。Select APIはnullでないことと自身のCatalog直下であることだけを確認する。
+GestureTableから取得したSlotはそのままPlaybackへ送る。Select APIはnull（表情解除）または自身のCatalog直下のSlotを受理する。ContextMenuで選択済みの表情を再度押すと、ButtonDynamicImpulseTriggerWithReference<Slot>はnullを送る。解除時も手の値は変えず、左右のジェスチャー許可をfalseにする。
 表情SlotやCatalogが非アクティブでも選択・適用される。装着状態によるAPI受付制御は維持する。
 Sourceは生成物の説明用メタデータで実行処理には使われていなかったため、Catalog・Templatesの両方から省く。
 

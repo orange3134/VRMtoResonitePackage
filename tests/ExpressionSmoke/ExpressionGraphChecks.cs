@@ -21,8 +21,12 @@ internal static class ExpressionGraphChecks
             bool active;
             if (item.Slot.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>() is { } select)
             {
-                var expected = select.PressedData.Reference.Target;
+                var payload = item.Slot.GetComponent<BooleanReferenceDriver<Slot>>();
+                var expected = payload.FalseTarget.Target;
                 active = current != null && current == expected;
+                Check(payload.TargetReference.Target == select.PressedData.Reference && payload.TrueTarget.Target == null &&
+                    select.PressedData.Reference.Target == (active ? null : expected),
+                    "selected menu sends null; other entries send their expression: " + item.Slot.Name);
                 var driver = item.Slot.GetComponent<ReferenceOptionDescriptionDriver<Slot>>();
                 Check(driver != null && driver.Color.IsLinkValid && driver.Color.Target == item.Color,
                     "expression menu Color uses ReferenceOptionDescriptionDriver: " + item.Slot.Name);
@@ -80,7 +84,7 @@ internal static class ExpressionGraphChecks
                     "Back navigates without selecting an expression");
                 foreach (var item in entries.Children.Where(item => item != back))
                 {
-                    var target = item.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().PressedData.Reference.Target;
+                    var target = item.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target;
                     Check(target == null || target.Parent == expressions.FindChild("Catalog"),
                         "grouped menu buttons reference the local Catalog after cloning and reload");
                     var labelCopy = item.GetComponent<ValueCopy<string>>();

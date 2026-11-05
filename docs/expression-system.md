@@ -468,9 +468,10 @@ Backは表情選択APIを送らず、選択中の表情やハンドジェスチ�
 分類は変換時に固定する。変換後のGestureTable編集による自動再分類は行わない。
 表情SlotはCatalog直下に保ち、サブメニュー配下の項目からSlot参照を送る。表示LabelはCatalog項目のLabelからValueCopyで取得する。
 項目のEnabledを自動制御しない。
-押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをSelect APIへ送る。自身のCatalog直下で有効な表情かを検証し、ApplyExpressionがCurrentExpressionへ設定して適用する。
+押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをSelect APIへ送る。選択済みの項目はnullを送り、表情を解除する。Select APIはnullまたは自身のCatalog直下の表情Slotを受理し、ApplyExpressionがCurrentExpressionへ設定して適用する。
 AllowHandGestures.Left・Rightを両方falseにするが、LeftGesture・RightGestureは変更しない。GestureTable未割り当てでも選択できる。
-同じ表情の再選択でもApplyExpressionを実行するため、名前付きfloat変数の編集も反映できる。
+ReferenceEqualityDriver<Slot>がCurrentExpressionと項目の表情Slotを比較し、BooleanReferenceDriver<Slot>がPressedData.Referenceを選択中はnull、それ以外は表情Slotへ切り替える。Catalogの直接項目・左右のサブメニュー・Imported menuに共通で適用し、解除後の押下で再選択できる。表情の固定参照はFalseTargetに保持する。コンポーネントの変更通知で送信参照が更新されるため、同一フレーム内の更新を挟まない連続呼び出しでは切り替えが反映されない。
+Select APIへ同じ非nullの表情Slotを直接再送した場合は解除せず、ApplyExpressionで名前付きfloat変数の編集を反映する。
 表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `CurrentExpression` を参照して駆動する。
 Catalog・Imported menuともに選択中の表情は緑、それ以外は白。null用の白いOptionを先頭に置き、
 参照先の表情を削除した項目が未選択状態で緑にならないようにする。
@@ -521,7 +522,7 @@ Clipの識別子変数は持たず、外部からの直接選択には表情Slot
 直接選択ボタンからの適用にGestureTableの割り当ては不要。対応表の編集でメニュー項目の Enabled は変更しない。直接選択は即時に反映する。削除は表情スロットごと行える。
 複製したメニューのLabelは直接編集でき、送信するSlot参照は複製先自身へリマップされる。項目の Enabled は駆動しない。
 Version 57でCatalogへ表情を追加した場合は、直接選択サブメニューのItemsにも既存項目を複製し、
-ButtonDynamicImpulseTriggerWithReference<Slot>のPressedData.Reference、選択色DriverのReferenceTarget、
+BooleanReferenceDriver<Slot>のFalseTarget、ReferenceEqualityDriver<Slot>のReference、選択色DriverのReferenceTarget、
 Label用ValueCopyのSourceを追加した表情へ設定する。Catalogへの追加だけではサブメニューに項目は増えない。
 表情を削除する場合は、サブメニュー側の参照項目も削除する。
 
@@ -545,7 +546,7 @@ Selectの引数は表情Slot。旧string ID送信は受理しない。内部Appl
 | `ExpressionSystem/Method.TrySetGesture.Right` | int（範囲制限なし） | AllowHandGestures.Right が true のときMethod.SetGesture.Rightへ転送 |
 | `ExpressionSystem/Method.SetGesture.Left` | int（範囲制限なし） | フラグに関係なく左手を更新。フラグ自体は維持 |
 | `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし） | フラグに関係なく右手を更新。フラグ自体は維持 |
-| `ExpressionSystem/Method.SelectExpression` | Slot: 自身のCatalog直下の表情 | 有効性を検証し、boolをfalseにしてApplyExpressionへ送信 |
+| `ExpressionSystem/Method.SelectExpression` | Slot: 自身のCatalog直下の表情、または解除用のnull | 有効性を検証し、boolをfalseにしてApplyExpressionへ送信 |
 | `ExpressionSystem/Method.ToggleHandGestures` | なし | 両手とも許可なら両手を停止、それ以外は両手を許可。左右値・表情は維持 |
 | `ExpressionSystem/Method.Reset` | なし | 表情を解除してBaseへ戻し、左右を0、ジェスチャー入力を有効にする |
 
@@ -1467,7 +1468,7 @@ ExpressionSystem/References.Receiver を ExpressionSystem/References.API に変�
 
 Clip/Enabledを生成せず、Selection・Select APIのEnabled読み取りとSlotのアクティブ状態チェックを削除する。
 選択した表情Slotは非アクティブでもCurrentExpressionへ設定し、Binding.*を適用する。
-GestureTableは取得した参照をそのまま送信し、Select APIはnull・自身のCatalog直下ではないSlotだけを除外する。
+GestureTableは取得した参照をそのまま送信し、Select APIは非nullで自身のCatalog直下ではないSlotだけを除外する。nullは選択解除として受理する。
 nullの対応表行は選択解除となり、値が見つからない出力は従来どおりBaseへ戻る。装着状態の受付制御は維持する。
 Clip/Sourceは実行時に読み取る箇所がないため、CatalogとTemplatesの生成から削除した。
 非アクティブな表情・Catalog、ジェスチャー選択と直接選択、テンプレート複製、保存再読込を回帰検証する。

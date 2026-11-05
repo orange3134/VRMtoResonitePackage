@@ -28,11 +28,14 @@ internal sealed partial class ExpressionSystemSetup
     }
     private static readonly colorX SelectedMenuColor = new(0f, 1f, 0f, 1f, ColorProfile.Linear);
 
+    private SyncRef<Slot> CurrentExpressionReference =>
+        _root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+            .Single(v => v.VariableName.Value == Path(SystemSpace, "CurrentExpression")).Reference;
+
     private void SelectMenuColor(Slot item, Slot expression)
     {
         var driver = item.AttachComponent<ReferenceOptionDescriptionDriver<Slot>>();
-        driver.Reference.Target = _root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Single(v => v.VariableName.Value == Path(SystemSpace, "CurrentExpression")).Reference;
+        driver.Reference.Target = CurrentExpressionReference;
         driver.DefaultOption.Color.Value = colorX.White;
         // Null must never appear selected, including an imported item whose clip was deleted.
         driver.Options.Add().Color.Value = colorX.White;
@@ -74,6 +77,15 @@ internal sealed partial class ExpressionSystemSetup
         trigger.ExcludeDisabled.Value = true;
         trigger.PressedData.Tag.Value = SelectTag;
         trigger.PressedData.Reference.Target = expression;
+        // Keep the authored expression separate from the payload, which becomes null
+        // while selected. These local references also remap when a Catalog entry is copied.
+        var payload = item.AttachComponent<BooleanReferenceDriver<Slot>>();
+        payload.FalseTarget.Target = expression;
+        payload.TargetReference.Target = trigger.PressedData.Reference;
+        var selected = item.AttachComponent<ReferenceEqualityDriver<Slot>>();
+        selected.TargetReference.Target = CurrentExpressionReference;
+        selected.Reference.Target = expression;
+        selected.Target.Target = payload.State;
         SelectMenuColor(item, expression);
     }
     private void BuildMenus()
