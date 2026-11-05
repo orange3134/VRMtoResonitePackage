@@ -25,16 +25,23 @@ internal static class ExpressionMenuToggleChecks
                 var target = button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target;
                 Check(target.Parent == catalog && button.PressedData.Reference.Target == target,
                     "unselected menu payload references the local Catalog");
-                var hands = Gestures(core);
+                void SetHands()
+                {
+                    Check(core.WriteDynamicVariable("ExpressionSystem/LeftGesture", 5) == DynamicVariableWriteResult.Success &&
+                        core.WriteDynamicVariable("ExpressionSystem/RightGesture", 6) == DynamicVariableWriteResult.Success,
+                        "prepare non-neutral hand values without changing the selected expression");
+                }
+                SetHands();
                 button.Pressed(null, default);
-                Check(Reference<Slot>(core, "CurrentExpression") == target && NoHandsAllowed(core),
-                    "menu press selects the expression and disables gestures");
+                Check(Reference<Slot>(core, "CurrentExpression") == target && NoHandsAllowed(core) && Gestures(core) == (0, 0),
+                    "menu press clears both hand values, selects the expression and disables gestures");
                 await Frames();
                 ExpressionGraphChecks.CheckMenuColors(expressions);
                 Check(button.PressedData.Reference.Target == null, "selected menu trigger carries null");
+                SetHands();
                 button.Pressed(null, default);
-                Check(Reference<Slot>(core, "CurrentExpression") == null && NoHandsAllowed(core) && Gestures(core) == hands,
-                    "second menu press clears selection without changing hand values or enabling gestures");
+                Check(Reference<Slot>(core, "CurrentExpression") == null && NoHandsAllowed(core) && Gestures(core) == (0, 0),
+                    "second menu press clears selection and both hand values without enabling gestures");
                 await Frames();
                 Check(outputs.All(output => !TryReadSelectedValue(output, out _)), "cleared menu leaves no selected pose bindings");
                 ExpressionGraphChecks.CheckMenuColors(expressions);

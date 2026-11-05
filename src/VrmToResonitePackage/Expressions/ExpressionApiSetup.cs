@@ -28,7 +28,7 @@ internal sealed partial class ExpressionSystemSetup
         var receiver = g.Receiver<int>(tag);
         if (checkPermission)
         {
-            // SetGesture owns hand mutation for every input source.
+            // Gesture inputs mutate their hand through SetGesture.
             // Early gestures with saved false permissions are intentionally dropped.
             Link(receiver, "OnTriggered", g.If(
                 g.Read<bool>(g.Ref(_api), SystemSpace, HandGesturePermission(hand)),
@@ -62,7 +62,10 @@ internal sealed partial class ExpressionSystemSetup
         var selected = Out(receiver, "Value");
         var valid = g.Or(g.IsNull<Slot>(selected),
             g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", selected)), g.Ref(_catalog)));
+        // Clear hand state before applying the selected pose, without evaluating the gesture table.
         var select = g.Sequence(HandGesturePermissionWrites(g, g.Constant(false))
+            .Append(WriteHand(g, "Left", g.Constant(0)))
+            .Append(WriteHand(g, "Right", g.Constant(0)))
             .Append(g.Trigger<Slot>(g.Ref(_api), g.Text(PlaybackTickTag), selected)).ToArray());
         Link(receiver, "OnTriggered", g.If(valid, select));
     }

@@ -471,6 +471,17 @@ internal static class ExpressionGraphChecks
         Check(Descendant(expressions, "API/Method/SelectExpression").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => n.GetType().Name != "Children" && !n.GetType().Name.StartsWith("ForEachObject", StringComparison.Ordinal)),
             "Select validates the supplied Slot without scanning Catalog");
+        var selectNodes = Descendant(expressions, "API/Method/SelectExpression").GetComponentsInChildren<ProtoFluxNode>();
+        var selectCalls = selectNodes.OfType<Nodes.Sequence>().Single().Calls;
+        Check(selectCalls.Count == 5 &&
+            selectCalls[2] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> leftClear &&
+            leftClear.Path.Target is Nodes.ValueObjectInput<string> leftPath && leftPath.Value.Value == "ExpressionSystem/LeftGesture" &&
+            leftClear.Value.Target is Nodes.ValueInput<int> leftZero && leftZero.Value.Value == 0 &&
+            selectCalls[3] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> rightClear &&
+            rightClear.Path.Target is Nodes.ValueObjectInput<string> rightPath && rightPath.Value.Value == "ExpressionSystem/RightGesture" &&
+            rightClear.Value.Target is Nodes.ValueInput<int> rightZero && rightZero.Value.Value == 0 &&
+            selectCalls[4] == selectNodes.Single(n => n.GetType().Name == "DynamicImpulseTriggerWithObject`1"),
+            "Select clears LeftGesture then RightGesture before dispatching the selected expression in one Sequence");
         var currentWrites = nodes.Where(n => n.GetType().Name == "WriteDynamicObjectVariable`1" &&
             n.Slot.Parent.GetComponentsInChildren<Nodes.ValueObjectInput<string>>().Any(v =>
                 v.Value.Value == "ExpressionSystem/CurrentExpression")).ToArray();

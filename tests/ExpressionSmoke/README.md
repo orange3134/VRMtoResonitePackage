@@ -1,5 +1,12 @@
 # Expression integration checks
 
+2026-11-06: SelectExpression clears LeftGesture and RightGesture before sending
+the selected Slot to ApplyExpression. Graph checks enforce this order in one
+flat Sequence through generation, cloning and reload. Menu checks seed both
+hands with nonzero values and verify selection and null deselection clear them
+for Catalog, both hand menus and imported buttons. Invalid Slots retain state;
+valid direct API calls use the same behavior without reevaluating GestureTable.
+
 2026-11-06: ResetState preserves AllowHandGestures.Left/Right. Menu and direct
 reset checks cover all four permission combinations while still clearing hand
 values and selection. Lifecycle checks retain asymmetric permissions; clone,

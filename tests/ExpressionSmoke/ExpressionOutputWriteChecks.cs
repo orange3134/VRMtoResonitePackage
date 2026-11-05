@@ -215,9 +215,9 @@ internal static class ExpressionOutputWriteChecks
                 catalog.FindChild("Short"));
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesTag, true);
             await Frames();
-            Check(Get<int>(core, "RightGesture") == 1 && BothHandsAllowed(core) &&
+            Check(Get<int>(core, "RightGesture") == 0 && BothHandsAllowed(core) &&
                 Reference<Slot>(core, "CurrentExpression") == null,
-                "unworn APIs update input and permissions while Internal Playback keeps the pose cleared");
+                "unworn Select clears hand input while Internal Playback keeps the pose cleared");
             tracking.Value = 0.65f; await Frames();
             Near(a.Value, 0.65f, "unworn tracking continues to follow Base");
             EquipAvatar(avatar); await Frames(30);

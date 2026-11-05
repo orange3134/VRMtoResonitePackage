@@ -3,6 +3,11 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-06: ContextMenuが呼ぶSelectExpressionで、左右のGestureを0にしてから表情を設定する。
+Catalog検証後、1つのSequenceで左右の許可をfalse、LeftGesture=0、RightGesture=0、ApplyExpression送信の順に実行する。
+CurrentExpressionの書き込みはApplyExpressionが担当する。SetGestureやUpdateSelectionを経由せず、途中でGestureTableを再評価しない。
+Catalog・左右のサブメニュー・Imported menuとAPI直接呼び出しで共通。nullによる解除も左右値をクリアし、範囲外の非null Slotは状態を変更しない。
+
 2026-11-06: ResetStateからAllowHandGestures.Left/Rightへの書き込みを削除した。
 手動Reset・着用開始・再着用・複製・保存読込では左右のGesture値と表情だけをリセットし、許可設定は保存値を維持する。
 新規生成時の許可設定の既定値は両方trueのまま。直接選択で停止したジェスチャーはReset後も停止し、再開は許可メニューや変数編集で行う。
@@ -226,7 +231,7 @@ flowchart LR
     G -->|true| U[SetGesture API]
     K[キーボード] --> U
     U --> S[LeftGesture / RightGesture]
-    D[メニューでCatalogの表情を選択] --> T[boolをfalseにして表情Slotを送信]
+    D[メニューでCatalogの表情を選択] --> T[許可をfalse・左右Gestureを0にして表情Slotを送信]
     T --> R
     S -->|入力イベント時のみ| P[GestureTableから表情Slotを送信]
     P --> R[PlaybackがCurrentExpressionを設定・適用]
@@ -262,7 +267,7 @@ Expressions/
     Method/
       TrySetGesture.Left|TrySetGesture.Right/  許可判定付きのint入力・SetGestureへ転送
       SetGesture.Left|SetGesture.Right/        共通のint入力・左右値更新と表情選択
-      SelectExpression/            表情Slotを検証してApplyExpressionへ送信
+      SelectExpression/            表情Slotを検証し、左右値を0にしてApplyExpressionへ送信
       ToggleHandGestures/           両手の許可をまとめて切り替え
       Reset/                       表情・左右値を初期状態へ戻す（許可設定は維持）
   Outputs/                         BlendShape ごとのベース入力と最終出力
@@ -497,7 +502,7 @@ Version 23では左右ジェスチャーのコンテキストメニューと専�
 物理入力は安定したジェスチャーが変化したときと接続時にだけ送る。
 ハンドジェスチャーが許可されている間は、手を動かさずにキーボードで設定した状態を維持し、次の物理ジェスチャー変更で更新する。ハンドジェスチャー停止中は機種別の判定状態をリセットし、許可を戻した後は再び安定した手形を検出して送る。
 
-- コンテキストメニュー: Catalogの表情を直接選択。左右値は変更しない。
+- コンテキストメニュー: 左右のGesture値を0に戻してからCatalogの表情を直接選択する。
 - キーボード: 左手は Shift+テンキー0〜9、右手は Ctrl+テンキー0〜9。Ctrl+Shift+テンキーでは両手が同時に入力される。
   Version 27ではテンキー0〜9をそれぞれジェスチャー値0〜9として送信する。
   0が Neutral、1が Fist、7が ThumbsUp。8・9は拡張用で、対応するGestureTableの行があればその表情を選び、未割り当てなら表情を解除する。
@@ -530,7 +535,7 @@ Backは表情選択APIを送らず、選択中の表情やハンドジェスチ�
 表情SlotはCatalog直下に保ち、サブメニュー配下の項目からSlot参照を送る。表示LabelはCatalog項目のLabelからValueCopyで取得する。
 項目のEnabledを自動制御しない。
 押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをSelect APIへ送る。選択済みの項目はnullを送り、表情を解除する。Select APIはnullまたは自身のCatalog直下の表情Slotを受理し、ApplyExpressionがCurrentExpressionへ設定して適用する。
-AllowHandGestures.Left・Rightを両方falseにするが、LeftGesture・RightGestureは変更しない。GestureTable未割り当てでも選択できる。
+AllowHandGestures.Left・Rightを両方falseにし、LeftGesture=0、RightGesture=0を書いてからApplyExpressionを呼ぶ。GestureTableを再評価しないため、未割り当てでも直接選択できる。
 ReferenceEqualityDriver<Slot>がCurrentExpressionと項目の表情Slotを比較し、BooleanReferenceDriver<Slot>がPressedData.Referenceを選択中はnull、それ以外は表情Slotへ切り替える。Catalogの直接項目・左右のサブメニュー・Imported menuに共通で適用し、解除後の押下で再選択できる。表情の固定参照はFalseTargetに保持する。コンポーネントの変更通知で送信参照が更新されるため、同一フレーム内の更新を挟まない連続呼び出しでは切り替えが反映されない。
 Select APIへ同じ非nullの表情Slotを直接再送した場合は解除せず、ApplyExpressionで名前付きfloat変数の編集を反映する。
 表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `CurrentExpression` を参照して駆動する。
@@ -607,7 +612,7 @@ Selectの引数は表情Slot。旧string ID送信は受理しない。内部Appl
 | `ExpressionSystem/Method.TrySetGesture.Right` | int（範囲制限なし） | AllowHandGestures.Right が true のときMethod.SetGesture.Rightへ転送 |
 | `ExpressionSystem/Method.SetGesture.Left` | int（範囲制限なし） | フラグに関係なく左手を更新。フラグ自体は維持 |
 | `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし） | フラグに関係なく右手を更新。フラグ自体は維持 |
-| `ExpressionSystem/Method.SelectExpression` | Slot: 自身のCatalog直下の表情、または解除用のnull | 有効性を検証し、boolをfalseにしてApplyExpressionへ送信 |
+| `ExpressionSystem/Method.SelectExpression` | Slot: 自身のCatalog直下の表情、または解除用のnull | 有効性を検証し、左右の許可をfalse、LeftGesture・RightGestureを順に0にしてからApplyExpressionへ送信 |
 | `ExpressionSystem/Method.ToggleHandGestures` | なし | 両手とも許可なら両手を停止、それ以外は両手を許可。左右値・表情は維持 |
 | `ExpressionSystem/Method.Reset` | なし | 表情を解除してBaseへ戻し、左右を0、ジェスチャー入力を有効にする |
 

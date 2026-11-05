@@ -118,11 +118,10 @@ internal static class ImportedGestureAvatarChecks
                 expression.GetComponent<ContextMenuItemSource>().EnabledField.ActiveLink == null,
                 "Saved direct menu is enabled independently of table membership and expression state");
             visible++;
-            int leftBefore = Get<int>(core, "LeftGesture"), rightBefore = Get<int>(core, "RightGesture");
             expression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().Pressed(null, default);
-            Check(NoHandsAllowed(core) && Get<int>(core, "LeftGesture") == leftBefore && Get<int>(core, "RightGesture") == rightBefore &&
+            Check(NoHandsAllowed(core) && Gestures(core) == (0, 0) &&
                 Reference<Slot>(core, "CurrentExpression") == expression,
-                "Saved direct menu preserves gestures and selects the Catalog expression");
+                "Saved direct menu clears gestures and selects the Catalog expression");
             for (int i = 0; i < 2; i++) await default(NextUpdate);
             ExpressionGraphChecks.CheckMenuColors(root);
         }

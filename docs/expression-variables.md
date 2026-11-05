@@ -57,7 +57,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 Version 22で左右を明示する参照名に変更し、Version 28で `.Pair` を除いた `GestureTable.LnRm` に変更した。例：左1・右2は
 `GestureTable.L1R2`。選択時に左×8＋右の番号へ変換せず、左右を文字列化して直接参照する。
 状態の診断値も数値の `PairIndex` から文字列の `PairKey` へ変更したが、実行処理には使わないためVersion 79で削除した。
-Version 37のSelect APIは表情Slotを受け取り、自身のCatalog直下で有効な表情かを検証してApplyExpressionへ渡す。CurrentExpressionの設定はApplyExpressionが担当する。左右値は維持する。
+Select APIは表情Slotを受け取り、自身のCatalog直下で有効な表情かを検証し、左右のGesture値を0にしてからApplyExpressionへ渡す。CurrentExpressionの設定はApplyExpressionが担当する。nullによる解除も左右値をクリアする。
 生成アバターは旧 `Pair.0`〜`Pair.63` を参照しない。旧パッケージの変更には再変換が必要。
 
 Version 20から `SmoothingSpeed` を共有する。各SmoothValueと同じSlotの
@@ -79,7 +79,7 @@ Version 21ではメニュー項目の Enabled を対応表の参照有無や表�
 `MenuAvailable`、`GestureTable/Logic`、`Inputs/ContextMenu/Logic`、内部 `MenuRefresh` を生成しない。
 直接選択と Imported menu の項目には自動の選択可否制御を付けず、表の変更を監視してメニューを走査しない。
 Select APIはGestureTableへの割り当てを条件にせず、Catalogの表情をSlotのアクティブ状態に関わらず選択する。
-null・自身のCatalog直下ではないSlotは受理せず、選択状態を変更しない。左右値は直接選択では常に保持する。
+自身のCatalog直下ではない非null Slotは受理せず、選択状態・左右値・許可を変更しない。nullは解除として受理し、左右値を0にしてから表情を解除する。
 
 各表情の `ExpressionSystem.Catalog.Clip` 空間に、Output.Idと同名の
 `DynamicValueVariable<float>` を保存する。配置先は各表情の `DV/<Output.Id>`。
@@ -131,7 +131,7 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 | 名前 | 型 | 初期値 | 更新元・役割 |
 |---|---|---|---|
 | `AllowHandGestures.Left` / `AllowHandGestures.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとTrySetGesture APIだけの受付可否。SetGesture・メニューはこの設定で停止しない。表情の直接選択で両方false。初期化・リセット・再着用・複製・保存読込では各設定値を維持する。個別メニューのButtonToggleや変数の直接編集で変更可能 |
-| `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。メニューでは変更しない |
+| `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。SelectExpressionでは表情の適用前に両方0へ戻す |
 | `CurrentExpression` | Slot | null | ApplyExpressionが受信した表情Slot。UpdateSelectionは対応表の参照をそのまま渡し、Select APIは非nullの場合に自身のCatalog直下か確認する。解除はnull |
 
 状態の DynamicVariable に保持する表情参照は CurrentExpression だけ。UpdateSelection は対応表から読み取ったSlot（未割当・削除済みならnull）をそのままApplyExpressionへ送り、ApplyExpressionがCurrentExpressionへ設定する。
@@ -317,7 +317,7 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 |---|---|---|
 | `TrySetGestureLeftTag` / `TrySetGestureRightTag` | `ExpressionSystem/Method.TrySetGesture.Left` / `ExpressionSystem/Method.TrySetGesture.Right` | int（範囲制限なし）。対応するAllowHandGestures.Left・Right がtrueの場合だけSetGestureへ転送 |
 | `SetGestureLeftTag` / `SetGestureRightTag` | `ExpressionSystem/Method.SetGesture.Left` / `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし）。入力元共通の更新処理。ジェスチャー許可に関係なく左右値を更新。フラグは維持 |
-| `SelectTag` | `ExpressionSystem/Method.SelectExpression` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してApplyExpressionへ渡す。nullは表情解除、非nullの範囲外は無視 |
+| `SelectTag` | `ExpressionSystem/Method.SelectExpression` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止し、LeftGesture・RightGestureを順に0にしてからApplyExpressionへ渡す。nullは同じ順序で表情解除、非nullの範囲外は無視 |
 | `ToggleHandGesturesTag` | `ExpressionSystem/Method.ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
 | `ResetTag` | `ExpressionSystem/Method.Reset` | 引数なし。ResetStateへ転送し、未着用時も左右値・表情を初期状態へ戻す。許可設定は維持する |
 | `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Resetと着用開始のEventから共用する。着用判定なしで左右値を0に戻し、ApplyExpressionへnullを送る。許可設定は維持する。表情解除はApplyExpressionの受付条件に従う |
@@ -333,7 +333,7 @@ UpdateSelectionは対応表から読み取った表情Slotを送信ノードへ�
 初期化済みフラグは StoredValue<bool> を使い、DynamicVariable の保存変数とは区別する。
 
 現行版は `PreviousOwner`、`Override`、`LeftInput`、`RightInput` という項目を生成しない。
-メニュー選択はAllowHandGestures.Left・Right=falseとCurrentExpressionで保持する。キーボードは停止せず、次のショートカットで表情を変更できる。
+メニュー選択は左右のGesture値を0にした後、AllowHandGestures.Left・Right=falseとCurrentExpressionで保持する。キーボードは停止せず、次のショートカットで表情を変更できる。
 
 ## 実装の参照先
 
@@ -398,7 +398,7 @@ Lifecycle・Selection・Playbackへの固定参照はすべてDynamicImpulseTrig
 
 `ExpressionSystem.Catalog.Clip/Enabled` と `ExpressionSystem.Catalog.Clip/Source` は生成しない。
 Enabledの読み取りとSlotのアクティブ状態による選択判定も削除した。
-GestureTableから取得したSlotはそのままPlaybackへ送る。Select APIはnull（表情解除）または自身のCatalog直下のSlotを受理する。ContextMenuで選択済みの表情を再度押すと、ButtonDynamicImpulseTriggerWithReference<Slot>はnullを送る。解除時も手の値は変えず、左右のジェスチャー許可をfalseにする。
+GestureTableから取得したSlotはそのままPlaybackへ送る。Select APIはnull（表情解除）または自身のCatalog直下のSlotを受理する。ContextMenuで選択済みの表情を再度押すと、ButtonDynamicImpulseTriggerWithReference<Slot>はnullを送る。選択・解除とも左右のジェスチャー許可をfalseにし、LeftGesture=0、RightGesture=0を書いてからPlaybackへ送る。途中でGestureTableは再評価しない。
 表情SlotやCatalogが非アクティブでも選択・適用される。装着状態によるAPI受付制御は維持する。
 Sourceは生成物の説明用メタデータで実行処理には使われていなかったため、Catalog・Templatesの両方から省く。
 

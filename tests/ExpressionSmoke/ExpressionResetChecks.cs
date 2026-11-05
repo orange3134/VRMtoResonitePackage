@@ -19,13 +19,19 @@ internal static class ExpressionResetChecks
         var neutral = mappings.Keys.Single(v => v.VariableName.Value == "ExpressionSystem/GestureTable.L0R0");
         var button = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items").FindChild("Reset settings")
             .GetComponent<ButtonDynamicImpulseTrigger>();
+        void PrepareSelection()
+        {
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, expression);
+            // Direct state edits keep a pose selected while preparing non-neutral reset input.
+            Check(core.WriteDynamicVariable("ExpressionSystem/LeftGesture", 5) == DynamicVariableWriteResult.Success &&
+                core.WriteDynamicVariable("ExpressionSystem/RightGesture", 6) == DynamicVariableWriteResult.Success,
+                "prepare hand values without reevaluating the selected pose");
+        }
         try
         {
             // Reset must return to Base even if neutral has an assigned expression.
             neutral.Reference.Target = expression;
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureLeftTag, true, 5);
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureRightTag, true, 6);
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, expression);
+            PrepareSelection();
             Check(Get<int>(core, "LeftGesture") == 5 && Get<int>(core, "RightGesture") == 6 &&
                 NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == expression,
                 "reset starts with both hands non-neutral, a selected expression and gestures disabled");
@@ -66,9 +72,7 @@ internal static class ExpressionResetChecks
             for (int combination = 0; combination < 4; combination++)
             {
                 bool left = (combination & 1) != 0, right = (combination & 2) != 0;
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureLeftTag, true, 5);
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureRightTag, true, 6);
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, expression);
+                PrepareSelection();
                 SetHandGesturesAllowed(core, left, "Left");
                 SetHandGesturesAllowed(core, right, "Right");
                 button.Pressed(null, default);
