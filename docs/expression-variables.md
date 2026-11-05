@@ -148,14 +148,15 @@ PlaybackStart・PlaybackElapsed・AnimationTime は生成しない。表情の�
 API/Event/OnAvatarWornはOnStartと着用状態の変更時に動き、現在の装着者がローカルユーザーで未初期化の場合にフラグを立て、最後にInternal/ResetStateへ引数なしDynamicImpulseを送る。初期化でUpdateSelectionは実行しない。
 初期化済みかはOnAvatarWorn内の保存されない `StoredValue<bool>` で管理し、PreviousOwner は保持しない。
 OnAvatarRemovedは別の保存されないフラグを持ち、着用開始の通知で有効化する。脱着から2更新後に再判定し、後片付けとフラグ解除を行ってOnAvatarWornへ終了を通知する。
-ResetStateには着用監視や初期化済みフラグを置かず、Impulse受信時の状態リセットだけを行う。
-公開APIは暗黙の初期化を行わず、初期化前の入力は後続のResetState初期化でクリアされる。Version 77以降はAPI内で着用判定せず、未着用でも左右値・許可を更新する。Internalの表情適用・リセットには着用判定が残る。
+ResetStateには着用監視や初期化済みフラグ、AvatarWornLocal条件を置かず、Impulse受信時の状態リセットだけを行う。
+公開APIは暗黙の初期化を行わず、初期化前の入力は後続のResetState初期化でクリアされる。Version 77以降はAPI内で着用判定せず、未着用でも左右値・許可を更新する。
+現在は公開Reset・直接のResetStateも未着用時に受理する。Internalの選択・表情適用には従来の着用条件が残る。
 
 初期化時は左右値を 0、AllowHandGestures.Left・Right を両方true、
 ApplyExpressionへnullを送り、CurrentExpressionの解除と通常出力のBase復帰をまとめて実行する。追跡出力は専用DriveがBaseを反映する。
 その後の UpdateSelection と ApplyExpression の同期Writeで現在の対応表に応じた状態になる。
 
-装着が終了すると、Eventが初期化済みのクライアントでだけ一度このクリア処理を実行し、フラグを false に戻す。未着用中のResetStateは受理されないため、この後片付けはEvent内で実行する。
+装着が終了すると、OnAvatarRemovedが初期化済みのクライアントでだけ一度ResetStateを呼び、フラグを false に戻す。クリア操作はResetStateだけに生成する。
 既に別のユーザーが装着している場合は共有値をクリアせず、ローカルフラグだけを戻す。
 未装着で生成・複製したインスタンスや閲覧者のクライアントはクリアを書き込まない。
 未装着中は UpdateSelection を実行しない。通常出力は初期化・権限取得時にホストがBaseをWriteし、追跡出力は専用DriveがBaseに追従する。
@@ -319,8 +320,8 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `SetGestureLeftTag` / `SetGestureRightTag` | `ExpressionSystem/Method.SetGesture.Left` / `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし）。入力元共通の更新処理。ジェスチャー許可に関係なく左右値を更新。フラグは維持 |
 | `SelectTag` | `ExpressionSystem/Method.SelectExpression` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、ハンドジェスチャーを停止してApplyExpressionへ渡す。nullは表情解除、非nullの範囲外は無視 |
 | `ToggleHandGesturesTag` | `ExpressionSystem/Method.ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
-| `ResetTag` | `ExpressionSystem/Method.Reset` | 引数なし。ローカル着用中に左右値・許可・表情を初期状態へ戻す |
-| `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Resetまたは着用時のEventから呼び出す、ローカル着用中の状態リセット |
+| `ResetTag` | `ExpressionSystem/Method.Reset` | 引数なし。ResetStateへ転送し、未着用時も左右値・許可・表情を初期状態へ戻す |
+| `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Reset・着用開始・脱着時のEventから共用する。着用判定なしで左右値・許可を戻し、ApplyExpressionへnullを送る。表情解除はApplyExpressionの受付条件に従う |
 | `AvatarWornTag` | `ExpressionSystem/Event.OnAvatarWorn` | 引数なし。OnAvatarWornからOnAvatarRemovedへのローカル着用開始通知。脱着監視フラグを立てる |
 | `AvatarRemovedTag` | `ExpressionSystem/Event.OnAvatarRemoved` | 引数なし。OnAvatarRemovedからOnAvatarWornへの終了通知。初期化済みフラグを解除する |
 | `SelectionTickTag` | `ExpressionSystem/Internal.UpdateSelection` | 引数なし。左右入力イベントから選択更新を同期実行 |

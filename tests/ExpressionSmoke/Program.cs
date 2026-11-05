@@ -498,22 +498,34 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items").FindChild("Hand gestures")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         Check(NoHandsAllowed(core), "unworn combined toggle disables both hands");
+        // Saved/manual state may still contain a pose while the avatar is unworn.
+        Set(core, "CurrentExpression", catalog.FindChild("Angry"));
+        Set(table, "L0R0", catalog.FindChild("Angry"));
         expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items").FindChild("Reset settings")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
-        Check(NoHandsAllowed(core) && Get<int>(core, "LeftGesture") == 3 && Get<int>(core, "RightGesture") == 4,
-            "unworn Reset reaches the still-gated Internal Lifecycle without clearing API-written state");
-        // Non-neutral hand state must survive rejected wearer-only private updates.
+        Check(BothHandsAllowed(core) && Gestures(core) == (0, 0) &&
+            Reference<Slot>(core, "CurrentExpression") == null && Math.Abs(field.Value - 0.4f) < 0.01,
+            "unworn Reset clears hands and saved selection, enables gestures and restores Base without selecting Neutral");
+        Set(table, "L0R0", (Slot)null);
+        Request(ExpressionSystemSetup.SetGestureLeftTag, 3); Request(ExpressionSystemSetup.SetGestureRightTag, 4);
+        AllowInput(false);
+        // Selection still requires a wearer; ResetState now accepts unworn requests.
         var outputState = expressions.FindChild("Outputs").Children.Single();
-        foreach (var (board, tag) in new[] { ("UpdateSelection", "ExpressionSystem/Internal.UpdateSelection"),
-            ("ResetState", "ExpressionSystem/Internal.ResetState") })
-            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, tag, true) == 1,
-                "shared API hierarchy reaches exactly one private stage receiver: " + board);
+        Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, "ExpressionSystem/Internal.UpdateSelection", true) == 1,
+            "shared API hierarchy reaches exactly one UpdateSelection receiver");
         await Frames();
         Check(Gestures(core) == (3, 4) && NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == null &&
             Math.Abs(Get<float>(outputState, "Result") - 0.4f) < 0.01f,
-            "private stages also reject updates without a local wearer");
+            "UpdateSelection still rejects updates without a local wearer");
+        Set(core, "CurrentExpression", catalog.FindChild("Angry"));
+        Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, "ExpressionSystem/Internal.ResetState", true) == 1,
+            "shared API hierarchy reaches exactly one ResetState receiver");
+        Check(Gestures(core) == (0, 0) && BothHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == null,
+            "direct ResetState synchronously resets an unworn avatar");
+        Request(ExpressionSystemSetup.SetGestureLeftTag, 3); Request(ExpressionSystemSetup.SetGestureRightTag, 4);
+        AllowInput(false);
         // A loaded/cloned instance with no wearer must not mutate shared state just
         // because its local initialization flag starts false.
         var unwornClone = avatar.Duplicate(world.RootSlot);

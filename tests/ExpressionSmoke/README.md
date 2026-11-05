@@ -1,5 +1,13 @@
 # Expression integration checks
 
+2026-11-05: Remove the local-wearer condition from ResetState and share its
+impulse from OnAvatarRemoved behind the existing departure/handoff guards.
+Graph checks reject duplicated cleanup operations in the removal event.
+Runtime checks verify unworn menu and direct ResetState requests clear hands,
+permissions and saved selection without selecting the mapped Neutral pose;
+UpdateSelection still rejects unworn requests. Existing dequip/rewear,
+clone and package reload checks cover the shared reset path.
+
 2026-11-05: Split departure monitoring and delayed cleanup into OnAvatarRemoved.
 OnAvatarWorn notifies removal monitoring before ResetState; removal completion
 notifies OnAvatarWorn to allow initialization on the next wear. Graph checks
@@ -13,8 +21,9 @@ Layout and early-input checks follow the named board through cloning and reload.
 2026-11-05: Move lifecycle monitoring to API/Event. Event owns OnStart, wearer
 changes, the unsaved initialization flag and delayed departure cleanup. Wearing
 sets the flag and sends Internal.ResetState through the shared API reference.
-ResetState only receives the impulse and resets state behind its local-wearer
-gate. Layout checks require separate Flux groups and no lifecycle nodes in
+At this stage ResetState received the impulse behind a local-wearer gate;
+that gate has since been removed to share reset with departure cleanup.
+Layout checks require separate Flux groups and no lifecycle nodes in
 ResetState. Early-input, equip/dequip, manual reset, clone and reload tests cover
 the split, with the early-input fixture invoking Event's actual startup path.
 
@@ -472,7 +481,7 @@ Only the current expression / matching flag is green; other options are white. C
 cover gesture selection, direct selection, permission changes, copied templates, clone
 isolation and package reload, with no changes to Enabled, label or sprite bindings.
 
-Version 25 adds the Reset settings menu and a payload-free Reset API. ExpressionResetChecks presses the actual button on generated, cloned and imported avatars, checks both hands and expression reset to neutral/Base with gestures enabled, verifies mappings survive, and confirms the next gesture resumes selection. The main fixture also checks that unworn reset requests are ignored.
+Version 25 adds the Reset settings menu and a payload-free Reset API. ExpressionResetChecks presses the actual button on generated, cloned and imported avatars, checks both hands and expression reset to neutral/Base with gestures enabled, verifies mappings survive, and confirms the next gesture resumes selection. The main fixture originally checked that unworn reset requests were ignored; it now verifies unworn reset is accepted.
 
 Version 28 groups all 64 table rows under Expressions/DV/GestureTable/LnRm,
 removes the empty Expressions/GestureTable slot, and reads

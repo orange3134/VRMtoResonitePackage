@@ -374,6 +374,10 @@ internal static class ExpressionGraphChecks
         var resetNodes = Descendant(expressions, "API/Internal/ResetState").GetComponentsInChildren<ProtoFluxNode>();
         Check(resetNodes.All(node => node.GetType().Name is not ("OnStart" or "StoredValue`1" or "FireOnLocalValueChange`1" or "DelayUpdates")),
             "ResetState contains only impulse-driven reset logic, without lifecycle monitoring");
+        Check(resetNodes.All(node => node.GetType().Name != "If") &&
+            Descendant(expressions, "API/Internal/ResetState").GetComponentsInChildren<GlobalValue<string>>()
+                .All(value => value.Value.Value != "modular_avatar/AvatarWornLocal"),
+            "ResetState receives requests without a local-wearer condition");
         var events = Descendant(expressions, "API/Event");
         Check(events.Children.Select(child => child.Name).OrderBy(name => name)
                 .SequenceEqual(new[] { "OnAvatarRemoved", "OnAvatarWorn" }),
@@ -386,8 +390,8 @@ internal static class ExpressionGraphChecks
         var removedNodes = events.FindChild("OnAvatarRemoved").GetComponentsInChildren<ProtoFluxNode>();
         Check(removedNodes.OfType<Nodes.StoredValue<bool>>().Count() == 1 &&
             removedNodes.Count(node => node.GetType().Name == "DelayUpdates") == 1 &&
-            removedNodes.All(node => node.GetType().Name != "OnStart"),
-            "OnAvatarRemoved owns its local arming flag and delayed departure cleanup");
+            removedNodes.All(node => node.GetType().Name is not ("OnStart" or "WriteDynamicValueVariable`1" or "DynamicImpulseTriggerWithObject`1")),
+            "OnAvatarRemoved owns its local arming flag and delay without duplicating reset operations");
         string[] TriggerTags(IEnumerable<ProtoFluxNode> boardNodes) => boardNodes
             .Where(node => node.GetType().Name == "DynamicImpulseTrigger")
             .Select(node => ((Nodes.ValueObjectInput<string>)((ISyncRef)ExpressionFlux.Member(node, "Tag")).Target).Value.Value)
@@ -398,9 +402,9 @@ internal static class ExpressionGraphChecks
         Check(TriggerTags(eventNodes).SequenceEqual(new[] { "ExpressionSystem/Event.OnAvatarWorn", "ExpressionSystem/Internal.ResetState" }) &&
             ReceiverTag(removedNodes) == "ExpressionSystem/Event.OnAvatarWorn",
             "OnAvatarWorn arms removal through an impulse and calls ResetState");
-        Check(TriggerTags(removedNodes).SequenceEqual(new[] { "ExpressionSystem/Event.OnAvatarRemoved" }) &&
+        Check(TriggerTags(removedNodes).SequenceEqual(new[] { "ExpressionSystem/Event.OnAvatarRemoved", "ExpressionSystem/Internal.ResetState" }) &&
             ReceiverTag(eventNodes) == "ExpressionSystem/Event.OnAvatarRemoved",
-            "OnAvatarRemoved notifies wear initialization after cleanup without calling wearer-only ResetState");
+            "OnAvatarRemoved calls ResetState and notifies wear initialization after cleanup");
         var publicReceivers = method.GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
         Check(publicReceivers.Length == 7, "exactly seven public API receivers");

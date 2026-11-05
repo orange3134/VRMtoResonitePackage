@@ -15,8 +15,9 @@ internal sealed partial class ExpressionSystemSetup
         Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal, action));
     }
 
-    private IWorldElement[] ResetStateActions(ExpressionFlux g)
+    private void BuildResetState()
     {
+        var g = new ExpressionFlux(_resetState);
         var core = g.Ref(_api);
         var cleanup = new List<IWorldElement>();
         foreach (string hand in new[] { "Left", "Right" })
@@ -25,14 +26,10 @@ internal sealed partial class ExpressionSystemSetup
         }
         cleanup.AddRange(HandGesturePermissionWrites(g, g.Constant(true)));
         cleanup.Add(g.Trigger<Slot>(g.Ref(_api), g.Text(PlaybackTickTag), g.Ref<Slot>(null)));
-        return cleanup.ToArray();
-    }
-
-    private void BuildResetState()
-    {
-        var g = new ExpressionFlux(_resetState);
-        // Explicit reset remains wearer-only and does not select the neutral table entry.
-        ReceiveUpdate(g, ResetStateTag, g.Sequence(ResetStateActions(g)));
+        // Reset is shared by explicit requests, wear initialization and departure.
+        // It does not select the neutral table entry or depend on local wear state.
+        var receiver = g.Receiver(ResetStateTag, false);
+        Link(receiver, "OnTriggered", g.Sequence(cleanup.ToArray()));
     }
 
     private void BuildLifecycle()
@@ -70,9 +67,8 @@ internal sealed partial class ExpressionSystemSetup
         // that initialized this instance clears it once, provided nobody else is wearing it.
         // Observers never initialize and therefore never write this cleanup state.
         var stop = g.Sequence(
-            // Departure cannot use the wearer-only ResetState receiver. Build its
-            // cleanup locally, without connecting Flux groups across the two boards.
-            g.If(g.Not(g.AvatarWorn), g.Sequence(ResetStateActions(g))),
+            // Preserve the handoff guard while sharing reset through an impulse.
+            g.If(g.Not(g.AvatarWorn), g.Trigger(g.Ref(_api), ResetStateTag)),
             g.Set<bool>(armed, g.Constant(false)),
             g.Trigger(g.Ref(_api), AvatarRemovedTag));
         var shouldStop = g.And(g.Not(g.AvatarWornLocal), armed);

@@ -3,6 +3,11 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-05: ResetStateのAvatarWornLocal条件を削除した。公開Resetと直接のResetStateは未着用時にも受理する。
+OnAvatarRemovedの左右値・許可・表情のクリアはResetStateへのDynamicImpulse呼び出しに置き換えた。
+脱着イベント側の2更新後の再判定、別の装着者がいる場合のリセット抑止、ローカルフラグの解除は維持する。
+状態クリアの操作ノードはResetStateだけに置き、イベント側と直接接続せず独立したFluxGroupを保つ。
+
 2026-11-05: 脱着時の処理を `API/Event/OnAvatarRemoved` へ分離した。
 OnAvatarWornは着用開始時にローカル初期化フラグを立て、Event.OnAvatarWornを通知し、最後にResetStateを呼ぶ。
 OnAvatarRemovedはその通知で自身のローカルフラグを立て、脱着検出から2更新後に再判定して後片付けする。
@@ -18,9 +23,9 @@ Eventはイベントの格納先、OnAvatarWornは着用開始・脱着を監視
 保存されない初期化済みフラグ、脱着時の遅延後片付けはEventが担当する。
 ローカル着用開始時はフラグを立て、最後に共通のAPIを宛先として
 `ExpressionSystem/Internal.ResetState` を引数なしDynamicImpulseで同期送信する。
-`Internal/ResetState` はImpulse受信、ローカル着用判定、左右値・入力許可・表情のリセットだけを持つ。
-明示的なResetはEventのフラグを変更しない。未着用中のResetは従来どおり無視するため、
-脱着時の後片付けはEvent内で生成する。状態クリアの生成コードは共通化するが、
+この時点の `Internal/ResetState` はImpulse受信、ローカル着用判定、左右値・入力許可・表情のリセットを持っていた。
+明示的なResetはEventのフラグを変更しない。当時は未着用中のResetを無視していたため、
+脱着時の後片付けはEvent内で生成していた。現在は着用判定を削除し、ResetStateの呼び出しへ統一した。
 EventとResetStateのノードを直接接続せず、独立したFluxGroupを維持する。
 
 2026-11-05: Sequenceから別のSequenceを直接呼ぶ構成を廃止した。
@@ -28,7 +33,7 @@ SelectExpressionは左右のジェスチャー許可をfalseにする書き込�
 1つのSequenceで順番に実行する。ResetStateも左右の値のクリア、左右の許可の復元、
 表情解除を同じSequenceへ並べる。初期化済みフラグは現在API/Event側で設定する。
 装着解除時は条件付きのクリア処理と初期化済みフラグの解除が必要なため、条件分岐は維持する。
-Sequence自体は入れ子にしない。現在はEventとResetStateの各ボード内で必要な操作を生成する。
+Sequence自体は入れ子にしない。現在はEventからResetStateへImpulseを送り、状態クリアを共用する。
 ExpressionSmokeで生成・複製・保存再読込後にSequence同士の直結がないことを確認する。
 
 2026-11-05: `Expressions/API` を作成し、InternalとMethodをその直下へ移動した。
@@ -424,12 +429,14 @@ SelectionStatus は生成・計算しない。入力モードは AllowHandGestur
 
 ## 装着状態と Event・ResetState
 
-Event・UpdateSelection・ResetState・キーボード・機種別入力は `AvatarWornLocal` で更新を制御する。
+Event・UpdateSelection・キーボード・機種別入力は `AvatarWornLocal` で更新を制御する。
+ResetState自体は着用状態で制限せず、公開Reset・着用開始・脱着処理から共用する。
 `AvatarWorn` は誰かが装着中かの判定に使い、取り外し時のクリア、未装着時のホストによるBase適用、各クライアントの追跡合成を切り替える。
 UserRoot配下への配置だけでは装着とみなさない。AvatarUserReferenceAssigner の装着通知と階層からIdentificationが算出した値を共通の判定元とする。
 API/Event/OnAvatarWorn 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。
 着用開始時はEvent.OnAvatarWornの通知でOnAvatarRemoved内の別のローカルフラグを立て、最後にResetStateへImpulseを送る。
-OnAvatarRemovedは着用終了の遅延再判定と後片付けを担当し、Event.OnAvatarRemovedの通知で初期化済みフラグを解除する。
+OnAvatarRemovedは着用終了の遅延再判定を担当し、誰も着用していなければResetStateを呼ぶ。
+その後、Event.OnAvatarRemovedの通知で初期化済みフラグを解除する。
 
 - 装着開始・初回起動：AvatarWornLocal=true になれば初期化する。入力イベントがなければ CurrentExpression=null のままにする。
 - 取り外し：初期化済みのクライアントが一度だけ入力・選択状態をクリアし、出力を Base に戻す。初期化済みフラグを解除する。
@@ -442,20 +449,14 @@ OnAvatarRemovedは着用終了の遅延再判定と後片付けを担当し、Ev
 未装着中も追跡用Driveは各クライアントのBaseに追従する。
 既存パッケージへ反映するには再変換・再インポートが必要。
 
-### OnAvatarWornとResetStateの重複を簡略化する場合の影響
+### ResetStateの共通化と受付条件
 
 着用開始の分岐は初期化済みフラグの設定・脱着監視の有効化とResetStateの同期呼び出しだけで、状態リセットを重ねて実行してはいない。
-OnAvatarRemoved内にある左右値・許可・表情のクリアは脱着時の処理であり、ローカル着用中だけ受け付けるResetStateを呼んでも実行されない。
-生成コードは `ResetStateActions` を共用しているが、両ボードを独立させるため、生成物にはそれぞれ操作ノードを置いている。
-
-| 簡略化案 | 影響 |
-|---|---|
-| ResetStateの着用判定を削除し、脱着時も呼ぶ | 未着用時の公開ResetやInternalへの直接呼び出しでも左右値・入力許可が変わる。別のクライアントからのリセットも受け付けるため、現在の受付条件を変更する |
-| OnAvatarWornの着用判定を削除 | 閲覧側でも初期化済みフラグが立ち得る。ResetState側で状態更新を拒否しても、イベント側の初期化状態は変わるので同等ではない |
-| 脱着時の後片付けを省く | 左右値・許可・CurrentExpressionが残る。特に元の装着者がホストの場合、ApplyExpressionのcanWriteが脱着前後でtrueのままになり、通常出力の再評価が発火せず最後の表情が残る可能性がある |
-| 判定を各入口に残し、状態クリアを別の共通内部処理へ移す | 着用開始・手動Reset・脱着の受付条件を維持して重複を減らせる。ただし内部Impulseと処理スロットが増え、共通処理へ直接送った場合の受付契約も設計する必要がある |
-
-単純な削除では挙動が変わるため、イベントの命名と分離を行い、判定・脱着処理は維持する。
+OnAvatarRemovedもResetStateを呼ぶため、左右値・許可・表情のクリア操作はResetStateだけに生成する。
+ResetStateのAvatarWornLocal条件を削除したことで、未着用時の公開Resetと直接のResetStateも左右値を0、許可をtrueへ戻し、表情を解除する。
+別のクライアントからの明示Resetも左右値・許可の更新を受け付ける。ApplyExpressionの条件は変更せず、
+表情解除のnullはローカル着用中または誰も着用していない場合に受理する。他者着用中の閲覧側では表情の更新を拒否する。
+脱着イベントには誰も着用していないことの確認を残すため、装着者交代時には共有状態をリセットしない。
 初期化済みフラグは閲覧者の書き込みと繰り返し初期化を防ぎ、2更新の待機と再判定は着用フラグの反映順や再着用・装着者交代を扱うために残す。
 
 ## 入力の動作
