@@ -14,7 +14,7 @@ internal static class ExpressionMenuToggleChecks
         var buttons = expressions.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithReference<Slot>>()
             .Where(button => button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target != null).ToArray();
         Check(buttons.Any(button => button.Slot.Name == "Imported angry"), "imported expression menu is exercised");
-        var reset = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items")
+        var reset = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items")
             .FindChild("Reset settings").GetComponent<ButtonDynamicImpulseTrigger>();
         try
         {
@@ -58,7 +58,7 @@ internal static class ExpressionMenuToggleChecks
         }
         finally { reset.Pressed(null, default); }
         await Frames();
-        Console.WriteLine($"MENU TOGGLE: {buttons.Length} Catalog, left/right and imported menu buttons select, clear and reselect");
+        Console.WriteLine($"MENU TOGGLE: {buttons.Length} Catalog, shared and imported menu buttons select, clear and reselect");
     }
 
     private static async Task Frames() { for (int i = 0; i < 5; i++) await default(NextUpdate); }

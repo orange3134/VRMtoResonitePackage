@@ -96,15 +96,9 @@ internal sealed partial class ExpressionSystemSetup
             MenuItem(expression, expression.Name);
             SelectMenuTrigger(expression, expression);
         }
-        foreach (var side in new[] { Chirality.Left, Chirality.Right })
-            BuildHandMenu(menu.AddSlot(side.ToString()), side);
-    }
-
-    private void BuildHandMenu(Slot menu, Chirality side)
-    {
         var rootItem = menu.AttachComponent<RootContextMenuItem>();
         rootItem.Item.Target = MenuItem(menu, "Expressions");
-        rootItem.OnlyForSide.Value = side;
+        rootItem.OnlyForSide.Value = null;
         var items = menu.AddSlot("Items");
         menu.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
         // Keep clips directly under Catalog for the Select API and copied templates.

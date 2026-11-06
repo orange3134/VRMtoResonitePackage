@@ -101,7 +101,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(expressions.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "all generated ProtoFlux groups are valid");
         ExpressionLayoutChecks.SaveKeyboardLayout(expressions, Path.Combine(artifacts, "keyboard-layout.json"));
         ExpressionGraphChecks.CheckLayout(expressions);
-        var directGroups = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items");
+        var directGroups = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
         var expressionGroups = directGroups.Children.Where(group => group.Name is "Hand sign expressions" or "Other expressions").ToArray();
         var mappedExpressions = expressions.FindChild("DV").FindChild("GestureTable")
             .GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Select(row => row.Reference.Target)
@@ -356,7 +356,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Gesture(0, 1); await Frames();
         touch.Destroy(); await Frames();
         Check(Get<int>(core, "LeftGesture") == 1, "deleting a controller module preserves the last accepted int state");
-        var menu = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items");
+        var menu = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null,
             "context menu has no hand submenus");
         var menuButton = directGroups.FindChild("Hand sign expressions").FindChild("Items").FindChild("Smile")
@@ -497,16 +497,16 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Request(ExpressionSystemSetup.SetGestureLeftTag, 3); Request(ExpressionSystemSetup.SetGestureRightTag, 4);
         Check(Get<int>(core, "LeftGesture") == 3 && Get<int>(core, "RightGesture") == 4 && NoHandsAllowed(core),
             "unworn SetGesture updates both hands independently of permission");
-        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items").FindChild("Hand gestures")
+        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Hand gestures")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         Check(BothHandsAllowed(core), "unworn combined toggle enables both hands");
-        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items").FindChild("Hand gestures")
+        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Hand gestures")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         Check(NoHandsAllowed(core), "unworn combined toggle disables both hands");
         // Saved/manual state may still contain a pose while the avatar is unworn.
         Set(core, "CurrentExpression", catalog.FindChild("Angry"));
         Set(table, "L0R0", catalog.FindChild("Angry"));
-        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items").FindChild("Reset settings")
+        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Reset settings")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);

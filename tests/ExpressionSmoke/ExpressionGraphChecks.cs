@@ -67,8 +67,7 @@ internal static class ExpressionGraphChecks
     {
         ExpressionSpaceChecks.Run(expressions);
         CheckMenuColors(expressions);
-        foreach (string hand in new[] { "Left", "Right" })
-        if (Descendant(expressions, "Inputs/ContextMenu/" + hand + "/Items") is { } groups)
+        if (Descendant(expressions, "Inputs/ContextMenu/Items") is { } groups)
         {
             Check(groups.FindChild("Direct selection") == null,
                 "expression groups open directly from Expressions without an intermediate selection menu");
@@ -102,9 +101,8 @@ internal static class ExpressionGraphChecks
         Check(!expressions.GetComponentsInChildren<DynamicValueVariable<bool>>().Any(v =>
             v.VariableName.Value == "ExpressionSystem.Catalog.Clip/MenuAvailable"),
             "menu availability state is absent");
-        var modeEntries = new[] { "Left", "Right" }.SelectMany(hand =>
-            new[] { "Hand gesture options", "Hand gestures" }.Select(name =>
-                Descendant(expressions, $"Inputs/ContextMenu/{hand}/Items/{name}")?.GetComponent<ContextMenuItemSource>()))
+        var modeEntries = new[] { "Hand gesture options", "Hand gestures" }.Select(name =>
+                Descendant(expressions, $"Inputs/ContextMenu/Items/{name}")?.GetComponent<ContextMenuItemSource>())
             .Where(item => item != null).ToHashSet();
         Check(expressions.GetComponentsInChildren<ContextMenuItemSource>().All(item =>
             (item.EnabledField.ActiveLink != null) == modeEntries.Contains(item)),
@@ -189,7 +187,7 @@ internal static class ExpressionGraphChecks
         Check(nodes.All(n => n.GetType().Name != "ReferenceDrive`1"), "no playback reference drives");
         Check(nodes.Where(n => n.GetType().Name == "ValueFieldDrive`1").All(n =>
             Board(n).Name == "Tracking" && Board(n).Parent.Parent == expressions.FindChild("Outputs") ||
-            Board(n).Name == "Gesture menu visibility" && Board(n).Parent.Parent == Descendant(expressions, "Inputs/ContextMenu")),
+            Board(n).Name == "Gesture menu visibility" && Board(n).Parent == Descendant(expressions, "Inputs/ContextMenu")),
             "continuous drives are limited to live tracking and gesture menu visibility");
         Check(nodes.Any(n => n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "state transitions use local change detectors");
@@ -442,8 +440,7 @@ internal static class ExpressionGraphChecks
             "reset receives an impulse without a payload");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "ToggleHandGestures").GetType().Name == "DynamicImpulseReceiver",
             "hand gesture toggle receives an impulse without a payload");
-        foreach (string hand in new[] { "Left", "Right" })
-        if (Descendant(expressions, "Inputs/ContextMenu/" + hand + "/Items") is { } menuItems)
+        if (Descendant(expressions, "Inputs/ContextMenu/Items") is { } menuItems)
         {
             Check(menuItems.FindChild("Allow hand gestures") == null && menuItems.FindChild("Disable hand gestures") == null,
                 "separate allow and disable menu items are absent");

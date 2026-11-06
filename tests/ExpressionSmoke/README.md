@@ -1,5 +1,11 @@
 # Expression integration checks
 
+2026-11-06: Both hands share one Expressions menu rooted at Inputs/ContextMenu.
+Checks require one RootContextMenuItem without side restrictions, no Left/Right
+menu copies and one mode visibility board through generation, clone and reload.
+Expression selection, Back references, reset, imported controls and gesture
+permission checks all use the shared Items hierarchy.
+
 2026-11-06: VR gesture permissions use four explicit choices in a submenu;
 desktop shows only the combined-hand toggle. Checks cover every initial and
 selected permission pair, repeated selection, unchanged gesture/pose state,

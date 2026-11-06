@@ -3,14 +3,19 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-06: 左右で同じ内容になったExpressionsメニューを `Inputs/ContextMenu` に1つだけ生成する。
+`RootContextMenuItem.OnlyForSide` はnullとし、左右どちらからも同じ `Items` を開く。
+実DLLの `InteractionHandler` はOnlyForSideがnullなら左右の制限を掛けない。
+表情一覧・ジェスチャー許可・Reset・Imported menuと表示切替のFluxを共有し、Left／Rightの複製階層は生成しない。
+
 2026-11-06: ContextMenuのジェスチャー許可をモード別に表示する。VRでは `Hand gestures` サブメニューに
 `Both hands enabled`（両手有効）、`Left hand only`（左手のみ有効）、`Right hand only`（右手のみ有効）、
-`Both hands disabled`（両手無効）と `Back` を置く。左右どちらのExpressionsメニューでも同じ4択を使う。
+`Both hands disabled`（両手無効）と `Back` を置く。両手で共有するExpressionsメニューから同じ4択を使う。
 各選択肢の2つの `ButtonValueSet<bool>` が左右の許可を設定し、再選択でも反転しない。
 一致する選択肢を緑、それ以外を白にする。許可だけを変更し、左右GestureとCurrentExpressionは保持する。
 デスクトップではサブメニューを隠し、両手をまとめて切り替える `Hand gestures` トグルのみ表示する。
 両手有効なら両手無効へ、それ以外（片手のみ有効も含む）なら両手有効へ切り替え、色は従来どおり緑／赤。
-`Inputs/ContextMenu/Left・Right/Gesture menu visibility` の `UserVR_Active` が装着者のVR状態を読み、
+`Inputs/ContextMenu/Gesture menu visibility` の `UserVR_Active` が装着者のVR状態を読み、
 サブメニュー入口とトグルの `ContextMenuItemSource.EnabledField` を逆の条件で駆動する。
 実DLLの `ContextMenuSubmenu` は `excludeDisabled: true` で項目を集めるため、無効な入口は表示されない。
 表示判定のFluxは入口の外に置き、両モードで動作させる。表示変更はメニューを開くときに反映される。
@@ -288,9 +293,9 @@ Expressions/
   Drivers/各 Renderer/            DynamicBlendShapeDriver、必要なシェイプのみ登録
     瞬き以外の各シェイプ/         SmoothValue<float>、TargetValue → BlendShapes[].Value
   Inputs/
-    ContextMenu/                   表情の直接選択・入力許可（項目の自動選択可否制御なし）
-      Left|Right/                  手別のExpressions入口（OnlyForSideで表示を制限）
-        Items/                     共通項目一式と、その手だけの個別トグル
+    ContextMenu/                   両手で共有するExpressions入口（OnlyForSide=null）
+      Items/                       表情一覧・ジェスチャー許可・Reset・Imported menu
+      Gesture menu visibility/     VRサブメニューとデスクトップトグルの表示切替
     Keyboard/
       Left|Right/                  各手の共通設定用の変数空間
         DV/                        Tag、Modifier、Key.0〜Key.9
