@@ -30,7 +30,7 @@ internal sealed partial class ExpressionSystemSetup
 
     private SyncRef<Slot> CurrentExpressionReference =>
         _root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Single(v => v.VariableName.Value == Path(SystemSpace, "CurrentExpression")).Reference;
+            .Single(v => v.VariableName.Value == Path(SystemSpace, "State.CurrentExpression")).Reference;
 
     private void SelectMenuColor(Slot item, Slot expression)
     {

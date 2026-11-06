@@ -27,32 +27,32 @@ internal static class ExpressionMenuToggleChecks
                     "unselected menu payload references the local Catalog");
                 void SetHands()
                 {
-                    Check(core.WriteDynamicVariable("ExpressionSystem/LeftGesture", 5) == DynamicVariableWriteResult.Success &&
-                        core.WriteDynamicVariable("ExpressionSystem/RightGesture", 6) == DynamicVariableWriteResult.Success,
+                    Check(core.WriteDynamicVariable("ExpressionSystem/State.LeftGesture", 5) == DynamicVariableWriteResult.Success &&
+                        core.WriteDynamicVariable("ExpressionSystem/State.RightGesture", 6) == DynamicVariableWriteResult.Success,
                         "prepare non-neutral hand values without changing the selected expression");
                 }
                 SetHands();
                 button.Pressed(null, default);
-                Check(Reference<Slot>(core, "CurrentExpression") == target && NoHandsAllowed(core) && Gestures(core) == (0, 0),
+                Check(Reference<Slot>(core, "State.CurrentExpression") == target && NoHandsAllowed(core) && Gestures(core) == (0, 0),
                     "menu press clears both hand values, selects the expression and disables gestures");
                 await Frames();
                 ExpressionGraphChecks.CheckMenuColors(expressions);
                 Check(button.PressedData.Reference.Target == null, "selected menu trigger carries null");
                 SetHands();
                 button.Pressed(null, default);
-                Check(Reference<Slot>(core, "CurrentExpression") == null && NoHandsAllowed(core) && Gestures(core) == (0, 0),
+                Check(Reference<Slot>(core, "State.CurrentExpression") == null && NoHandsAllowed(core) && Gestures(core) == (0, 0),
                     "second menu press clears selection and both hand values without enabling gestures");
                 await Frames();
                 Check(outputs.All(output => !TryReadSelectedValue(output, out _)), "cleared menu leaves no selected pose bindings");
                 ExpressionGraphChecks.CheckMenuColors(expressions);
                 Check(button.PressedData.Reference.Target == target, "cleared menu restores its expression payload");
                 button.Pressed(null, default);
-                Check(Reference<Slot>(core, "CurrentExpression") == target, "third press selects the expression again");
+                Check(Reference<Slot>(core, "State.CurrentExpression") == target, "third press selects the expression again");
                 // API calls remain explicit selections; only menu payloads toggle.
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, target);
-                Check(Reference<Slot>(core, "CurrentExpression") == target, "repeating a non-null Select API call keeps its pose");
+                Check(Reference<Slot>(core, "State.CurrentExpression") == target, "repeating a non-null Select API call keeps its pose");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, ExpressionSystemSetup.SelectTag, true, null);
-                Check(Reference<Slot>(core, "CurrentExpression") == null, "Select API accepts null to clear the pose");
+                Check(Reference<Slot>(core, "State.CurrentExpression") == null, "Select API accepts null to clear the pose");
                 await Frames();
             }
         }

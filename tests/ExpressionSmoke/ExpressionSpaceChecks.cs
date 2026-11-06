@@ -57,12 +57,15 @@ internal static class ExpressionSpaceChecks
             "Internal directly contains exactly the three logic boards");
         Check(root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/", StringComparison.Ordinal))
-            .All(v => v.VariableName.Value == "ExpressionSystem/CurrentExpression" ||
+            .All(v => v.VariableName.Value == "ExpressionSystem/State.CurrentExpression" ||
                 v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal) ||
-                v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal)),
-            "fixed system Slot references use References; current expression and gesture mappings retain their keys");
+                v.VariableName.Value.StartsWith("ExpressionSystem/Reference.", StringComparison.Ordinal)),
+            "fixed Slot references use Reference; selected expression uses State; mappings use GestureTable");
         Check(root.FindChild("DV").Children.All(child => !child.Name.StartsWith("Core.", StringComparison.Ordinal)),
             "state variable slots have no Core prefix");
+        foreach (string key in new[] { "Config.AllowHandGesture.Left", "Config.AllowHandGesture.Right", "Config.SmoothingSpeed",
+            "State.LeftGesture", "State.RightGesture", "State.CurrentExpression", "Reference.API", "Reference.Catalog" })
+            Check(root.FindChild("DV").FindChild(key) != null, "renamed system DV slot exists: " + key);
 
         var spaces = root.GetComponentsInChildren<DynamicVariableSpace>();
         Check(spaces.Count == expected.Count, "every record has exactly one explicit schema space");
@@ -79,6 +82,11 @@ internal static class ExpressionSpaceChecks
         var occupied = new HashSet<Slot>();
         void Placement(Component variable, string path)
         {
+            Check(!path.Contains("/References.", StringComparison.Ordinal) &&
+                !path.StartsWith("ExpressionSystem/AllowHandGestures.", StringComparison.Ordinal) &&
+                path is not ("ExpressionSystem/SmoothingSpeed" or "ExpressionSystem/LeftGesture" or
+                    "ExpressionSystem/RightGesture" or "ExpressionSystem/CurrentExpression"),
+                "renamed variables have no legacy aliases: " + path);
             var space = variable.Slot.GetComponentInParents<DynamicVariableSpace>();
             var data = space.Slot.FindChild("DV");
             bool tableRow = path.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal);
@@ -115,10 +123,10 @@ internal static class ExpressionSpaceChecks
             root.FindChild("DV").FindChild("Version") == null,
             "unused Version variable and its slot are absent");
         Check(root.ExpressionVariables<DynamicValueVariable<bool>>().Count(v =>
-            v.VariableName.Value is "ExpressionSystem/AllowHandGestures.Left" or "ExpressionSystem/AllowHandGestures.Right") == 2 &&
+            v.VariableName.Value is "ExpressionSystem/Config.AllowHandGesture.Left" or "ExpressionSystem/Config.AllowHandGesture.Right") == 2 &&
             root.ExpressionVariables<DynamicValueVariable<bool>>().All(v => v.VariableName.Value != "ExpressionSystem/AllowHandGestures"),
             "gesture permission is stored independently for Left and Right");
-        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("LeftGesture", out _),
+        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("State.LeftGesture", out _),
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),
             "table rows are readable from the system root");

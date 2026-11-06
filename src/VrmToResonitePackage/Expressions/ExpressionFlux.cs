@@ -50,7 +50,7 @@ internal sealed class ExpressionFlux
                     OwningNode(port)?.Slot.IsChildOf(module) == true) ? module : expressions;
             });
         var existing = expressions.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-            .Where(v => v.VariableName.Value is "ExpressionSystem/References.API" or "ExpressionSystem/References.Catalog").ToArray();
+            .Where(v => v.VariableName.Value is "ExpressionSystem/Reference.API" or "ExpressionSystem/Reference.Catalog").ToArray();
         var references = existing.ToDictionary(v => v.Reference.Target, v => v.VariableName.Value);
         var usedNames = new Dictionary<Slot, HashSet<string>>();
         foreach (var literal in nodes.OfType<Nodes.RefObjectInput<Slot>>().ToArray())
@@ -90,7 +90,7 @@ internal sealed class ExpressionFlux
         {
             if (!usedNames.TryGetValue(owner, out var names))
                 usedNames.Add(owner, names = new HashSet<string>(owner.FindChild("DV").Children.Select(s => s.Name), StringComparer.Ordinal));
-            string key = ExpressionBindingNames.Create("References", name, names);
+            string key = ExpressionBindingNames.Create("Reference", name, names);
             return Reference(owner, key, target).VariableName.Value;
         }
     }

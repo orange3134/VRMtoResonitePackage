@@ -62,15 +62,15 @@ internal static class ImportedGestureAvatarChecks
             for (int r = 0; r < 8; r++)
             {
                 // Both gesture events run in the same update and resolve the pair immediately.
-                int previousRight = Get<int>(core, "RightGesture");
+                int previousRight = Get<int>(core, "State.RightGesture");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureLeftTag, true, l);
-                Check(Get<int>(core, "LeftGesture") == l && Get<int>(core, "RightGesture") == previousRight &&
-                    Reference<Slot>(core, "CurrentExpression") == Reference<Slot>(table, $"L{l}R{previousRight}"), "Left gesture event did not evaluate immediately");
+                Check(Get<int>(core, "State.LeftGesture") == l && Get<int>(core, "State.RightGesture") == previousRight &&
+                    Reference<Slot>(core, "State.CurrentExpression") == Reference<Slot>(table, $"L{l}R{previousRight}"), "Left gesture event did not evaluate immediately");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureRightTag, true, r);
-                Check(Get<int>(core, "LeftGesture") == l && Get<int>(core, "RightGesture") == r, "Gestures did not update both hand states synchronously");
+                Check(Get<int>(core, "State.LeftGesture") == l && Get<int>(core, "State.RightGesture") == r, "Gestures did not update both hand states synchronously");
                 var mapped = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
                     .Single(v => v.VariableName.Value == $"ExpressionSystem/GestureTable.L{l}R{r}").Reference.Target;
-                Check(mapped != null && Reference<Slot>(core, "CurrentExpression") == mapped, "Missing or incorrect selected pose");
+                Check(mapped != null && Reference<Slot>(core, "State.CurrentExpression") == mapped, "Missing or incorrect selected pose");
                 Check(BothHandsAllowed(core),
                     "Imported pair or input mode disagrees with the selected gesture pair");
                 for (int i = 0; i < 6; i++) await default(NextUpdate);
@@ -120,22 +120,22 @@ internal static class ImportedGestureAvatarChecks
             visible++;
             expression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().Pressed(null, default);
             Check(NoHandsAllowed(core) && Gestures(core) == (0, 0) &&
-                Reference<Slot>(core, "CurrentExpression") == expression,
+                Reference<Slot>(core, "State.CurrentExpression") == expression,
                 "Saved direct menu clears gestures and selects the Catalog expression");
             for (int i = 0; i < 2; i++) await default(NextUpdate);
             ExpressionGraphChecks.CheckMenuColors(root);
         }
         Check(visible >= distinctPoses.Count, "Saved direct menu exposes every distinct mapped pose");
-        int heldLeft = Get<int>(core, "LeftGesture"), heldRight = Get<int>(core, "RightGesture");
+        int heldLeft = Get<int>(core, "State.LeftGesture"), heldRight = Get<int>(core, "State.RightGesture");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureLeftTag, true, (heldLeft + 1) % 8);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureRightTag, true, (heldRight + 1) % 8);
-        Check(Get<int>(core, "LeftGesture") == heldLeft && Get<int>(core, "RightGesture") == heldRight,
+        Check(Get<int>(core, "State.LeftGesture") == heldLeft && Get<int>(core, "State.RightGesture") == heldRight,
             "Saved menu-only mode ignores normal input");
         var toggle = menu.FindChild("Hand gestures").GetComponent<ButtonDynamicImpulseTrigger>();
         Check(toggle.PressedTag.Value == ExpressionSystemSetup.ToggleHandGesturesTag,
             "Saved hand gesture button sends a toggle impulse");
         toggle.Pressed(null, default);
-        Check(BothHandsAllowed(core) && Get<int>(core, "LeftGesture") == heldLeft && Get<int>(core, "RightGesture") == heldRight,
+        Check(BothHandsAllowed(core) && Get<int>(core, "State.LeftGesture") == heldLeft && Get<int>(core, "State.RightGesture") == heldRight,
             "Enabling ordinary input retains the saved menu pair");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureLeftTag, true, 0);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureRightTag, true, 0);
@@ -172,7 +172,7 @@ internal static class ImportedGestureAvatarChecks
                 SetHandGesturesAllowed(core, true);
                 Check(BothHandsAllowed(core), "Ordinary input is enabled before imported button verification");
                 importedButton.Pressed(null, default);
-                Check(NoHandsAllowed(core) && Reference<Slot>(core, "CurrentExpression") == selected,
+                Check(NoHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == selected,
                     "Saved imported-menu button selects by Slot independently of its label");
                 Console.WriteLine("PASS: saved imported-menu button selects its Slot synchronously despite label edits");
             }

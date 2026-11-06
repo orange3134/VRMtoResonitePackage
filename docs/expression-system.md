@@ -3,6 +3,20 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-06: DVの変数名とスロット名を次のように変更した。空間名 `ExpressionSystem` は維持する。
+
+| 旧名 | 新名 |
+|---|---|
+| `References.*` | `Reference.*` |
+| `AllowHandGestures.Left` / `Right` | `Config.AllowHandGesture.Left` / `Right` |
+| `SmoothingSpeed` | `Config.SmoothingSpeed` |
+| `LeftGesture` / `RightGesture` | `State.LeftGesture` / `State.RightGesture` |
+| `CurrentExpression` | `State.CurrentExpression` |
+
+新規生成時は新名だけを使い、DV直下のスロット名も同じキーにする。固定参照の自動生成、Fluxの読み書き、
+メニューの状態参照、補間速度Driverも新名を使う。公開ImpulseのTagは変更しない。
+既存パッケージは再変換で更新し、DVを直接読む外部処理は新名に合わせる。検証・過去変更の記録には当時の旧名が残る。
+
 2026-11-06: 左右で同じ内容になったExpressionsメニューを `Inputs/ContextMenu` に1つだけ生成する。
 `RootContextMenuItem.OnlyForSide` はnullとし、左右どちらからも同じ `Items` を開く。
 実DLLの `InteractionHandler` はOnlyForSideがnullなら左右の制限を掛けない。
@@ -12,7 +26,7 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 `Both hands enabled`（両手有効）、`Left hand only`（左手のみ有効）、`Right hand only`（右手のみ有効）、
 `Both hands disabled`（両手無効）と `Back` を置く。両手で共有するExpressionsメニューから同じ4択を使う。
 各選択肢の2つの `ButtonValueSet<bool>` が左右の許可を設定し、再選択でも反転しない。
-一致する選択肢を緑、それ以外を白にする。許可だけを変更し、左右GestureとCurrentExpressionは保持する。
+一致する選択肢を緑、それ以外を白にする。許可だけを変更し、左右GestureとState.CurrentExpressionは保持する。
 デスクトップではサブメニューを隠し、両手をまとめて切り替える `Hand gestures` トグルのみ表示する。
 両手有効なら両手無効へ、それ以外（片手のみ有効も含む）なら両手有効へ切り替え、色は従来どおり緑／赤。
 `Inputs/ContextMenu/Gesture menu visibility` の `UserVR_Active` が装着者のVR状態を読み、
@@ -21,16 +35,16 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 表示判定のFluxは入口の外に置き、両モードで動作させる。表示変更はメニューを開くときに反映される。
 
 2026-11-06: ContextMenuが呼ぶSelectExpressionで、左右のGestureを0にしてから表情を設定する。
-Catalog検証後、1つのSequenceで左右の許可をfalse、LeftGesture=0、RightGesture=0、ApplyExpression送信の順に実行する。
-CurrentExpressionの書き込みはApplyExpressionが担当する。SetGestureやUpdateSelectionを経由せず、途中でGestureTableを再評価しない。
+Catalog検証後、1つのSequenceで左右の許可をfalse、State.LeftGesture=0、State.RightGesture=0、ApplyExpression送信の順に実行する。
+State.CurrentExpressionの書き込みはApplyExpressionが担当する。SetGestureやUpdateSelectionを経由せず、途中でGestureTableを再評価しない。
 Catalog・左右のサブメニュー・Imported menuとAPI直接呼び出しで共通。nullによる解除も左右値をクリアし、範囲外の非null Slotは状態を変更しない。
 
-2026-11-06: ResetStateからAllowHandGestures.Left/Rightへの書き込みを削除した。
+2026-11-06: ResetStateからConfig.AllowHandGesture.Left/Rightへの書き込みを削除した。
 手動Reset・着用開始・再着用・複製・保存読込では左右のGesture値と表情だけをリセットし、許可設定は保存値を維持する。
 新規生成時の許可設定の既定値は両方trueのまま。直接選択で停止したジェスチャーはReset後も停止し、再開は許可メニューや変数編集で行う。
 
 2026-11-06: OnAvatarRemovedとイベント間の2つの通知タグを削除した。
-脱着時は左右値・許可・CurrentExpressionを保持し、OnAvatarWornのローカル初期化フラグだけを解除する。
+脱着時は左右値・許可・State.CurrentExpressionを保持し、OnAvatarWornのローカル初期化フラグだけを解除する。
 次の着用時にResetStateで初期化する。脱着の2更新待機と遅延タスクは生成しない。
 通常出力はApplyExpressionでAvatarWornLocalの変化も監視し、ホストの書き込み権限が脱着前後で変わらなくてもBaseへ戻す。
 追跡出力は従来どおり未着用時にBaseへ追従する。保持した表情は未着用中の見た目へ適用しない。
@@ -69,8 +83,8 @@ Sequence自体は入れ子にしない。現在はEventからResetStateへImpuls
 ExpressionSmokeで生成・複製・保存再読込後にSequence同士の直結がないことを確認する。
 
 2026-11-05: `Expressions/API` を作成し、InternalとMethodをその直下へ移動した。
-公開・内部の全DynamicImpulseは `ExpressionSystem/References.API` が指すこのAPIを送信先とし、
-タグで受信処理を選ぶ。`References.Internal` のDVと入力ノードは生成しない。
+公開・内部の全DynamicImpulseは `ExpressionSystem/Reference.API` が指すこのAPIを送信先とし、
+タグで受信処理を選ぶ。`Reference.Internal` のDVと入力ノードは生成しない。
 APIは整理用Slotで、DynamicVariableSpaceは追加しない。状態変数は従来のExpressionSystem空間を使う。
 
 2026-11-05: 実行時に未使用の `ExpressionSystem/Version` と `DV/Version` を削除した。
@@ -79,7 +93,7 @@ Clip形式として読み、旧パッケージにVersionがある場合だけ従
 公開処理は `API/Receivers` を廃止して `Method` 直下へ移し、受信ボード名をタグ末尾へ統一した。
 内部の旧Selection・Playback・Lifecycleは、それぞれUpdateSelection・ApplyExpression・ResetStateとなる。
 この時点ではResetStateに自動初期化・着用監視も残っていたが、現在はAPI/Eventへ分離している。
-この時点では送信先変数 `References.API` はMethodを参照していた。タグ・引数・処理内容は維持した。
+この時点では送信先変数 `Reference.API` はMethodを参照していた。タグ・引数・処理内容は維持した。
 以下のVersion番号は過去の変更記録であり、現行の生成物にはVersion変数を持たせない。
 
 Version 85ではDynamicImpulseのタグを `ExpressionSystem/Method.*`（公開操作）と
@@ -103,7 +117,7 @@ Version 82ではSelectionの対応表読み取り結果をPlayback送信ノー�
 
 Version 81では対応表への固定参照を `ExpressionSystem/GestureTable` に変更し、
 `Expressions/DV/GestureTable` 自体にDynamicReferenceVariable<Slot>を付けて自分のSlotを参照する。
-旧 `References.GestureTable`・`References.DV.GestureTable` とその専用スロットは生成しない。
+旧 `Reference.GestureTable`・`Reference.DV.GestureTable` とその専用スロットは生成しない。
 子の `L0R0` などは従来どおり `ExpressionSystem/GestureTable.L0R0` で表情Slotを参照する。
 
 Version 80では対応表の参照名を明示し、入力階層を整理した。
@@ -111,7 +125,7 @@ Version 80では対応表の参照名を明示し、入力階層を整理した�
 各機種のDV・左右Logic・名前空間は維持する。既存パッケージへ反映するには再変換が必要。
 
 Version 79では診断専用だった `ExpressionSystem/PairKey` を削除した。実行処理からの読み取りはなく、
-Selectionは左右のGestureから `GestureTable.L{左}R{右}` を直接参照する。確認には左右値とCurrentExpressionを使う。
+Selectionは左右のGestureから `GestureTable.L{左}R{右}` を直接参照する。確認には左右値とState.CurrentExpressionを使う。
 
 Version 78では、生成時に瞬き接続を検出したメッシュ出力のSmoothValueを省略する。瞬きのタイミングと振幅を保ち、表情とのmax/min合成を維持する。詳細は出力構築の説明を参照。
 
@@ -125,11 +139,11 @@ API全体は75から65ノードになる。初期化前のAPI更新は、その�
 Version 76では、生成物内に呼び出し元のない `AllowHandGestures`・`AllowHandGesturesLeft/Right`・
 `ToggleHandGesturesLeft/Right` の5受信処理とTag定義を削除した。公開受信処理は12から7個になる。
 両手メニューが使う `ToggleHandGestures` は維持する。個別の許可設定は左右のButtonToggle、
-または `ExpressionSystem/AllowHandGestures.Left`・`Right` の直接変更を使う。
+または `ExpressionSystem/Config.AllowHandGesture.Left`・`Right` の直接変更を使う。
 新規生成物には廃止Tagの互換受信部を置かない。既存パッケージの更新には再変換・再インポートが必要。
 
 Version 75では、ContextMenuの `Left hand gestures`・`Right hand gestures` を `ButtonToggle` に変更した。
-`TargetValue` は自身のアバターの `ExpressionSystem/AllowHandGestures.Left`・`Right` のValueを直接参照する。
+`TargetValue` は自身のアバターの `ExpressionSystem/Config.AllowHandGesture.Left`・`Right` のValueを直接参照する。
 個別メニューはAPIやその着用判定を経由せず、対応する許可だけを反転する。左右値・選択中の表情は保持する。
 色表示も同じValueを参照するため、APIからの変更にも追従する。両手用 `Hand gestures` と公開APIは従来どおり。
 
@@ -140,7 +154,7 @@ Ifを8個から5個へ削減し、Lifecycle全体は45から43ノードになっ
 他ユーザーが着用中なら共有状態を消さずローカル初期化フラグだけを戻す分岐は維持する。
 
 Version 73では、`Expressions/API/Receivers/Logic` を廃止し、その子の12個の受信処理スロットを
-`Receivers` 直下へ置く。各処理内のノード構成・公開Tag・送信先の `References.API` は維持する。
+`Receivers` 直下へ置く。各処理内のノード構成・公開Tag・送信先の `Reference.API` は維持する。
 受信処理を直接参照する場合のパスは `API/Receivers/SetGestureLeft` などになる。
 
 Version 72では、入力元ではなく処理の役割を表すAPI名へ変更する。左右とも同じ対応になる。
@@ -150,7 +164,7 @@ Version 72では、入力元ではなく処理の役割を表すAPI名へ変更�
 | `ResoPon/Expression/Keyboard/Left` | `ResoPon/Expression/SetGesture/Left` | 許可フラグに関係なく左手の値を設定して表情を選択 |
 | `ResoPon/Expression/Gesture/Left` | `ResoPon/Expression/TrySetGesture/Left` | 左手の許可がtrueの場合だけSetGestureへ転送 |
 
-`TrySetGesture → AllowHandGestures.<hand> → SetGesture → 左右値更新・Selection` の関係になる。
+`TrySetGesture → Config.AllowHandGesture.<hand> → SetGesture → 左右値更新・Selection` の関係になる。
 SetGestureもローカル着用者限定で、許可フラグ自体は変更しない。TrySetGestureは成功値を返すAPIではない。
 キーボード入力はSetGesture、コントローラー入力はTrySetGestureを使う。
 受信部名も `SetGestureLeft/Right`・`TrySetGestureLeft/Right` に揃える。
@@ -168,7 +182,7 @@ Keyboard左右は各13→10ノード、API全体は150→111ノードになる�
 初期化完了後の通常入力、未着用時の更新拒否、左右の許可判定は維持する。
 
 Version 70では、Gesture APIのLeft・Rightを
-`AllowHandGestures.<hand> → Keyboard/<hand>` に単純化する。
+`Config.AllowHandGesture.<hand> → Keyboard/<hand>` に単純化する。
 Gesture受信部には着用判定・Initialize・Sequenceを置かず、転送先のKeyboard受信部に任せる。
 標準生成構成のLeft・Rightはそれぞれ13ノードから7ノードになる。
 初期化より前に保存済みの許可値falseで届いた入力は破棄し、後から再送しない。
@@ -183,7 +197,7 @@ Version 69では、Gesture APIのLeft・Rightが許可された値を同じ手�
 ただし、観測したグラフは許可判定がInitializeより先に走るため、そのままでは同等ではない。
 複製・再読込・再装着時にローカル初期化が未完了かつ保存された許可値がfalseの場合、
 最初のGesture入力が破棄される。Version 69の生成コードでは従来どおり
-`AvatarWornLocal → Initialize → AllowHandGestures.<hand> → Keyboard/<hand>` の順序を維持する。
+`AvatarWornLocal → Initialize → Config.AllowHandGesture.<hand> → Keyboard/<hand>` の順序を維持する。
 転送先のInitializeは初期化済みなら何もせず、同じインパルス内で左右値と表情を更新する。
 初期化済みで禁止中の入力（停止時の-1を含む）は引き続き拒否する。
 Keyboard受信部もGesture入力の共通処理になるため、削除・無効化・Tag変更はGestureにも影響する。
@@ -195,7 +209,7 @@ Version 68では、API共通の `ApplyRequest` が追加条件を受け取らな
 計8個の固定true条件のIfを生成しない。装着判定と、Gesture入力に対する各手の許可判定は維持する。
 生成直後・複製・保存再読込後に、固定trueを条件に持つIfが存在しないことを検証する。
 
-Version 64ではジェスチャー許可を `AllowHandGestures.Left`・`Right` に分け、各手の
+Version 64ではジェスチャー許可を `Config.AllowHandGesture.Left`・`Right` に分け、各手の
 コントローラー入力とGesture APIに適用する。キーボードは左右の許可に関係なく受け付ける。
 Version 66の「Hand gestures」は両手とも許可されていれば両手を停止し、それ以外は両手を許可する。
 片手だけ変更した後も両手を同じ状態に揃えられる。「Left hand gestures」「Right hand gestures」は
@@ -231,7 +245,7 @@ Version 62では、Fluxノードをまとめる各Logic親スロットのロー�
 複製・保存後の再読込でも親の原点配置と、同じLogic内でノードが重ならないことを検証する。
 
 左右それぞれの現在のジェスチャーを int で保持し、
-`GestureTable.L{LeftGesture}R{RightGesture}` の名前で対応表を直接引く。生成時は64通りで、外部から行を追加できる。
+`GestureTable.L{State.LeftGesture}R{State.RightGesture}` の名前で対応表を直接引く。生成時は64通りで、外部から行を追加できる。
 対応表で選んだ表情の各トラックの終端値へ即座に切り替え、固定ポーズとして保持する。
 VRChatのカスタムFXからFaceEmo基準で最初の表情パターンを読み取り、対応表へ変換する。
 左右64通りへ静的に変換する方式であり、Animator 全体や汎用パラメーターの状態機械は生成しない。
@@ -239,19 +253,19 @@ VRChatのカスタムFXからFaceEmo基準で最初の表情パターンを読�
 
 変換済みポーズの格納先である `Catalog` と、選択先を決める `GestureTable` は別である。
 Version 23ではメニューからCatalogの表情を直接選択できる。GestureTableへの割り当ては不要。
-自動割り当てが0/64なら左右入力では `CurrentExpression` が null になるが、メニューからはCatalog表情を選択できる。
+自動割り当てが0/64なら左右入力では `State.CurrentExpression` が null になるが、メニューからはCatalog表情を選択できる。
 その場合は 変換ログのレイヤー・Clip の除外理由を確認する。
 
 ```mermaid
 flowchart LR
-    H[ハンドジェスチャー・TrySetGesture API] --> G{各手のAllowHandGestures.Left・Right}
+    H[ハンドジェスチャー・TrySetGesture API] --> G{各手のConfig.AllowHandGesture.Left・Right}
     G -->|true| U[SetGesture API]
     K[キーボード] --> U
-    U --> S[LeftGesture / RightGesture]
+    U --> S[State.LeftGesture / State.RightGesture]
     D[メニューでCatalogの表情を選択] --> T[許可をfalse・左右Gestureを0にして表情Slotを送信]
     T --> R
     S -->|入力イベント時のみ| P[GestureTableから表情Slotを送信]
-    P --> R[PlaybackがCurrentExpressionを設定・適用]
+    P --> R[PlaybackがState.CurrentExpressionを設定・適用]
     R --> V[通常出力はResultへWrite → BlendShape]
     R --> Q[追跡のある出力だけ専用Driveで合成 → BlendShape]
     B[瞬き・口パクのBase] --> Q
@@ -263,13 +277,15 @@ flowchart LR
 ```text
 Expressions/
   DV/                              システム共通の変数（1変数1子 Slot）
-    LeftGesture・RightGesture      左右の入力状態
-    AllowHandGestures.Left・Right          入力許可
-    CurrentExpression              現在の表情（Slot参照）
+    State.LeftGesture              左手の入力状態
+    State.RightGesture             右手の入力状態
+    Config.AllowHandGesture.Left    左手の入力許可
+    Config.AllowHandGesture.Right   右手の入力許可
+    State.CurrentExpression        現在の表情（Slot参照）
     GestureTable/                  対応表の変数をまとめるスロット
       L0R0〜L7R7                   64個の Catalog 参照
-    SmoothingSpeed                 補間速度
-    References.*                   API・Catalog・内部Slotの固定参照
+    Config.SmoothingSpeed          補間速度
+    Reference.*                    API・Catalog・内部Slotの固定参照
   Catalog/                         表情ごとの定義と最終値の一覧
     各表情/                        メニューのLabelに名前を直接保存
       DV/                          Clip空間のfloat変数
@@ -332,14 +348,14 @@ ProtoFlux Tool では調べたい `UpdateSelection`、`ApplyExpression` など�
 左右の公開 API は int を受信し、初期化確認 → 片手状態の更新 → UpdateSelection → ApplyExpression を同期実行する。
 同じフレーム内で左右のイベントが連続しても、それぞれの受信時点の両手状態・固定ポーズ・出力目標が確定する。
 追跡対象の出力目標は通常のドライバー更新で反映する。瞬き以外のメッシュの実ウェイトはSmoothValueで補間する。
-表情Slotを引数としてExpressionSystem/Internal.ApplyExpressionを送る。ApplyExpressionがCurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情のアクティブ状態は選択条件にしない。
+表情Slotを引数としてExpressionSystem/Internal.ApplyExpressionを送る。ApplyExpressionがState.CurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情のアクティブ状態は選択条件にしない。
 
 Version 47 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を 各CatalogエントリーのDV直下のfloat変数 に保存する。
-ApplyExpressionは表情Slot付きDynamicImpulseを受信し、CurrentExpressionへ設定してからOutputsを走査する。各出力のIdと同じ名前のfloat変数を読み、
+ApplyExpressionは表情Slot付きDynamicImpulseを受信し、State.CurrentExpressionへ設定してからOutputsを走査する。各出力のIdと同じ名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
 元から瞬き・口パク等のドライバーがある出力だけTrackingボードを生成し、
-CurrentExpressionの名前付き変数と追跡BaseをValueFieldDriveで合成する。アニメーションの途中値は評価しない。
+State.CurrentExpressionの名前付き変数と追跡BaseをValueFieldDriveで合成する。アニメーションの途中値は評価しない。
 AnimX・AnimationProvider・AssetLoader・トラック検索・サンプラーも生成しない。
 瞬き以外のメッシュ出力のResultはSmoothValue<float>.TargetValueを参照するDynamicField<float>。
 SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、標準ドライバーが実メッシュへ反映する。
@@ -382,8 +398,8 @@ Version 21では `GestureTable/Logic` のメニュー用監視を生成しない
 間に別名の空間があっても、要求した空間名で祖先を検索する。
 
 - 機種ごとの指角度しきい値・パッド方向割当・StabilitySeconds：親モジュールの `ExpressionSystem.Input.HandGestures`。
-- UpdateSelection の左右値：`ExpressionSystem/LeftGesture`・`ExpressionSystem/RightGesture`。
-- ApplyExpression の CurrentExpression：`ExpressionSystem/CurrentExpression` の Object Input。
+- UpdateSelection の左右値：`ExpressionSystem/State.LeftGesture`・`ExpressionSystem/State.RightGesture`。
+- ApplyExpression の State.CurrentExpression：`ExpressionSystem/State.CurrentExpression` の Object Input。
 - 各 Output の Id・Base・TrackingWeight・Result：`ExpressionSystem.Output`。
 
 API・機種別入力・各 Output からも、状態変数は祖先の ExpressionSystem 空間へ入力ノードでバインドする。
@@ -411,20 +427,20 @@ User が必要なコントローラー・UserFingerPoseSource だけは `GetActi
 
 まず Expressions/DV の状態変数を見て、入力・選択・再生のどこで期待とずれたかを分ける。
 各 Space の Slot 直下に DV を置き、値・参照・DynamicField を含め1変数1子 Slotで生成する。
-Inspector 上の状態変数名は `ExpressionSystem/LeftGesture` などで、Core. 接頭辞は付かない。GestureTable も同じ ExpressionSystem 空間に GestureTable.* として登録する。複数インスタンスを持つレコードだけに、階層をドットで表す別の空間名を使う。
+Inspector 上の状態変数名は `ExpressionSystem/State.LeftGesture` などで、Core. 接頭辞は付かない。GestureTable も同じ ExpressionSystem 空間に GestureTable.* として登録する。複数インスタンスを持つレコードだけに、階層をドットで表す別の空間名を使う。
 
 | 状態変数 | 確認する内容 |
 |---|---|
-| `LeftGesture` / `RightGesture` | 各入力から届いた int の状態（範囲制限なし） |
-| AllowHandGestures.Left / Right | true=該当する手のジェスチャーを許可、false=停止。キーボード・表情メニューは常に使用可能 |
-| `CurrentExpression` | 対応表または直接選択から渡された再生対象。未割当・削除済みなら null |
+| `State.LeftGesture` / `State.RightGesture` | 各入力から届いた int の状態（範囲制限なし） |
+| Config.AllowHandGesture.Left / Right | true=該当する手のジェスチャーを許可、false=停止。キーボード・表情メニューは常に使用可能 |
+| `State.CurrentExpression` | 対応表または直接選択から渡された再生対象。未割当・削除済みなら null |
 
 1. 左右の番号が違う場合は、`API/Method/TrySetGesture.Left`／`TrySetGesture.Right`、転送先の `SetGesture.Left`／`SetGesture.Right` と該当入力の `Logic` を調べる。
-2. 左右値が正しく表情が違う場合は、`GestureTable.L{左}R{右}` の参照と `AllowHandGestures.Left`・`Right` を確認し、`UpdateSelection` を調べる。
-3. `CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（nはLeftGesture、mはRightGesture）の参照があるか確認する。表情Slotのアクティブ状態は選択に影響しない。参照先が削除されていないか確認する。
+2. 左右値が正しく表情が違う場合は、`GestureTable.L{左}R{右}` の参照と `Config.AllowHandGesture.Left`・`Right` を確認し、`UpdateSelection` を調べる。
+3. `State.CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（nはState.LeftGesture、mはState.RightGesture）の参照があるか確認する。表情Slotのアクティブ状態は選択に影響しない。参照先が削除されていないか確認する。
 4. 選択が正しく見た目が違う場合は、`Internal/ApplyExpression` と該当出力の `Base`、`TrackingWeight`、`Result` と、Resultの参照先からメッシュまでの駆動接続を調べる。
 
-`AllowHandGestures.Left`・`Right` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
+`Config.AllowHandGesture.Left`・`Right` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
 変換時の警告・案内はログの `Expression diagnostics:` に記録する。
 `Expression graph:` にはボードの相対パスとノード数を記録する。アバター内にはDiagnosticsを生成しない。
 Outputs の `Id` はメッシュ名.BlendShape名から作る変数キー。選択表情に対応するfloat変数がなければBaseを使う。Binding参照・Pose・HasPose・再生時計は持たない。
@@ -447,15 +463,15 @@ URL を省略した場合は resoloop の環境変数・プロジェクト設定
 
 ## UpdateSelection と再生対象
 
-Core に保存する表情参照は `CurrentExpression` だけ。`MappedExpression` と `CandidateExpression` は生成しない。
+Core に保存する表情参照は `State.CurrentExpression` だけ。`MappedExpression` と `CandidateExpression` は生成しない。
 UpdateSelection は受理した左右入力イベントのときだけ実行する。左右値や表の編集・装着・入力許可の変更だけでは再評価しない。
 UpdateSelection は左・右を文字列化して `L{左}R{右}` を組み立て、`Expressions/DV/GestureTable/LnRm` を読み取る。
 取得した参照（未割当・削除済みならnull）をその更新中のローカル値として確定し、ApplyExpressionへ同期送信する。
-ApplyExpressionがCurrentExpressionへ設定し、終端値を即時にWriteする。同じ表情でも再適用する。
+ApplyExpressionがState.CurrentExpressionへ設定し、終端値を即時にWriteする。同じ表情でも再適用する。
 同じ参照なら同じ固定ポーズになる。nullでの解除時は出力目標をBaseへ戻す。Slotの無効化では解除しない。
 対応表の参照を調べたい場合は、左右のGesture値に対応する `L{左}R{右}` の行を直接見る。
-SelectionStatus は生成・計算しない。入力モードは AllowHandGestures.Left・Right、再生対象は CurrentExpression で確認する。
-未割当・参照先の削除は CurrentExpression=null となる。表情SlotやCatalogが非アクティブでも選択・適用できる。
+SelectionStatus は生成・計算しない。入力モードは Config.AllowHandGesture.Left・Right、再生対象は State.CurrentExpression で確認する。
+未割当・参照先の削除は State.CurrentExpression=null となる。表情SlotやCatalogが非アクティブでも選択・適用できる。
 
 ## 装着状態と Event・ResetState
 
@@ -468,10 +484,10 @@ API/Event/OnAvatarWorn 内の保存されない `StoredValue<bool>` が初期化
 AvatarWornLocal=falseのときは初期化済みフラグだけを解除し、共有状態は書き換えない。
 OnAvatarRemovedやイベント間の通知タグ、脱着用の遅延タスクは生成しない。
 
-- 装着開始・初回起動：AvatarWornLocal=true になれば初期化する。入力イベントがなければ CurrentExpression=null のままにする。
-- 取り外し：左右値・入力許可・CurrentExpressionを保持し、初期化済みフラグだけを解除する。出力側の着用判定で見た目をBaseへ戻す。
+- 装着開始・初回起動：AvatarWornLocal=true になれば初期化する。入力イベントがなければ State.CurrentExpression=null のままにする。
+- 取り外し：左右値・入力許可・State.CurrentExpressionを保持し、初期化済みフラグだけを解除する。出力側の着用判定で見た目をBaseへ戻す。
 - 未装着中：選択更新は停止する。通常出力は初期化・権限取得・ローカル着用状態の変化時にホストがBaseをWriteし、追跡対象は専用DriveがBaseに追従する。明示API呼び出しがなければ共有状態を維持する。
-- 再装着・複製・読み込み：初回のローカル着用時に左右値を0、CurrentExpressionをnullに戻す。左右の入力許可は保存値を維持する。APIが先に届いても初期化は呼ばず、先行入力のGesture値と表情は後続のResetState初期化でクリアされる。
+- 再装着・複製・読み込み：初回のローカル着用時に左右値を0、State.CurrentExpressionをnullに戻す。左右の入力許可は保存値を維持する。APIが先に届いても初期化は呼ばず、先行入力のGesture値と表情は後続のResetState初期化でクリアされる。
 
 OnAvatarWornはAvatarWornLocalの変化をFireOnLocalValueChangeで検出し、装着者の履歴は保持しない。
 一度falseを検出した後の再着用は、以前の2更新待機内であっても新しい着用として初期化する。
@@ -484,7 +500,7 @@ APIは着用状態にかかわらず受信処理を実行し、選択・表情�
 ### ResetStateの共通化と受付条件
 
 着用開始の分岐は初期化済みフラグの設定とResetStateの同期呼び出しだけで、状態リセットを重ねて実行してはいない。
-左右値・表情のクリア操作はResetStateだけに生成し、脱着時には呼ばない。AllowHandGestures.Left/Rightには書き込まない。
+左右値・表情のクリア操作はResetStateだけに生成し、脱着時には呼ばない。Config.AllowHandGesture.Left/Rightには書き込まない。
 ResetStateのAvatarWornLocal条件を削除したことで、未着用時の公開Resetと直接のResetStateも左右値を0へ戻し、表情を解除する。左右の許可設定は維持する。
 別のクライアントからの明示Resetも左右値の更新を受け付ける。ApplyExpressionの条件は変更せず、
 表情解除のnullはローカル着用中または誰も着用していない場合に受理する。他者着用中の閲覧側では表情の更新を拒否する。
@@ -499,9 +515,9 @@ bool APIも `ResoPon/Expression/AllowHandGestures` に変更する。旧変数�
 
 ジェスチャー番号は次の対応になる。
 Version 23では左右ジェスチャーのコンテキストメニューと専用のMenu/Left・Menu/Right APIを生成しない。
-コントローラーはMethod.TrySetGesture.Left・Method.TrySetGesture.Rightを使い、対応するAllowHandGestures.Left・Right=trueのときだけ受け付ける。
+コントローラーはMethod.TrySetGesture.Left・Method.TrySetGesture.Rightを使い、対応するConfig.AllowHandGesture.Left・Right=trueのときだけ受け付ける。
 キーボードはMethod.SetGesture.Left・Method.SetGesture.Rightのint APIを使い、許可フラグに関係なく受け付ける。Inputs側の送信は装着者限定。APIを直接呼ぶと未着用でも左右値を更新するが、表情選択はInternalで装着者に限定する。
-動作確認では `Core/LeftGesture`、`RightGesture`、`CurrentExpression` と対応表の参照先を見る。
+動作確認では `Core/State.LeftGesture`、`State.RightGesture`、`State.CurrentExpression` と対応表の参照先を見る。
 
 | 番号 | 状態 |
 |---|---|
@@ -551,11 +567,11 @@ Backは表情選択APIを送らず、選択中の表情やハンドジェスチ�
 分類は変換時に固定する。変換後のGestureTable編集による自動再分類は行わない。
 表情SlotはCatalog直下に保ち、サブメニュー配下の項目からSlot参照を送る。表示LabelはCatalog項目のLabelからValueCopyで取得する。
 項目のEnabledを自動制御しない。
-押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをSelect APIへ送る。選択済みの項目はnullを送り、表情を解除する。Select APIはnullまたは自身のCatalog直下の表情Slotを受理し、ApplyExpressionがCurrentExpressionへ設定して適用する。
-AllowHandGestures.Left・Rightを両方falseにし、LeftGesture=0、RightGesture=0を書いてからApplyExpressionを呼ぶ。GestureTableを再評価しないため、未割り当てでも直接選択できる。
-ReferenceEqualityDriver<Slot>がCurrentExpressionと項目の表情Slotを比較し、BooleanReferenceDriver<Slot>がPressedData.Referenceを選択中はnull、それ以外は表情Slotへ切り替える。Catalogの直接項目・左右のサブメニュー・Imported menuに共通で適用し、解除後の押下で再選択できる。表情の固定参照はFalseTargetに保持する。コンポーネントの変更通知で送信参照が更新されるため、同一フレーム内の更新を挟まない連続呼び出しでは切り替えが反映されない。
+押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをSelect APIへ送る。選択済みの項目はnullを送り、表情を解除する。Select APIはnullまたは自身のCatalog直下の表情Slotを受理し、ApplyExpressionがState.CurrentExpressionへ設定して適用する。
+Config.AllowHandGesture.Left・Rightを両方falseにし、State.LeftGesture=0、State.RightGesture=0を書いてからApplyExpressionを呼ぶ。GestureTableを再評価しないため、未割り当てでも直接選択できる。
+ReferenceEqualityDriver<Slot>がState.CurrentExpressionと項目の表情Slotを比較し、BooleanReferenceDriver<Slot>がPressedData.Referenceを選択中はnull、それ以外は表情Slotへ切り替える。Catalogの直接項目・左右のサブメニュー・Imported menuに共通で適用し、解除後の押下で再選択できる。表情の固定参照はFalseTargetに保持する。コンポーネントの変更通知で送信参照が更新されるため、同一フレーム内の更新を挟まない連続呼び出しでは切り替えが反映されない。
 Select APIへ同じ非nullの表情Slotを直接再送した場合は解除せず、ApplyExpressionで名前付きfloat変数の編集を反映する。
-表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `CurrentExpression` を参照して駆動する。
+表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `State.CurrentExpression` を参照して駆動する。
 Catalog・Imported menuともに選択中の表情は緑、それ以外は白。null用の白いOptionを先頭に置き、
 参照先の表情を削除した項目が未選択状態で緑にならないようにする。
 ジェスチャー許可項目のColorは `ValueOptionDescriptionDriver<bool>` が `MultiBoolConditionDriver` の結果を読む。
@@ -565,7 +581,7 @@ VRの4択は左右の許可がその選択肢と一致すれば緑、それ以�
 Catalog の Slot を固定用に保持する Override 変数は生成しない。
 
 Version 26の `Hand gestures` は単一のトグル項目で、押すたびに現在のboolを反転する。
-モードだけの変更では左右値・CurrentExpressionを変えない。初期値は true。
+モードだけの変更では左右値・State.CurrentExpressionを変えない。初期値は true。
 メニューから表情を選ぶと再び false になるため、ハンドジェスチャーへ戻すには許可をオンにする。キーボードはそのまま使える。
 直接選択は bool が false でも使える。ハンドジェスチャーを再許可した後も、次の左右入力イベントまでは直接選択を保持する。
 元のExpression MenuのButton/Toggleは読み込まない。
@@ -615,7 +631,7 @@ VariableNameはExpressionSystem.Catalog.Clip/と対応するOutput.Idを連結�
 例：ExpressionSystem.Catalog.Clip/Body.Smile。独立したBinding空間やBindings参照は生成しない。
 新しいシェイプを追加する場合は、対応する Outputs とメッシュへの接続も用意する。
 通常出力の名前付き変数・子レコードの編集後は表情を再選択する。追跡出力の名前付き変数の編集は自動反映する。
-外部から直接適用する場合は、References.APIが指すAPIスロットへExpressionSystem/Internal.ApplyExpressionを表情Slot付きで送る。CurrentExpressionを先に編集する必要はない。
+外部から直接適用する場合は、Reference.APIが指すAPIスロットへExpressionSystem/Internal.ApplyExpressionを表情Slot付きで送る。State.CurrentExpressionを先に編集する必要はない。
 
 ## 外部イベント API（タグ名はVersion 85）
 
@@ -626,11 +642,11 @@ Selectの引数は表情Slot。旧string ID送信は受理しない。内部Appl
 
 | Tag | 引数 | 動作 |
 |---|---|---|
-| `ExpressionSystem/Method.TrySetGesture.Left` | int（範囲制限なし） | AllowHandGestures.Left が true のときMethod.SetGesture.Leftへ転送 |
-| `ExpressionSystem/Method.TrySetGesture.Right` | int（範囲制限なし） | AllowHandGestures.Right が true のときMethod.SetGesture.Rightへ転送 |
+| `ExpressionSystem/Method.TrySetGesture.Left` | int（範囲制限なし） | Config.AllowHandGesture.Left が true のときMethod.SetGesture.Leftへ転送 |
+| `ExpressionSystem/Method.TrySetGesture.Right` | int（範囲制限なし） | Config.AllowHandGesture.Right が true のときMethod.SetGesture.Rightへ転送 |
 | `ExpressionSystem/Method.SetGesture.Left` | int（範囲制限なし） | フラグに関係なく左手を更新。フラグ自体は維持 |
 | `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし） | フラグに関係なく右手を更新。フラグ自体は維持 |
-| `ExpressionSystem/Method.SelectExpression` | Slot: 自身のCatalog直下の表情、または解除用のnull | 有効性を検証し、左右の許可をfalse、LeftGesture・RightGestureを順に0にしてからApplyExpressionへ送信 |
+| `ExpressionSystem/Method.SelectExpression` | Slot: 自身のCatalog直下の表情、または解除用のnull | 有効性を検証し、左右の許可をfalse、State.LeftGesture・State.RightGestureを順に0にしてからApplyExpressionへ送信 |
 | `ExpressionSystem/Method.ToggleHandGestures` | なし | 両手とも許可なら両手を停止、それ以外は両手を許可。左右値・表情は維持 |
 | `ExpressionSystem/Method.Reset` | なし | 表情を解除してBaseへ戻し、左右を0、ジェスチャー入力を有効にする |
 
@@ -639,11 +655,11 @@ Tag は大文字・小文字を含めて完全一致。引数型違い、無効�
 固定したいときは Menu 側の Tag を使い、手入力など固定しない送信元は Gesture 側を使う。
 メニューの送信にも専用の Tag を使うため、ハンドジェスチャーを無効にしてもメニューは操作できる。
 
-左右入力は片手の値を更新してUpdateSelectionへ通知する。直接選択メニューはboolを更新してApplyExpressionへ通知する。Internalがローカル着用を認めた場合、同じImpulse内でCurrentExpressionと出力を更新する。
+左右入力は片手の値を更新してUpdateSelectionへ通知する。直接選択メニューはboolを更新してApplyExpressionへ通知する。Internalがローカル着用を認めた場合、同じImpulse内でState.CurrentExpressionと出力を更新する。
 直接選択ではUpdateSelectionを経由せず、ApplyExpressionが固定ポーズと通常出力を同期更新する。追跡対象は通常のドライバー更新で反映する。
 boolの変更だけでは左右値も表情も変更しない。
 Version 25のコンテキストメニュー「Reset settings」は引数なしのReset APIを送る。
-CurrentExpression=null、左右のGesture=0へ一括で戻し、各出力にBaseを反映する。AllowHandGestures.Left・Rightはそれぞれ現在値を維持する。
+State.CurrentExpression=null、左右のGesture=0へ一括で戻し、各出力にBaseを反映する。Config.AllowHandGesture.Left・Rightはそれぞれ現在値を維持する。
 GestureTableの割り当てやCatalog、キー設定は変更しない。L0R0に表情が割り当てられていてもリセットでは再選択せず、次の左右入力イベントで再評価する。
 Resetは未着用時やジェスチャー無効時にも受け付ける。停止中のジェスチャーを再開する場合は許可メニューを使う。
 着用監視はEvent、状態の初期化はResetStateが担当し、複製・再ロード・再装着後のローカル着用時に左右値と表情をクリアする。許可設定は変更しない。公開APIから暗黙の初期化は行わない。
@@ -651,7 +667,7 @@ Dynamic ImpulseはネットワークRPCではない。API内の左右値・許�
 
 旧 `ResoPon/Expression/v3/Select` と `v3/Automatic` は生成しない。
 旧 Select 送信側は `ExpressionSystem/Method.SelectExpression` へ変更する。ハンドジェスチャーを明示的に再開する場合は
-`ExpressionSystem/AllowHandGestures.Left`・`Right` をtrueに設定する。
+`ExpressionSystem/Config.AllowHandGesture.Left`・`Right` をtrueに設定する。
 
 ## FaceEmo に合わせた表情候補の検出
 
@@ -767,7 +783,7 @@ FaceEmoのIsFaceMotionに合わせ、BlendTreeの候補判定は直下の最初�
 変換後は出力先と最終値だけを保存する。元カーブ・キー列・接線・AnimXは含めない。
 
 Playback は選択イベント・表情参照の変化時に、Outputsを1回走査する。
-各OutputのIdを変数名に使い、CurrentExpressionのClip空間からfloat値を直接読む。FoundValue=falseの場合だけBaseを使い、0の値は有効な表情値として適用する。
+各OutputのIdを変数名に使い、State.CurrentExpressionのClip空間からfloat値を直接読む。FoundValue=falseの場合だけBaseを使い、0の値は有効な表情値として適用する。
 表情値の子スロットの走査やOutput参照との比較はない。同名変数を同一空間に複数作ると値を共有するため、生成時に衝突しない名前を割り当てる。
 続いて通常出力を合成し、Resultと違う場合だけ書き込む。追跡用Driveの対象にはWriteしない。
 無変化時の全出力巡回も出力ごとの変更監視もない。通常出力のBase・TrackingWeight・BlinkMode編集は再選択で適用する。
@@ -804,7 +820,7 @@ BlinkModeの実行時編集だけではSmoothValueの有無は変わらない。
 瞬き接続を設定した状態で表情システムを再生成する必要がある。
 SmoothValueは瞬き以外の各Rendererの子にシェイプ名で1つずつ生成する。初期目標とBlendShapes[].Valueは解決済みフィールドの現在値で初期化し、
 Speedの初期値は10、WriteBack=falseでValueをBlendShapes[].ValueへTryLinkする。補間途中の値をTargetValueへ書き戻さない。
-Version 20では `Expressions/DV/SmoothingSpeed` の `ExpressionSystem/SmoothingSpeed`（float、初期値10）を共通設定にする。
+Version 20では `Expressions/DV/Config.SmoothingSpeed` の `ExpressionSystem/Config.SmoothingSpeed`（float、初期値10）を共通設定にする。
 各SmoothValueのSpeedは同じSlotのDynamicValueVariableDriver<float>でこの変数へ接続し、未解決時も10を使う。
 共通変数のValueを変えると、すべてのRendererの表情用SmoothValueへ反映される。
 Speedは秒数ではなく追従速度。小さくするとゆっくり、大きくすると速くなる。
@@ -816,7 +832,7 @@ Playback は通常出力の ExpressionSystem.Output/Result を読み、値が変
 
 瞬きの応答テストはResultや単独ValueFieldだけではなく、実SkinnedMeshRendererのウェイトを読む。
 単独フィールドには元からSmoothValueが付かないため、合成だけのテストではメッシュ出力の遅延を検出できない。
-ExpressionMeshDriverChecksではSmoothingSpeedを0.0001にし、通常／逆方向の左右独立した短い閉眼・開眼入力を4更新後に比較する。
+ExpressionMeshDriverChecksではConfig.SmoothingSpeedを0.0001にし、通常／逆方向の左右独立した短い閉眼・開眼入力を4更新後に比較する。
 半目・閉眼・トラック欠落・選択解除について、生成直後・複製後・保存再読込後に同じ検証を行う。
 
 2026-09-27: Version 16の実メッシュ検証では、選択直後のTargetValue更新、実ウェイトの中間値、

@@ -82,7 +82,7 @@ internal static class ExpressionMeshDriverChecks
         {
             Near(smooth.Speed.Value, expected, "all mesh SmoothValues follow this avatar's shared speed");
             var driver = smooth.Slot.GetComponent<DynamicValueVariableDriver<float>>();
-            Check(driver?.VariableName.Value == "ExpressionSystem/SmoothingSpeed" && driver.Target.Target == smooth.Speed &&
+            Check(driver?.VariableName.Value == "ExpressionSystem/Config.SmoothingSpeed" && driver.Target.Target == smooth.Speed &&
                 driver.Target.IsLinkValid, "shared speed uses a bound native DynamicVariableDriver");
         }
     }
@@ -91,8 +91,8 @@ internal static class ExpressionMeshDriverChecks
     {
         var expressions = avatar.FindChild("Expressions");
         var speed = expressions.GetComponentsInChildren<DynamicValueVariable<float>>()
-            .Single(v => v.VariableName.Value == "ExpressionSystem/SmoothingSpeed");
-        Check(speed.Slot == expressions.FindChild("DV").FindChild("SmoothingSpeed"), "one shared speed is editable in Expressions/DV");
+            .Single(v => v.VariableName.Value == "ExpressionSystem/Config.SmoothingSpeed");
+        Check(speed.Slot == expressions.FindChild("DV").FindChild("Config.SmoothingSpeed"), "one shared speed is editable in Expressions/DV");
         Near(speed.Value.Value, initial, "shared speed retains its value across clone/reload");
         CheckSpeeds(avatar, initial);
         speed.Value.Value = updated;
@@ -143,7 +143,7 @@ internal static class ExpressionMeshDriverChecks
         Near(second.GetBlendShapeWeight("ActualSmile"), 0.8f, "same shape and slot names on second renderer remain independent");
         Near(first.GetBlendShapeWeight("ActualBlink"), 0.1f, "missing animation track follows blink Base");
         var smoother = (SmoothValue<float>)dynamicResult.TargetField.Target.Parent;
-        var sharedSpeed = expressions.FindChild("DV").FindChild("SmoothingSpeed").GetComponent<DynamicValueVariable<float>>();
+        var sharedSpeed = expressions.FindChild("DV").FindChild("Config.SmoothingSpeed").GetComponent<DynamicValueVariable<float>>();
         float configuredSpeed = sharedSpeed.Value.Value;
         // Slow this transition so a long headless frame cannot skip every intermediate sample.
         sharedSpeed.Value.Value = 1f; await Frames(3); CheckSpeeds(avatar, 1f);

@@ -52,7 +52,7 @@ internal static class ExpressionOutputWriteChecks
                 ExpressionSystemSetup.TrySetGestureRightTag, true, index) == 1, "int receiver selects test clip " + index);
 
             Select(1); await Frames();
-            Check(Get<int>(core, "RightGesture") == 1 && Reference<Slot>(core, "CurrentExpression") == null,
+            Check(Get<int>(core, "State.RightGesture") == 1 && Reference<Slot>(core, "State.CurrentExpression") == null,
                 "before equip the API accepts the gesture value while Internal Selection rejects the pose");
             Near(a.Value, 0.2f, "unassigned avatar retains tracking Base");
             EquipAvatar(avatar); await Frames(30);
@@ -94,7 +94,7 @@ internal static class ExpressionOutputWriteChecks
             Near(a.Value, 1, "looping ramp stays at its final pose");
             Near(b.Value, 0, "time does not restart or advance the fixed pose");
             var outputReference = expressions.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-                .Single(v => v.VariableName.Value == "ExpressionSystem/References.Outputs");
+                .Single(v => v.VariableName.Value == "ExpressionSystem/Reference.Outputs");
             var emptyOutputs = expressions.AddSlot("Temporary empty outputs");
             try
             {
@@ -114,31 +114,31 @@ internal static class ExpressionOutputWriteChecks
             }
             await Frames(); Select(4); await Frames();
             var ramp = catalog.FindChild("Ramp");
-            Set<Slot>(core, "CurrentExpression", catalog.FindChild("Sparse"));
+            Set<Slot>(core, "State.CurrentExpression", catalog.FindChild("Sparse"));
             await Frames();
-            Near(a.Value, 0.7f, "changing CurrentExpression reads values from the new clip");
+            Near(a.Value, 0.7f, "changing State.CurrentExpression reads values from the new clip");
             Near(b.Value, 0, "direct reference edits do not apply static outputs without an impulse");
-            Playback(Reference<Slot>(core, "CurrentExpression"));
+            Playback(Reference<Slot>(core, "State.CurrentExpression"));
             Near(b.Value, 0.3f, "playback impulse synchronously restores Base for absent binding names");
             Playback(null);
-            Check(Reference<Slot>(core, "CurrentExpression") == null, "null playback payload synchronously clears selection");
+            Check(Reference<Slot>(core, "State.CurrentExpression") == null, "null playback payload synchronously clears selection");
             await Frames();
-            Near(a.Value, 0.4f, "null CurrentExpression restores Base");
+            Near(a.Value, 0.4f, "null State.CurrentExpression restores Base");
             Playback(ramp);
-            Check(Reference<Slot>(core, "CurrentExpression") == ramp, "playback payload synchronously sets selection");
+            Check(Reference<Slot>(core, "State.CurrentExpression") == ramp, "playback payload synchronously sets selection");
             Near(b.Value, 0, "explicit playback applies a reference change synchronously");
             await Frames();
-            Near(a.Value, 1, "restored CurrentExpression applies the clip value without a new gesture");
+            Near(a.Value, 1, "restored State.CurrentExpression applies the clip value without a new gesture");
             Near(b.Value, 0, "tracks with different lengths each hold their own final key");
             var shortClip = catalog.FindChild("Short");
-            Set<Slot>(core, "CurrentExpression", shortClip);
+            Set<Slot>(core, "State.CurrentExpression", shortClip);
             var shortB = BindingVariable(shortClip, outputB);
             outputB.ActiveSelf = false;
             shortClip.ActiveSelf = false;
             shortB.Slot.Parent.ActiveSelf = false;
             shortB.Slot.ActiveSelf = false;
             await Frames();
-            Playback(Reference<Slot>(core, "CurrentExpression"));
+            Playback(Reference<Slot>(core, "State.CurrentExpression"));
             Near(b.Value, 0.8f, "inactive Output, Clip and Binding slots do not gate playback values");
             outputB.ActiveSelf = true;
             shortClip.ActiveSelf = true;
@@ -200,23 +200,23 @@ internal static class ExpressionOutputWriteChecks
             avatar.FindChild("Avatar Root Identification")
                 .GetComponent<FrooxEngine.CommonAvatar.AvatarUserReferenceAssigner>().OnDequip(null);
             await Frames(30);
-            Check(Get<int>(core, "RightGesture") == 1 && Reference<Slot>(core, "CurrentExpression") == shortClip,
+            Check(Get<int>(core, "State.RightGesture") == 1 && Reference<Slot>(core, "State.CurrentExpression") == shortClip,
                 "identification dequip retains selection without a hierarchy change");
             Near(a.Value, 0.8f, "dequip restores tracked output Base");
             Near(b.Value, 0.3f, "dequip restores static output Base");
             Playback(ramp);
-            Check(Reference<Slot>(core, "CurrentExpression") == shortClip, "unworn Playback rejects non-null payloads and retains selection");
-            Set<Slot>(core, "CurrentExpression", ramp);
+            Check(Reference<Slot>(core, "State.CurrentExpression") == shortClip, "unworn Playback rejects non-null payloads and retains selection");
+            Set<Slot>(core, "State.CurrentExpression", ramp);
             Playback(null);
-            Check(Reference<Slot>(core, "CurrentExpression") == null, "unworn Playback accepts explicit clearing");
+            Check(Reference<Slot>(core, "State.CurrentExpression") == null, "unworn Playback accepts explicit clearing");
             Select(1);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureRightTag, true, 1);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true,
                 catalog.FindChild("Short"));
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesTag, true);
             await Frames();
-            Check(Get<int>(core, "RightGesture") == 0 && BothHandsAllowed(core) &&
-                Reference<Slot>(core, "CurrentExpression") == null,
+            Check(Get<int>(core, "State.RightGesture") == 0 && BothHandsAllowed(core) &&
+                Reference<Slot>(core, "State.CurrentExpression") == null,
                 "unworn Select clears hand input while Internal Playback keeps the pose cleared");
             tracking.Value = 0.65f; await Frames();
             Near(a.Value, 0.65f, "unworn tracking continues to follow Base");
@@ -224,12 +224,12 @@ internal static class ExpressionOutputWriteChecks
             Select(1); await Frames();
             Near(a.Value, 1, "re-equip re-enables selection without a hierarchy change");
             avatar.Parent = avatar.World.RootSlot; await Frames(30);
-            Check(Get<int>(core, "RightGesture") == 1 && Reference<Slot>(core, "CurrentExpression") == shortClip,
+            Check(Get<int>(core, "State.RightGesture") == 1 && Reference<Slot>(core, "State.CurrentExpression") == shortClip,
                 "hierarchy departure retains state despite different worn-flag update order");
             Near(a.Value, 0.65f, "hierarchy departure restores tracking Base");
             Near(b.Value, 0.3f, "hierarchy departure restores static Base without a reset impulse");
             avatar.Parent = parent; await Frames(30);
-            Check(Get<int>(core, "RightGesture") == 0 && Reference<Slot>(core, "CurrentExpression") == null,
+            Check(Get<int>(core, "State.RightGesture") == 0 && Reference<Slot>(core, "State.CurrentExpression") == null,
                 "reattachment resets retained state before input");
             Select(1); await Frames(); Near(a.Value, 1, "reattachment accepts input after worn flags update");
             Check(expressions.GetComponentsInChildren<ProtoFluxNode>().Count(n => n.GetType().Name == "LocalUpdate") == 0,

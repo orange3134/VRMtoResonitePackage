@@ -54,7 +54,7 @@ internal sealed partial class ExpressionSystemSetup
         var smooth = driver.Slot.AddSlot(UniqueChildName(driver.Slot, name)).AttachComponent<SmoothValue<float>>();
         smooth.Speed.Value = DefaultSmoothingSpeed;
         var speed = smooth.Slot.AttachComponent<DynamicValueVariableDriver<float>>();
-        speed.VariableName.Value = ExpressionFlux.Path(ExpressionSpaces.SystemSpace, "SmoothingSpeed");
+        speed.VariableName.Value = ExpressionFlux.Path(ExpressionSpaces.SystemSpace, "Config.SmoothingSpeed");
         speed.DefaultValue.Value = DefaultSmoothingSpeed;
         speed.Target.Target = smooth.Speed;
         smooth.WriteBack.Value = false;

@@ -21,7 +21,7 @@ internal sealed partial class ExpressionSystemSetup
     }
 
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
-        g.Write<int>(g.Ref(_api), SystemSpace, hand + "Gesture", gesture);
+        g.Write<int>(g.Ref(_api), SystemSpace, "State." + hand + "Gesture", gesture);
 
     private void BuildHandReceiver(ExpressionFlux g, string hand, string tag, bool checkPermission)
     {

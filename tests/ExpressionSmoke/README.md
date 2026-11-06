@@ -1,5 +1,11 @@
 # Expression integration checks
 
+2026-11-06: System DV keys and their slots use Reference.* for fixed references,
+Config.AllowHandGesture.Left/Right and Config.SmoothingSpeed for settings, and
+State.LeftGesture/RightGesture/CurrentExpression for runtime state. Placement
+checks require the new slots and reject old variable aliases. Dynamic input,
+menu, smoothing, lifecycle, clone and reload checks use the renamed fields.
+
 2026-11-06: Both hands share one Expressions menu rooted at Inputs/ContextMenu.
 Checks require one RootContextMenuItem without side restrictions, no Left/Right
 menu copies and one mode visibility board through generation, clone and reload.

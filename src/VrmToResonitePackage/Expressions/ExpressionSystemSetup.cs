@@ -16,7 +16,7 @@ internal sealed partial class ExpressionSystemSetup
     internal const string SelectTag = "ExpressionSystem/Method.SelectExpression";
     internal const string ResetTag = "ExpressionSystem/Method.Reset";
     internal const string ToggleHandGesturesTag = "ExpressionSystem/Method.ToggleHandGestures";
-    internal static string HandGesturePermission(string hand) => "AllowHandGestures." + hand;
+    internal static string HandGesturePermission(string hand) => "Config.AllowHandGesture." + hand;
     private readonly ExpressionModel _model;
     private readonly Slot _root, _catalog, _outputs, _table, _api, _method, _inputs;
     private readonly Slot _events, _resetState, _selection, _playback;
@@ -46,13 +46,13 @@ internal sealed partial class ExpressionSystemSetup
         _playback = internalSlot.AddSlot("ApplyExpression");
         foreach (string hand in new[] { "Left", "Right" })
         {
-            Data(_root, hand + "Gesture", 0);
+            Data(_root, "State." + hand + "Gesture", 0);
             Data(_root, HandGesturePermission(hand), true);
         }
-        Reference<Slot>(_root, "CurrentExpression", null);
-        Data(_root, "SmoothingSpeed", DefaultSmoothingSpeed);
-        Reference(_root, "References.API", _api);
-        Reference(_root, "References.Catalog", _catalog);
+        Reference<Slot>(_root, "State.CurrentExpression", null);
+        Data(_root, "Config.SmoothingSpeed", DefaultSmoothingSpeed);
+        Reference(_root, "Reference.API", _api);
+        Reference(_root, "Reference.Catalog", _catalog);
     }
 
     public static Task<Slot> BuildAsync(Slot avatar, ExpressionModel model, Func<ExpressionBinding, IField<float>> resolve,

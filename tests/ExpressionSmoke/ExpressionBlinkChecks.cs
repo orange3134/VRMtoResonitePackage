@@ -105,7 +105,7 @@ internal static class ExpressionBlinkChecks
         Blink(0, 0); await Frames(); Near(Result(close), 0.6f, "reopening reveals the selected pose");
         Select(0); Check(!TryReadSelectedValue(close, out _), "clearing immediately removes the pose");
         await Frames(); Near(Get<float>(close, "Result"), 0, "clearing restores live Base without a fade");
-        Blink(1, 1); await Frames(); Near(Result(close), 1, "blink works while CurrentExpression is null");
+        Blink(1, 1); await Frames(); Near(Result(close), 1, "blink works while State.CurrentExpression is null");
         Blink(0, 0); await Frames(); Near(Result(close), 0, "blink returns to open base");
         ExpressionGraphChecks.CheckLayout(expressions);
     }

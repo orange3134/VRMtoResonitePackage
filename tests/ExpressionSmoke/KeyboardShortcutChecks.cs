@@ -36,7 +36,7 @@ internal static class KeyboardShortcutChecks
         void Key(InputKey key, bool held) { if (held) heldKeys.Add(key); else heldKeys.Remove(key); }
         void Gesture(int hand, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             api, hand == 0 ? ExpressionSystemSetup.SetGestureLeftTag : ExpressionSystemSetup.SetGestureRightTag, true, value);
-        int GestureValue(int hand) => Get<int>(core, hand == 0 ? "LeftGesture" : "RightGesture");
+        int GestureValue(int hand) => Get<int>(core, hand == 0 ? "State.LeftGesture" : "State.RightGesture");
         bool leftAllowedBefore = HandGesturesAllowed(core, "Left"), rightAllowedBefore = HandGesturesAllowed(core, "Right");
         Slot extendedRow = null;
         try
@@ -77,16 +77,16 @@ internal static class KeyboardShortcutChecks
             Key(InputKey.Shift, false); Key(InputKey.Control, true); Key(InputKey.Keypad9, true); await Frames();
             Key(InputKey.Keypad9, false); await Frames();
             Check(GestureValue(0) == 8 && GestureValue(1) == 9 &&
-                Reference<Slot>(core, "CurrentExpression") == null, "keypad 8/9 produce an unmapped L8R9 without truncation");
+                Reference<Slot>(core, "State.CurrentExpression") == null, "keypad 8/9 produce an unmapped L8R9 without truncation");
             var expression = expressions.FindChild("Catalog").Children.First();
             extendedRow = expressions.FindChild("DV").FindChild("GestureTable").AddSlot("L8R9");
             var mapping = extendedRow.AttachComponent<DynamicReferenceVariable<Slot>>();
             mapping.VariableName.Value = "ExpressionSystem/GestureTable.L8R9";
             mapping.Reference.Target = expression;
             await Frames();
-            Check(Reference<Slot>(core, "CurrentExpression") == null, "adding an extended row waits for keyboard input");
+            Check(Reference<Slot>(core, "State.CurrentExpression") == null, "adding an extended row waits for keyboard input");
             Key(InputKey.Keypad9, true); await Frames();
-            Check(Reference<Slot>(core, "CurrentExpression") == expression && NoHandsAllowed(core),
+            Check(Reference<Slot>(core, "State.CurrentExpression") == expression && NoHandsAllowed(core),
                 "keypad 9 selects an externally added L8R9 expression while hand gestures are disabled");
             Key(InputKey.Keypad9, false); await Frames();
             Key(InputKey.Shift, false); Key(InputKey.Control, false);
@@ -95,7 +95,7 @@ internal static class KeyboardShortcutChecks
             Check(GestureValue(0) == 0 && GestureValue(1) == 0, "modifiers alone do not send a gesture");
             Key(InputKey.Keypad1, true); await Frames();
             Check(GestureValue(0) == 1 && GestureValue(1) == 1 &&
-                Reference<Slot>(core, "CurrentExpression") == Reference<Slot>(core, "GestureTable.L1R1"),
+                Reference<Slot>(core, "State.CurrentExpression") == Reference<Slot>(core, "GestureTable.L1R1"),
                 "both keyboard events settle on the simultaneous hand pair");
             Gesture(0, 4); Gesture(1, 5); await Frames();
             Key(InputKey.Control, false); await Frames();

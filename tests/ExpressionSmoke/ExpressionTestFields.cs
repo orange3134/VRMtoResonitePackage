@@ -7,12 +7,12 @@ internal static class ExpressionTestFields
     public static (int Left, int Right) Gestures(Slot slot)
     {
         int Read(string hand) => slot.ExpressionVariables<DynamicValueVariable<int>>()
-            .Single(v => v.VariableName.Value == VariablePath(slot, hand + "Gesture")).Value.Value;
+            .Single(v => v.VariableName.Value == VariablePath(slot, "State." + hand + "Gesture")).Value.Value;
         return (Read("Left"), Read("Right"));
     }
 
     public static bool HandGesturesAllowed(Slot slot, string hand) => slot.ExpressionVariables<DynamicValueVariable<bool>>()
-        .Single(v => v.VariableName.Value == VariablePath(slot, "AllowHandGestures." + hand)).Value.Value;
+        .Single(v => v.VariableName.Value == VariablePath(slot, "Config.AllowHandGesture." + hand)).Value.Value;
     public static bool BothHandsAllowed(Slot slot) => HandGesturesAllowed(slot, "Left") && HandGesturesAllowed(slot, "Right");
     public static bool NoHandsAllowed(Slot slot) => !HandGesturesAllowed(slot, "Left") && !HandGesturesAllowed(slot, "Right");
 
@@ -22,7 +22,7 @@ internal static class ExpressionTestFields
     {
         var space = slot.GetComponentInParents<DynamicVariableSpace>();
         foreach (string side in hand == null ? new[] { "Left", "Right" } : new[] { hand })
-            if (space.TryWriteValue("AllowHandGestures." + side, value) != DynamicVariableWriteResult.Success)
+            if (space.TryWriteValue("Config.AllowHandGesture." + side, value) != DynamicVariableWriteResult.Success)
                 throw new InvalidOperationException("Permission variable not writable: " + side);
     }
 
@@ -83,7 +83,7 @@ internal static class ExpressionTestFields
     public static bool TryReadSelectedValue(Slot output, out float value)
     {
         value = 0;
-        var current = Reference<Slot>(output.Parent.Parent.FindChild("API").FindChild("Internal"), "CurrentExpression");
+        var current = Reference<Slot>(output.Parent.Parent.FindChild("API").FindChild("Internal"), "State.CurrentExpression");
         if (current == null) return false;
         string id = output.ExpressionVariables<DynamicValueVariable<string>>()
             .Single(v => v.VariableName.Value == VariablePath(output, "Id")).Value.Value;

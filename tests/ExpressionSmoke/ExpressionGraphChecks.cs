@@ -14,7 +14,7 @@ internal static class ExpressionGraphChecks
     public static void CheckMenuColors(Slot expressions)
     {
         if (Descendant(expressions, "Inputs/ContextMenu") == null) return;
-        var current = ExpressionTestFields.Reference<Slot>(expressions.FindChild("API").FindChild("Internal"), "CurrentExpression");
+        var current = ExpressionTestFields.Reference<Slot>(expressions.FindChild("API").FindChild("Internal"), "State.CurrentExpression");
         var green = new colorX(0f, 1f, 0f, 1f, Renderite.Shared.ColorProfile.Linear);
         foreach (var item in expressions.GetComponentsInChildren<ContextMenuItemSource>())
         {
@@ -370,7 +370,7 @@ internal static class ExpressionGraphChecks
             foreach (var child in slot.Children) pending.Push(child);
         }
         var method = Descendant(expressions, "API/Method");
-        Check(ExpressionTestFields.Reference<Slot>(expressions, "References.API") == expressions.FindChild("API"),
+        Check(ExpressionTestFields.Reference<Slot>(expressions, "Reference.API") == expressions.FindChild("API"),
             "shared API reference targets this avatar's API root after generation, clone and reload");
         Check(expressions.FindChild("Method") == null && expressions.FindChild("Internal") == null &&
             expressions.FindChild("API").Children.Select(child => child.Name).OrderBy(name => name)
@@ -463,9 +463,9 @@ internal static class ExpressionGraphChecks
         var core = Descendant(expressions, "API/Internal");
         Check(core.ExpressionVariables<DynamicValueVariable<int>>().All(v => v.VariableName.Value != "ExpressionSystem/SelectionStatus"),
             "Core contains no SelectionStatus diagnostic variable");
-        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().Where(v => !v.VariableName.Value.StartsWith("ExpressionSystem/References.", StringComparison.Ordinal) &&
+        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().Where(v => !v.VariableName.Value.StartsWith("ExpressionSystem/Reference.", StringComparison.Ordinal) &&
                 !v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal))
-            .Select(v => v.VariableName.Value).SequenceEqual(new[] { "ExpressionSystem/CurrentExpression" }),
+            .Select(v => v.VariableName.Value).SequenceEqual(new[] { "ExpressionSystem/State.CurrentExpression" }),
             "Core stores only the current expression, without intermediate diagnostic references");
         Check(!core.ExpressionVariables<DynamicValueVariable<float>>().Any(v =>
             v.VariableName.Value is "ExpressionSystem/PlaybackStart" or "ExpressionSystem/PlaybackElapsed" or "ExpressionSystem/AnimationTime"),
@@ -480,21 +480,21 @@ internal static class ExpressionGraphChecks
         var selectCalls = selectNodes.OfType<Nodes.Sequence>().Single().Calls;
         Check(selectCalls.Count == 5 &&
             selectCalls[2] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> leftClear &&
-            leftClear.Path.Target is Nodes.ValueObjectInput<string> leftPath && leftPath.Value.Value == "ExpressionSystem/LeftGesture" &&
+            leftClear.Path.Target is Nodes.ValueObjectInput<string> leftPath && leftPath.Value.Value == "ExpressionSystem/State.LeftGesture" &&
             leftClear.Value.Target is Nodes.ValueInput<int> leftZero && leftZero.Value.Value == 0 &&
             selectCalls[3] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> rightClear &&
-            rightClear.Path.Target is Nodes.ValueObjectInput<string> rightPath && rightPath.Value.Value == "ExpressionSystem/RightGesture" &&
+            rightClear.Path.Target is Nodes.ValueObjectInput<string> rightPath && rightPath.Value.Value == "ExpressionSystem/State.RightGesture" &&
             rightClear.Value.Target is Nodes.ValueInput<int> rightZero && rightZero.Value.Value == 0 &&
             selectCalls[4] == selectNodes.Single(n => n.GetType().Name == "DynamicImpulseTriggerWithObject`1"),
-            "Select clears LeftGesture then RightGesture before dispatching the selected expression in one Sequence");
+            "Select clears State.LeftGesture then State.RightGesture before dispatching the selected expression in one Sequence");
         var currentWrites = nodes.Where(n => n.GetType().Name == "WriteDynamicObjectVariable`1" &&
             n.Slot.Parent.GetComponentsInChildren<Nodes.ValueObjectInput<string>>().Any(v =>
-                v.Value.Value == "ExpressionSystem/CurrentExpression")).ToArray();
+                v.Value.Value == "ExpressionSystem/State.CurrentExpression")).ToArray();
         Check(currentWrites.Length == 1 && currentWrites[0].Slot.Parent.Name == "ApplyExpression",
-            "Playback is the sole writer of CurrentExpression");
+            "Playback is the sole writer of State.CurrentExpression");
         Check(playback.All(n => n.GetType().Name is not "WorldTimeFloat" and not "ValueMod"), "pose application has no time or loop evaluation");
         Check(playback.All(n => n.GetType().Name != "FireOnLocalObjectChange`1"),
-            "CurrentExpression changes require an explicit playback impulse");
+            "State.CurrentExpression changes require an explicit playback impulse");
         Check(playback.Concat(expressions.FindChild("Outputs").GetComponentsInChildren<ProtoFluxNode>())
             .All(n => n.GetType().Name != "GetSlotActive"),
             "playback and tracking do not gate values on slot activity");
