@@ -58,7 +58,7 @@ internal static class ExpressionOutputWriteChecks
                 "before equip the API accepts the gesture value while Internal Selection rejects the pose");
             Near(a.Value, 0.2f, "unassigned avatar retains tracking Base");
             EquipAvatar(avatar); await Frames(30);
-            Near(b.Value, 0.3f, "first local wear initializes static output to Base");
+            Near(b.Value, 0.123f, "first local wear skips static output when selection is already null");
             Select(1); await Frames(); Near(a.Value, 1, "short clip reaches its final pose");
             Select(2); await Frames(); Near(a.Value, 0.2f, "track order can change for A"); Near(b.Value, 0.6f, "track order can change for B");
             Select(3); await Frames(); Near(a.Value, 0.7f, "sparse clip drives its own shape"); Near(b.Value, 0.3f, "missing track restores Base");
@@ -83,7 +83,15 @@ internal static class ExpressionOutputWriteChecks
             await Frames();
             Near(b.Value, 0.123f, "static Base edits do not write outside a selection event");
             Select(3);
-            Near(b.Value, 0.45f, "reselection synchronously applies the edited static Base");
+            Near(b.Value, 0.123f, "repeating the same gesture skips static output even after Base edits");
+            Set(table, "L0R7", catalog.FindChild("Sparse"));
+            Select(7);
+            Check(Get<int>(core, "State.RightGesture") == 7, "a different gesture can select the same expression");
+            Near(b.Value, 0.123f, "different gestures sharing one expression do not sweep static output");
+            Playback(catalog.FindChild("Sparse"));
+            Near(b.Value, 0.123f, "direct same-Slot playback does not sweep static output");
+            Select(2); Select(3);
+            Near(b.Value, 0.45f, "switching away and back applies the static Base");
             Set(outputB, "Base", 0.3f);
             tracking.Value = 0.4f;
             Set(outputA, "TrackingWeight", 0f);
@@ -108,6 +116,8 @@ internal static class ExpressionOutputWriteChecks
                 outputReference.Reference.Target = outputs;
                 await Frames();
                 Select(1);
+                Near(b.Value, 0, "same-Slot playback skips output even after restoring the Outputs reference");
+                Select(2); Select(1);
                 Near(b.Value, 0.8f, "restoring the Outputs reference resumes static output writes");
             }
             finally
@@ -122,9 +132,13 @@ internal static class ExpressionOutputWriteChecks
             Near(a.Value, 0.7f, "changing State.CurrentExpression reads values from the new clip");
             Near(b.Value, 0, "direct reference edits do not apply static outputs without an impulse");
             Playback(Reference<Slot>(core, "State.CurrentExpression"));
-            Near(b.Value, 0.3f, "playback impulse synchronously restores Base for absent binding names");
+            Near(b.Value, 0, "same-Slot playback after a direct reference edit skips static output");
             Playback(null);
             Check(Reference<Slot>(core, "State.CurrentExpression") == null, "null playback payload synchronously clears selection");
+            Near(b.Value, 0.3f, "changing selection to null synchronously restores static Base");
+            b.Value = 0.123f;
+            Playback(null);
+            Near(b.Value, 0.123f, "repeated null playback does not sweep static output");
             await Frames();
             Near(a.Value, 0.4f, "null State.CurrentExpression restores Base");
             Playback(ramp);
@@ -134,14 +148,13 @@ internal static class ExpressionOutputWriteChecks
             Near(a.Value, 1, "restored State.CurrentExpression applies the clip value without a new gesture");
             Near(b.Value, 0, "tracks with different lengths each hold their own final key");
             var shortClip = catalog.FindChild("Short");
-            Set<Slot>(core, "State.CurrentExpression", shortClip);
             var shortB = BindingVariable(shortClip, outputB);
             outputB.ActiveSelf = false;
             shortClip.ActiveSelf = false;
             shortB.Slot.Parent.ActiveSelf = false;
             shortB.Slot.ActiveSelf = false;
             await Frames();
-            Playback(Reference<Slot>(core, "State.CurrentExpression"));
+            Playback(shortClip);
             Near(b.Value, 0.8f, "inactive Output, Clip and Binding slots do not gate playback values");
             outputB.ActiveSelf = true;
             shortClip.ActiveSelf = true;
@@ -236,7 +249,7 @@ internal static class ExpressionOutputWriteChecks
             Near(a.Value, 0.65f, "unworn tracking continues to follow Base");
             Near(b.Value, 0.123f, "unworn inputs and tracking leave static output untouched");
             EquipAvatar(avatar); await Frames(30);
-            Near(b.Value, 0.3f, "re-equip initializes static output to Base");
+            Near(b.Value, 0.123f, "re-equip skips static output when selection was already cleared while unworn");
             Select(1); await Frames();
             Near(a.Value, 1, "re-equip re-enables selection without a hierarchy change");
             avatar.Parent = avatar.World.RootSlot; await Frames(30);

@@ -353,7 +353,7 @@ ProtoFlux Tool では調べたい `UpdateSelection`、`ApplyExpression` など�
 
 Version 47 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
 変換時に各トラックの最後のキー値を 各CatalogエントリーのDV直下のfloat変数 に保存する。
-ApplyExpressionは表情Slot付きDynamicImpulseを受信し、State.CurrentExpressionへ設定してからOutputsを走査する。各出力のIdと同じ名前のfloat変数を読み、
+ApplyExpressionは表情Slot付きDynamicImpulseを受信し、受信SlotとState.CurrentExpressionが異なる場合だけ参照を更新してOutputsを走査する。同一Slot（null同士も含む）では参照更新と走査を省略する。各出力のIdと同じ名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
 元から瞬き・口パク等のドライバーがある出力だけTrackingボードを生成し、
 State.CurrentExpressionの名前付き変数と追跡BaseをValueFieldDriveで合成する。アニメーションの途中値は評価しない。
@@ -378,7 +378,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 | UpdateSelection | 受理した左右のSetGesture APIイベントからの同期呼び出しのみ（TrySetGestureからの転送も含む） |
 | キーボード | 左右それぞれの10キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
-| ApplyExpression | 表情Slot付きImpulse受信時だけ実行し、ローカル着用中だけ通常出力へ一括Write。初期化・リセットはResetStateからnullを同期送信 |
+| ApplyExpression | 表情Slot付きImpulse受信時、現在と異なるSlotの場合だけ更新。通常出力の走査・Writeはローカル着用中のみ。初期化・リセットはResetStateからnullを同期送信 |
 | Outputs | 通常出力にはFluxなし。既存の追跡がある出力だけTrackingのDriveで継続合成。変更監視・通知は置かない |
 
 入力・装着状態の変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
@@ -468,7 +468,7 @@ Core に保存する表情参照は `State.CurrentExpression` だけ。`MappedEx
 UpdateSelection は受理した左右入力イベントのときだけ実行する。左右値や表の編集・装着・入力許可の変更だけでは再評価しない。
 UpdateSelection は左・右を文字列化して `L{左}R{右}` を組み立て、`Expressions/DV/GestureTable/LnRm` を読み取る。
 取得した参照（未割当・削除済みならnull）をその更新中のローカル値として確定し、ApplyExpressionへ同期送信する。
-ApplyExpressionがState.CurrentExpressionへ設定し、終端値を即時にWriteする。同じ表情でも再適用する。
+ApplyExpressionが受信SlotとState.CurrentExpressionを比較し、異なる場合だけ参照更新と通常出力の走査へ進む。同じ表情への入力は再適用しない。
 同じ参照なら同じ固定ポーズになる。nullでの解除時は出力目標をBaseへ戻す。Slotの無効化では解除しない。
 対応表の参照を調べたい場合は、左右のGesture値に対応する `L{左}R{右}` の行を直接見る。
 SelectionStatus は生成・計算しない。入力モードは Config.AllowHandGesture.Left・Right、再生対象は State.CurrentExpression で確認する。
@@ -492,7 +492,7 @@ OnAvatarRemovedやイベント間の通知タグ、脱着用の遅延タスク�
 
 OnAvatarWornはAvatarWornLocalの変化をFireOnLocalValueChangeで検出し、装着者の履歴は保持しない。
 一度falseを検出した後の再着用は、以前の2更新待機内であっても新しい着用として初期化する。
-通常出力のForEachは、受理したApplyExpression ImpulseからAvatarWornLocal=trueの場合だけ実行する。起動・着用開始はOnAvatarWorn → ResetState → ApplyExpression(null)の経路で初期化する。ApplyExpressionにはOnStart・変更監視・ホスト判定を生成しない。未装着時の明示Resetは状態を解除するが通常出力には書き込まない。
+通常出力のForEachは、受理したApplyExpression ImpulseのSlotが現在と異なり、AvatarWornLocal=trueの場合だけ実行する。Slot比較はState.CurrentExpressionへの書き込み前に行う。起動・着用開始はOnAvatarWorn → ResetState → ApplyExpression(null)の経路で初期化するが、すでにnullなら通常出力は走査せず現在値を保持する。ApplyExpressionにはOnStart・変更監視・ホスト判定を生成しない。未装着時の明示Resetは状態を解除するが通常出力には書き込まない。
 APIは着用状態にかかわらず受信処理を実行し、選択・表情適用はInternal側の条件に従う。ResetStateには着用条件を置かない。
 変更イベントが処理される前に外して同じユーザーへ戻し、判定結果が変わらなかった場合は連続した装着として扱う。
 未装着中も追跡用Driveは各クライアントのBaseに追従する。
@@ -572,7 +572,7 @@ Backは表情選択APIを送らず、選択中の表情やハンドジェスチ�
 押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをSelect APIへ送る。選択済みの項目はnullを送り、表情を解除する。Select APIはnullまたは自身のCatalog直下の表情Slotを受理し、ApplyExpressionがState.CurrentExpressionへ設定して適用する。
 Config.AllowHandGesture.Left・Rightを両方falseにし、State.LeftGesture=0、State.RightGesture=0を書いてからApplyExpressionを呼ぶ。GestureTableを再評価しないため、未割り当てでも直接選択できる。
 ReferenceEqualityDriver<Slot>がState.CurrentExpressionと項目の表情Slotを比較し、BooleanReferenceDriver<Slot>がPressedData.Referenceを選択中はnull、それ以外は表情Slotへ切り替える。Catalogの直接項目・左右のサブメニュー・Imported menuに共通で適用し、解除後の押下で再選択できる。表情の固定参照はFalseTargetに保持する。コンポーネントの変更通知で送信参照が更新されるため、同一フレーム内の更新を挟まない連続呼び出しでは切り替えが反映されない。
-Select APIへ同じ非nullの表情Slotを直接再送した場合は解除せず、ApplyExpressionで名前付きfloat変数の編集を反映する。
+Select APIへ同じ非nullの表情Slotを直接再送した場合は解除せず、ApplyExpressionの参照更新と通常出力の走査も省略する。
 表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `State.CurrentExpression` を参照して駆動する。
 Catalog・Imported menuともに選択中の表情は緑、それ以外は白。null用の白いOptionを先頭に置き、
 参照先の表情を削除した項目が未選択状態で緑にならないようにする。
@@ -616,7 +616,7 @@ Select APIは表情Slotを直接受け取るため、ジェスチャーの値・
 表は変数名で引くので、スロットの並び替え・表示名の変更・別の行の削除で対応がずれることはない。
 変数名は固定し、同じ名前を重複させない。削除した行を戻す場合は同じ変数名で再作成する。
 行が未設定、または表情の参照先が削除されている場合は Outputs のベース入力を使う。
-表の参照の編集は次の左右入力イベントで反映される。異なる行でも同じ表情を指す場合は同じ固定値を適用する。
+表の参照の編集は次の左右入力イベントで反映される。異なる行でも同じ表情を指す場合はApplyExpressionの更新を省略する。
 
 表情の追加は既存の Catalog エントリーを Catalog へ複製し、
 DV直下のfloat値とContextMenuItemSource.Labelを設定する。
@@ -632,8 +632,8 @@ Label用ValueCopyのSourceを追加した表情へ設定する。Catalogへの�
 VariableNameはExpressionSystem.Catalog.Clip/と対応するOutput.Idを連結した名前、値は元カーブの最後のキー値。
 例：ExpressionSystem.Catalog.Clip/Body.Smile。独立したBinding空間やBindings参照は生成しない。
 新しいシェイプを追加する場合は、対応する Outputs とメッシュへの接続も用意する。
-通常出力の名前付き変数・子レコードの編集後は表情を再選択する。追跡出力の名前付き変数の編集は自動反映する。
-外部から直接適用する場合は、Static.APIが指すAPIスロットへExpressionSystem/Internal.ApplyExpressionを表情Slot付きで送る。State.CurrentExpressionを先に編集する必要はない。
+通常出力の名前付き変数・子レコードの編集は、同じSlotの再送では反映しない。別の表情またはnullへ切り替えてから選び直すと反映する。追跡出力の名前付き変数の編集は自動反映する。
+外部から直接適用する場合は、Static.APIが指すAPIスロットへExpressionSystem/Internal.ApplyExpressionを表情Slot付きで送る。State.CurrentExpressionを先に編集すると同一Slotと判定され、通常出力の適用を省略する。
 
 ## 外部イベント API（タグ名はVersion 85）
 
@@ -784,12 +784,12 @@ FaceEmoのIsFaceMotionに合わせ、BlendTreeの候補判定は直下の最初�
 最後に開始姿勢へ戻るループ素材は、その戻った姿勢を採用する。途中の最大値や任意フレームは推測しない。
 変換後は出力先と最終値だけを保存する。元カーブ・キー列・接線・AnimXは含めない。
 
-ApplyExpression は表情Slot付きImpulseの受理時に、ローカル着用中だけOutputsを1回走査する。起動・着用開始の初期化もOnAvatarWornからResetState経由で同じImpulseを送る。表情参照の直接編集だけでは通常出力を更新しない。
+ApplyExpression は表情Slot付きImpulseの受理時に、現在と異なるSlotかつローカル着用中の場合だけOutputsを1回走査する。起動・着用開始の初期化もOnAvatarWornからResetState経由で同じImpulseを送り、null同士なら走査を省略する。表情参照の直接編集だけでは通常出力を更新しない。
 各OutputのIdを変数名に使い、State.CurrentExpressionのClip空間からfloat値を直接読む。FoundValue=falseの場合だけBaseを使い、0の値は有効な表情値として適用する。
 表情値の子スロットの走査やOutput参照との比較はない。同名変数を同一空間に複数作ると値を共有するため、生成時に衝突しない名前を割り当てる。
 続いて通常出力を合成し、Resultと違う場合だけ書き込む。追跡用Driveの対象にはWriteしない。
-無変化時の全出力巡回も出力ごとの変更監視もない。通常出力のBase・TrackingWeight・BlinkMode編集は再選択で適用する。
-通常出力のClip変数の編集も再選択で適用する。追跡出力は名前で直接読むため、値・名前・変数の追加削除は自動反映する。ローカル着用中の表情選択・初期化・着用開始で固定ポーズと通常出力を更新する。
+無変化時の全出力巡回も出力ごとの変更監視もない。通常出力のBase・TrackingWeight・BlinkMode・Clip変数の編集は同一Slotの再送では反映せず、別の表情またはnullへ切り替えてから選び直すことで適用する。
+追跡出力は名前で直接読むため、値・名前・変数の追加削除は自動反映する。通常出力はローカル着用中に選択Slotが変わった場合だけ更新する。
 ローカル装着者だけが通常出力のWriterを実行する。追跡用Driveは全クライアントでローカル評価する。
 未装着時は、保存・複製で選択状態が残っていても追跡出力のResultはBaseとなる。通常出力のResultは未装着判定中には書き換えない。
 

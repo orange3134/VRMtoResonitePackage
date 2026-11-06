@@ -1,5 +1,11 @@
 # Expression integration checks
 
+2026-11-06: ApplyExpression compares the received Slot with CurrentExpression
+before writing it. Repeated Slots, including null, skip the output traversal.
+Output checks use sentinel values to cover repeated gestures, different gestures
+sharing a clip, direct impulses, edited Base and output references, and null resets.
+First wear or rewear with an already-null selection also preserves static output.
+
 2026-11-06: ApplyExpression runs only on Slot impulses; OnAvatarWorn initializes
 startup and local wear through ResetState. Graph checks reject OnStart and local
 change detectors in ApplyExpression after generation, cloning and package reload.
@@ -84,8 +90,8 @@ Select accepts null to clear the pose while keeping gestures disabled and hand
 values unchanged. Runtime checks cover select/clear/reselect for Catalog entries,
 both hand menus and imported controls, including cloned and reloaded avatars.
 Color checks use the authored expression reference rather than the mutable payload.
-Copied Catalog entries also clear and reselect; repeated non-null API calls still
-apply the expression. Menu payload drivers settle on component updates between presses.
+Copied Catalog entries also clear and reselect; repeated non-null API calls keep
+the selection without reapplying static output. Menu payload drivers settle on component updates between presses.
 
 2026-11-05: Parent Internal and Method under a shared API slot. References.API
 targets that slot for every public/internal impulse. Checks verify the nested

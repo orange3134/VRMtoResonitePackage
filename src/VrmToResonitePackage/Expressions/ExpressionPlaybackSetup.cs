@@ -41,7 +41,8 @@ internal sealed partial class ExpressionSystemSetup
         // Explicit reset may clear state even without local wear authority.
         // Non-null selections require the local wearer; unworn instances accept only clearing.
         var accept = g.Or(wearer, g.And(g.Not(g.AvatarWorn), g.IsNull<Slot>(selected)));
-        Link(receiver, "OnTriggered", g.If(accept, g.Sequence(
+        // Compare before writing CurrentExpression; repeated Slots (including null) do not sweep Outputs.
+        Link(receiver, "OnTriggered", g.If(g.And(accept, g.NotEqual<Slot>(selected, current)), g.Sequence(
             g.Write<Slot>(core, SystemSpace, "State.CurrentExpression", selected),
             g.If(wearer, refresh))));
         // OnAvatarWorn initializes through ResetState's impulse; no separate startup or wear refresh.

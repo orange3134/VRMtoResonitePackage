@@ -67,6 +67,9 @@ internal static class ExpressionBindingNameChecks
                 await Frames(3);
                 Check(Math.Abs(fields[bindings[0]].Value - 0.2f) < 0.001f, "static edits wait for selection");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, root.FindChild("Catalog").FindChild("Named"));
+                Check(Math.Abs(fields[bindings[0]].Value - 0.2f) < 0.001f, "same-Slot selection skips edited static values");
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, ExpressionSystemSetup.SelectTag, true, null);
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, root.FindChild("Catalog").FindChild("Named"));
                 Check(Math.Abs(fields[bindings[0]].Value - 0.91f) < 0.001f, "variable name binds independently of slot label");
                 variable.Slot.Name = Text(firstOutput, "Id");
                 Check(ExpressionPackageSnapshot.Pose(root.FindChild("Catalog").FindChild("Named")).Count == bindings.Length,

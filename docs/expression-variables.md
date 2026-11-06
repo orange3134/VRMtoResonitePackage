@@ -156,7 +156,7 @@ ResetStateには着用監視や初期化済みフラグ、AvatarWornLocal条件�
 現在は公開Reset・直接のResetStateも未着用時に受理する。Internalの選択・表情適用には従来の着用条件が残る。
 
 初期化時は左右値を0へ戻し、Config.AllowHandGesture.Left・Rightは変更せず、
-ApplyExpressionへnullを送り、State.CurrentExpressionの解除と通常出力のBase復帰をまとめて実行する。追跡出力は専用DriveがBaseを反映する。
+ApplyExpressionへnullを送り、選択中ならState.CurrentExpressionの解除と通常出力のBase復帰をまとめて実行する。すでにnullなら通常出力の走査は省略する。追跡出力は専用DriveがBaseを反映する。
 ApplyExpressionはImpulse受信だけで実行する。OnStart・着用状態の変更監視は置かず、起動・着用開始の初期化はOnAvatarWorn → ResetStateへ集約する。
 その後の UpdateSelection と ApplyExpression の同期Writeで現在の対応表に応じた状態になる。
 
@@ -184,7 +184,7 @@ DynamicVariable としてのパスと float 型は同じなので、Read Dynamic
 メッシュ以外の単独 IField を使う内部テスト等では、そのフィールドをWriteまたは追跡用Driveの対象とし Result から参照する。
 
 表情なし・該当トラックなしの場合は sample の代わりに Base を使う。
-選択イベント内で各出力のIdと同名のClip変数を読み、通常出力のResultをWriteする。Binding参照・HasPose・Poseコピーは生成しない。
+選択イベントで受信SlotとState.CurrentExpressionを比較し、異なる場合だけ参照を更新して各出力のIdと同名のClip変数を読み、通常出力のResultをWriteする。同一Slotとnull同士では参照更新・ForEachを省略する。Binding参照・HasPose・Poseコピーは生成しない。
 元から追跡ドライバーがある出力だけTrackingのValueFieldDriveで継続合成する。
 出力ごとのFireOnLocalChange・通知イベント、LocalUpdate・アセット検索・サンプリング・切り替え補間は生成しない。
 未装着時は追跡出力のみ Result=Base とし、通常出力は最後の値を保持する。装着中は以下の式で評価する。通常出力のWriteはローカル装着者だけが値が異なる場合に行う。
@@ -208,7 +208,7 @@ BlinkMode を閉じる方向に合わせて1または2にする。TrackingWeight
 同じ BlendShape を DynamicBlendShapeDriver と EyeLinearDriver の両方から直接 Drive しない。
 BlinkMode は生成時に閉じる方向を設定する。後から OpenState／ClosedState を反転した場合は BlinkMode も変更する。
 追跡用DriveはState.CurrentExpressionから<Output.Id>名の値を読み、最新のBaseと合成し続ける。
-通常出力のBase・TrackingWeight・BlinkMode・Clipのfloat変数の編集は再選択で反映する。
+通常出力のBase・TrackingWeight・BlinkMode・Clipのfloat変数の編集は同一Slotの再送では反映しない。別の表情またはnullへ切り替えてから選び直すと反映する。
 追跡対象ではBase・TrackingWeight・BlinkModeと選択中の表情の名前付き変数の変更が自動反映される。
 Trackingのない出力に追跡を後付けする場合、Baseに接続するだけでは足りず、追跡元を設定してシステムを再生成する。
 OriginalDriverは元コンポーネント自体ではなく、元のActiveLink（出力先を保持するISyncRef）への参照。生成時にそのTargetをBase.Valueへ付け替える。実行時にも通常Writeを除外する判定で読むが、編集してもTrackingグラフの作成・削除や駆動先の再接続は行わないため、追跡の切り替え設定としては使わない。
