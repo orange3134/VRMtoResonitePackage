@@ -127,10 +127,13 @@ internal static class ImportedGestureAvatarChecks
         }
         Check(visible >= distinctPoses.Count, "Saved direct menu exposes every distinct mapped pose");
         int heldLeft = Get<int>(core, "State.LeftGesture"), heldRight = Get<int>(core, "State.RightGesture");
+        var heldExpression = Reference<Slot>(core, "State.CurrentExpression");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureLeftTag, true, (heldLeft + 1) % 8);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureRightTag, true, (heldRight + 1) % 8);
-        Check(Get<int>(core, "State.LeftGesture") == heldLeft && Get<int>(core, "State.RightGesture") == heldRight,
-            "Saved menu-only mode ignores normal input");
+        heldLeft = (heldLeft + 1) % 8; heldRight = (heldRight + 1) % 8;
+        Check(Get<int>(core, "State.LeftGesture") == heldLeft && Get<int>(core, "State.RightGesture") == heldRight &&
+            Reference<Slot>(core, "State.CurrentExpression") == heldExpression && ContextMenuSelected(core),
+            "Saved menu hold permits hand updates while blocking pose application");
         var toggle = menu.FindChild("Hand gestures").GetComponent<ButtonDynamicImpulseTrigger>();
         Check(toggle.PressedTag.Value == ExpressionSystemSetup.ToggleHandGesturesTag,
             "Saved hand gesture button sends a toggle impulse");

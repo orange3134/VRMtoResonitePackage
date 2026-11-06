@@ -48,16 +48,22 @@ internal static class ExpressionMenuToggleChecks
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, catalog);
                 Check(Held() && Reference<Slot>(core, "State.CurrentExpression") == target,
                     "invalid menu payload cannot release or replace the held pose");
-                foreach (string tag in new[] { ExpressionSystemSetup.TrySetGestureLeftTag, ExpressionSystemSetup.TrySetGestureRightTag,
-                    ExpressionSystemSetup.SetGestureLeftTag, ExpressionSystemSetup.SetGestureRightTag })
+                foreach (string tag in new[] { ExpressionSystemSetup.TrySetGestureLeftTag, ExpressionSystemSetup.TrySetGestureRightTag })
                     ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, tag, true, 7);
+                Check(Gestures(core) == (left ? 7 : 0, right ? 7 : 0) && Held() &&
+                    Reference<Slot>(core, "State.CurrentExpression") == target,
+                    "gesture inputs update permitted hands while ApplyExpression holds the pose");
+                foreach (string tag in new[] { ExpressionSystemSetup.SetGestureLeftTag, ExpressionSystemSetup.SetGestureRightTag })
+                    ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, tag, true, 6);
+                Check(Gestures(core) == (6, 6) && Held() && Reference<Slot>(core, "State.CurrentExpression") == target,
+                    "keyboard API updates both hands without applying a different pose");
                 foreach (string tag in new[] { ExpressionSystemSetup.SelectTag, "ExpressionSystem/Internal.ApplyExpression" })
                 foreach (var candidate in new[] { (Slot)null, catalog.Children.First(c => c != target) })
                     ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, tag, true, candidate);
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, "ExpressionSystem/Internal.UpdateSelection", true);
                 await Frames();
                 Check(Held() && Gestures(core) == (0, 0) && Reference<Slot>(core, "State.CurrentExpression") == target &&
-                    pose.SequenceEqual(outputs.Select(SelectedValue)), "all non-menu expression inputs are ignored while held");
+                    pose.SequenceEqual(outputs.Select(SelectedValue)), "Select clears hand state but ApplyExpression rejects non-menu pose changes while held");
                 PermissionsPreserved();
                 ExpressionGraphChecks.CheckMenuColors(expressions);
                 Check(button.PressedData.Reference.Target == null, "selected menu trigger carries null");

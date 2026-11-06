@@ -38,11 +38,8 @@ internal sealed partial class ExpressionSystemSetup
         }
         var mutation = g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),
             g.Trigger(g.Ref(_api), SelectionTickTag));
-        Link(receiver, "OnTriggered", g.If(AcceptExpressionInput(g), mutation));
+        Link(receiver, "OnTriggered", mutation);
     }
-
-    private IWorldElement AcceptExpressionInput(ExpressionFlux g) =>
-        g.Not(g.Read<bool>(g.Ref(_api), SystemSpace, ContextMenuSelected));
 
     private static IWorldElement FormatGesturePair(ExpressionFlux g, string format, IWorldElement left, IWorldElement right)
     {
@@ -75,7 +72,7 @@ internal sealed partial class ExpressionSystemSetup
         actions.Add(WriteHand(g, "Right", g.Constant(0)));
         actions.Add(g.Trigger<Slot>(g.Ref(_api), g.Text(PlaybackTickTag), selected));
         if (fromMenu) actions.Add(g.Write<bool>(g.Ref(_api), SystemSpace, ContextMenuSelected, g.Not(g.IsNull<Slot>(selected))));
-        var accept = fromMenu ? g.And(valid, g.AvatarWornLocal) : g.And(valid, AcceptExpressionInput(g));
+        var accept = fromMenu ? g.And(valid, g.AvatarWornLocal) : valid;
         Link(receiver, "OnTriggered", g.If(accept, g.Sequence(actions.ToArray())));
     }
 

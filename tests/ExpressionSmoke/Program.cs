@@ -380,11 +380,13 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(keyboard.Children.Count == 2, "keyboard exposes settings for each hand");
         var shortcut = keyboard.FindChild("Right").FindChild("DV").FindChild("Tag");
         Request(Get<string>(shortcut, "Tag"), 7); await Frames();
-        Check(Get<int>(core, "State.RightGesture") == 0 && BothHandsAllowed(core) && ContextMenuSelected(core),
+        Check(Get<int>(core, "State.RightGesture") == 7 && BothHandsAllowed(core) && ContextMenuSelected(core) &&
+            Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Animated"),
             "keyboard binding cannot overwrite a menu selection");
         AllowInput();
         Request(Get<string>(shortcut, "Tag"), 7); await Frames();
-        Check(Get<int>(core, "State.RightGesture") == 0, "enabling gestures does not release the menu hold");
+        Check(Get<int>(core, "State.RightGesture") == 7 && ContextMenuSelected(core) &&
+            Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Animated"), "enabling gestures does not release the menu hold");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
         Request(Get<string>(shortcut, "Tag"), 7);
         Check(Get<int>(core, "State.RightGesture") == 7, "keyboard binding resumes after reset");

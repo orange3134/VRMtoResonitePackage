@@ -9,7 +9,7 @@ internal sealed partial class ExpressionSystemSetup
     private void ReceiveUpdate(ExpressionFlux g, string tag, IWorldElement action)
     {
         var receiver = g.Receiver(tag, false);
-        Link(receiver, "OnTriggered", g.If(g.And(g.AvatarWornLocal, AcceptExpressionInput(g)), action));
+        Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal, action));
     }
 
     private void BuildResetState()
