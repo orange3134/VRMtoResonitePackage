@@ -1,5 +1,10 @@
 # Expression integration checks
 
+2026-11-06: ApplyExpression runs only on Slot impulses; OnAvatarWorn initializes
+startup and local wear through ResetState. Graph checks reject OnStart and local
+change detectors in ApplyExpression after generation, cloning and package reload.
+Existing output and lifecycle checks cover first wear, rewear and unworn values.
+
 2026-11-06: System DV keys and their slots use Static.* for fixed references,
 Config.AllowHandGesture.Left/Right and Config.SmoothingSpeed for settings, and
 State.LeftGesture/RightGesture/CurrentExpression for runtime state. Placement

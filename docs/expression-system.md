@@ -47,7 +47,7 @@ Catalog・左右のサブメニュー・Imported menuとAPI直接呼び出しで
 2026-11-06: OnAvatarRemovedとイベント間の2つの通知タグを削除した。
 脱着時は左右値・許可・State.CurrentExpressionを保持し、OnAvatarWornのローカル初期化フラグだけを解除する。
 次の着用時にResetStateで初期化する。脱着の2更新待機と遅延タスクは生成しない。
-通常出力はApplyExpressionでAvatarWornLocalの変化も監視し、ローカル着用開始時に再適用する。未着用時のホスト書き込みは行わず、脱着時は最後の出力値を保持する。
+通常出力はApplyExpressionのImpulse受信時だけ更新する。起動・着用開始の初期化はOnAvatarWornからResetState経由で行い、ApplyExpressionにはOnStart・着用状態の変更監視を置かない。未着用時のホスト書き込みは行わず、脱着時は最後の出力値を保持する。
 追跡出力は従来どおり未着用時にBaseへ追従する。
 
 2026-11-05: ResetStateのAvatarWornLocal条件を削除した。公開Resetと直接のResetStateは未着用時にも受理する。
@@ -378,12 +378,12 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 | UpdateSelection | 受理した左右のSetGesture APIイベントからの同期呼び出しのみ（TrySetGestureからの転送も含む） |
 | キーボード | 左右それぞれの10キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
-| ApplyExpression | ローカル着用中だけ通常出力へ一括Write。選択イベント内で保存済みValueを即時適用。初期化・リセットはnullを同期送信。OnStartとローカル着用開始でも再適用 |
+| ApplyExpression | 表情Slot付きImpulse受信時だけ実行し、ローカル着用中だけ通常出力へ一括Write。初期化・リセットはResetStateからnullを同期送信 |
 | Outputs | 通常出力にはFluxなし。既存の追跡がある出力だけTrackingのDriveで継続合成。変更監視・通知は置かない |
 
 入力・装着状態の変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
 比較用の前回値はローカルな実行状態で、DynamicVariable や同期・保存対象の変数には追加しない。
-初期値の設定だけでは発火しない。Inputsは変更イベントだけを使い、EventとApplyExpressionの初期処理には `OnStart` を使う。ResetStateにはOnStartを置かない。
+初期値の設定だけでは発火しない。Inputsは変更イベントだけを使い、Event/OnAvatarWornの初期処理には `OnStart` を使う。ResetStateとApplyExpressionにはOnStartを置かず、Impulse受信で実行する。
 装着者の確認はEvent・Inputs・Internalで行う。Version 77以降、公開Method内では着用判定しない。
 
 この構成で、無変化時の Impulse 実行・変数への書き込みを減らす。メニュー全走査は行わない。
@@ -492,7 +492,7 @@ OnAvatarRemovedやイベント間の通知タグ、脱着用の遅延タスク�
 
 OnAvatarWornはAvatarWornLocalの変化をFireOnLocalValueChangeで検出し、装着者の履歴は保持しない。
 一度falseを検出した後の再着用は、以前の2更新待機内であっても新しい着用として初期化する。
-通常出力のForEachは、受理したApplyExpression Impulse・OnStart・AvatarWornLocalの変化から、AvatarWornLocal=trueの場合だけ実行する。ホスト判定と権限変更の監視は生成しない。未装着時の明示Resetは状態を解除するが通常出力には書き込まない。
+通常出力のForEachは、受理したApplyExpression ImpulseからAvatarWornLocal=trueの場合だけ実行する。起動・着用開始はOnAvatarWorn → ResetState → ApplyExpression(null)の経路で初期化する。ApplyExpressionにはOnStart・変更監視・ホスト判定を生成しない。未装着時の明示Resetは状態を解除するが通常出力には書き込まない。
 APIは着用状態にかかわらず受信処理を実行し、選択・表情適用はInternal側の条件に従う。ResetStateには着用条件を置かない。
 変更イベントが処理される前に外して同じユーザーへ戻し、判定結果が変わらなかった場合は連続した装着として扱う。
 未装着中も追跡用Driveは各クライアントのBaseに追従する。
@@ -784,7 +784,7 @@ FaceEmoのIsFaceMotionに合わせ、BlendTreeの候補判定は直下の最初�
 最後に開始姿勢へ戻るループ素材は、その戻った姿勢を採用する。途中の最大値や任意フレームは推測しない。
 変換後は出力先と最終値だけを保存する。元カーブ・キー列・接線・AnimXは含めない。
 
-ApplyExpression は表情Slot付きImpulseの受理時・OnStart・ローカル着用開始時に、ローカル着用中だけOutputsを1回走査する。表情参照の直接編集だけでは通常出力を更新しない。
+ApplyExpression は表情Slot付きImpulseの受理時に、ローカル着用中だけOutputsを1回走査する。起動・着用開始の初期化もOnAvatarWornからResetState経由で同じImpulseを送る。表情参照の直接編集だけでは通常出力を更新しない。
 各OutputのIdを変数名に使い、State.CurrentExpressionのClip空間からfloat値を直接読む。FoundValue=falseの場合だけBaseを使い、0の値は有効な表情値として適用する。
 表情値の子スロットの走査やOutput参照との比較はない。同名変数を同一空間に複数作ると値を共有するため、生成時に衝突しない名前を割り当てる。
 続いて通常出力を合成し、Resultと違う場合だけ書き込む。追跡用Driveの対象にはWriteしない。

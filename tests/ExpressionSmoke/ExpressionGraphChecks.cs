@@ -493,8 +493,8 @@ internal static class ExpressionGraphChecks
         Check(currentWrites.Length == 1 && currentWrites[0].Slot.Parent.Name == "ApplyExpression",
             "Playback is the sole writer of State.CurrentExpression");
         Check(playback.All(n => n.GetType().Name is not "WorldTimeFloat" and not "ValueMod"), "pose application has no time or loop evaluation");
-        Check(playback.All(n => n.GetType().Name != "FireOnLocalObjectChange`1"),
-            "State.CurrentExpression changes require an explicit playback impulse");
+        Check(playback.All(n => n.GetType().Name is not ("OnStart" or "FireOnLocalValueChange`1" or "FireOnLocalObjectChange`1")),
+            "ApplyExpression runs only on impulses; OnAvatarWorn owns startup and wear initialization");
         Check(playback.Concat(expressions.FindChild("Outputs").GetComponentsInChildren<ProtoFluxNode>())
             .All(n => n.GetType().Name != "GetSlotActive"),
             "playback and tracking do not gate values on slot activity");

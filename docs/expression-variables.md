@@ -157,6 +157,7 @@ ResetStateには着用監視や初期化済みフラグ、AvatarWornLocal条件�
 
 初期化時は左右値を0へ戻し、Config.AllowHandGesture.Left・Rightは変更せず、
 ApplyExpressionへnullを送り、State.CurrentExpressionの解除と通常出力のBase復帰をまとめて実行する。追跡出力は専用DriveがBaseを反映する。
+ApplyExpressionはImpulse受信だけで実行する。OnStart・着用状態の変更監視は置かず、起動・着用開始の初期化はOnAvatarWorn → ResetStateへ集約する。
 その後の UpdateSelection と ApplyExpression の同期Writeで現在の対応表に応じた状態になる。
 
 装着が終了しても左右値・入力許可・State.CurrentExpressionは保持し、ResetStateは呼ばない。

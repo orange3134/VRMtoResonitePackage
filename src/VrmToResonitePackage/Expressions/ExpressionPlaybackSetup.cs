@@ -44,8 +44,7 @@ internal sealed partial class ExpressionSystemSetup
         Link(receiver, "OnTriggered", g.If(accept, g.Sequence(
             g.Write<Slot>(core, SystemSpace, "State.CurrentExpression", selected),
             g.If(wearer, refresh))));
-        g.OnChanged<bool>(wearer, g.If(wearer, refresh));
-        g.OnStart(g.If(wearer, refresh));
+        // OnAvatarWorn initializes through ResetState's impulse; no separate startup or wear refresh.
         foreach (var output in _outputSlots.Values)
         {
             if (!output.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<ISyncRef>>().Any(v =>
