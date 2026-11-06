@@ -20,7 +20,7 @@ internal sealed partial class ExpressionSystemSetup
         cleanup.Add(g.Write<bool>(core, SystemSpace, ContextMenuSelected, g.Constant(false)));
         foreach (string hand in new[] { "Left", "Right" })
         {
-            cleanup.Add(g.Write<int>(core, SystemSpace, "State." + hand + "Gesture", g.Constant(0)));
+            cleanup.Add(g.Write<int>(core, SystemSpace, "State.Gesture." + hand, g.Constant(0)));
         }
         cleanup.Add(g.Trigger<Slot>(g.Ref(_api), g.Text(PlaybackTickTag), g.Ref<Slot>(null)));
         // Reset is shared by explicit requests and wear initialization.

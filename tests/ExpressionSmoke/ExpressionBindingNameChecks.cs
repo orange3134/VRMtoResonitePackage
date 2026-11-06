@@ -47,7 +47,7 @@ internal static class ExpressionBindingNameChecks
                 {
                     var groups = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
                     Check(groups.FindChild("Hand sign expressions") == null && groups.FindChild("Other expressions") != null,
-                        "Catalog without gesture mappings omits the empty hand sign submenu");
+                        "Clips without gesture mappings omits the empty hand sign submenu");
                 }
                 var outputs = root.FindChild("Outputs").Children;
                 var names = outputs.ToDictionary(o => fields.Single(p => p.Value == OutputTarget(o)).Key.Path, o => Text(o, "Id"));
@@ -56,23 +56,23 @@ internal static class ExpressionBindingNameChecks
                 else Check(names.All(p => firstNames[p.Key] == p.Value), "keys are stable when source curve order changes");
                 var api = root.FindChild("API");
                 Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-                    ExpressionSystemSetup.MenuSelectTag, true, root.FindChild("Catalog").FindChild("Named")) == 1, "select named expression");
+                    ExpressionSystemSetup.MenuSelectTag, true, root.FindChild("Clips").FindChild("Named")) == 1, "select named expression");
                 for (int i = 0; i < bindings.Length; i++)
                     Check(Math.Abs(fields[bindings[i]].Value - (0.2f + i * 0.15f)) < 0.001f, "colliding names drive their own output");
-                var values = root.FindChild("Catalog").FindChild("Named");
+                var values = root.FindChild("Clips").FindChild("Named");
                 var firstOutput = outputs.Single(o => OutputTarget(o) == fields[bindings[0]]);
                 var variable = BindingVariable(values, firstOutput);
                 variable.Slot.Name = "Display label is independent";
                 variable.Value.Value = 0.91f;
                 await Frames(3);
                 Check(Math.Abs(fields[bindings[0]].Value - 0.2f) < 0.001f, "static edits wait for selection");
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, root.FindChild("Catalog").FindChild("Named"));
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, root.FindChild("Clips").FindChild("Named"));
                 Check(Math.Abs(fields[bindings[0]].Value - 0.2f) < 0.001f, "same-Slot selection skips edited static values");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, ExpressionSystemSetup.MenuSelectTag, true, null);
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, root.FindChild("Catalog").FindChild("Named"));
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, root.FindChild("Clips").FindChild("Named"));
                 Check(Math.Abs(fields[bindings[0]].Value - 0.91f) < 0.001f, "variable name binds independently of slot label");
                 variable.Slot.Name = Text(firstOutput, "Id");
-                Check(ExpressionPackageSnapshot.Pose(root.FindChild("Catalog").FindChild("Named")).Count == bindings.Length,
+                Check(ExpressionPackageSnapshot.Pose(root.FindChild("Clips").FindChild("Named")).Count == bindings.Length,
                     "snapshot comparisons retain every source binding");
                 ExpressionGraphChecks.CheckLayout(root);
                 ExpressionPackageSnapshot.Capture(root, Path.Combine(artifacts, "NamedBindings" + reverse));

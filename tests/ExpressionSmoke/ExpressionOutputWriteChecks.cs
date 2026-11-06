@@ -38,7 +38,7 @@ internal static class ExpressionOutputWriteChecks
             b.Value = 0.123f;
             await Frames(90);
             Near(b.Value, 0.123f, "unworn startup does not write static Base even on the host");
-            var core = expressions.FindChild("API").FindChild("Internal"); var catalog = expressions.FindChild("Catalog");
+            var core = expressions.FindChild("API").FindChild("Internal"); var catalog = expressions.FindChild("Clips");
             var table = expressions.FindChild("DV").FindChild("GestureTable"); var outputs = expressions.FindChild("Outputs");
             var outputA = outputs.FindChild("A"); var outputB = outputs.FindChild("B");
             var api = expressions.FindChild("API");
@@ -54,7 +54,7 @@ internal static class ExpressionOutputWriteChecks
                 ExpressionSystemSetup.TrySetGestureRightTag, true, index) == 1, "int receiver selects test clip " + index);
 
             Select(1); await Frames();
-            Check(Get<int>(core, "State.RightGesture") == 1 && Reference<Slot>(core, "State.CurrentExpression") == null,
+            Check(Get<int>(core, "State.Gesture.Right") == 1 && Reference<Slot>(core, "State.CurrentExpression") == null,
                 "before equip the API accepts the gesture value while Internal Selection rejects the pose");
             Near(a.Value, 0.2f, "unassigned avatar retains tracking Base");
             EquipAvatar(avatar); await Frames(30);
@@ -86,7 +86,7 @@ internal static class ExpressionOutputWriteChecks
             Near(b.Value, 0.123f, "repeating the same gesture skips static output even after Base edits");
             Set(table, "L0R7", catalog.FindChild("Sparse"));
             Select(7);
-            Check(Get<int>(core, "State.RightGesture") == 7, "a different gesture can select the same expression");
+            Check(Get<int>(core, "State.Gesture.Right") == 7, "a different gesture can select the same expression");
             Near(b.Value, 0.123f, "different gestures sharing one expression do not sweep static output");
             Playback(catalog.FindChild("Sparse"));
             Near(b.Value, 0.123f, "direct same-Slot playback does not sweep static output");
@@ -105,7 +105,7 @@ internal static class ExpressionOutputWriteChecks
             Near(a.Value, 1, "looping ramp stays at its final pose");
             Near(b.Value, 0, "time does not restart or advance the fixed pose");
             var outputReference = expressions.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-                .Single(v => v.VariableName.Value == "ExpressionSystem/Static.Outputs");
+                .Single(v => v.VariableName.Value == "ExpressionSystem/Reference.Outputs");
             var emptyOutputs = expressions.AddSlot("Temporary empty outputs");
             try
             {
@@ -216,7 +216,7 @@ internal static class ExpressionOutputWriteChecks
             avatar.FindChild("Avatar Root Identification")
                 .GetComponent<FrooxEngine.CommonAvatar.AvatarUserReferenceAssigner>().OnDequip(null);
             await Frames(30);
-            Check(Get<int>(core, "State.RightGesture") == 1 && Reference<Slot>(core, "State.CurrentExpression") == shortClip,
+            Check(Get<int>(core, "State.Gesture.Right") == 1 && Reference<Slot>(core, "State.CurrentExpression") == shortClip,
                 "identification dequip retains selection without a hierarchy change");
             Near(a.Value, 0.8f, "dequip restores tracked output Base");
             Near(b.Value, 0.8f, "dequip retains static output even on the host");
@@ -241,7 +241,7 @@ internal static class ExpressionOutputWriteChecks
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true,
                 catalog.FindChild("Short"));
             await Frames();
-            Check(Get<int>(core, "State.RightGesture") == 0 && BothHandsAllowed(core) &&
+            Check(Get<int>(core, "State.Gesture.Right") == 0 && BothHandsAllowed(core) &&
                 Reference<Slot>(core, "State.CurrentExpression") == null && ContextMenuSelected(core),
                 "unworn menu selection clears hands and sets the hold while Playback rejects the pose");
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, catalog);
@@ -261,12 +261,12 @@ internal static class ExpressionOutputWriteChecks
             Select(1); await Frames();
             Near(a.Value, 1, "re-equip re-enables selection without a hierarchy change");
             avatar.Parent = avatar.World.RootSlot; await Frames(30);
-            Check(Get<int>(core, "State.RightGesture") == 1 && Reference<Slot>(core, "State.CurrentExpression") == shortClip,
+            Check(Get<int>(core, "State.Gesture.Right") == 1 && Reference<Slot>(core, "State.CurrentExpression") == shortClip,
                 "hierarchy departure retains state despite different worn-flag update order");
             Near(a.Value, 0.65f, "hierarchy departure restores tracking Base");
             Near(b.Value, 0.8f, "hierarchy departure retains static output without a reset impulse");
             avatar.Parent = parent; await Frames(30);
-            Check(Get<int>(core, "State.RightGesture") == 0 && Reference<Slot>(core, "State.CurrentExpression") == null,
+            Check(Get<int>(core, "State.Gesture.Right") == 0 && Reference<Slot>(core, "State.CurrentExpression") == null,
                 "reattachment resets retained state before input");
             Near(b.Value, 0.3f, "reattachment restores static Base before input");
             Select(1); await Frames(); Near(a.Value, 1, "reattachment accepts input after worn flags update");

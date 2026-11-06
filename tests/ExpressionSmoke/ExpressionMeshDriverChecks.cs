@@ -119,7 +119,7 @@ internal static class ExpressionMeshDriverChecks
         EquipAvatar(avatar);
         await Frames(30);
         var expressions = avatar.FindChild("Expressions"); var core = expressions.FindChild("API").FindChild("Internal");
-        var catalog = expressions.FindChild("Catalog"); var table = expressions.FindChild("DV").FindChild("GestureTable");
+        var catalog = expressions.FindChild("Clips"); var table = expressions.FindChild("DV").FindChild("GestureTable");
         var first = avatar.FindChild("First").FindChild("Face").GetComponent<SkinnedMeshRenderer>();
         var second = avatar.FindChild("Second").FindChild("Face").GetComponent<SkinnedMeshRenderer>();
         var manager = avatar.GetComponent<EyeManager>();

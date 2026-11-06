@@ -4,15 +4,15 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 [変数・定数リファレンス](expression-variables.md)を参照。
 
 2026-11-06: ContextMenuの選択保持を `ExpressionSystem/State.ContextMenuSelected`（bool、初期値false）へ分離した。
-Catalog・表情サブメニュー・Imported menuは専用の `ExpressionSystem/Method.SelectMenuExpression` を呼ぶ。
-nullまたは自身のCatalog直下のSlotだけを受理する。1つの同期Sequenceで保持を解除し、
+Clips・表情サブメニュー・Imported menuは専用の `ExpressionSystem/Method.SelectMenuExpression` を呼ぶ。
+nullまたは自身のClips直下のSlotだけを受理する。1つの同期Sequenceで保持を解除し、
 左右Gestureを0に戻し、ApplyExpressionへSlotを送り、最後に非nullなら保持をtrueにする。
 2026-11-07: 実入力から呼ばれていなかった中継のMethod.SelectExpressionを削除し、メニュー側に処理を統合した。
 メニュー側のAvatarWornLocal条件も削除した。未着用時も有効な選択は左右Gestureと保持boolを更新するが、
 実際の表情適用にはApplyExpressionの着用条件が掛かる。未着用時のnullは保持と保存された表情を解除できる。
 無効なSlotは保持状態を変更しない。旧Method.SelectExpressionタグのReceiverは生成しない。
 選択中は別のメニュー表情へ変更でき、選択済み項目の再押下（null）またはResetStateで保持を解除する。
-選択中のCatalogを削除した場合も保持は残るので、Resetか別のメニュー操作で解除する。
+選択中のClipsを削除した場合も保持は残るので、Resetか別のメニュー操作で解除する。
 2026-11-07: 保持の条件判定はInternal.ApplyExpressionだけに集約した。
 保持中もSetGesture（キーボードを含む）は左右Gestureを更新し、TrySetGestureは各手の許可設定を満たす場合にSetGestureへ転送する。
 Internal.UpdateSelectionは対応表を評価して送信する。
@@ -27,11 +27,11 @@ ResetStateは最初に保持をfalseにしてから左右値と表情をクリ�
 
 | 旧名 | 新名 |
 |---|---|
-| `References.*` | `Static.*` |
-| `Reference.*` | `Static.*` |
+| `References.*` | `Reference.*` |
+| `Static.*` | `Reference.*` |
 | `AllowHandGestures.Left` / `Right` | `Config.AllowHandGesture.Left` / `Right` |
 | `SmoothingSpeed` | `Config.SmoothingSpeed` |
-| `LeftGesture` / `RightGesture` | `State.LeftGesture` / `State.RightGesture` |
+| `LeftGesture` / `RightGesture` | `State.Gesture.Left` / `State.Gesture.Right` |
 | `CurrentExpression` | `State.CurrentExpression` |
 
 新規生成時は新名だけを使い、DV直下のスロット名も同じキーにする。固定参照の自動生成、Fluxの読み書き、
@@ -56,9 +56,9 @@ ResetStateは最初に保持をfalseにしてから左右値と表情をクリ�
 表示判定のFluxは入口の外に置き、両モードで動作させる。表示変更はメニューを開くときに反映される。
 
 2026-11-06: ContextMenuが呼ぶSelectExpressionで、左右のGestureを0にしてから表情を設定する。
-Catalog検証後、1つのSequenceで左右の許可をfalse、State.LeftGesture=0、State.RightGesture=0、ApplyExpression送信の順に実行する。
+Clips検証後、1つのSequenceで左右の許可をfalse、State.Gesture.Left=0、State.Gesture.Right=0、ApplyExpression送信の順に実行する。
 State.CurrentExpressionの書き込みはApplyExpressionが担当する。SetGestureやUpdateSelectionを経由せず、途中でGestureTableを再評価しない。
-Catalog・左右のサブメニュー・Imported menuとAPI直接呼び出しで共通。nullによる解除も左右値をクリアし、範囲外の非null Slotは状態を変更しない。
+Clips・左右のサブメニュー・Imported menuとAPI直接呼び出しで共通。nullによる解除も左右値をクリアし、範囲外の非null Slotは状態を変更しない。
 
 2026-11-06: ResetStateからConfig.AllowHandGesture.Left/Rightへの書き込みを削除した。
 手動Reset・着用開始・再着用・複製・保存読込では左右のGesture値と表情だけをリセットし、許可設定は保存値を維持する。
@@ -104,8 +104,8 @@ Sequence自体は入れ子にしない。現在はEventからResetStateへImpuls
 ExpressionSmokeで生成・複製・保存再読込後にSequence同士の直結がないことを確認する。
 
 2026-11-05: `Expressions/API` を作成し、InternalとMethodをその直下へ移動した。
-公開・内部の全DynamicImpulseは `ExpressionSystem/Static.API` が指すこのAPIを送信先とし、
-タグで受信処理を選ぶ。`Static.Internal` のDVと入力ノードは生成しない。
+公開・内部の全DynamicImpulseは `ExpressionSystem/Reference.API` が指すこのAPIを送信先とし、
+タグで受信処理を選ぶ。`Reference.Internal` のDVと入力ノードは生成しない。
 APIは整理用Slotで、DynamicVariableSpaceは追加しない。状態変数は従来のExpressionSystem空間を使う。
 
 2026-11-05: 実行時に未使用の `ExpressionSystem/Version` と `DV/Version` を削除した。
@@ -114,7 +114,7 @@ Clip形式として読み、旧パッケージにVersionがある場合だけ従
 公開処理は `API/Receivers` を廃止して `Method` 直下へ移し、受信ボード名をタグ末尾へ統一した。
 内部の旧Selection・Playback・Lifecycleは、それぞれUpdateSelection・ApplyExpression・ResetStateとなる。
 この時点ではResetStateに自動初期化・着用監視も残っていたが、現在はAPI/Eventへ分離している。
-この時点では送信先変数 `Static.API` はMethodを参照していた。タグ・引数・処理内容は維持した。
+この時点では送信先変数 `Reference.API` はMethodを参照していた。タグ・引数・処理内容は維持した。
 以下のVersion番号は過去の変更記録であり、現行の生成物にはVersion変数を持たせない。
 
 Version 85ではDynamicImpulseのタグを `ExpressionSystem/Method.*`（公開操作）と
@@ -131,14 +131,14 @@ Version 84ではSelectionのReadDynamicObjectVariable<Slot>のSourceを未接続
 対応表の行とDV/GestureTableスロットは維持する。
 
 Version 83ではAPI/ExamplesとAPI/Templatesを削除し、API直下にはReceiversだけを生成する。
-表情を追加する場合は既存のCatalogエントリーを複製する。
+表情を追加する場合は既存のClipsエントリーを複製する。
 
 Version 82ではSelectionの対応表読み取り結果をPlayback送信ノードのValueへ直接接続する。
 一時保存用のLocalObject・ObjectWrite・Sequenceを省き、着用判定と同期通知は維持する。
 
 Version 81では対応表への固定参照を `ExpressionSystem/GestureTable` に変更し、
 `Expressions/DV/GestureTable` 自体にDynamicReferenceVariable<Slot>を付けて自分のSlotを参照する。
-旧 `Static.GestureTable`・`Static.DV.GestureTable` とその専用スロットは生成しない。
+旧 `Reference.GestureTable`・`Reference.DV.GestureTable` とその専用スロットは生成しない。
 子の `L0R0` などは従来どおり `ExpressionSystem/GestureTable.L0R0` で表情Slotを参照する。
 
 Version 80では対応表の参照名を明示し、入力階層を整理した。
@@ -153,7 +153,7 @@ Version 78では、生成時に瞬き接続を検出したメッシュ出力のS
 Version 77では、API内の `modular_avatar/AvatarWornLocal` 判定を削除した。
 SetGesture左右・Select・ToggleHandGestures・Resetが対象で、API内にはAvatarWorn/AvatarWornLocalの参照を生成しない。
 未着用でもSetGestureは左右値を更新し、TrySetGestureは各手の許可があればSetGestureへ転送する。
-SelectはCatalog検証後に両手の許可をfalseへ変更し、ToggleHandGesturesは両手の許可を切り替える。
+SelectはClips検証後に両手の許可をfalseへ変更し、ToggleHandGesturesは両手の許可を切り替える。
 InternalのSelection・Playback・LifecycleとInputsの着用判定は維持するため、未着用時は表情の適用やResetは実行されない。
 API全体は75から65ノードになる。初期化前のAPI更新は、その後のLifecycle初期化でクリアされる。
 
@@ -175,7 +175,7 @@ Ifを8個から5個へ削減し、Lifecycle全体は45から43ノードになっ
 他ユーザーが着用中なら共有状態を消さずローカル初期化フラグだけを戻す分岐は維持する。
 
 Version 73では、`Expressions/API/Receivers/Logic` を廃止し、その子の12個の受信処理スロットを
-`Receivers` 直下へ置く。各処理内のノード構成・公開Tag・送信先の `Static.API` は維持する。
+`Receivers` 直下へ置く。各処理内のノード構成・公開Tag・送信先の `Reference.API` は維持する。
 受信処理を直接参照する場合のパスは `API/Receivers/SetGestureLeft` などになる。
 
 Version 72では、入力元ではなく処理の役割を表すAPI名へ変更する。左右とも同じ対応になる。
@@ -251,7 +251,7 @@ Localはインパルス内だけの値なので、別クリックや別アバタ
 Version 65では `Inputs/ContextMenu/Left`・`Right` にExpressionsメニュー全体をそれぞれ生成する。
 両方の `RootContextMenuItem.OnlyForSide` に対応するChiralityを設定し、各手のルートにはExpressions入口だけを表示する。
 各 `Items` サブメニューには、その手の個別トグルだけを置く。表情一覧・両手共通トグル・リセット・
-インポートメニューは左右とも含め、共通のCatalog・API・許可変数を参照する。Backは同じ手のItemsへ戻る。
+インポートメニューは左右とも含め、共通のClips・API・許可変数を参照する。Backは同じ手のItemsへ戻る。
 標準 `ContextMenuItemSource`・`ContextMenuSubmenu` に手別のフィルターはなく、実行対象DLLの
 `InteractionHandler` はルート項目だけをOnlyForSideでフィルターするため、入口ごとにメニューを分ける。
 個別のColorは自分の許可設定に直接追従し、有効なら緑、無効なら赤。
@@ -266,15 +266,15 @@ Version 62では、Fluxノードをまとめる各Logic親スロットのロー�
 複製・保存後の再読込でも親の原点配置と、同じLogic内でノードが重ならないことを検証する。
 
 左右それぞれの現在のジェスチャーを int で保持し、
-`GestureTable.L{State.LeftGesture}R{State.RightGesture}` の名前で対応表を直接引く。生成時は64通りで、外部から行を追加できる。
+`GestureTable.L{State.Gesture.Left}R{State.Gesture.Right}` の名前で対応表を直接引く。生成時は64通りで、外部から行を追加できる。
 対応表で選んだ表情の各トラックの終端値へ即座に切り替え、固定ポーズとして保持する。
 VRChatのカスタムFXからFaceEmo基準で最初の表情パターンを読み取り、対応表へ変換する。
 左右64通りへ静的に変換する方式であり、Animator 全体や汎用パラメーターの状態機械は生成しない。
 標準コンポーネントと ProtoFlux で動作し、利用側に ResoPon の DLL は不要。
 
-変換済みポーズの格納先である `Catalog` と、選択先を決める `GestureTable` は別である。
-Version 23ではメニューからCatalogの表情を直接選択できる。GestureTableへの割り当ては不要。
-自動割り当てが0/64なら左右入力では `State.CurrentExpression` が null になるが、メニューからはCatalog表情を選択できる。
+変換済みポーズの格納先である `Clips` と、選択先を決める `GestureTable` は別である。
+Version 23ではメニューからClipsの表情を直接選択できる。GestureTableへの割り当ては不要。
+自動割り当てが0/64なら左右入力では `State.CurrentExpression` が null になるが、メニューからはClips表情を選択できる。
 その場合は 変換ログのレイヤー・Clip の除外理由を確認する。
 
 ```mermaid
@@ -282,8 +282,8 @@ flowchart LR
     H[ハンドジェスチャー・TrySetGesture API] --> G{各手のConfig.AllowHandGesture.Left・Right}
     G -->|true| U[SetGesture API]
     K[キーボード] --> U
-    U --> S[State.LeftGesture / State.RightGesture]
-    D[メニューでCatalogの表情を選択] --> T[左右Gestureを0にして適用・選択保持boolを更新]
+    U --> S[State.Gesture.Left / State.Gesture.Right]
+    D[メニューでClipsの表情を選択] --> T[左右Gestureを0にして適用・選択保持boolを更新]
     T --> L{ApplyExpression: State.ContextMenuSelected}
     S -->|入力イベント時のみ| P[GestureTableから表情Slotを送信]
     P --> L
@@ -299,17 +299,17 @@ flowchart LR
 ```text
 Expressions/
   DV/                              システム共通の変数（1変数1子 Slot）
-    State.LeftGesture              左手の入力状態
-    State.RightGesture             右手の入力状態
+    State.Gesture.Left              左手の入力状態
+    State.Gesture.Right             右手の入力状態
     Config.AllowHandGesture.Left    左手の入力許可
     Config.AllowHandGesture.Right   右手の入力許可
     State.CurrentExpression        現在の表情（Slot参照）
     State.ContextMenuSelected      メニュー選択中の表情適用停止（bool）
     GestureTable/                  対応表の変数をまとめるスロット
-      L0R0〜L7R7                   64個の Catalog 参照
+      L0R0〜L7R7                   64個の Clips 参照
     Config.SmoothingSpeed          補間速度
-    Static.*                       API・Catalog・内部Slotの固定参照
-  Catalog/                         表情ごとの定義と最終値の一覧
+    Reference.*                       API・Clips・内部Slotの固定参照
+  Clips/                         表情ごとの定義と最終値の一覧
     各表情/                        メニューのLabelに名前を直接保存
       DV/                          Clip空間のfloat変数
         Body.Smile                 Body.Smileの固定値（float）
@@ -374,7 +374,7 @@ ProtoFlux Tool では調べたい `UpdateSelection`、`ApplyExpression` など�
 表情Slotを引数としてExpressionSystem/Internal.ApplyExpressionを送る。ApplyExpressionがState.CurrentExpressionを設定して通常出力へ適用する。参照のFireOnLocalObjectChangeは生成しない。表情のアクティブ状態は選択条件にしない。
 
 Version 47 は通常の表情出力の目標を選択イベント内のWriteで更新し、各シェイプをSmoothValueで補間する。
-変換時に各トラックの最後のキー値を 各CatalogエントリーのDV直下のfloat変数 に保存する。
+変換時に各トラックの最後のキー値を 各ClipsエントリーのDV直下のfloat変数 に保存する。
 ApplyExpressionは表情Slot付きDynamicImpulseを受信し、受信SlotとState.CurrentExpressionが異なる場合だけ参照を更新してOutputsを走査する。同一Slot（null同士も含む）では参照更新と走査を省略する。各出力のIdと同じ名前のfloat変数を読み、
 通常出力のResultを一括適用する。LocalUpdate・出力ごとのFireOnLocalChange・出力通知イベントは生成しない。
 元から瞬き・口パク等のドライバーがある出力だけTrackingボードを生成し、
@@ -420,8 +420,8 @@ Version 21では `GestureTable/Logic` のメニュー用監視を生成しない
 `DynamicVariableValueInput<T>`／`DynamicVariableObjectInput<T>` で読む。
 間に別名の空間があっても、要求した空間名で祖先を検索する。
 
-- 機種ごとの指角度しきい値・パッド方向割当・StabilitySeconds：親モジュールの `ExpressionSystem.Input.HandGestures`。
-- UpdateSelection の左右値：`ExpressionSystem/State.LeftGesture`・`ExpressionSystem/State.RightGesture`。
+- 機種ごとの指角度しきい値・パッド方向割当・StabilitySeconds：親モジュールの `ExpressionSystem.Input.HandGesture`。
+- UpdateSelection の左右値：`ExpressionSystem/State.Gesture.Left`・`ExpressionSystem/State.Gesture.Right`。
 - ApplyExpression の State.CurrentExpression：`ExpressionSystem/State.CurrentExpression` の Object Input。
 - 各 Output の Id・Base・TrackingWeight・Result：`ExpressionSystem.Output`。
 
@@ -433,7 +433,7 @@ API・機種別入力・各 Output からも、状態変数は祖先の Expressi
 
 次の読み取りは `ReadDynamicValueVariable<T>`／`ReadDynamicObjectVariable<T>` を維持する。
 
-- 切り替え・初期化時の ForEach の出力レコード、選択中の Catalog：実行中に Source Slot が変わる。
+- 切り替え・初期化時の ForEach の出力レコード、選択中の Clips：実行中に Source Slot が変わる。
 - `ExpressionSystem/GestureTable.LnRm`：左右の値を含むキーで読み取る変数名が変わる。
 
 入力ノードには Source Slot を渡せないため、これらはそのまま入力ノードに置き換えない。
@@ -444,26 +444,26 @@ API・機種別入力・各 Output からも、状態変数は祖先の Expressi
 `modular_avatar/AvatarWornLocal` を各ボードの DynamicVariableValueInput<bool> で読み取る。
 User が必要なコントローラー・UserFingerPoseSource だけは `GetActiveUserSelf` を直接参照する。
 装着判定にはこのUserを使わず、入力受付は引き続き `AvatarWornLocal` で制御する。
-各ボードは独立した FluxGroup を維持する。直接選択は受信Slotの親がCatalogかを確認し、Catalogを列挙しない。GestureTableの逆引きは行わない。
+各ボードは独立した FluxGroup を維持する。直接選択は受信Slotの親がClipsかを確認し、Clipsを列挙しない。GestureTableの逆引きは行わない。
 
 ## 不具合の調べ方
 
 まず Expressions/DV の状態変数を見て、入力・選択・再生のどこで期待とずれたかを分ける。
 各 Space の Slot 直下に DV を置き、値・参照・DynamicField を含め1変数1子 Slotで生成する。
-Inspector 上の状態変数名は `ExpressionSystem/State.LeftGesture` などで、Core. 接頭辞は付かない。GestureTable も同じ ExpressionSystem 空間に GestureTable.* として登録する。複数インスタンスを持つレコードだけに、階層をドットで表す別の空間名を使う。
+Inspector 上の状態変数名は `ExpressionSystem/State.Gesture.Left` などで、Core. 接頭辞は付かない。GestureTable も同じ ExpressionSystem 空間に GestureTable.* として登録する。複数インスタンスを持つレコードだけに、階層をドットで表す別の空間名を使う。
 
 | 状態変数 | 確認する内容 |
 |---|---|
-| `State.LeftGesture` / `State.RightGesture` | 各入力から届いた int の状態（範囲制限なし） |
+| `State.Gesture.Left` / `State.Gesture.Right` | 各入力から届いた int の状態（範囲制限なし） |
 | Config.AllowHandGesture.Left / Right | true=該当する手のジェスチャーを許可、false=停止。キーボード・表情メニューは常に使用可能 |
 | `State.CurrentExpression` | 対応表または直接選択から渡された再生対象。未割当・削除済みなら null |
 
 1. 左右の番号が違う場合は、`API/Method/TrySetGesture.Left`／`TrySetGesture.Right`、転送先の `SetGesture.Left`／`SetGesture.Right` と該当入力の `Logic` を調べる。
 2. 左右値が正しく表情が違う場合は、`GestureTable.L{左}R{右}` の参照と `Config.AllowHandGesture.Left`・`Right` を確認し、`UpdateSelection` を調べる。
-3. `State.CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（nはState.LeftGesture、mはState.RightGesture）の参照があるか確認する。表情Slotのアクティブ状態は選択に影響しない。参照先が削除されていないか確認する。
+3. `State.CurrentExpression` が null の場合は、`Expressions/DV/GestureTable/LnRm`（nはState.Gesture.Left、mはState.Gesture.Right）の参照があるか確認する。表情Slotのアクティブ状態は選択に影響しない。参照先が削除されていないか確認する。
 4. 選択が正しく見た目が違う場合は、`Internal/ApplyExpression` と該当出力の `Base`、`TrackingWeight`、`Result` と、Resultの参照先からメッシュまでの駆動接続を調べる。
 
-`Config.AllowHandGesture.Left`・`Right` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Catalog を編集する。
+`Config.AllowHandGesture.Left`・`Right` は入力モードの設定。それ以外の状態は読み取り用の診断情報として扱い、再生結果を変えたい場合は公開 API、対応表、Clips を編集する。
 変換時の警告・案内はログの `Expression diagnostics:` に記録する。
 `Expression graph:` にはボードの相対パスとノード数を記録する。アバター内にはDiagnosticsを生成しない。
 Outputs の `Id` はメッシュ名.BlendShape名から作る変数キー。選択表情に対応するfloat変数がなければBaseを使う。Binding参照・Pose・HasPose・再生時計は持たない。
@@ -494,7 +494,7 @@ ApplyExpressionが受信SlotとState.CurrentExpressionを比較し、異なる�
 同じ参照なら同じ固定ポーズになる。nullでの解除時は出力目標をBaseへ戻す。Slotの無効化では解除しない。
 対応表の参照を調べたい場合は、左右のGesture値に対応する `L{左}R{右}` の行を直接見る。
 SelectionStatus は生成・計算しない。入力モードは Config.AllowHandGesture.Left・Right、再生対象は State.CurrentExpression で確認する。
-未割当・参照先の削除は State.CurrentExpression=null となる。表情SlotやCatalogが非アクティブでも選択・適用できる。
+未割当・参照先の削除は State.CurrentExpression=null となる。表情SlotやClipsが非アクティブでも選択・適用できる。
 
 ## 装着状態と Event・ResetState
 
@@ -541,7 +541,7 @@ bool APIも `ResoPon/Expression/AllowHandGestures` に変更する。旧変数�
 Version 23では左右ジェスチャーのコンテキストメニューと専用のMenu/Left・Menu/Right APIを生成しない。
 コントローラーはMethod.TrySetGesture.Left・Method.TrySetGesture.Rightを使い、対応するConfig.AllowHandGesture.Left・Right=trueのときだけ受け付ける。
 キーボードはMethod.SetGesture.Left・Method.SetGesture.Rightのint APIを使い、許可フラグに関係なく受け付ける。Inputs側の送信は装着者限定。APIを直接呼ぶと未着用でも左右値を更新するが、表情選択はInternalで装着者に限定する。
-動作確認では `Core/State.LeftGesture`、`State.RightGesture`、`State.CurrentExpression` と対応表の参照先を見る。
+動作確認では `Core/State.Gesture.Left`、`State.Gesture.Right`、`State.CurrentExpression` と対応表の参照先を見る。
 
 | 番号 | 状態 |
 |---|---|
@@ -559,12 +559,12 @@ Version 23では左右ジェスチャーのコンテキストメニューと専�
 物理入力は安定したジェスチャーが変化したときと接続時にだけ送る。
 ハンドジェスチャーが許可されている間は、手を動かさずにキーボードで設定した状態を維持し、次の物理ジェスチャー変更で更新する。ハンドジェスチャー停止中は機種別の判定状態をリセットし、許可を戻した後は再び安定した手形を検出して送る。
 
-- コンテキストメニュー: 左右のGesture値を0に戻してからCatalogの表情を直接選択する。
+- コンテキストメニュー: 左右のGesture値を0に戻してからClipsの表情を直接選択する。
 - キーボード: 左手は Shift+テンキー0〜9、右手は Ctrl+テンキー0〜9。Ctrl+Shift+テンキーでは両手が同時に入力される。
   Version 27ではテンキー0〜9をそれぞれジェスチャー値0〜9として送信する。
   0が Neutral、1が Fist、7が ThumbsUp。8・9は拡張用で、対応するGestureTableの行があればその表情を選び、未割り当てなら表情を解除する。
   自動生成するジェスチャー表は引き続き左右0〜7の64組。8・9を含む割り当ては同じ命名規則（例: `GestureTable.L8R9`）で追加できる。
-  左右の割当は表情の優先順位に依存せず、Catalog・GestureTable・元FXの読み込み規則にも影響しない。
+  左右の割当は表情の優先順位に依存せず、Clips・GestureTable・元FXの読み込み規則にも影響しない。
   `Left/DV` と `Right/DV` の `Key.0`〜`Key.9`、各手の共通キー `Modifier`、送信先の `Tag` を編集できる。
   `Modifier` はShift・Control・Altなどのキー値を持つDynamicVariableで、指定したキーの押下だけを判定する。
   他の修飾キーが押されていても入力を受け付ける。Noneは未割当で、その手のショートカットを無効にする。
@@ -586,23 +586,23 @@ Version 58は `Expressions` メニュー直下に `Hand sign expressions` と `O
 中間の `Select expression` メニューは生成しない。それぞれのサブメニューには `Back` 項目を置き、
 そのContextMenuSubmenu.ItemsRootからExpressions直下のItemsを参照して親メニューへ戻る。
 Backは表情選択APIを送らず、選択中の表情やハンドジェスチャーの許可状態を変更しない。
-変換時に確定した64通りのGestureTableから参照される表情を前者、それ以外のCatalog表情を後者に入れる。
+変換時に確定した64通りのGestureTableから参照される表情を前者、それ以外のClips表情を後者に入れる。
 同じ表情が複数の組み合わせで使われても項目は1つとし、空のサブメニューは生成しない。
 分類は変換時に固定する。変換後のGestureTable編集による自動再分類は行わない。
-表情SlotはCatalog直下に保ち、サブメニュー配下の項目からSlot参照を送る。表示LabelはCatalog項目のLabelからValueCopyで取得する。
+表情SlotはClips直下に保ち、サブメニュー配下の項目からSlot参照を送る。表示LabelはClips項目のLabelからValueCopyで取得する。
 項目のEnabledを自動制御しない。
-押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをMethod.SelectMenuExpressionへ送る。選択済みの項目はnullを送り、表情とState.ContextMenuSelectedを解除する。着用状態に関わらずnullまたは自身のCatalog直下の表情Slotを受理し、ApplyExpressionが着用条件に従ってState.CurrentExpressionへ設定して適用する。
-State.LeftGesture=0、State.RightGesture=0を書いてからApplyExpressionを呼び、非nullの選択中はState.ContextMenuSelected=trueで他の表情の適用を停止する。入力値の更新・対応表の評価は続ける。Config.AllowHandGesture.Left・Rightは変更しない。メニュー操作ではGestureTableを再評価しないため、未割り当てでも直接選択できる。
-ReferenceEqualityDriver<Slot>がState.CurrentExpressionと項目の表情Slotを比較し、BooleanReferenceDriver<Slot>がPressedData.Referenceを選択中はnull、それ以外は表情Slotへ切り替える。Catalogの直接項目・左右のサブメニュー・Imported menuに共通で適用し、解除後の押下で再選択できる。表情の固定参照はFalseTargetに保持する。コンポーネントの変更通知で送信参照が更新されるため、同一フレーム内の更新を挟まない連続呼び出しでは切り替えが反映されない。
+押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをMethod.SelectMenuExpressionへ送る。選択済みの項目はnullを送り、表情とState.ContextMenuSelectedを解除する。着用状態に関わらずnullまたは自身のClips直下の表情Slotを受理し、ApplyExpressionが着用条件に従ってState.CurrentExpressionへ設定して適用する。
+State.Gesture.Left=0、State.Gesture.Right=0を書いてからApplyExpressionを呼び、非nullの選択中はState.ContextMenuSelected=trueで他の表情の適用を停止する。入力値の更新・対応表の評価は続ける。Config.AllowHandGesture.Left・Rightは変更しない。メニュー操作ではGestureTableを再評価しないため、未割り当てでも直接選択できる。
+ReferenceEqualityDriver<Slot>がState.CurrentExpressionと項目の表情Slotを比較し、BooleanReferenceDriver<Slot>がPressedData.Referenceを選択中はnull、それ以外は表情Slotへ切り替える。Clipsの直接項目・左右のサブメニュー・Imported menuに共通で適用し、解除後の押下で再選択できる。表情の固定参照はFalseTargetに保持する。コンポーネントの変更通知で送信参照が更新されるため、同一フレーム内の更新を挟まない連続呼び出しでは切り替えが反映されない。
 Method.SelectMenuExpressionへ同じ非nullの表情Slotを直接再送した場合は解除せず、ApplyExpressionの参照更新と通常出力の走査も省略する。
 表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `State.CurrentExpression` を参照して駆動する。
-Catalog・Imported menuともに選択中の表情は緑、それ以外は白。null用の白いOptionを先頭に置き、
+Clips・Imported menuともに選択中の表情は緑、それ以外は白。null用の白いOptionを先頭に置き、
 参照先の表情を削除した項目が未選択状態で緑にならないようにする。
 ジェスチャー許可項目のColorは `ValueOptionDescriptionDriver<bool>` が `MultiBoolConditionDriver` の結果を読む。
 VRの4択は左右の許可がその選択肢と一致すれば緑、それ以外は白。デスクトップのトグルは両手のANDがtrueなら緑、falseなら赤。
 両DriverともLabel・Spriteは駆動しない。ジェスチャー設定の入口だけは上記のモード判定でEnabledを制御する。
-参照はアバター複製時に複製先へ再対応し、Catalogエントリーを複製した項目は自分自身の表情を比較対象にする。
-Catalog の Slot を固定用に保持する Override 変数は生成しない。
+参照はアバター複製時に複製先へ再対応し、Clipsエントリーを複製した項目は自分自身の表情を比較対象にする。
+Clips の Slot を固定用に保持する Override 変数は生成しない。
 
 Version 26の `Hand gestures` は単一のトグル項目で、押すたびに現在のboolを反転する。
 モードだけの変更では左右値・State.CurrentExpressionを変えない。初期値は true。
@@ -632,30 +632,30 @@ n は左、m は右の int 値。ResoPon が生成するのは各0〜7で、例�
 という DynamicReferenceVariable<Slot> を追加すれば、左右 API に8と255を送って選択できる。
 左右のSetGesture・TrySetGesture APIは負数も含む int 全域を受理する。対応行がなければ入力値を保持し、ベース入力へ戻る。
 Select APIは表情Slotを直接受け取るため、ジェスチャーの値・表の行数には依存しない。
-参照先を `Catalog` の表情スロットへ変更するだけで割り当てを編集できる。
-左右の組み合わせごとにアニメーションを複製せず、同じ表情は同じ Catalog エントリーを参照する。
+参照先を `Clips` の表情スロットへ変更するだけで割り当てを編集できる。
+左右の組み合わせごとにアニメーションを複製せず、同じ表情は同じ Clips エントリーを参照する。
 
 表は変数名で引くので、スロットの並び替え・表示名の変更・別の行の削除で対応がずれることはない。
 変数名は固定し、同じ名前を重複させない。削除した行を戻す場合は同じ変数名で再作成する。
 行が未設定、または表情の参照先が削除されている場合は Outputs のベース入力を使う。
 表の参照の編集は次の左右入力イベントで反映される。異なる行でも同じ表情を指す場合はApplyExpressionの更新を省略する。
 
-表情の追加は既存の Catalog エントリーを Catalog へ複製し、
+表情の追加は既存の Clips エントリーを Clips へ複製し、
 DV直下のfloat値とContextMenuItemSource.Labelを設定する。
 Clipの識別子変数は持たず、外部からの直接選択には表情Slotを送る。
 直接選択ボタンからの適用にGestureTableの割り当ては不要。対応表の編集でメニュー項目の Enabled は変更しない。直接選択は即時に反映する。削除は表情スロットごと行える。
 複製したメニューのLabelは直接編集でき、送信するSlot参照は複製先自身へリマップされる。項目の Enabled は駆動しない。
-Version 57でCatalogへ表情を追加した場合は、直接選択サブメニューのItemsにも既存項目を複製し、
+Version 57でClipsへ表情を追加した場合は、直接選択サブメニューのItemsにも既存項目を複製し、
 BooleanReferenceDriver<Slot>のFalseTarget、ReferenceEqualityDriver<Slot>のReference、選択色DriverのReferenceTarget、
-Label用ValueCopyのSourceを追加した表情へ設定する。Catalogへの追加だけではサブメニューに項目は増えない。
+Label用ValueCopyのSourceを追加した表情へ設定する。Clipsへの追加だけではサブメニューに項目は増えない。
 表情を削除する場合は、サブメニュー側の参照項目も削除する。
 
-各表情のExpressionSystem.Catalog.Clip空間のDV直下に、Output.Idと同名のfloat変数スロットを並べる。
-VariableNameはExpressionSystem.Catalog.Clip/と対応するOutput.Idを連結した名前、値は元カーブの最後のキー値。
-例：ExpressionSystem.Catalog.Clip/Body.Smile。独立したBinding空間やBindings参照は生成しない。
+各表情のExpressionSystem.Clip空間のDV直下に、Output.Idと同名のfloat変数スロットを並べる。
+VariableNameはExpressionSystem.Clip/と対応するOutput.Idを連結した名前、値は元カーブの最後のキー値。
+例：ExpressionSystem.Clip/Body.Smile。独立したBinding空間やBindings参照は生成しない。
 新しいシェイプを追加する場合は、対応する Outputs とメッシュへの接続も用意する。
 通常出力の名前付き変数・子レコードの編集は、同じSlotの再送では反映しない。別の表情またはnullへ切り替えてから選び直すと反映する。追跡出力の名前付き変数の編集は自動反映する。
-外部から直接適用する場合は、Static.APIが指すAPIスロットへExpressionSystem/Internal.ApplyExpressionを表情Slot付きで送る。State.CurrentExpressionを先に編集すると同一Slotと判定され、通常出力の適用を省略する。
+外部から直接適用する場合は、Reference.APIが指すAPIスロットへExpressionSystem/Internal.ApplyExpressionを表情Slot付きで送る。State.CurrentExpressionを先に編集すると同一Slotと判定され、通常出力の適用を省略する。
 
 ## 外部イベント API（タグ名はVersion 85）
 
@@ -666,7 +666,7 @@ APIの分類は実際の呼び出し元で決める。API外から呼ぶ処理�
 |---|---|---|
 | Method | TrySetGesture.Left/Right | Inputs/HandGestures |
 | Method | SetGesture.Left/Right | Inputs/Keyboard、API内のTrySetGesture |
-| Method | SelectMenuExpression | Catalog、ContextMenuの表情サブメニュー、Imported menu |
+| Method | SelectMenuExpression | Clips、ContextMenuの表情サブメニュー、Imported menu |
 | Method | ToggleHandGestures、Reset | ContextMenu |
 | Internal | ResetState | Method.Reset、Event.OnAvatarWorn |
 | Internal | UpdateSelection | Method.SetGesture.Left/Right |
@@ -688,7 +688,7 @@ APIの分類は実際の呼び出し元で決める。API外から呼ぶ処理�
 | `ExpressionSystem/Method.TrySetGesture.Right` | int（範囲制限なし） | Config.AllowHandGesture.Right が true のときMethod.SetGesture.Rightへ転送 |
 | `ExpressionSystem/Method.SetGesture.Left` | int（範囲制限なし） | メニュー保持中もジェスチャー許可に関係なく左手を更新。設定は維持。表情適用の可否はApplyExpressionが判定 |
 | `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし） | メニュー保持中もジェスチャー許可に関係なく右手を更新。設定は維持。表情適用の可否はApplyExpressionが判定 |
-| `ExpressionSystem/Method.SelectMenuExpression` | Slot（自身のCatalog直下）、解除用のnull | 左右Gestureを0にして表情を選択・保持する。nullで保持を解除。許可設定は維持 |
+| `ExpressionSystem/Method.SelectMenuExpression` | Slot（自身のClips直下）、解除用のnull | 左右Gestureを0にして表情を選択・保持する。nullで保持を解除。許可設定は維持 |
 | `ExpressionSystem/Method.ToggleHandGestures` | なし | 両手とも許可なら両手を停止、それ以外は両手を許可。左右値・表情は維持 |
 | `ExpressionSystem/Method.Reset` | なし | メニュー保持と表情を解除してBaseへ戻し、左右を0にする。ジェスチャー許可設定は維持 |
 
@@ -702,7 +702,7 @@ Tag は大文字・小文字を含めて完全一致。引数型違い、無効�
 boolの変更だけでは左右値も表情も変更しない。
 Version 25のコンテキストメニュー「Reset settings」は引数なしのReset APIを送る。
 State.ContextMenuSelected=false、State.CurrentExpression=null、左右のGesture=0へ一括で戻し、各出力にBaseを反映する。Config.AllowHandGesture.Left・Rightはそれぞれ現在値を維持する。
-GestureTableの割り当てやCatalog、キー設定は変更しない。L0R0に表情が割り当てられていてもリセットでは再選択せず、次の左右入力イベントで再評価する。
+GestureTableの割り当てやClips、キー設定は変更しない。L0R0に表情が割り当てられていてもリセットでは再選択せず、次の左右入力イベントで再評価する。
 Resetは未着用時やジェスチャー無効時にも受け付ける。停止中のジェスチャーを再開する場合は許可メニューを使う。
 着用監視はEvent、状態の初期化はResetStateが担当し、複製・再ロード・再装着後のローカル着用時に左右値と表情をクリアする。許可設定は変更しない。公開APIから暗黙の初期化は行わない。
 Dynamic ImpulseはネットワークRPCではない。API内の左右値・許可の更新は呼び出したクライアントで実行する。Internalの表情適用には着用条件が残るが、ResetStateには着用条件を置かない。
@@ -719,7 +719,7 @@ VRChatの表情読み込みは `VrchatFaceEmoExpressionImporter` に一本化し
 `VrchatExpressionParser` は顔カーブとFX入力を読み、候補検出を統一Importerへ渡す。従来のEntry/Exit投影、
 既定パラメーター固定、Setドライバー連鎖、入れ子バンクの専用ルーターは削除した。
 Expression Menu、Expression Parameters、MA Parametersから表情セットを選ぶ処理もない。
-ハンド割り当ては、FaceEmoでCatalogを確定した後、後述のグラフ解析でその中から選択する。
+ハンド割り当ては、FaceEmoでClipsを確定した後、後述のグラフ解析でその中から選択する。
 MA Absolute/Appendは入力FXを順番に並べるためだけに使い、追加FXも同じFaceEmo基準で読む。
 VRMの規格上の表情定義と、変換後のResonite側の入力・出力グラフは別の責務として維持する。
 参照したFaceEmoの実装は [既存表情検出の調査](face-emo-expression-import.md) を参照。
@@ -745,18 +745,18 @@ FaceEmoの `ImportNormal` / `GetBranches` / `GetBranch` / `DivideMode` に合わ
 - 顔の初期値との差分がない通常分岐は除外する。各左右組合せで最初に一致する分岐を選び、
   全組合せで隠れる条件付き分岐は後続パターンに相当するため出力しない。
 - 条件なしの表情はFaceEmoと同様、アニメーションの同一性で重複を除いて第1パターンの
-  Catalog候補に残す。条件なし分岐はハンドサインのフォールバックにはならない。
+  Clips候補に残す。条件なし分岐はハンドサインのフォールバックにはならない。
 
 最初のパターンだけをResoPonの表情セットにする。通常形式の分岐数は必ずしも14ではない。
 未一致のジェスチャーはアバターの初期姿勢に戻す。元クリップの名前を使うので、
-PlumとSanatiaでCatalogの項目名が同じになるわけではない。
+PlumとSanatiaでClipsの項目名が同じになるわけではない。
 
-### ジェスチャー入力から検出済みCatalogを選択する
+### ジェスチャー入力から検出済みClipsを選択する
 
 候補検出と入力の割り当てを分離する。まず `VrchatFaceEmoExpressionImporter` が顔Renderer・初期値との差分・
-FaceEmoの分岐順序から先頭セットのCatalog候補を確定する。その後 `FaceEmoGestureConditions` が左右64通りの
+FaceEmoの分岐順序から先頭セットのClips候補を確定する。その後 `FaceEmoGestureConditions` が左右64通りの
 入力についてAnimatorの到達先を解析し、既に選ばれた候補のClip IDと照合する。解析器自身はClipを読み込んで
-Catalogへ追加しない。状態名やパラメーター名、アバター名、固定の番号対応は判定に使わない。
+Clipsへ追加しない。状態名やパラメーター名、アバター名、固定の番号対応は判定に使わない。
 
 - Parameter Driverは必須ではない。Entry／Default、Any State、通常のState遷移、子StateMachineへの進入、
   Exitと親の明示的なStateMachine遷移を辿る。比較条件、リスト順、Mute／Solo、Any Stateの自己遷移設定を読む。
@@ -773,7 +773,7 @@ Catalogへ追加しない。状態名やパラメーター名、アバター名�
 - 1D BlendTreeはしきい値に一致する子、または範囲外の端の子を選べる場合だけClip IDを返す。
   補間中の姿勢や2D／Direct BlendTreeから新たな表情を生成しない。Fistは該当する手のWeightを1として扱う。
 
-到達先を確定できたレイヤーでは、途中で通過した表情を採用しない。空MotionやCatalog外のClipに到達した場合は
+到達先を確定できたレイヤーでは、途中で通過した表情を採用しない。空MotionやClips外のClipに到達した場合は
 そのレイヤーを通過して下の候補を調べる。後続FaceEmoセットやbool専用候補をグラフ解析によって追加しない。
 未解決のレイヤーには元の直接Gesture条件によるFaceEmo割り当てを残し、確定済みの下位レイヤーより優先順位を
 下げない。最終的にどの候補にも一致しなければ、従来どおりアバターの初期姿勢に戻す。
@@ -784,7 +784,7 @@ Catalogへ追加しない。状態名やパラメーター名、アバター名�
 未知のBehaviourやAnimation Eventを実際に実行することはない。
 
 FaceEmo候補の保持と既存の直接割り当てへのフォールバックは、このグラフ解析の成否と独立している。
-ログにはCatalog内で解決できた組数と、未解決のレイヤー・理由を残す。CACは従来の先頭14表情セットを使う。
+ログにはClips内で解決できた組数と、未解決のレイヤー・理由を残す。CACは従来の先頭14表情セットを使う。
 
 ### CAC形式の最初の表情セット
 
@@ -796,9 +796,9 @@ FaceEmoの `GetCacLayer` と同じく、子StateMachineのEntry条件が `SYNC_E
 CACではFaceEmo同様、顔Motionがあるが初期値との差分がない分岐も初期姿勢として有効にする。
 Sanatia 1.11はこの形式で、第1セットの左右7種類は同じ姿勢、初期姿勢を含めた見た目は8種類。
 
-両形式とも、後続セットと無関係なFX・メニュー由来のクリップはCatalogに混ぜない。
+両形式とも、後続セットと無関係なFX・メニュー由来のクリップはClipsに混ぜない。
 採用したセット・ジェスチャー分岐数・手動候補数は `FaceEmo normal:` / `FaceEmo CAC:` に残す。
-元クリップとコンパイルした固定ポーズが両方Catalogに存在することはある。
+元クリップとコンパイルした固定ポーズが両方Clipsに存在することはある。
 Version 21では対応表への割り当てによるメニュー項目の自動選択可否制御を行わない。
 
 SanatiaにはDescriptorと同じVRCSDK3A.dllのGUIDを持つ音声コンポーネントも含まれる。
@@ -849,7 +849,7 @@ Trackingのない出力に後から追跡を加える場合は、追跡元を設
 元の BlendShape フィールドは DynamicBlendShapeDriver が Drive するため、OpenCloseTarget を直接重ねて接続しない。
 既存パッケージをこの方式にするには再変換が必要。瞬き binding がないアバターは、再変換だけで Eyes の接続先が増えるわけではない。
 複製・再ロード・再装着時には左右状態を0に、AllowHandGestures を true に初期化する。
-VRM の感情表情も同じ Catalog を使うが、VRChat の条件がないため対応表は未設定から始まる。
+VRM の感情表情も同じ Clips を使うが、VRChat の条件がないため対応表は未設定から始まる。
 
 DynamicBlendShapeDriver は Expressions/Drivers 以下に SkinnedMeshRenderer ごとに1つ生成し、
 表情で使用するシェイプだけを登録する。同名 renderer は名前ではなく Component の同一性で区別する。
@@ -883,7 +883,7 @@ ExpressionMeshDriverChecksではConfig.SmoothingSpeedを0.0001にし、通常／
 2026-09-27: Version 16の実メッシュ検証では、選択直後のTargetValue更新、実ウェイトの中間値、
 遷移途中の再選択、瞬き合成、複製・保存再読込を確認した。Legniaの実変換・inspectでは138個の
 SmoothValueを確認し、保存後の全64組・138出力が変更前と同じ最終値へ収束した。
-Catalog・固定ポーズ値・出力binding・ジェスチャー対応表はVersion 15と一致する。
+Clips・固定ポーズ値・出力binding・ジェスチャー対応表はVersion 15と一致する。
 
 ## 検証
 
@@ -895,7 +895,7 @@ FaceEmoの第1パターン選択、実ProtoFluxの入力・再生・編集・モ
 Plumは元FXの順序と元Clip終端値による独立照合で154出力×64組（9,856項目）が一致した。
 第1セットの割り当てはF_blink、F_smile_1、F_doya_2、F_joy_1、F_guruguru_1、
 F_marushiro_1、F_shiitake_1の7ポーズと初期姿勢。条件なしのviseme_resetもFaceEmoの候補として残る。
-Sanatiaは31出力×64組の再生が成功し、統一前の第1セットとCatalog・値・対応表が一致した。
+Sanatiaは31出力×64組の再生が成功し、統一前の第1セットとClips・値・対応表が一致した。
 旧ルーター専用の期待値は `NormalExpressionPatternChecks` に置き換え、同じ入力上の
 既定値・Behaviour・Entry/Exit・入れ子・再生指定をFaceEmoが評価しないことを検証する。
 物理コントローラー、デスクトップのキーフォーカス、メニュー操作、複数クライアントの動作確認は
@@ -918,7 +918,7 @@ SkinnedMeshRenderer と2レイヤーの Animator を使った再現でも確認�
 FluxGroupを共有しない。Core は Lifecycle 59、Selection 101、Playback 60ノード。
 この構造上の境界は、見出しや座標だけでなく実際の FluxGroup で検査している。
 
-Plum の旧・新パッケージで29クリップの全 AnimX 内容、Catalog設定、出力binding・基準値・追跡混合率、
+Plum の旧・新パッケージで29クリップの全 AnimX 内容、Clips設定、出力binding・基準値・追跡混合率、
 64通りの割り当てを比較し、一致を確認した。保存パッケージのメニューボタンを実際に発火する試験でも、
 64通り・102出力・8種類の表情が成功した。
 ExpressionSmoke はフェード、診断値のローカル駆動、入力拒否、所有者の離脱・再装着、
@@ -939,7 +939,7 @@ API/Gesture は104、Core は Lifecycle 65、Selection 86、Playback 60ノード
 ExpressionSmoke で各手の全8値、範囲外（int.MinValue、-1、8、255、int.MaxValue）、
 型違い・旧 Tag の拒否、同一更新内の左右入力、複製と保存再読み込みが成功した。
 Plum の再変換・inspect、および保存済みメニューボタンによる64通り・102出力・8種類の表情の検証も成功。
-旧パッケージと Catalog、全 AnimX 曲線、出力binding、64通りの表情割り当てが一致した。
+旧パッケージと Clips、全 AnimX 曲線、出力binding、64通りの表情割り当てが一致した。
 Plum の Flux は1,444から1,235ノードへ減少。左右 Receiver は各31ノード、16グループ、最大109ノード。
 接続中ワールドの Plum は旧 string 構成として読み取り確認し、ワールド内の置き換えは行っていない。
 
@@ -960,7 +960,7 @@ For は安定した Pair.0～63 の逆引き・メニュー表示判定に使う
 2026-09-20: Version 5 では共通の Expr 空間を廃止し、変数定義ごとに11種類の名前を付けた。
 空間名と変数パス、ProtoFlux の参照、テンプレート、診断スクリプトを更新した。公開イベント Tag・引数は変更していない。
 ExpressionSmoke で生成時・保存再読み込み後の全レコードの空間名と変数接頭辞、旧 Expr 書き込みの拒否を確認した。
-Plum の再変換・inspect、新旧パッケージの Catalog・AnimX・出力定義・64通りの割り当て比較が成功し、
+Plum の再変換・inspect、新旧パッケージの Clips・AnimX・出力定義・64通りの割り当て比較が成功し、
 保存済みメニューによる64通り・102出力・8表情、直接選択と入力モードの動作も確認した。
 診断スクリプトは新 ExpressionCore と旧 Expr の模擬応答で読み取りを検証した。
 
@@ -981,32 +981,32 @@ ExpressionSmoke で機種別設定の編集、Core 参照の結合、同一フ�
 2026-09-21: Version 7 は各 Output にサンプリング・混合・フェードの Logic を配置し、Result を ValueFieldDrive で駆動する。
 Playback の LocalUpdate、再生用内部 Impulse、Lifecycle の Result 直接書き込みを削除した。
 ExpressionSmoke で短いクリップのフェード、途中切り替え、欠落・並べ替えトラック、ループ周期編集、追跡入力、複製・保存再読込を検証した。
-Plum v1.0.1 は102出力・左右64通りを再生確認し、旧パッケージと Catalog・全 AnimX カーブ・出力接続・対応表が一致した。
+Plum v1.0.1 は102出力・左右64通りを再生確認し、旧パッケージと Clips・全 AnimX カーブ・出力接続・対応表が一致した。
 
 2026-09-21: Version 8 は AnimationTime と FadeWeight を Playback で一度計算し、各 Output から ValueSource で参照する。
 ValueSource はフィールド変更を伝播するが、独立した FluxGroup の評価順を保証しない。
 切替直後に新しい表情へ古いフェード率が適用される回帰を再現したため、計算対象の開始時刻・表情参照を照合し、更新待ちは Snapshot を維持する。
 ExpressionSmoke は共有ドライバーの入力差し替え、切替の最初の更新、ループ周期編集、短い Clip のフェード、複製・保存再読込を検証する。
-Plum の再変換・inspect、左右64通り・102出力・8表情の再生、v7 パッケージとの全 AnimX・Catalog・出力接続・対応表の比較も成功した。
+Plum の再変換・inspect、左右64通り・102出力・8表情の再生、v7 パッケージとの全 AnimX・Clips・出力接続・対応表の比較も成功した。
 Plum の総ノード数は5,973から5,167へ減り、130ボード・最大95ノードとボード間の独立性を維持した。
 
 2026-09-21: Version 9 は EyeLinearDriver の OpenCloseTarget を Base へ移した出力に BlinkMode を設定し、フェード後に閉じる側を合成する。
 Base に瞬きが届いても、Clip が同じトラックを持ち TrackingWeight=0 なら従来の混合では使われなかった。
 実 DLL の EyeLinearDriver.UpdateTarget は OpenState／ClosedState へ値を写すため、閉じるほど小さい設定では min が必要。
 ExpressionSmoke は実 EyeManager／EyeLinearDriver で開眼・閉眼・左右別入力・逆方向・フェード中の瞬きと、複製・保存再読込を検証した。
-Plum の再変換・inspect、左右64通り・102出力・8表情の再生、v8 パッケージとの Catalog・全 AnimX・対応表の比較も成功した。
+Plum の再変換・inspect、左右64通り・102出力・8表情の再生、v8 パッケージとの Clips・全 AnimX・対応表の比較も成功した。
 
 2026-09-21: Version 10 はメッシュごとの DynamicBlendShapeDriver に必要なシェイプをまとめ、Result を DynamicField へ変更した。
 実 DLL の DynamicBlendShapeDriver は Renderer 変更時または Inspector の Update BlendShape Targets で名前を解決する。
 既存 Renderer にエントリを追加しただけでは再解決しないため、生成時には各 _drive を明示的にリンクする。
-これにより Catalog のアセット書き出しを await した後に増えたシェイプも正しく接続する。
+これにより Clips のアセット書き出しを await した後に増えたシェイプも正しく接続する。
 実メッシュ2個で数値 binding・同名 Slot/シェイプ・未使用シェイプの保持・DynamicField 読取・Snapshot・瞬き合成・複製・保存再読込を検証した。
-Plum の再変換・inspect と保存パッケージの左右64通り・102出力・8表情の再生も成功し、v9 の Catalog・全 AnimX・対応表と一致した。
+Plum の再変換・inspect と保存パッケージの左右64通り・102出力・8表情の再生も成功し、v9 の Clips・全 AnimX・対応表と一致した。
 パッケージ読込ではフィールド参照の復元がメッシュロードより先に完了するため、実メッシュ名との照合はロード完了後に行う。
 
 2026-09-21: Touch 入力は AvatarAddonSystem の Touch V1.4.3 を読み取り調査し、ビット化・指形状表・ボタン優先表に整理した。
 既存の条件としきい値を維持し、左右各128通りの入力・ヒステリシス・安定待ち・再接続・手動入力保持を ExpressionSmoke で検証した。
-入力を左隣のポート順に配置する検証は複製・保存再読込でも成功。Plum の変換・inspect・左右64通りの再生と変更前の全 AnimX・Catalog・対応表の比較も成功した。
+入力を左隣のポート順に配置する検証は複製・保存再読込でも成功。Plum の変換・inspect・左右64通りの再生と変更前の全 AnimX・Clips・対応表の比較も成功した。
 
 2026-09-21: 同じ判定構成を Index・Vive・WindowsMR に展開し、全4機種で生成処理を共通化した。
 機種固有の接触入力、B/A の優先順位、パッドクリックと Grip の組み合わせ、アナログ／bool の Grip の違いは維持する。
@@ -1016,7 +1016,7 @@ ExpressionSmoke は左右合計576通りの入力と各機種の安定待ち・�
 ### Legnia 1.21: FaceMorphからハンド割り当てを復元する
 
 FaceEmo統一直後のcommit `550f18e` では、Legnia 4Pの候補検出は成功するがハンド割り当ては0/64だった。
-Catalogは17表情とNeutral、Outputsは138シェイプ。保存後の18件のSelectと64組の入力でも出力は初期値のままだった。
+Clipsは17表情とNeutral、Outputsは138シェイプ。保存後の18件のSelectと64組の入力でも出力は初期値のままだった。
 ユーザーによるUnity上の確認でも、FaceEmoは表情を認識するが各ハンドジェスチャーへ割り当てられていなかった。
 
 元FXは `GestureLeft/Right` → Parameter Driverで `FaceMorph` をSet → 入れ子の
@@ -1033,19 +1033,19 @@ Legniaでは後ろの右手入力レイヤーが優先され、右がNeutralの�
 最初のセットを採用するルール、顔カーブの選別、追加の手動候補は維持している。
 実アバターの変換・inspect・保存後の全64組と8種類の姿勢の実再生が成功。
 元FXのDriver値・入れ子Entry・元Clipの最終キーを独立に読んだ照合でも、138出力×64組（8,832項目）が一致した。
-PlumとSanatiaも再変換・inspect・保存後64組の実再生に成功し、変更前のCatalog・固定ポーズ値・出力binding・対応表と一致した。
+PlumとSanatiaも再変換・inspect・保存後64組の実再生に成功し、変更前のClips・固定ポーズ値・出力binding・対応表と一致した。
 合成テストでは番号やパラメーター名の変更、入力レイヤー順序、両手Fist、未知の親条件、別FXの書き込み、
 Add/Random/Copy、動かない入力状態、顔以外のカーブを持つ入力Motionについても確認する。
 
 続いて候補検出と割り当てを分離し、上記のグラフ解析へ置き換えた。Parameter Driverなしの複数段遷移、
 Any State、Entry、入れ子Exit、途中状態のSet→Copy→Add、別FX、親子Behaviour順序、重複FXを合成テストで確認する。
-Legniaは従来の正常なCatalog・固定ポーズ値・対応表と一致し、元データとの8,832項目の照合も一致した。
+Legniaは従来の正常なClips・固定ポーズ値・対応表と一致し、元データとの8,832項目の照合も一致した。
 
-当時は条件を補完できない手動候補の選択制限が残っていたが、Version 23ではCatalogからの直接選択に変更した。
+当時は条件を補完できない手動候補の選択制限が残っていたが、Version 23ではClipsからの直接選択に変更した。
 Version 21ではメニュー項目の自動選択可否制御と `GestureTable/Logic` の監視を削除した。
 対応表の参照有無や表情の Active・Enabled に応じたメニューの Enabled 更新は行わない。
-Version 23の `ExpressionApiSetup.BuildSelectReceiver` はCatalogから表情IDを検索し、CurrentExpressionを直接更新する。
-これによりGestureTable未割り当ての有効なCatalog候補も直接再生できる。
+Version 23の `ExpressionApiSetup.BuildSelectReceiver` はClipsから表情IDを検索し、CurrentExpressionを直接更新する。
+これによりGestureTable未割り当ての有効なClips候補も直接再生できる。
 
 ### 12B 1.0.0: 元FaceEmo設定とCAC再インポートの割り当ての違い
 
@@ -1059,7 +1059,7 @@ FaceEmo生成FXを取り込む。DescriptorのFXだけを調べると、この�
 空スロットを詰めたり、左へ自動複製したり、後続セットから補充したりしない。
 
 2026-09-26の調査では、現行ソースと報告時の配布版（2026.09.26.2226）で生成された
-保存パッケージの両方にCatalogと割り当てが存在した。実メニュー入力による64組・11出力の検証で
+保存パッケージの両方にClipsと割り当てが存在した。実メニュー入力による64組・11出力の検証で
 初期姿勢を含む7種類のポーズを確認し、両パッケージの表情データも一致した。
 これはヘッドレス実行による確認であり、ユーザーのVR装着環境での入力は未確認。
 後続調査で、これは元の割り当ての正しさを保証していないことが判明した。
@@ -1078,7 +1078,7 @@ FaceEmo生成FXを取り込む。DescriptorのFXだけを調べると、この�
 以下のモデル固有のルーター調査・当時の検証結果は履歴として残す。
 `Vrchat*GestureRouter` と `VrchatExpressionMask` はFaceEmo統一時に削除済みであり、
 下記の既定値固定・履歴評価・経路拒否条件は現在の仕様ではない。
-現在の表情検出・セット選択には上記FaceEmo基準を使い、そのCatalogの中からグラフ解析でハンド割り当てを選ぶ。
+現在の表情検出・セット選択には上記FaceEmo基準を使い、そのClipsの中からグラフ解析でハンド割り当てを選ぶ。
 FBX名修復、出力グラフ、保存形式についての記録は各実装を参照する。
 
 ### 空の振り分けステートを使うジェスチャー表情
@@ -1124,7 +1124,7 @@ Transform 要素が空の Humanoid マスクと、既知の目・口のみの Tr
 この例外は検証済みレイヤーの `EmptyStatesUseBaseStream` に限定する。TrackingControl による
 目・口の追跡切替と遷移時間も再現せず、ResoPon の瞬き・リップシンク合成を使う。
 近似内容は変換ログに記録する。Facial パラメーターによる別レイヤーの状態遷移は
-引き続き自動対応表の対象外で、対応可能な Clip は直接選択用 Catalog に残す。
+引き続き自動対応表の対象外で、対応可能な Clip は直接選択用 Clips に残す。
 [VRChat のレイヤーとマスク](https://creators.vrchat.com/avatars/playable-layers/) および
 [TrackingControl](https://creators.vrchat.com/avatars/state-behaviors/) も参照。
 
@@ -1162,7 +1162,7 @@ Write Defaults が全状態で有効なら異なる binding 集合を許容し�
 
 実 Fyuett_All_Hina の変換・inspect と、保存後の全64組の CurrentExpression・685出力の再生を確認した。
 直接選択メニュー15件と入力モード切替も動作する。LuciferDevil の再変換・保存後再生・
-Catalog/全AnimX/出力binding/対応表の変更前比較も一致した。
+Clips/全AnimX/出力binding/対応表の変更前比較も一致した。
 
 ### NoraMiaree の未割り当て調査
 
@@ -1259,7 +1259,7 @@ BothHand は左右が同じサインのとき Any State から専用表情へ入
 更新には既存パッケージの再変換・再インポートが必要。
 
 Ricorine_03_Albiflora（375出力）ではFluxノードが18,253→1,804、再生用の個別ボードが375→0に減った。
-通常EXEで変換・inspectし、保存後の64組・47種類の表情・375出力、旧版との全AnimX・Catalog・
+通常EXEで変換・inspectし、保存後の64組・47種類の表情・375出力、旧版との全AnimX・Clips・
 出力binding・対応表の一致を検証した（意図的に削除したフェード設定は比較対象外）。
 即時切り替え、連続／ループ再生、瞬き、追跡混合、解除、複製・未装着・再装着・保存再読込の回帰も通る。
 
@@ -1285,7 +1285,7 @@ AnimX の全キー・接線、出力binding、対応表は Version 11 から維�
 
 変換時にコンパイル済みカーブの最後のキー値を取り出し、各表情の Bindings に Output参照とValueを保存する。
 AnimXファイルの生成・LocalDBへの登録・AnimationProvider・AssetLoader・実行時サンプラーを削除した。
-CatalogのClip参照をBindingsのSlot参照へ置き換え、アセットのロード待ちも不要になった。
+ClipsのClip参照をBindingsのSlot参照へ置き換え、アセットのロード待ちも不要になった。
 変換前の中間カーブはAnimatorレイヤーの合成に使うが、変換後のパッケージには出力しない。
 既存パッケージを新方式へ更新するには再変換が必要。公開イベントTag・引数は変更しない。
 回帰テストでは最終値、即時切り替え、値一覧の差し替え・編集後の再選択、
@@ -1321,7 +1321,7 @@ LifecycleはHasPoseを解除し、通常出力だけBaseをWriteする。追跡�
 Legnia 4Pでは、重み0のInput LeftHand／Input RightHandレイヤーのStateMachineBehaviourが
 FaceMorphへ定数をSetし、重み1のFace Morphレイヤーが入れ子のEntryで表情を選ぶ。
 従来は入力レイヤーを重み0として読み飛ばし、表情側もnested state machineとして除外したため、
-Catalogに22件あってもGestureTableが0/64となり、CurrentExpressionを選択できなかった。
+Clipsに22件あってもGestureTableが0/64となり、CurrentExpressionを選択できなかった。
 
 VrchatIndirectGestureRouterはモデル名やFaceMorphという名前に依存せず、次の範囲を静的に変換する。
 
@@ -1342,7 +1342,7 @@ VrchatIndirectGestureRouterはモデル名やFaceMorphという名前に依存�
 回帰テストはゼロウェイト入力、記述と異なるExpressionParametersの初期値、入れ子Entry、左右64組、
 上記の不正・未対応経路の拒否を確認する。実Legniaコントローラーでも64組の選択状態を元の割り当てと照合する。
 
-Legnia 4Pの実変換では23件のCatalog・139出力・64/64割り当てを確認した。保存済みパッケージを
+Legnia 4Pの実変換では23件のClips・139出力・64/64割り当てを確認した。保存済みパッケージを
 読み戻したメニュー操作でも全64組のCurrentExpressionと出力値、8種類のポーズを検証した。
 表情値の比較時は外部追跡入力だけを固定し、ライブ瞬き・口パクは別の合成テストで検証する。
 
@@ -1397,7 +1397,7 @@ Entryから入れ子・Any State・通常遷移を評価する。異なるパラ
 保存済みパッケージを読み戻したメニュー操作でも全64組のCurrentExpressionと出力値、
 15種類の表情、15件の直接選択メニューを検証した。実クライアントでの目視確認は別途必要。
 最終コードでも実変換・inspect・保存パッケージの全64組の再検証に成功した。
-初回修正出力とのCatalog・最終値・参照・割り当ての一致も確認した。
+初回修正出力とのClips・最終値・参照・割り当ての一致も確認した。
 更新した通常のpublish EXEは実変換EXEと同一DLLで、通常EXEからのinspectも成功した。
 ### GameVketChan: SDKマスク・往復分岐・欠落シェイプ
 
@@ -1438,7 +1438,7 @@ humanoidフラグのみで `m_Elements: []` のため、非Transformの表情シ
 混在トラックの抽出と不正な顔曲線・空 Clip の扱いは `MixedExpressionClipChecks` で検証する。
 表情システムの実行方式は最終値Writeと独立した瞬き・口パク追従を維持し、Version 16でメッシュ出力にSmoothValueを追加した。
 
-実変換では65件のCatalog・95出力・64/64割り当てを確認した。保存パッケージの全64組で
+実変換では65件のClips・95出力・64/64割り当てを確認した。保存パッケージの全64組で
 CurrentExpressionと出力値を照合し、48種類の表情を検証した。片手単独では右8種類・左6種類となり、
 左のNeutral／Fist／Pointは有効なシェイプの最終値が同じになる。配布EXEでの実変換・inspect、
 既存の瞬き・口パクを含むExpressionSmokeも成功した。実クライアントの目視確認は含まない。
@@ -1472,7 +1472,7 @@ MaryciaではGestureLeftWeight／GestureRightWeightは0、bnEyeCloseと左右・
 `NestedGestureRouterChecks` は既定値を変更した2セットの全64組、両手一致の優先、
 元の左右の条件順、通常表情の循環の最終値、未選択セットの未対応クリップ、不正経路の拒否を検証する。
 
-実際の2P版を配布EXEで変換・inspectし、49件のCatalog・156出力・64/64割り当てを確認した。
+実際の2P版を配布EXEで変換・inspectし、49件のClips・156出力・64/64割り当てを確認した。
 保存パッケージのメニュー操作で全64組のCurrentExpressionと出力値、13種類の表情を照合した。
 片手単独では各7種類となり、既定ウェイト0のFistはNeutralと同じ表情になる。通常版と通常／2Pの
 UserEdit版でも64組の解析を確認した。ExpressionSmokeの全回帰テストも成功した。
@@ -1506,9 +1506,9 @@ ExpressionSmokeで禁止文字・置換後の衝突・同名メッシュ・実Bl
 
 ## Version 31: Binding変数をClip空間に統合
 
-2026-09-28: ExpressionSystem.Catalog.Clip.Binding空間を削除し、
-各表情のClip空間に `ExpressionSystem.Catalog.Clip/Binding.<Output.Id>` を保存する。
-各変数の配置は `Catalog/<表情>/DV/Binding.<Output.Id>`。
+2026-09-28: ExpressionSystem.Clip.Binding空間を削除し、
+各表情のClip空間に `ExpressionSystem.Clip/Binding.<Output.Id>` を保存する。
+各変数の配置は `Clips/<表情>/DV/Binding.<Output.Id>`。
 BindingsスロットとそのSlot参照も廃止し、PlaybackとTrackingはCurrentExpressionを直接Sourceにする。
 命名・禁止文字変換・欠落時のBase復帰はVersion 30と同じ。表情の有効性はSlotの有効状態とEnabledで判定する。
 ExpressionSmokeでClip直下の変数配置と旧空間・参照の不在、直接選択・欠落値・瞬き・複製・保存再読込を含む全回帰テストが成功した。
@@ -1516,8 +1516,8 @@ ExpressionSmokeでClip直下の変数配置と旧空間・参照の不在、直�
 ### Version 32: Binding変数スロットの整理
 
 各ClipのDV配下にBindingスロットを作り、Binding.*の変数スロットをその子へまとめる。
-配置はCatalog/<表情>/DV/Binding/Binding.<Output.Id>。BindingスロットにはDynamicVariableSpaceを追加せず、
-変数名ExpressionSystem.Catalog.Clip/Binding.<Output.Id>とCurrentExpressionからの読み取りを維持する。
+配置はClips/<表情>/DV/Binding/Binding.<Output.Id>。BindingスロットにはDynamicVariableSpaceを追加せず、
+変数名ExpressionSystem.Clip/Binding.<Output.Id>とCurrentExpressionからの読み取りを維持する。
 ExpressionSmokeの全回帰テストでグループ配置、変数名による読み取り、Base復帰、複製・保存再読込が成功した。
 
 ### Version 33: CurrentExpression更新直後のPlayback呼び出し
@@ -1534,7 +1534,7 @@ ExpressionSmokeの全回帰テストで明示Impulseの即時適用、参照編�
 ### Version 34: Outputsの未使用DVを削除
 
 実行時に使わないPath・Shape・Target・Baselineを生成しない。OriginalDriverはPlaybackの通常Writeを除外する判定に使うため維持する。
-元の基準値はCatalogのresopon:neutral表情に保持し、実メッシュへの接続はResult → SmoothValue → DynamicBlendShapeDriverで辿れる。
+元の基準値はClipsのresopon:neutral表情に保持し、実メッシュへの接続はResult → SmoothValue → DynamicBlendShapeDriverで辿れる。
 回帰テストもDVの記録ではなく実際の駆動接続で出力を識別し、Neutralの値を基準値として比較する。旧形式の比較読み取りは維持する。
 ExpressionSmokeの全回帰テストで未使用DVの不在、実駆動接続、Neutralの基準値、表情選択・瞬き・複製・保存再読込が成功した。
 
@@ -1549,14 +1549,14 @@ ExpressionSmokeの全回帰テストで生成・複製・保存再読込後のDi
 ### Version 36: 固定Slot参照をDynamicVariableへ移行
 
 生成済みグラフのRefObjectInput<Slot>を廃止し、DynamicReferenceVariable<Slot>とDynamicVariableObjectInput<Slot>で参照する。
-既存のReceiver・Catalogを再利用し、Core・Outputs・内部Impulse宛先・各入力状態・追跡出力は必要なReferences.*だけを生成する。
+既存のReceiver・Clipsを再利用し、Core・Outputs・内部Impulse宛先・各入力状態・追跡出力は必要なReferences.*だけを生成する。
 null参照はReferences.Noneへまとめる。DVはExpressions/DV配下に置き、各ボードの入力ノードは独立したまま同じ変数を読む。
 ExpressionSmokeの全回帰テストでRefObjectInput<Slot>の不在、ReceiverとOutputs参照の編集追従、
 複製・保存再読込後の参照の独立性、モジュール削除後の空参照を確認した。
 
 ### Version 37: SelectとPlaybackは表情Slotを受信
 
-Select APIはstring IDではなくSlotを受信する。Catalogの列挙をなくし、親SlotとActive・Enabledで候補を検証する。
+Select APIはstring IDではなくSlotを受信する。Clipsの列挙をなくし、親SlotとActive・Enabledで候補を検証する。
 メニューはButtonDynamicImpulseTriggerWithReference<Slot>で参照を送り、複製・保存再読込でも参照先を維持する。
 PlaybackはDynamicImpulseReceiverWithObject<Slot>で受信し、CurrentExpressionへの書き込みをこのボードへ集約する。
 Selection・Select APIは表情Slot、Lifecycleはnullを送る。非nullはローカル装着者のみ、nullは未装着時も受理する。
@@ -1568,7 +1568,7 @@ ExpressionSmokeの全回帰テストでSlot受信・即時設定と解除・無�
 ### Version 38: 手入力モジュールの参照を各空間へ集約
 
 References.Inputs.HandGestures.Modules.*は各モジュール内の左右状態の更新だけで使用しているため、共有ExpressionSystem空間への生成を廃止した。
-各Inputs/HandGestures/Modules/<機種>/DVへReferences.Left・References.Rightを置き、ExpressionSystem.Input.HandGestures空間へ登録する（Version 80ではModulesを省略）。
+各Inputs/HandGestures/Modules/<機種>/DVへReferences.Left・References.Rightを置き、ExpressionSystem.Input.HandGesture空間へ登録する（Version 80ではModulesを省略）。
 全消費先が対象モジュール内にあることを生成時に判定する。外部からも使われる参照は共有空間へ残す。
 各機種と複製アバターは同じ変数名を使っても、自分の空間のSlot参照にバインドする。
 ExpressionSmokeの全回帰テストで、共有空間の旧参照の不在、モジュール内参照の編集、機種間の分離、複製・保存再読込後のバインドが成功した。
@@ -1591,7 +1591,7 @@ ExpressionSmokeの全回帰テストで、None変数・入力ノードの不在�
 ## Version 41：状態変数名・固定参照・内部階層の整理
 
 `Core.*` の状態変数から Core. を外した。CurrentExpression と GestureTable.LnRm は
-References 接頭辞を付けず、Receiver・Catalog と各内部処理への固定参照を References.* に統一する。
+References 接頭辞を付けず、Receiver・Clips と各内部処理への固定参照を References.* に統一する。
 Core スロットを Internal に変更し、Logic を挟まず Lifecycle・Selection・Playback を直下に置く。
 例：ExpressionSystem/References.Internal.Playback は Expressions/Internal/Playback を参照する。
 公開 Dynamic Impulse の Tag・引数は変わらない。外部で変数を直接読む処理は新しい名前に更新する。
@@ -1613,16 +1613,16 @@ ExpressionSystem/References.Receiver を ExpressionSystem/References.API に変�
 
 Clip/Enabledを生成せず、Selection・Select APIのEnabled読み取りとSlotのアクティブ状態チェックを削除する。
 選択した表情Slotは非アクティブでもCurrentExpressionへ設定し、Binding.*を適用する。
-GestureTableは取得した参照をそのまま送信し、Select APIは非nullで自身のCatalog直下ではないSlotだけを除外する。nullは選択解除として受理する。
+GestureTableは取得した参照をそのまま送信し、Select APIは非nullで自身のClips直下ではないSlotだけを除外する。nullは選択解除として受理する。
 nullの対応表行は選択解除となり、値が見つからない出力は従来どおりBaseへ戻る。装着状態の受付制御は維持する。
-Clip/Sourceは実行時に読み取る箇所がないため、CatalogとTemplatesの生成から削除した。
-非アクティブな表情・Catalog、ジェスチャー選択と直接選択、テンプレート複製、保存再読込を回帰検証する。
+Clip/Sourceは実行時に読み取る箇所がないため、ClipsとTemplatesの生成から削除した。
+非アクティブな表情・Clips、ジェスチャー選択と直接選択、テンプレート複製、保存再読込を回帰検証する。
 
 ## Version 45：Clipのfloat変数をDV直下へ配置
 
 Clip/IdとClip/DisplayNameを生成しない。表情メニューのLabelへ名前を直接書き込み、表示名のDriveを削除する。
 表情値のBinding.接頭辞とDV/Bindingスロットも削除し、各表情のDV直下にOutput.Idと同名の変数を並べる。
-読み取りパスはExpressionSystem.Catalog.Clip/<Output.Id>。通常出力・追跡出力とも同じ形式を使う。
+読み取りパスはExpressionSystem.Clip/<Output.Id>。通常出力・追跡出力とも同じ形式を使う。
 Output側のIdと変換処理内の識別子は維持し、メニュー操作とGestureTableは従来どおりSlot参照で選択する。
 メニューLabelの編集、変数名・値の編集、同名シェイプの衝突回避、テンプレート複製、保存再読込を検証する。
 

@@ -12,7 +12,7 @@ internal static class ExpressionInputEventChecks
     {
         var core = expressions.FindChild("API").FindChild("Internal");
         var api = expressions.FindChild("API");
-        var catalog = expressions.FindChild("Catalog");
+        var catalog = expressions.FindChild("Clips");
         var modules = expressions.FindChild("Inputs").FindChild("HandGestures");
         var mocks = expressions.Parent.AddSlot("Temporary sensor inputs");
         var restore = new List<(ISyncRef Port, IWorldElement Target)>();
@@ -135,106 +135,106 @@ internal static class ExpressionInputEventChecks
                 Gesture(side, 1);
                 active.Value.Value = true;
                 await WaitSeconds(0.4);
-                Check(Get<int>(core, "State." + side + "Gesture") == 1,
+                Check(Get<int>(core, "State.Gesture." + side) == 1,
                     module.Name + "/" + side + ": desktop ignores active controller sensors");
                 vrActive.Value.Value = true;
                 await WaitSeconds(0.1);
-                Check(Get<int>(core, "State." + side + "Gesture") == 1,
+                Check(Get<int>(core, "State.Gesture." + side) == 1,
                     module.Name + "/" + side + ": first Neutral waits for the captured delay");
                 Set(module, "StabilitySeconds", 0.05f);
                 await WaitSeconds(0.1);
-                Check(Get<int>(core, "State." + side + "Gesture") == 1,
+                Check(Get<int>(core, "State.Gesture." + side) == 1,
                     module.Name + "/" + side + ": editing delay does not shorten a pending task");
                 await WaitSeconds(0.2);
-                Check(Get<int>(core, "State." + side + "Gesture") == 0,
+                Check(Get<int>(core, "State.Gesture." + side) == 0,
                     module.Name + "/" + side + ": first Neutral sends after the captured delay");
                 setCode(0); await WaitSeconds(0.12);
-                Check(Get<int>(core, "State." + side + "Gesture") == expected[0],
+                Check(Get<int>(core, "State.Gesture." + side) == expected[0],
                     module.Name + "/" + side + ": next change uses the edited delay");
                 Gesture(side, 1); await Frames(10);
-                Check(Get<int>(core, "State." + side + "Gesture") == 1, module.Name + "/" + side + ": idle sensors preserve newer input");
+                Check(Get<int>(core, "State.Gesture." + side) == 1, module.Name + "/" + side + ": idle sensors preserve newer input");
                 Set(core, "Config.AllowHandGesture." + side, false); await Frames(10);
-                Check(Get<int>(core, "State." + side + "Gesture") == 1,
+                Check(Get<int>(core, "State.Gesture." + side) == 1,
                     module.Name + "/" + side + ": gate retains the accepted value");
                 Check(HandGesturesAllowed(core, side == "Left" ? "Right" : "Left"),
                     module.Name + "/" + side + ": disabling one hand preserves the opposite permission");
                 Set(core, "Config.AllowHandGesture." + side, true); await Frames(30);
-                Check(Get<int>(core, "State." + side + "Gesture") == expected[0], module.Name + "/" + side + ": re-enable detects current pose");
+                Check(Get<int>(core, "State.Gesture." + side) == expected[0], module.Name + "/" + side + ": re-enable detects current pose");
                 active.Value.Value = false; await Frames(10);
-                Check(Get<int>(core, "State." + side + "Gesture") == -1,
+                Check(Get<int>(core, "State.Gesture." + side) == -1,
                     module.Name + "/" + side + ": disconnect immediately sends the unavailable sentinel");
                 Gesture(side, 4); active.Value.Value = true; await Frames(30);
-                Check(Get<int>(core, "State." + side + "Gesture") == expected[0], module.Name + "/" + side + ": reconnect submits physical pose");
+                Check(Get<int>(core, "State.Gesture." + side) == expected[0], module.Name + "/" + side + ": reconnect submits physical pose");
                 // VR exit clears just this hand without waiting for StabilitySeconds.
-                int opposite = Get<int>(core, "State." + (side == "Left" ? "Right" : "Left") + "Gesture");
+                int opposite = Get<int>(core, "State.Gesture." + (side == "Left" ? "Right" : "Left"));
                 Set(module, "StabilitySeconds", 0.3f);
                 vrActive.Value.Value = false; await Frames(3);
-                Check(Get<int>(core, "State." + side + "Gesture") == -1 &&
-                    Get<int>(core, "State." + (side == "Left" ? "Right" : "Left") + "Gesture") == opposite,
+                Check(Get<int>(core, "State.Gesture." + side) == -1 &&
+                    Get<int>(core, "State.Gesture." + (side == "Left" ? "Right" : "Left")) == opposite,
                     module.Name + "/" + side + ": VR exit immediately clears only its own hand");
                 Gesture(side, 7); await WaitSeconds(0.4);
-                Check(Get<int>(core, "State." + side + "Gesture") == 7,
+                Check(Get<int>(core, "State.Gesture." + side) == 7,
                     module.Name + "/" + side + ": idle desktop does not repeatedly send the sentinel");
                 vrActive.Value.Value = true; await WaitSeconds(0.1);
-                Check(Get<int>(core, "State." + side + "Gesture") == 7,
+                Check(Get<int>(core, "State.Gesture." + side) == 7,
                     module.Name + "/" + side + ": VR re-entry waits for a stable pose");
                 await WaitSeconds(0.3);
-                Check(Get<int>(core, "State." + side + "Gesture") == expected[0],
+                Check(Get<int>(core, "State.Gesture." + side) == expected[0],
                     module.Name + "/" + side + ": VR re-entry submits the unchanged physical pose");
                 int nextCode = Array.FindIndex(expected, value => value != expected[0]);
                 int thirdCode = Array.FindIndex(expected, value => value != expected[0] && value != expected[nextCode]);
                 Set(module, "StabilitySeconds", 0.3f);
                 Gesture(side, 7);
                 setCode(nextCode); await WaitSeconds(0.15);
-                Check(Get<int>(core, "State." + side + "Gesture") == 7, module.Name + "/" + side + ": changed pose waits for its task");
+                Check(Get<int>(core, "State.Gesture." + side) == 7, module.Name + "/" + side + ": changed pose waits for its task");
                 setCode(0); await WaitSeconds(0.4);
-                Check(Get<int>(core, "State." + side + "Gesture") == 7, module.Name + "/" + side + ": returning pose during timeout is dropped without a queued resend");
+                Check(Get<int>(core, "State.Gesture." + side) == 7, module.Name + "/" + side + ": returning pose during timeout is dropped without a queued resend");
                 Gesture(side, 7);
                 setCode(nextCode); await WaitSeconds(0.15);
                 setCode(thirdCode); await WaitSeconds(0.2);
-                Check(Get<int>(core, "State." + side + "Gesture") == 7, module.Name + "/" + side + ": expired snapshot for a different pose is discarded");
+                Check(Get<int>(core, "State.Gesture." + side) == 7, module.Name + "/" + side + ": expired snapshot for a different pose is discarded");
                 await WaitSeconds(0.2);
-                Check(Get<int>(core, "State." + side + "Gesture") == 7, module.Name + "/" + side + ": replacement during timeout stays unsent even after holding it");
+                Check(Get<int>(core, "State.Gesture." + side) == 7, module.Name + "/" + side + ": replacement during timeout stays unsent even after holding it");
                 Gesture(side, 7);
                 setCode(nextCode); await WaitSeconds(0.1);
                 Allow(false); await WaitSeconds(0.3);
-                Check(Get<int>(core, "State." + side + "Gesture") == 7, module.Name + "/" + side + ": pending task is rejected while input is disabled");
+                Check(Get<int>(core, "State.Gesture." + side) == 7, module.Name + "/" + side + ": pending task is rejected while input is disabled");
                 // The authored false branch sends -1, but the public API rejects
                 // it while AllowHandGestures is false.
                 vrActive.Value.Value = false; await Frames(3);
-                Check(Get<int>(core, "State." + side + "Gesture") == 7,
+                Check(Get<int>(core, "State.Gesture." + side) == 7,
                     module.Name + "/" + side + ": permission gate rejects the VR-exit sentinel");
                 vrActive.Value.Value = true; await Frames(3);
                 // Settle the mocked sensor while disabled before testing re-enable.
                 setCode(0); await Frames(3); Allow(true); await WaitSeconds(0.4);
-                Check(Get<int>(core, "State." + side + "Gesture") == expected[0], module.Name + "/" + side + ": re-enable starts a new task");
+                Check(Get<int>(core, "State.Gesture." + side) == expected[0], module.Name + "/" + side + ": re-enable starts a new task");
                 // Only the first snapshot survives an A -> B -> A round trip.
                 // Dropped impulses do not extend the cooldown or capture a value.
                 setCode(nextCode); await WaitSeconds(0.08);
                 setCode(0); await WaitSeconds(0.08);
                 setCode(nextCode); await WaitSeconds(0.19);
-                Check(Get<int>(core, "State." + side + "Gesture") == expected[nextCode], module.Name + "/" + side + ": admitted snapshot still sends when its pose returns");
+                Check(Get<int>(core, "State.Gesture." + side) == expected[nextCode], module.Name + "/" + side + ": admitted snapshot still sends when its pose returns");
                 Gesture(side, 7);
                 setCode(thirdCode); await WaitSeconds(0.22);
-                Check(Get<int>(core, "State." + side + "Gesture") == 7, module.Name + "/" + side + ": suppressed matching change did not create another delayed task");
+                Check(Get<int>(core, "State.Gesture." + side) == 7, module.Name + "/" + side + ": suppressed matching change did not create another delayed task");
                 await WaitSeconds(0.18);
-                Check(Get<int>(core, "State." + side + "Gesture") == expected[thirdCode], module.Name + "/" + side + ": suppressed impulses do not extend the timeout and a later change sends");
+                Check(Get<int>(core, "State.Gesture." + side) == expected[thirdCode], module.Name + "/" + side + ": suppressed impulses do not extend the timeout and a later change sends");
                 // A short disable/re-enable neither resets the timeout nor queues
                 // another copy. The original snapshot may still match on completion.
                 setCode(0); await WaitSeconds(0.08);
                 Allow(false); await WaitSeconds(0.04);
                 Allow(true); await WaitSeconds(0.23);
-                Check(Get<int>(core, "State." + side + "Gesture") == expected[0], module.Name + "/" + side + ": original admitted snapshot may send after quick re-enable");
+                Check(Get<int>(core, "State.Gesture." + side) == expected[0], module.Name + "/" + side + ": original admitted snapshot may send after quick re-enable");
                 Gesture(side, 7); await WaitSeconds(0.2);
-                Check(Get<int>(core, "State." + side + "Gesture") == 7, module.Name + "/" + side + ": quick re-enable does not reset timeout or schedule a duplicate");
+                Check(Get<int>(core, "State.Gesture." + side) == 7, module.Name + "/" + side + ": quick re-enable does not reset timeout or schedule a duplicate");
                 // Exit during an admitted delay: -1 bypasses Timeout, and the
                 // pending snapshot must not overwrite it when the delay expires.
                 setCode(nextCode); await WaitSeconds(0.08);
                 vrActive.Value.Value = false; await Frames(3);
-                Check(Get<int>(core, "State." + side + "Gesture") == -1,
+                Check(Get<int>(core, "State.Gesture." + side) == -1,
                     module.Name + "/" + side + ": VR exit bypasses an active timeout");
                 await WaitSeconds(0.35);
-                Check(Get<int>(core, "State." + side + "Gesture") == -1,
+                Check(Get<int>(core, "State.Gesture." + side) == -1,
                     module.Name + "/" + side + ": pending snapshot cannot overwrite the VR-exit sentinel");
                 setCode(0); await Frames(3);
                 vrActive.Value.Value = true; await WaitSeconds(0.4);
@@ -242,15 +242,15 @@ internal static class ExpressionInputEventChecks
                 await Frames(10);
                 foreach (var entry in wearerReferences) entry.Reference.Target = expressions.World.LocalUser;
                 await WaitSeconds(0.45);
-                Check(Get<int>(core, "State." + side + "Gesture") == expected[0], module.Name + "/" + side + ": rewear submits the unchanged physical pose");
+                Check(Get<int>(core, "State.Gesture." + side) == expected[0], module.Name + "/" + side + ": rewear submits the unchanged physical pose");
                 Set(module, "StabilitySeconds", 0f);
-                int other = Get<int>(core, "State." + (side == "Left" ? "Right" : "Left") + "Gesture");
+                int other = Get<int>(core, "State.Gesture." + (side == "Left" ? "Right" : "Left"));
                 for (int code = 0; code < expected.Length; code++)
                 {
                     setCode(code); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == expected[code],
+                    Check(Get<int>(core, "State.Gesture." + side) == expected[code],
                         $"{module.Name}/{side}: sensor input code {code} selects {expected[code]}");
-                    Check(Get<int>(core, "State." + (side == "Left" ? "Right" : "Left") + "Gesture") == other, "device input does not change the opposite hand");
+                    Check(Get<int>(core, "State.Gesture." + (side == "Left" ? "Right" : "Left")) == other, "device input does not change the opposite hand");
                 }
                 if (module.Name == "Touch")
                 {
@@ -263,26 +263,26 @@ internal static class ExpressionInputEventChecks
                         Set(core, "GestureTable.L0R0", smile);
                         Gesture(otherSide, 0);
                         setCode(8); await Frames(6); // Thumb on stick, index lifted.
-                        Check(Get<int>(core, "State." + side + "Gesture") == 4, side + ": lifted index selects Victory");
+                        Check(Get<int>(core, "State.Gesture." + side) == 4, side + ": lifted index selects Victory");
                         Set(module, "StabilitySeconds", 0.3f);
                         setCode(8 | 32); await WaitSeconds(0.1); // Index touches, no pull.
-                        Check(Get<int>(core, "State." + side + "Gesture") == 4, side + ": resting index waits before Neutral");
+                        Check(Get<int>(core, "State.Gesture." + side) == 4, side + ": resting index waits before Neutral");
                         await WaitSeconds(0.3);
-                        Check(Get<int>(core, "State." + side + "Gesture") == 0 &&
+                        Check(Get<int>(core, "State.Gesture." + side) == 0 &&
                             Reference<Slot>(core, "State.CurrentExpression") == smile,
                             side + ": resting index selects the mapped Neutral expression");
                         setCode(8); await WaitSeconds(0.4);
-                        Check(Get<int>(core, "State." + side + "Gesture") == 4, side + ": lifting index restores Victory");
+                        Check(Get<int>(core, "State.Gesture." + side) == 4, side + ": lifting index restores Victory");
                         Set(module, "StabilitySeconds", 0f);
                         setCode(0); await Frames(6);
-                        Check(Get<int>(core, "State." + side + "Gesture") == 2, side + ": releasing all contacts selects Open");
+                        Check(Get<int>(core, "State.Gesture." + side) == 2, side + ": releasing all contacts selects Open");
                         setCode(32 | 4); await Frames(6);
-                        Check(Get<int>(core, "State." + side + "Gesture") == 7, side + ": grip plus resting index selects ThumbsUp");
+                        Check(Get<int>(core, "State.Gesture." + side) == 7, side + ": grip plus resting index selects ThumbsUp");
                         setCode(32 | 4 | 64); await Frames(6);
-                        Check(Get<int>(core, "State." + side + "Gesture") == 1, side + ": thumbrest plus grip and resting index selects Fist");
+                        Check(Get<int>(core, "State.Gesture." + side) == 1, side + ": thumbrest plus grip and resting index selects Fist");
                         Gesture(side, 7);
                         setCode(32 | 4 | 1 | 2 | 8 | 64); await Frames(6);
-                        Check(Get<int>(core, "State." + side + "Gesture") == 7,
+                        Check(Get<int>(core, "State.Gesture." + side) == 7,
                             side + ": changing thumb contacts within the same pose does not resend");
                     }
                     finally
@@ -296,19 +296,19 @@ internal static class ExpressionInputEventChecks
                     foreach (float x in new[] { -0.001f, 0f, 0.001f })
                     {
                         axis.Value.Value = new(x, -1); await Frames(6);
-                        Check(Get<int>(core, "State." + side + "Gesture") == 0, "both sides of the downward seam select Direction.0");
+                        Check(Get<int>(core, "State.Gesture." + side) == 0, "both sides of the downward seam select Direction.0");
                     }
                     foreach (float degrees in new[] { 22.4f, 22.6f, -22.4f, -22.6f })
                     {
                         double radians = degrees * Math.PI / 180;
                         axis.Value.Value = new((float)Math.Sin(radians), (float)Math.Cos(radians)); await Frames(6);
                         int sector = degrees > 22.5f ? 5 : degrees < -22.5f ? 3 : 4;
-                        Check(Get<int>(core, "State." + side + "Gesture") == sector, "pad sector boundary " + degrees);
+                        Check(Get<int>(core, "State.Gesture." + side) == sector, "pad sector boundary " + degrees);
                     }
                     setCode(4); Set(module, "Direction.4", 7); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 7, "editing a direction assignment refreshes the gesture");
+                    Check(Get<int>(core, "State.Gesture." + side) == 7, "editing a direction assignment refreshes the gesture");
                     Set(module, "Direction.4", 4); touch.Value.Value = false; await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 0, "pad release returns Neutral");
+                    Check(Get<int>(core, "State.Gesture." + side) == 0, "pad release returns Neutral");
                 }
                 if (module.Name == "Index")
                 {
@@ -333,45 +333,45 @@ internal static class ExpressionInputEventChecks
                             _ => 0
                         };
                         await Frames(6);
-                        Check(Get<int>(core, "State." + side + "Gesture") == selected, $"Index/{side}: {shape} selects {selected}");
-                        Check(Get<int>(core, "State." + (side == "Left" ? "Right" : "Left") + "Gesture") == other,
+                        Check(Get<int>(core, "State.Gesture." + side) == selected, $"Index/{side}: {shape} selects {selected}");
+                        Check(Get<int>(core, "State.Gesture." + (side == "Left" ? "Right" : "Left")) == other,
                             "intermediate Index input does not change the opposite hand");
                     }
                     setCode(30); await Frames(6);
                     rotations[0].Value.Value = Elements.Core.floatQ.Euler(19.9f, 0, 0); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 3, "index angle below open boundary makes FingerPoint");
+                    Check(Get<int>(core, "State.Gesture." + side) == 3, "index angle below open boundary makes FingerPoint");
                     rotations[0].Value.Value = Elements.Core.floatQ.Euler(20.1f, 0, 0); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 0, "index angle above open boundary enters Neutral");
+                    Check(Get<int>(core, "State.Gesture." + side) == 0, "index angle above open boundary enters Neutral");
                     rotations[0].Value.Value = Elements.Core.floatQ.Euler(39.9f, 0, 0); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 0, "index angle below closed boundary remains Neutral");
+                    Check(Get<int>(core, "State.Gesture." + side) == 0, "index angle below closed boundary remains Neutral");
                     rotations[0].Value.Value = Elements.Core.floatQ.Euler(40.1f, 0, 0); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 1, "index angle above threshold makes Fist");
+                    Check(Get<int>(core, "State.Gesture." + side) == 1, "index angle above threshold makes Fist");
                     Set(module, "FingerThreshold", 70f); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 0, "editing finger threshold refreshes detection");
+                    Check(Get<int>(core, "State.Gesture." + side) == 0, "editing finger threshold refreshes detection");
                     Set(module, "FingerThreshold", 40f);
                     rotations[0].Value.Value = Elements.Core.floatQ.Euler(30f, 0, 0); await Frames(6);
                     Set(module, "FingerNeutralRange", 0f); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 3, "zero finger neutral range restores binary detection");
+                    Check(Get<int>(core, "State.Gesture." + side) == 3, "zero finger neutral range restores binary detection");
                     Set(module, "FingerNeutralRange", -10f); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 3, "negative finger neutral range cannot overlap states");
+                    Check(Get<int>(core, "State.Gesture." + side) == 3, "negative finger neutral range cannot overlap states");
                     Set(module, "FingerNeutralRange", 20f); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 0, "editing finger neutral range restores intermediate detection");
+                    Check(Get<int>(core, "State.Gesture." + side) == 0, "editing finger neutral range restores intermediate detection");
                     setCode(15); await Frames(6);
                     float boundary = side == "Left" ? 25f : -25f;
                     rotations[4].Value.Value = Elements.Core.floatQ.Euler(0, boundary + 20.1f, 0); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 7, "thumb angle above open boundary makes ThumbsUp");
+                    Check(Get<int>(core, "State.Gesture." + side) == 7, "thumb angle above open boundary makes ThumbsUp");
                     rotations[4].Value.Value = Elements.Core.floatQ.Euler(0, boundary + 19.9f, 0); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 0, "thumb angle below open boundary enters Neutral");
+                    Check(Get<int>(core, "State.Gesture." + side) == 0, "thumb angle below open boundary enters Neutral");
                     rotations[4].Value.Value = Elements.Core.floatQ.Euler(0, boundary + 0.1f, 0); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 0, "thumb angle above closed boundary remains Neutral");
+                    Check(Get<int>(core, "State.Gesture." + side) == 0, "thumb angle above closed boundary remains Neutral");
                     Set(module, "ThumbNeutralRange", 0f); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 7, "zero thumb neutral range restores binary detection");
+                    Check(Get<int>(core, "State.Gesture." + side) == 7, "zero thumb neutral range restores binary detection");
                     Set(module, "ThumbNeutralRange", -10f); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 7, "negative thumb neutral range cannot overlap states");
+                    Check(Get<int>(core, "State.Gesture." + side) == 7, "negative thumb neutral range cannot overlap states");
                     Set(module, "ThumbNeutralRange", 20f); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 0, "editing thumb neutral range restores intermediate detection");
+                    Check(Get<int>(core, "State.Gesture." + side) == 0, "editing thumb neutral range restores intermediate detection");
                     rotations[4].Value.Value = Elements.Core.floatQ.Euler(0, boundary - 0.1f, 0); await Frames(6);
-                    Check(Get<int>(core, "State." + side + "Gesture") == 1, "thumb angle below side threshold makes Fist");
+                    Check(Get<int>(core, "State.Gesture." + side) == 1, "thumb angle below side threshold makes Fist");
                     string otherSide = side == "Left" ? "Right" : "Left";
                     var neutralRow = Reference<Slot>(core, "GestureTable.L0R0");
                     try
@@ -381,16 +381,16 @@ internal static class ExpressionInputEventChecks
                         Set(module, "StabilitySeconds", 0.3f);
                         rotations[0].Value.Value = Elements.Core.floatQ.Euler(30f, 0, 0);
                         await WaitSeconds(0.1);
-                        Check(Get<int>(core, "State." + side + "Gesture") == 1, "intermediate Index pose waits for stability");
+                        Check(Get<int>(core, "State.Gesture." + side) == 1, "intermediate Index pose waits for stability");
                         await WaitSeconds(0.3);
-                        Check(Get<int>(core, "State." + side + "Gesture") == 0 && Reference<Slot>(core, "State.CurrentExpression") == smile,
+                        Check(Get<int>(core, "State.Gesture." + side) == 0 && Reference<Slot>(core, "State.CurrentExpression") == smile,
                             "intermediate Index pose selects the mapped Neutral expression");
                         setCode(30); await WaitSeconds(0.4);
-                        Check(Get<int>(core, "State." + side + "Gesture") == 3, "extending the intermediate finger restores FingerPoint");
+                        Check(Get<int>(core, "State.Gesture." + side) == 3, "extending the intermediate finger restores FingerPoint");
                         setCode(31); await WaitSeconds(0.4);
-                        Check(Get<int>(core, "State." + side + "Gesture") == 1, "closing the intermediate finger restores Fist");
+                        Check(Get<int>(core, "State.Gesture." + side) == 1, "closing the intermediate finger restores Fist");
                         setCode(0); await WaitSeconds(0.4);
-                        Check(Get<int>(core, "State." + side + "Gesture") == 2, "fully open Index hand remains HandOpen");
+                        Check(Get<int>(core, "State.Gesture." + side) == 2, "fully open Index hand remains HandOpen");
                     }
                     finally
                     {
@@ -429,28 +429,28 @@ internal static class ExpressionInputEventChecks
             Gesture("Left", 0); Gesture("Right", 0);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 0 && Get<int>(core, "State.RightGesture") == 0,
+            Check(Get<int>(core, "State.Gesture.Left") == 0 && Get<int>(core, "State.Gesture.Right") == 0,
                 "keypad alone does not trigger either hand");
             Key(InputKey.Shift, true);
             await Frames(10);
-            Check(Get<int>(core, "State.LeftGesture") == 1 && Get<int>(core, "State.RightGesture") == 0,
+            Check(Get<int>(core, "State.Gesture.Left") == 1 && Get<int>(core, "State.Gesture.Right") == 0,
                 "Shift plus keypad sends only the left-hand input");
             Gesture("Left", 4);
             await Frames(10);
-            Check(Get<int>(core, "State.LeftGesture") == 4, "held keyboard chord does not repeatedly overwrite later input");
+            Check(Get<int>(core, "State.Gesture.Left") == 4, "held keyboard chord does not repeatedly overwrite later input");
             Key(InputKey.Keypad1, false);
             await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 4, "keyboard release preserves the last input");
+            Check(Get<int>(core, "State.Gesture.Left") == 4, "keyboard release preserves the last input");
             Allow(false);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 1 && NoHandsAllowed(core) &&
+            Check(Get<int>(core, "State.Gesture.Left") == 1 && NoHandsAllowed(core) &&
                 Reference<Slot>(core, "State.CurrentExpression") == smile, "keyboard selects a pose while hand gestures are disabled");
             Gesture("Left", 4); await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 1, "disabled gesture API cannot overwrite keyboard selection");
+            Check(Get<int>(core, "State.Gesture.Left") == 1, "disabled gesture API cannot overwrite keyboard selection");
             Allow(true);
             Gesture("Left", 4); await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 4, "enabling gestures does not resend a held keyboard chord");
+            Check(Get<int>(core, "State.Gesture.Left") == 4, "enabling gestures does not resend a held keyboard chord");
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, smile);
             Key(InputKey.Keypad1, false); await Frames(5);
             Key(InputKey.Keypad1, true); await Frames(5);
@@ -461,18 +461,18 @@ internal static class ExpressionInputEventChecks
             await Frames(5);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 1, "keyboard chord fires again after release and repress");
+            Check(Get<int>(core, "State.Gesture.Left") == 1, "keyboard chord fires again after release and repress");
             Key(InputKey.Keypad2, true);
             await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 1, "pressing another keypad key while holding the first does not retrigger");
+            Check(Get<int>(core, "State.Gesture.Left") == 1, "pressing another keypad key while holding the first does not retrigger");
             Key(InputKey.Keypad2, false);
             await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 1, "releasing another key does not retrigger the held chord");
+            Check(Get<int>(core, "State.Gesture.Left") == 1, "releasing another key does not retrigger the held chord");
             Key(InputKey.Keypad1, false);
             await Frames(5);
             Key(InputKey.Keypad1, true); Key(InputKey.Keypad3, true);
             await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 1, "simultaneous keys select the lowest gesture index");
+            Check(Get<int>(core, "State.Gesture.Left") == 1, "simultaneous keys select the lowest gesture index");
             Key(InputKey.Keypad1, false); Key(InputKey.Keypad3, false);
             await Frames(5);
             var leftSettings = keyboard.FindChild("Left").FindChild("DV");
@@ -480,7 +480,7 @@ internal static class ExpressionInputEventChecks
             Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.SetGestureRightTag);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "State.RightGesture") == 1, "keyboard sender reads the edited hand tag");
+            Check(Get<int>(core, "State.Gesture.Right") == 1, "keyboard sender reads the edited hand tag");
             Key(InputKey.Keypad1, false);
             Set(leftSettings.FindChild("Tag"), "Tag", ExpressionSystemSetup.SetGestureLeftTag);
             await Frames(5);
@@ -488,7 +488,7 @@ internal static class ExpressionInputEventChecks
                 "right-hand modifier remains Ctrl");
             Key(InputKey.Keypad0, true);
             await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 0, "keypad zero sends Neutral through the shared sender");
+            Check(Get<int>(core, "State.Gesture.Left") == 0, "keypad zero sends Neutral through the shared sender");
             Key(InputKey.Keypad0, false);
             Key(InputKey.Shift, false);
             Key(InputKey.Control, true);
@@ -496,11 +496,11 @@ internal static class ExpressionInputEventChecks
             await Frames(5);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 4 && Get<int>(core, "State.RightGesture") == 1,
+            Check(Get<int>(core, "State.Gesture.Left") == 4 && Get<int>(core, "State.Gesture.Right") == 1,
                 "Ctrl plus keypad sends only the right-hand input");
             Key(InputKey.Shift, true);
             await Frames(10);
-            Check(Get<int>(core, "State.LeftGesture") == 1 && Get<int>(core, "State.RightGesture") == 1,
+            Check(Get<int>(core, "State.Gesture.Left") == 1 && Get<int>(core, "State.Gesture.Right") == 1,
                 "adding Shift to a held Ctrl chord updates Left and retains Right");
             Key(InputKey.Keypad1, false);
             await Frames(5);
@@ -513,11 +513,11 @@ internal static class ExpressionInputEventChecks
             Gesture("Left", 6);
             Key(InputKey.Keypad1, true);
             await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 6 && Reference<Slot>(core, "State.CurrentExpression") == retainedExpression,
+            Check(Get<int>(core, "State.Gesture.Left") == 6 && Reference<Slot>(core, "State.CurrentExpression") == retainedExpression,
                 "AvatarWornLocal false permits direct API values while keyboard input and Internal selection stay gated");
             foreach (var entry in wearerReferences) entry.Reference.Target = expressions.World.LocalUser;
             await Frames(5);
-            Check(Get<int>(core, "State.LeftGesture") == 1, "AvatarWornLocal true accepts a held chord when wearing begins");
+            Check(Get<int>(core, "State.Gesture.Left") == 1, "AvatarWornLocal true accepts a held chord when wearing begins");
             Key(InputKey.Keypad1, false);
             Key(InputKey.Shift, false);
             await Frames(5);

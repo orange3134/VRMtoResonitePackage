@@ -11,8 +11,8 @@ internal static class ExpressionResetChecks
         var api = expressions.FindChild("API");
         var table = expressions.FindChild("DV").FindChild("GestureTable");
         var outputs = expressions.FindChild("Outputs").Children.ToArray();
-        var expression = expressions.FindChild("Catalog").Children.First(c =>
-            c.ExpressionVariables<DynamicValueVariable<float>>().Any(v => v.VariableName.Value.StartsWith("ExpressionSystem.Catalog.Clip/", StringComparison.Ordinal)));
+        var expression = expressions.FindChild("Clips").Children.First(c =>
+            c.ExpressionVariables<DynamicValueVariable<float>>().Any(v => v.VariableName.Value.StartsWith("ExpressionSystem.Clip/", StringComparison.Ordinal)));
         var mappings = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal))
             .ToDictionary(v => v, v => v.Reference.Target);
@@ -23,8 +23,8 @@ internal static class ExpressionResetChecks
         {
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, expression);
             // Direct state edits keep a pose selected while preparing non-neutral reset input.
-            Check(core.WriteDynamicVariable("ExpressionSystem/State.LeftGesture", 5) == DynamicVariableWriteResult.Success &&
-                core.WriteDynamicVariable("ExpressionSystem/State.RightGesture", 6) == DynamicVariableWriteResult.Success,
+            Check(core.WriteDynamicVariable("ExpressionSystem/State.Gesture.Left", 5) == DynamicVariableWriteResult.Success &&
+                core.WriteDynamicVariable("ExpressionSystem/State.Gesture.Right", 6) == DynamicVariableWriteResult.Success,
                 "prepare hand values without reevaluating the selected pose");
         }
         try
@@ -33,7 +33,7 @@ internal static class ExpressionResetChecks
             neutral.Reference.Target = expression;
             SetHandGesturesAllowed(core, false);
             PrepareSelection();
-            Check(Get<int>(core, "State.LeftGesture") == 5 && Get<int>(core, "State.RightGesture") == 6 &&
+            Check(Get<int>(core, "State.Gesture.Left") == 5 && Get<int>(core, "State.Gesture.Right") == 6 &&
                 NoHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == expression,
                 "reset starts with both hands non-neutral, a selected expression and gestures disabled");
             var toggle = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Hand gestures")
@@ -41,8 +41,8 @@ internal static class ExpressionResetChecks
             void Toggle(bool expected)
             {
                 toggle.Pressed(null, default);
-                Check(BothHandsAllowed(core) == expected && Get<int>(core, "State.LeftGesture") == 5 &&
-                    Get<int>(core, "State.RightGesture") == 6 && Reference<Slot>(core, "State.CurrentExpression") == expression,
+                Check(BothHandsAllowed(core) == expected && Get<int>(core, "State.Gesture.Left") == 5 &&
+                    Get<int>(core, "State.Gesture.Right") == 6 && Reference<Slot>(core, "State.CurrentExpression") == expression,
                     "gesture toggle changes only permission and preserves the selected expression and hands");
             }
             await Frames(2); ExpressionGraphChecks.CheckMenuColors(expressions);
@@ -53,7 +53,7 @@ internal static class ExpressionResetChecks
             button.Pressed(null, default);
             void CheckReset(bool left = false, bool right = false)
             {
-                Check(Get<int>(core, "State.LeftGesture") == 0 && Get<int>(core, "State.RightGesture") == 0 &&
+                Check(Get<int>(core, "State.Gesture.Left") == 0 && Get<int>(core, "State.Gesture.Right") == 0 &&
                     HandGesturesAllowed(core, "Left") == left && HandGesturesAllowed(core, "Right") == right &&
                     Reference<Slot>(core, "State.CurrentExpression") == null && !ContextMenuSelected(core),
                     "reset synchronously clears expression and hands while preserving each hand permission");

@@ -1,10 +1,16 @@
 # Expression integration checks
 
+2026-11-07: Rename hand state to State.Gesture.Left/Right and fixed references to
+Reference.*, including Reference.Clips. Clips replaces Catalog; clip records use
+ExpressionSystem.Clip and controller records use ExpressionSystem.Input.HandGesture.
+Placement and dynamic binding checks verify the new names through clone/reload.
+Snapshot comparisons still read legacy names to compare authored poses and mappings.
+
 2026-11-07: API operations are classified by their callers. SelectMenuExpression
 moves to Method with the public ExpressionSystem/Method.SelectMenuExpression tag.
 Checks require seven public receivers, three internal boards and OnAvatarWorn in
 Event, and reject the old internal menu tag through generation, clone and reload.
-Existing Catalog, submenu and imported-menu interactions use the public receiver.
+Existing Clips, submenu and imported-menu interactions use the public receiver.
 
 2026-11-07: Removed Method.SelectExpression; Internal.SelectMenuExpression now
 validates the Slot, releases the hold, clears both hands, calls ApplyExpression,
@@ -24,9 +30,9 @@ startup and local wear through ResetState. Graph checks reject OnStart and local
 change detectors in ApplyExpression after generation, cloning and package reload.
 Existing output and lifecycle checks cover first wear, rewear and unworn values.
 
-2026-11-06: System DV keys and their slots use Static.* for fixed references,
+2026-11-06: System DV keys and their slots use Reference.* for fixed references,
 Config.AllowHandGesture.Left/Right and Config.SmoothingSpeed for settings, and
-State.LeftGesture/RightGesture/CurrentExpression for runtime state. Placement
+State.Gesture.Left/Right and State.CurrentExpression for runtime state. Placement
 checks require the new slots and reject old variable aliases. Dynamic input,
 menu, smoothing, lifecycle, clone and reload checks use the renamed fields.
 
@@ -48,7 +54,7 @@ package reload; early-input checks also exercise the new choices.
 the selected Slot to ApplyExpression. Graph checks enforce this order in one
 flat Sequence through generation, cloning and reload. Menu checks seed both
 hands with nonzero values and verify selection and null deselection clear them
-for Catalog, both hand menus and imported buttons. Invalid Slots retain state;
+for Clips, both hand menus and imported buttons. Invalid Slots retain state;
 valid direct API calls use the same behavior without reevaluating GestureTable.
 
 2026-11-06: ResetState preserves AllowHandGestures.Left/Right. Menu and direct
@@ -100,10 +106,10 @@ order; the departure cleanup remains guarded by its wearer condition.
 
 2026-11-05: Expression menu buttons send null while their expression is selected.
 Select accepts null to clear the pose while keeping gestures disabled and hand
-values unchanged. Runtime checks cover select/clear/reselect for Catalog entries,
+values unchanged. Runtime checks cover select/clear/reselect for Clips entries,
 both hand menus and imported controls, including cloned and reloaded avatars.
 Color checks use the authored expression reference rather than the mutable payload.
-Copied Catalog entries also clear and reselect; repeated non-null API calls keep
+Copied Clips entries also clear and reselect; repeated non-null API calls keep
 the selection without reapplying static output. Menu payload drivers settle on component updates between presses.
 
 2026-11-05: Parent Internal and Method under a shared API slot. References.API
@@ -129,8 +135,8 @@ removes the unused GestureTable self-reference and input. Reference checks verif
 the disconnected Source and removed variables after generation, cloning and reload;
 existing runtime checks cover table edits, selection, missing rows and avatar isolation.
 
-Version 83 removes API/Examples and API/Templates. Clip checks cover Catalog only;
-the existing copy/edit/select checks duplicate a Catalog entry directly.
+Version 83 removes API/Examples and API/Templates. Clip checks cover Clips only;
+the existing copy/edit/select checks duplicate a Clips entry directly.
 
 Version 81 attaches the ExpressionSystem/GestureTable reference directly to the
 DV/GestureTable slot and targets that slot itself. Checks verify placement, absence
@@ -236,7 +242,7 @@ MultiBoolConditionDriver(All).
 Version 65 generates complete Left/Right Expressions submenus, with OnlyForSide on
 each root entry and only the matching hand toggle inside each submenu. Checks cover
 both copies of common controls, identical menu contents apart from the hand toggle,
-local Back/Catalog references, colors and button behavior after cloning/package reload.
+local Back/Clips references, colors and button behavior after cloning/package reload.
 
 Version 63 stores each keyboard hand's modifier as an editable Renderite.Shared.Key.
 Left defaults to Shift and Right to Control, independent of gesture table priority.
@@ -271,8 +277,8 @@ Version 58 places Hand sign expressions and Other expressions directly under Exp
 Each group includes a Back item whose ContextMenuSubmenu opens the local Expressions items,
 including after cloning and package reload. There is no intermediate Select expression menu.
 The synthetic fixture checks classification against the compiled 64-pair table,
-deduplication, complete Catalog coverage, actual button selection in both groups,
-editable Catalog labels, and local menu references after cloning and package reload.
+deduplication, complete Clips coverage, actual button selection in both groups,
+editable Clips labels, and local menu references after cloning and package reload.
 Empty groups are omitted; grouping is fixed at conversion time.
 
 Run with the installed Resonite runtime and .NET 10:
@@ -305,7 +311,7 @@ Tag/target/ExcludeDisabled inputs must stay close to their consumers. A shuffled
 fixture covers creation-order independence, shallow inputs feeding deep nodes,
 feedback cycles, and repeatable arrangement. The synthetic run
 writes keyboard-layout.json for inspecting the generated coordinates and edges.
-Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Catalog Slot and the combined toggle receives no payload; no Command slots may remain.
+Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Clips Slot and the combined toggle receives no payload; no Command slots may remain.
 Each actual Flux group must stay within one logic board. Core lifecycle, selection,
 playback, the seven public API receivers, and each controller hand have independent
 boards. The test reports node/group counts and enforces a 256-node per-board budget,
@@ -314,7 +320,7 @@ Each Output has its own sampling/mixing/fade board and a driven field exposed as
 Result targets and
 playback diagnostic fields must retain native driver links after import, preventing
 a regression to synchronized writes on every frame.
-Selection/playback diagnostics, gesture permission rejecting hand input while accepting keyboard updates, enabling input again, direct Catalog menu selection, a partial
+Selection/playback diagnostics, gesture permission rejecting hand input while accepting keyboard updates, enabling input again, direct Clips menu selection, a partial
 tracking-to-expression crossfade, wearer departure, rejection of public and internal
 updates without a wearer, first events after reattachment, and independent cloned
 int gesture receivers are checked as runtime behavior.
@@ -338,7 +344,7 @@ the current pair and selected expression. It checks all 64 selected poses agains
 their AnimX tracks and target output fields,
 and requires at least eight distinct poses by default. When the authored avatar has fewer poses,
 set `RESOPON_TEST_EXPECTED_DISTINCT_POSES` to its independently verified count (2–64);
-the test then requires exactly that count. PilicaKumagaya 1.0 uses 6. Saved menu items without automatic Enabled drivers, direct Catalog selection preserving the hand pair, rejection of hand gesture input while disabled, and both actual bool mode buttons are also checked. Plum v1.0.1 is the registered local regression case.
+the test then requires exactly that count. PilicaKumagaya 1.0 uses 6. Saved menu items without automatic Enabled drivers, direct Clips selection preserving the hand pair, rejection of hand gesture input while disabled, and both actual bool mode buttons are also checked. Plum v1.0.1 is the registered local regression case.
 An optional third argument supplies a previous package to compare before the menu test:
 
 ```powershell
@@ -370,9 +376,9 @@ StabilitySeconds must update that module's hands while other modules retain thei
 run on clones and package reloads. Existing same-frame events, editable tables, removable modules,
 wearer departure/reattachment and clone playback cover the synchronization behavior of Core inputs.
 
-Version 23 selects Catalog entries directly without changing LeftGesture/RightGesture or the then-existing PairKey diagnostic (removed in Version 79).
+Version 23 selects Clips entries directly without changing LeftGesture/RightGesture or the then-existing PairKey diagnostic (removed in Version 79).
 Actual expression buttons disable hand gesture input, write CurrentExpression and execute Playback.
-Unmapped Catalog entries and copied templates are selectable. Invalid Slot references preserve selection.
+Unmapped Clips entries and copied templates are selectable. Invalid Slot references preserve selection.
 Only accepted gesture API events run Selection. Data edits, input permission changes and initialization
 must not select a gesture pair. Lifecycle and input actions retain their local change detectors.
 The sensor-event fixture replaces hardware outputs temporarily and executes the exported graph:
@@ -399,7 +405,7 @@ The previous active client clears state once on departure only when no new weare
 Private stages reject unworn updates, unworn clones do not initialize or repeatedly clear
 stored state, and their first wear restores the base output. Same-frame reattachment API
 requests verify that initialization runs once and does not discard either hand.
-Mapping a Catalog entry makes it appear in the menu; copies from the template become usable after assignment.
+Mapping a Clips entry makes it appear in the menu; copies from the template become usable after assignment.
 The mode bool defaults to true and resets on cloning, loading and reattachment. Ordinary input cannot update
 hand values while disabled, and the first valid event after reattachment initializes before testing the gate.
 
@@ -439,7 +445,7 @@ Version 10 replaces per-output ValueCopy with one DynamicBlendShapeDriver per
 renderer. Result is a DynamicField targeting the driven entry's Value. Graph checks
 verify unique renderer ownership, exact entry-to-target links, and no extra entries.
 A real two-mesh fixture covers same-named renderers/shapes, numeric VRM-style bindings,
-a shape added after a Catalog asset await, untouched mesh weights, dynamic Result
+a shape added after a Clips asset await, untouched mesh weights, dynamic Result
 reads and Selection snapshots, blink routing, cloning and package reload.
 Standalone test fields are driven directly and exposed through the same DynamicField.
 Imported-package checks wait for driver mesh assets before verifying named shape links.
@@ -465,7 +471,7 @@ MA Absolute/Append continues to supply FX to the same importer.
 `CacExpressionChecks` verifies the first numbered 14-entry CAC set, all 64 pairs,
 right-hand priority, grip endpoint, muted/missing/non-face branches and later-set isolation.
 `FaceExpressionDetectionChecks` covers conditionless/nested/zero-weight candidates,
-Contact/PhysBone/bool-toggle exclusions, baseline differences and Catalog reset values.
+Contact/PhysBone/bool-toggle exclusions, baseline differences and Clips reset values.
 `MixedExpressionClipChecks` covers mixed tracks, ignored events/playback settings and
 malformed face data. `WeightedCurveChecks` retains its independent Bezier oracle.
 `NamedShapeRepairChecks` verifies exact renderer identity, source-FBX channel names,
@@ -482,12 +488,12 @@ parameter names and numbers, both-hand Fist timing and source-layer ordering. It
 checks that a stalled hand input follows the authored graph and that unresolved paths do
 not discard independent assignments or manual candidates.
 
-`FaceEmoGraphRoutingChecks` checks Catalog-first routing independently of Parameter Driver
+`FaceEmoGraphRoutingChecks` checks Clips-first routing independently of Parameter Driver
 placement: driver-free Entry/Any State/ordinary chains, intermediate faces, nested Exit,
 parent-before-child behaviours, Set-Copy-Add chains, cross-FX writers, repeated controllers,
 cycles, transition priority/Mute/Solo, discrete 1D BlendTree children and fallback priority. Every supported fixture checks
 all 64 input pairs against authored expected values. Unseen clips and later FaceEmo patterns
-must never enter the Catalog through graph evaluation.
+must never enter the Clips through graph evaluation.
 
 Keyboard defaults use Shift for Left and Ctrl for Right. Runtime checks execute
 the actual keyboard Flux, mocking only KeyHeld sensors and resolving their Key
@@ -526,7 +532,7 @@ Version 21 removes GestureTable/Logic, Inputs/ContextMenu/Logic, MenuAvailable a
 internal MenuRefresh event. Menu Enabled fields must have no automatic driver after
 generation, cloning and package reload. Runtime checks retain enabled menu items for
 unmapped, disabled and inactive expressions and after removing the last mapping.
-Selection validation and direct Catalog ID lookup are covered independently.
+Selection validation and direct Clips ID lookup are covered independently.
 
 Version 22 uses GestureTable.Pair.L0R0 through GestureTable.Pair.L7R7 and the string
 Core.PairKey (initially L0R0, removed in Version 79). All 64 keys and synchronous pair lookups are checked.
@@ -541,7 +547,7 @@ Keyboard/Left and Keyboard/Right have separate int receivers that preserve and b
 this flag. All 16 actual shortcuts are exercised with hand gestures disabled, including
 modifier exclusion, held chords and reload. Gesture API requests remain gated.
 
-Menu Color is driven by ReferenceOptionDescriptionDriver<Slot> for Catalog and imported
+Menu Color is driven by ReferenceOptionDescriptionDriver<Slot> for Clips and imported
 expression items, and ValueOptionDescriptionDriver<bool> for hand-gesture permission.
 Only the current expression / matching flag is green; other options are white. Checks
 cover gesture selection, direct selection, permission changes, copied templates, clone
@@ -573,7 +579,7 @@ Version 36 exports fixed Slot references through DynamicReferenceVariable<Slot> 
 
 Version 37 sends expression Slots to Select and Playback. Playback alone writes CurrentExpression; null clears it, including dequip cleanup. Tests cover invalid/foreign/disabled Slots, rejection of string selection, synchronous null/non-null playback, same-Slot reselection, reference menu buttons, copied templates and package reloads.
 
-Version 38 scopes hand-module references to each module's ExpressionSystem.Input.HandGestures space as References.Left/Right. Checks verify no global module references remain, local reference edits do not affect other modules, and bindings stay local across cloning and package reload.
+Version 38 scopes hand-module references to each module's ExpressionSystem.Input.HandGesture space as References.Left/Right. Checks verify no global module references remain, local reference edits do not affect other modules, and bindings stay local across cloning and package reload.
 
 Version 39 leaves Target unconnected for writes to the same named ancestor space. Checks require implicit targets for Core and hand state, explicit targets for traversed Output.Result, and no unused Core or hand reference variables. Existing runtime tests exercise API and controller writes, cloning, and package reload.
 
@@ -585,7 +591,7 @@ Version 42 routes all internal impulses through References.Internal targeting th
 
 Version 43 renames the public impulse reference to References.API. Existing reference-edit and binding checks use this name before and after cloning and package reload.
 
-Version 44 removes Clip/Enabled and unused Clip/Source metadata. Graph checks reject both definitions and references, including templates, and reject GetSlotActive gates. Runtime checks cover inactive clips in gesture mappings and direct selection under an inactive Catalog, null mapping reset, copied templates, cloning and package reload. Pose snapshots no longer include the removed Enabled field.
+Version 44 removes Clip/Enabled and unused Clip/Source metadata. Graph checks reject both definitions and references, including templates, and reject GetSlotActive gates. Runtime checks cover inactive clips in gesture mappings and direct selection under an inactive Clips, null mapping reset, copied templates, cloning and package reload. Pose snapshots no longer include the removed Enabled field.
 
 Version 45 removes Clip Id/DisplayName and writes menu labels directly. Pose floats use Output.Id as the full Clip key and live directly under DV, without the Binding. prefix or group. Checks cover direct label edits, slot renaming, flat placement, variable edits, collisions, templates, cloning and reload. Snapshot comparisons identify clips by Slot name and same-name sibling ordinal and retain legacy pose readers.
 

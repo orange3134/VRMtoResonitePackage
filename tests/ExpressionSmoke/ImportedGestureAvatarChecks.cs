@@ -62,12 +62,12 @@ internal static class ImportedGestureAvatarChecks
             for (int r = 0; r < 8; r++)
             {
                 // Both gesture events run in the same update and resolve the pair immediately.
-                int previousRight = Get<int>(core, "State.RightGesture");
+                int previousRight = Get<int>(core, "State.Gesture.Right");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureLeftTag, true, l);
-                Check(Get<int>(core, "State.LeftGesture") == l && Get<int>(core, "State.RightGesture") == previousRight &&
+                Check(Get<int>(core, "State.Gesture.Left") == l && Get<int>(core, "State.Gesture.Right") == previousRight &&
                     Reference<Slot>(core, "State.CurrentExpression") == Reference<Slot>(table, $"L{l}R{previousRight}"), "Left gesture event did not evaluate immediately");
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureRightTag, true, r);
-                Check(Get<int>(core, "State.LeftGesture") == l && Get<int>(core, "State.RightGesture") == r, "Gestures did not update both hand states synchronously");
+                Check(Get<int>(core, "State.Gesture.Left") == l && Get<int>(core, "State.Gesture.Right") == r, "Gestures did not update both hand states synchronously");
                 var mapped = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
                     .Single(v => v.VariableName.Value == $"ExpressionSystem/GestureTable.L{l}R{r}").Reference.Target;
                 Check(mapped != null && Reference<Slot>(core, "State.CurrentExpression") == mapped, "Missing or incorrect selected pose");
@@ -112,7 +112,7 @@ internal static class ImportedGestureAvatarChecks
         int visible = 0;
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(receiverRoot, ExpressionSystemSetup.ResetTag, true);
         for (int i = 0; i < 5; i++) await default(NextUpdate);
-        foreach (var expression in root.FindChild("Catalog").Children)
+        foreach (var expression in root.FindChild("Clips").Children)
         {
             Check(expression.GetComponent<ContextMenuItemSource>().EnabledField.Value &&
                 expression.GetComponent<ContextMenuItemSource>().EnabledField.ActiveLink == null,
@@ -121,17 +121,17 @@ internal static class ImportedGestureAvatarChecks
             expression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().Pressed(null, default);
             Check(BothHandsAllowed(core) && ContextMenuSelected(core) && Gestures(core) == (0, 0) &&
                 Reference<Slot>(core, "State.CurrentExpression") == expression,
-                "Saved direct menu clears gestures and selects the Catalog expression");
+                "Saved direct menu clears gestures and selects the Clips expression");
             for (int i = 0; i < 2; i++) await default(NextUpdate);
             ExpressionGraphChecks.CheckMenuColors(root);
         }
         Check(visible >= distinctPoses.Count, "Saved direct menu exposes every distinct mapped pose");
-        int heldLeft = Get<int>(core, "State.LeftGesture"), heldRight = Get<int>(core, "State.RightGesture");
+        int heldLeft = Get<int>(core, "State.Gesture.Left"), heldRight = Get<int>(core, "State.Gesture.Right");
         var heldExpression = Reference<Slot>(core, "State.CurrentExpression");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureLeftTag, true, (heldLeft + 1) % 8);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureRightTag, true, (heldRight + 1) % 8);
         heldLeft = (heldLeft + 1) % 8; heldRight = (heldRight + 1) % 8;
-        Check(Get<int>(core, "State.LeftGesture") == heldLeft && Get<int>(core, "State.RightGesture") == heldRight &&
+        Check(Get<int>(core, "State.Gesture.Left") == heldLeft && Get<int>(core, "State.Gesture.Right") == heldRight &&
             Reference<Slot>(core, "State.CurrentExpression") == heldExpression && ContextMenuSelected(core),
             "Saved menu hold permits hand updates while blocking pose application");
         var toggle = menu.FindChild("Hand gestures").GetComponent<ButtonDynamicImpulseTrigger>();
@@ -140,7 +140,7 @@ internal static class ImportedGestureAvatarChecks
         toggle.Pressed(null, default);
         Check(NoHandsAllowed(core) && ContextMenuSelected(core), "permission toggle preserves the menu hold");
         toggle.Pressed(null, default);
-        Check(BothHandsAllowed(core) && Get<int>(core, "State.LeftGesture") == heldLeft && Get<int>(core, "State.RightGesture") == heldRight,
+        Check(BothHandsAllowed(core) && Get<int>(core, "State.Gesture.Left") == heldLeft && Get<int>(core, "State.Gesture.Right") == heldRight,
             "Enabling ordinary input retains the saved menu pair");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(receiverRoot, ExpressionSystemSetup.ResetTag, true);
         Check(!ContextMenuSelected(core), "saved reset releases menu hold");
@@ -151,10 +151,10 @@ internal static class ImportedGestureAvatarChecks
         Check(NoHandsAllowed(core), "Saved menu-only button disables ordinary input");
         for (int i = 0; i < 2; i++) await default(NextUpdate);
         ExpressionGraphChecks.CheckMenuColors(root);
-        Console.WriteLine($"PASS: {visible} Catalog direct-menu entries and the hand gesture toggle work without Override state");
+        Console.WriteLine($"PASS: {visible} Clips direct-menu entries and the hand gesture toggle work without Override state");
         var importedMenu = menu.FindChild("Imported menu");
-        // All menu items stay enabled; valid Catalog Slots can select an expression.
-        var mappedExpressions = root.FindChild("Catalog").Children
+        // All menu items stay enabled; valid Clips Slots can select an expression.
+        var mappedExpressions = root.FindChild("Clips").Children
             .ToHashSet();
         if (importedMenu != null && !importedMenu.GetComponentsInChildren<ContextMenuItemSource>().Any(item =>
             item.Enabled && mappedExpressions.Contains(item.Slot.GetComponent<BooleanReferenceDriver<Slot>>()?.FalseTarget.Target)))

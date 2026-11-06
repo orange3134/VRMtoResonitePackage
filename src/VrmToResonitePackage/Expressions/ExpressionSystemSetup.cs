@@ -19,7 +19,7 @@ internal sealed partial class ExpressionSystemSetup
     internal const string ToggleHandGesturesTag = "ExpressionSystem/Method.ToggleHandGestures";
     internal static string HandGesturePermission(string hand) => "Config.AllowHandGesture." + hand;
     private readonly ExpressionModel _model;
-    private readonly Slot _root, _catalog, _outputs, _table, _api, _method, _inputs;
+    private readonly Slot _root, _clipRoot, _outputs, _table, _api, _method, _inputs;
     private readonly Slot _events, _resetState, _selection, _playback;
     private const string PlaybackTickTag = "ExpressionSystem/Internal.ApplyExpression";
     private const string SelectionTickTag = "ExpressionSystem/Internal.UpdateSelection";
@@ -32,7 +32,7 @@ internal sealed partial class ExpressionSystemSetup
     {
         _model = model;
         _root = Record(avatar, "Expressions", SystemSpace);
-        _catalog = _root.AddSlot("Catalog");
+        _clipRoot = _root.AddSlot("Clips");
         _api = _root.AddSlot("API");
         // Method accepts calls from outside API; Internal is shared only within API.
         // Event owns automatic startup and condition-change processing.
@@ -49,14 +49,14 @@ internal sealed partial class ExpressionSystemSetup
         _playback = internalSlot.AddSlot("ApplyExpression");
         foreach (string hand in new[] { "Left", "Right" })
         {
-            Data(_root, "State." + hand + "Gesture", 0);
+            Data(_root, "State.Gesture." + hand, 0);
             Data(_root, HandGesturePermission(hand), true);
         }
         Reference<Slot>(_root, "State.CurrentExpression", null);
         Data(_root, ContextMenuSelected, false);
         Data(_root, "Config.SmoothingSpeed", DefaultSmoothingSpeed);
-        Reference(_root, "Static.API", _api);
-        Reference(_root, "Static.Catalog", _catalog);
+        Reference(_root, "Reference.API", _api);
+        Reference(_root, "Reference.Clips", _clipRoot);
     }
 
     public static Task<Slot> BuildAsync(Slot avatar, ExpressionModel model, Func<ExpressionBinding, IField<float>> resolve,
@@ -65,7 +65,7 @@ internal sealed partial class ExpressionSystemSetup
         if (model.Clips.Count == 0 || model.DetectedExpressions != null && model.Clips.All(c => c.Curves.Count == 0)) return Task.FromResult<Slot>(null);
         AvatarSetup.EnsureAvatarRootIdentification(avatar);
         var setup = new ExpressionSystemSetup(avatar, model);
-        setup.BuildCatalog(resolve, initialWeight);
+        setup.BuildClips(resolve, initialWeight);
         for (int left = 0; left < 8; left++)
         for (int right = 0; right < 8; right++)
         {
@@ -90,7 +90,7 @@ internal sealed partial class ExpressionSystemSetup
         return Task.FromResult(setup._root);
     }
 
-    private void BuildCatalog(Func<ExpressionBinding, IField<float>> resolve, Func<IField<float>, float?> initialWeight)
+    private void BuildClips(Func<ExpressionBinding, IField<float>> resolve, Func<IField<float>, float?> initialWeight)
     {
         var fields = new Dictionary<IField<float>, Slot>();
         var definitions = _model.Clips.Where(clip =>
@@ -183,7 +183,7 @@ internal sealed partial class ExpressionSystemSetup
             // A partially resolved face must not be presented as a faithfully imported clip.
             if (clip.Curves.Any(c => !_outputSlots.ContainsKey(c.Binding.Id)))
             { UniLog.Warning($"Expression '{clip.Name}' omitted: one or more output bindings were not resolved"); continue; }
-            Slot entry = Record(_catalog, clip.Name, ClipSpace);
+            Slot entry = Record(_clipRoot, clip.Name, ClipSpace);
             var values = entry.AddSlot("DV");
             foreach (var curve in clip.Curves)
             {

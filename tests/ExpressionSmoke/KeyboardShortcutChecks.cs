@@ -36,7 +36,7 @@ internal static class KeyboardShortcutChecks
         void Key(InputKey key, bool held) { if (held) heldKeys.Add(key); else heldKeys.Remove(key); }
         void Gesture(int hand, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             api, hand == 0 ? ExpressionSystemSetup.SetGestureLeftTag : ExpressionSystemSetup.SetGestureRightTag, true, value);
-        int GestureValue(int hand) => Get<int>(core, hand == 0 ? "State.LeftGesture" : "State.RightGesture");
+        int GestureValue(int hand) => Get<int>(core, hand == 0 ? "State.Gesture.Left" : "State.Gesture.Right");
         bool leftAllowedBefore = HandGesturesAllowed(core, "Left"), rightAllowedBefore = HandGesturesAllowed(core, "Right");
         Slot extendedRow = null;
         try
@@ -78,7 +78,7 @@ internal static class KeyboardShortcutChecks
             Key(InputKey.Keypad9, false); await Frames();
             Check(GestureValue(0) == 8 && GestureValue(1) == 9 &&
                 Reference<Slot>(core, "State.CurrentExpression") == null, "keypad 8/9 produce an unmapped L8R9 without truncation");
-            var expression = expressions.FindChild("Catalog").Children.First();
+            var expression = expressions.FindChild("Clips").Children.First();
             extendedRow = expressions.FindChild("DV").FindChild("GestureTable").AddSlot("L8R9");
             var mapping = extendedRow.AttachComponent<DynamicReferenceVariable<Slot>>();
             mapping.VariableName.Value = "ExpressionSystem/GestureTable.L8R9";

@@ -9,7 +9,7 @@ internal static class ExpressionMenuToggleChecks
     {
         var api = expressions.FindChild("API");
         var core = api.FindChild("Internal");
-        var catalog = expressions.FindChild("Catalog");
+        var catalog = expressions.FindChild("Clips");
         var outputs = expressions.FindChild("Outputs").Children.ToArray();
         var buttons = expressions.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithReference<Slot>>()
             .Where(button => button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target != null).ToArray();
@@ -31,11 +31,11 @@ internal static class ExpressionMenuToggleChecks
                     HandGesturesAllowed(core, "Right") == right, "menu operations preserve each hand permission");
                 var target = button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target;
                 Check(target.Parent == catalog && button.PressedData.Reference.Target == target,
-                    "unselected menu payload references the local Catalog");
+                    "unselected menu payload references the local Clips");
                 void SetHands()
                 {
-                    Check(core.WriteDynamicVariable("ExpressionSystem/State.LeftGesture", 5) == DynamicVariableWriteResult.Success &&
-                        core.WriteDynamicVariable("ExpressionSystem/State.RightGesture", 6) == DynamicVariableWriteResult.Success,
+                    Check(core.WriteDynamicVariable("ExpressionSystem/State.Gesture.Left", 5) == DynamicVariableWriteResult.Success &&
+                        core.WriteDynamicVariable("ExpressionSystem/State.Gesture.Right", 6) == DynamicVariableWriteResult.Success,
                         "prepare non-neutral hand values without changing the selected expression");
                 }
                 SetHands();
@@ -103,7 +103,7 @@ internal static class ExpressionMenuToggleChecks
         }
         finally { reset.Pressed(null, default); }
         await Frames();
-        Console.WriteLine($"MENU TOGGLE: {buttons.Length} Catalog, shared and imported menu buttons hold/release all input paths with all four permission combinations");
+        Console.WriteLine($"MENU TOGGLE: {buttons.Length} Clips, shared and imported menu buttons hold/release all input paths with all four permission combinations");
     }
 
     private static async Task Frames() { for (int i = 0; i < 5; i++) await default(NextUpdate); }

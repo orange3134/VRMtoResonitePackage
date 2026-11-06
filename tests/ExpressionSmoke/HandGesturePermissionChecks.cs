@@ -60,7 +60,7 @@ internal static class HandGesturePermissionChecks
         void Keyboard(string hand, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             api, hand == "Left" ? ExpressionSystemSetup.SetGestureLeftTag : ExpressionSystemSetup.SetGestureRightTag, true, value);
         int Gesture(string hand) => core.ExpressionVariables<DynamicValueVariable<int>>()
-            .Single(v => v.VariableName.Value == "ExpressionSystem/State." + hand + "Gesture").Value.Value;
+            .Single(v => v.VariableName.Value == "ExpressionSystem/State.Gesture." + hand).Value.Value;
         void State(bool left, bool right) => Check(HandGesturesAllowed(core, "Left") == left && HandGesturesAllowed(core, "Right") == right,
             $"independent permissions: Left={left}, Right={right}");
         async Task Frames() { for (int i = 0; i < 3; i++) await default(NextUpdate); ExpressionGraphChecks.CheckMenuColors(expressions); }
@@ -94,7 +94,7 @@ internal static class HandGesturePermissionChecks
             Check(Gesture("Left") == 4 && Gesture("Right") == 5, "Keyboard API bypasses both independent permission flags");
             await Frames();
         }
-        var expression = expressions.FindChild("Catalog").Children.First();
+        var expression = expressions.FindChild("Clips").Children.First();
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, expression);
         State(true, true);
         SetHandGesturesAllowed(core, false);
@@ -154,7 +154,7 @@ internal static class HandGesturePermissionChecks
         var events = api.FindChild("Event").FindChild("OnAvatarWorn");
         var initialized = events.GetComponentsInChildren<Nodes.StoredValue<bool>>().Single();
         int Gesture(string hand) => core.ExpressionVariables<DynamicValueVariable<int>>()
-            .Single(v => v.VariableName.Value == "ExpressionSystem/State." + hand + "Gesture").Value.Value;
+            .Single(v => v.VariableName.Value == "ExpressionSystem/State.Gesture." + hand).Value.Value;
         var fixture = expressions.Parent.AddSlot("Temporary uninitialized gesture fixture");
         try
         {
@@ -199,7 +199,7 @@ internal static class HandGesturePermissionChecks
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesTag, true);
                 Check(BothHandsAllowed(core), "early global toggle enables saved false permissions without an implicit reset");
                 Preserved();
-                var selected = expressions.FindChild("Catalog").Children.First();
+                var selected = expressions.FindChild("Clips").Children.First();
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, selected);
                 Check(BothHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == selected &&
                     Gesture("Left") == 0 && Gesture("Right") == 0,

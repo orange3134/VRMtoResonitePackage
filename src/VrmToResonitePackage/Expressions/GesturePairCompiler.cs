@@ -54,7 +54,7 @@ internal sealed class GesturePairCompiler
                 var states = candidates.Select(l => Resolve(l, _ => control.Value)).ToArray();
                 string id = candidates.Length > 0 && states.All(s => s >= 0) ? Compose(candidates, states) : null;
                 if (id != null) Menu[control] = id;
-                else Warn("Menu control has no independent direct pose: " + control.Name + "; supported clips remain in Catalog.");
+                else Warn("Menu control has no independent direct pose: " + control.Name + "; supported clips remain in Clips.");
             }
         }
     }

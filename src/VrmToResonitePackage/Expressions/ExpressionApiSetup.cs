@@ -21,7 +21,7 @@ internal sealed partial class ExpressionSystemSetup
     }
 
     private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
-        g.Write<int>(g.Ref(_api), SystemSpace, "State." + hand + "Gesture", gesture);
+        g.Write<int>(g.Ref(_api), SystemSpace, "State.Gesture." + hand, gesture);
 
     private void BuildHandReceiver(ExpressionFlux g, string hand, string tag, bool checkPermission)
     {
@@ -62,7 +62,7 @@ internal sealed partial class ExpressionSystemSetup
         var selected = Out(receiver, "Value");
         // Validate before releasing the hold so invalid menu requests preserve it.
         var valid = g.Or(g.IsNull<Slot>(selected),
-            g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", selected)), g.Ref(_catalog)));
+            g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", selected)), g.Ref(_clipRoot)));
         // Wear authority is checked only when applying the pose.
         Link(receiver, "OnTriggered", g.If(valid, g.Sequence(
             g.Write<bool>(g.Ref(_api), SystemSpace, ContextMenuSelected, g.Constant(false)),

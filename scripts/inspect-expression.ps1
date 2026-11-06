@@ -18,7 +18,7 @@ $values = @(
         $members = $entry.component.members
         if (!$members.VariableName) { continue }
         $variableName = $members.VariableName.value
-        $currentName = $variableName -match '^ExpressionSystem/(State\.(LeftGesture|RightGesture|CurrentExpression)|Config\.(AllowHandGesture\.(Left|Right)|SmoothingSpeed))$'
+        $currentName = $variableName -match '^ExpressionSystem/(State\.(Gesture\.(Left|Right)|LeftGesture|RightGesture|CurrentExpression|ContextMenuSelected)|Config\.(AllowHandGesture\.(Left|Right)|SmoothingSpeed))$'
         $legacyName = $variableName -match '^(ExpressionSystem/(Core\.)?|ExpressionCore/|Expr/)(AllowHandGestures(\.(Left|Right))?|LeftGesture|RightGesture|PairKey|CurrentExpression)$'
         if (!$currentName -and !$legacyName) { continue }
         $member = if ($members.Value) { $members.Value } else { $members.Reference }
@@ -32,10 +32,10 @@ $values = @(
         }
     }
 )
-$hasCurrentState = ($values.Name -contains 'State.LeftGesture') -and ($values.Name -contains 'State.CurrentExpression')
+$hasCurrentState = (($values.Name -contains 'State.Gesture.Left') -or ($values.Name -contains 'State.LeftGesture')) -and ($values.Name -contains 'State.CurrentExpression')
 $hasLegacyState = ($values.Name -contains 'LeftGesture') -and ($values.Name -contains 'CurrentExpression')
 if (!$hasCurrentState -and !$hasLegacyState) {
-    throw 'The selected slot contains no expression state variables: expected State.LeftGesture and State.CurrentExpression (or legacy equivalents).'
+    throw 'The selected slot contains no expression state variables: expected State.Gesture.Left and State.CurrentExpression (or legacy equivalents).'
 }
 
 if ($Json) {

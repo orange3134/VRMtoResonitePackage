@@ -118,7 +118,7 @@ internal static class IndirectFaceEmoChecks
             var partial = Parse(variation);
             bool Assigned(int l, int r) => partial.Layers.Single().Transitions.Any(t => t.Conditions.Count > 0 &&
                 t.Conditions.All(c => c.Matches(c.Parameter == "GestureLeft" ? l : r)));
-            Check(!Assigned(1, 0) && Assigned(0, 2), "unresolved left route preserves independent right assignments and Catalog");
+            Check(!Assigned(1, 0) && Assigned(0, 2), "unresolved left route preserves independent right assignments and Clips");
         }
         ManualOnly(Parse(source, "--- !u!91 &91\nAnimatorController:\n  m_AnimatorLayers: []\n" + Driver(999, 42)), "writer in appended FX");
         Asset("Empty.anim", 3, empty.Replace("m_FloatCurves: []", "m_FloatCurves:\n  - classID: 95\n    path: ''\n    attribute: Selector"));

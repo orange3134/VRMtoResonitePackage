@@ -7,7 +7,7 @@ internal static class ExpressionTestFields
     public static (int Left, int Right) Gestures(Slot slot)
     {
         int Read(string hand) => slot.ExpressionVariables<DynamicValueVariable<int>>()
-            .Single(v => v.VariableName.Value == VariablePath(slot, "State." + hand + "Gesture")).Value.Value;
+            .Single(v => v.VariableName.Value == VariablePath(slot, "State.Gesture." + hand)).Value.Value;
         return (Read("Left"), Read("Right"));
     }
 

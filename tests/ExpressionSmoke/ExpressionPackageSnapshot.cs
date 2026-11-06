@@ -5,6 +5,8 @@ using FrooxEngine;
 // Legacy animation packages are compared by their endpoints, which are all the new system retains.
 internal static class ExpressionPackageSnapshot
 {
+    private static Slot ClipRoot(Slot root) => root.FindChild("Clips") ?? root.FindChild("Catalog");
+
     public static string Capture(Slot root, string artifacts)
     {
         Directory.CreateDirectory(artifacts);
@@ -14,7 +16,7 @@ internal static class ExpressionPackageSnapshot
                 Baseline = AuthoredBase(output), TrackingWeight = Value<float>(output, "TrackingWeight")
             }, StringComparer.Ordinal);
         var clips = new SortedDictionary<string, object>(StringComparer.Ordinal);
-        foreach (var entry in root.FindChild("Catalog").Children)
+        foreach (var entry in ClipRoot(root).Children)
         {
             string id = ClipIdentity(entry);
             clips.Add(id, new
@@ -36,7 +38,7 @@ internal static class ExpressionPackageSnapshot
         string json = JsonSerializer.Serialize(new
         {
             Outputs = new SortedDictionary<string, object>(outputs.ToDictionary(p => p.Key, p => (object)p.Value), StringComparer.Ordinal),
-            Catalog = clips,
+            Clips = clips,
             Pairs = keys.Select(key => table[key] == null ? null : ClipIdentity(table[key])).ToArray()
         }, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(Path.Combine(artifacts, "expressions.json"), json);
@@ -52,8 +54,7 @@ internal static class ExpressionPackageSnapshot
         if (bindings == null || bindings.GetComponent<DynamicVariableSpace>()?.SpaceName.Value == "ExpressionSystem.Catalog.Clip.Binding")
         {
             bool flat = !entry.Parent.Parent.GetComponent<DynamicVariableSpace>().TryReadValue<int>("Version", out int version) || version >= 45;
-            string prefix = bindings != null ? "ExpressionSystem.Catalog.Clip.Binding/" :
-                flat ? "ExpressionSystem.Catalog.Clip/" : "ExpressionSystem.Catalog.Clip/Binding.";
+            string prefix = ExpressionTestFields.VariablePath(bindings ?? entry, bindings != null || flat ? "" : "Binding.");
             var outputs = entry.Parent.Parent.FindChild("Outputs").Children.ToDictionary(o => Value<string>(o, "Id"));
             foreach (var variable in (bindings ?? entry).ExpressionVariables<DynamicValueVariable<float>>()
                 .Where(v => v.VariableName.Value.StartsWith(prefix, StringComparison.Ordinal)))
@@ -109,7 +110,7 @@ internal static class ExpressionPackageSnapshot
         var legacy = output.ExpressionVariables<DynamicValueVariable<float>>()
             .SingleOrDefault(v => v.VariableName.Value == ExpressionTestFields.VariablePath(output, "Baseline"));
         if (legacy != null) return legacy.Value.Value;
-        var neutral = output.Parent.Parent.FindChild("Catalog").Children.Last(c => c.Name == "Neutral (authored baseline)");
+        var neutral = ClipRoot(output.Parent.Parent).Children.Last(c => c.Name == "Neutral (authored baseline)");
         return Pose(neutral)[OutputIdentity(output)];
     }
 

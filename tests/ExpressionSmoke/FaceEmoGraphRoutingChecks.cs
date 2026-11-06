@@ -65,7 +65,7 @@ internal static class FaceEmoGraphRoutingChecks
         var model = Parse(source); Table(model, Expected);
         Table(Parse(source, sameController: true), Expected);
         Check(model.Clips.Select(c => c.Name).ToHashSet().SetEquals(new[] { "Pose1", "Pose2", "Pose3", "Pose4" }),
-            "Catalog first: keep FaceEmo candidates, exclude unseen motion and shadowed later set");
+            "Clips first: keep FaceEmo candidates, exclude unseen motion and shadowed later set");
         Check(model.Diagnostics.Any(d => d.Contains("56/64 gesture pairs")), "driver-free multi-hop routing is reported");
         string any = source.Replace(mainMachine, M(100, 200, new[] { 200, 201, 202, 203, 205, 207 }, new[] { 110 }, any: new[] { 300, 310 }))
             .Replace(idle, S(200, 0)).Replace(T(300, 201, C("GestureRight", 6, 1)), T(300, 202, C("GestureRight", 6, 1)));
@@ -104,7 +104,7 @@ internal static class FaceEmoGraphRoutingChecks
             S(910, 0, behaviours: new[] { 920 }) + S(911, 0, behaviours: new[] { 921 }) + T(912, 911, C("GestureRight", 6, 1)) +
             Driver(920, Write("A", 0, 0)) + Driver(921, Write("A", 0, 11));
         Table(Parse(external, producer), Expected);
-        // A deterministic route to an excluded bool-only candidate must not expand the Catalog.
+        // A deterministic route to an excluded bool-only candidate must not expand the Clips.
         string unseen = source.Replace(middle, S(201, 3, new[] { 301 }, new[] { 500 }))
             .Replace(T(301, 202), T(301, 205, C("Flag", 1, 0))) + Driver(500, Write("Flag", 0, 1));
         var restricted = Parse(unseen); Table(restricted, (l, r) => r > 1 ? 2 : 0);
@@ -120,8 +120,8 @@ internal static class FaceEmoGraphRoutingChecks
             Doc(206, 990, "  m_BlendType: 0\n  m_BlendParameter: GestureRight\n  m_Childs:\n  - m_Threshold: 0\n    m_Motion: {fileID: 7400000, guid: " + Guid(1001) + "}\n  - m_Threshold: 7\n    m_Motion: {fileID: 7400000, guid: " + Guid(1002) + "}\n");
         var blended = Parse(tree); Table(blended, (l, r) => r == 0 ? 1 : r == 7 ? 2 : 0);
         Table(Parse(tree.Replace("m_BlendParameter: GestureRight", "m_BlendParameter: GestureRightWeight").Replace("m_Threshold: 7", "m_Threshold: 1")), (l, r) => r == 1 ? 2 : 1);
-        Check(blended.Diagnostics.Any(d => d.Contains("blended pose is not a Catalog entry")), "interpolation does not invent a Catalog pose");
-        Console.WriteLine("PASS: Catalog-first graph routing, driver-free/AnyState/ordinary/nested Exit paths, Set-Copy-Add chain, cross-FX writers, cycles, first-set boundaries and discrete BlendTrees");
+        Check(blended.Diagnostics.Any(d => d.Contains("blended pose is not a Catalog entry")), "interpolation does not invent a Clips pose");
+        Console.WriteLine("PASS: Clips-first graph routing, driver-free/AnyState/ordinary/nested Exit paths, Set-Copy-Add chain, cross-FX writers, cycles, first-set boundaries and discrete BlendTrees");
     }
     private static void Check(bool ok, string message) { if (!ok) throw new InvalidOperationException(message); }
 }

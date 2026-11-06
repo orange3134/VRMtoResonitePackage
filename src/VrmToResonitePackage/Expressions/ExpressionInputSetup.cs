@@ -78,7 +78,7 @@ internal sealed partial class ExpressionSystemSetup
         trigger.PressedData.Tag.Value = MenuSelectTag;
         trigger.PressedData.Reference.Target = expression;
         // Keep the authored expression separate from the payload, which becomes null
-        // while selected. These local references also remap when a Catalog entry is copied.
+        // while selected. These local references also remap when a Clips entry is copied.
         var payload = item.AttachComponent<BooleanReferenceDriver<Slot>>();
         payload.FalseTarget.Target = expression;
         payload.TargetReference.Target = trigger.PressedData.Reference;
@@ -101,7 +101,7 @@ internal sealed partial class ExpressionSystemSetup
         rootItem.OnlyForSide.Value = null;
         var items = menu.AddSlot("Items");
         menu.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
-        // Keep clips directly under Catalog for menu selection and copied templates.
+        // Keep clips directly under Clips for menu selection and copied templates.
         // Only menu entries are grouped, using the final compiled gesture assignments.
         var mapped = _compiled.Pairs.Where(id => id != null).ToHashSet();
         foreach (var (assigned, label) in new[] { (true, "Hand sign expressions"), (false, "Other expressions") })

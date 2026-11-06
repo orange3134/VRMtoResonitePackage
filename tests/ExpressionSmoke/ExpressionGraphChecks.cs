@@ -86,12 +86,12 @@ internal static class ExpressionGraphChecks
                 foreach (var item in entries.Children.Where(item => item != back))
                 {
                     var target = item.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target;
-                    Check(target == null || target.Parent == expressions.FindChild("Catalog"),
-                        "grouped menu buttons reference the local Catalog after cloning and reload");
+                    Check(target == null || target.Parent == expressions.FindChild("Clips"),
+                        "grouped menu buttons reference the local Clips after cloning and reload");
                     var labelCopy = item.GetComponent<ValueCopy<string>>();
                     Check(labelCopy.Source.Target == target?.GetComponent<ContextMenuItemSource>()?.Label &&
                         labelCopy.Target.Target == item.GetComponent<ContextMenuItemSource>().Label,
-                        "grouped menu labels follow their local Catalog entries");
+                        "grouped menu labels follow their local Clips entries");
                 }
             }
         }
@@ -99,7 +99,7 @@ internal static class ExpressionGraphChecks
             Descendant(expressions, "Inputs/ContextMenu/Logic") == null,
             "menu availability watchers and refresh board are absent");
         Check(!expressions.GetComponentsInChildren<DynamicValueVariable<bool>>().Any(v =>
-            v.VariableName.Value == "ExpressionSystem.Catalog.Clip/MenuAvailable"),
+            v.VariableName.Value == "ExpressionSystem.Clip/MenuAvailable"),
             "menu availability state is absent");
         var modeEntries = new[] { "Hand gesture options", "Hand gestures" }.Select(name =>
                 Descendant(expressions, $"Inputs/ContextMenu/Items/{name}")?.GetComponent<ContextMenuItemSource>())
@@ -255,13 +255,13 @@ internal static class ExpressionGraphChecks
                 "mesh driver contains only required shape entries");
         Check(nodes.All(n => n.GetType().Name != "GetSlotActive"), "clip state never gates selection or playback");
         Check(!expressions.GetComponentsInChildren<DynamicValueVariable<bool>>().Any(v =>
-            v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Enabled") &&
+            v.VariableName.Value == "ExpressionSystem.Clip/Enabled") &&
             !expressions.GetComponentsInChildren<DynamicValueVariable<string>>().Any(v =>
-                v.VariableName.Value is "ExpressionSystem.Catalog.Clip/Source" or "ExpressionSystem.Catalog.Clip/Id" or "ExpressionSystem.Catalog.Clip/DisplayName"),
+                v.VariableName.Value is "ExpressionSystem.Clip/Source" or "ExpressionSystem.Clip/Id" or "ExpressionSystem.Clip/DisplayName"),
             "clips contain no metadata variables");
         Check(expressions.GetComponentsInChildren<Nodes.ValueObjectInput<string>>().All(v =>
-            v.Value.Value is not "ExpressionSystem.Catalog.Clip/Enabled" and not "ExpressionSystem.Catalog.Clip/Source" and
-                not "ExpressionSystem.Catalog.Clip/Id" and not "ExpressionSystem.Catalog.Clip/DisplayName"),
+            v.Value.Value is not "ExpressionSystem.Clip/Enabled" and not "ExpressionSystem.Clip/Source" and
+                not "ExpressionSystem.Clip/Id" and not "ExpressionSystem.Clip/DisplayName"),
             "graphs do not read or write removed clip fields");
         Check(nodes.All(n => n.GetType().Name is not "SampleValueAnimationTrack`1" and not "FindAnimationTrackIndex"),
             "no runtime animation samplers or track lookup");
@@ -269,10 +269,10 @@ internal static class ExpressionGraphChecks
             expressions.GetComponentsInChildren<AssetLoader<Animation>>().Count == 0 &&
             expressions.GetComponentsInChildren<DynamicReferenceVariable<IAssetProvider<Animation>>>().Count == 0,
             "expressions contain no animation providers, loaders or asset references");
-        foreach (var entry in expressions.FindChild("Catalog").Children)
+        foreach (var entry in expressions.FindChild("Clips").Children)
         {
             Check(entry.FindChild("Bindings") == null &&
-                !entry.ExpressionVariables<DynamicReferenceVariable<Slot>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Bindings"),
+                !entry.ExpressionVariables<DynamicReferenceVariable<Slot>>().Any(v => v.VariableName.Value == "ExpressionSystem.Clip/Bindings"),
                 "Clip owns binding values without a separate space or reference");
             Check(entry.FindChild("DV") != null && entry.FindChild("DV").FindChild("Binding") == null,
                 "each clip stores values directly under DV without a Binding group");
@@ -280,10 +280,10 @@ internal static class ExpressionGraphChecks
                 "clip menu labels are directly editable without a variable driver");
             var keys = expressions.FindChild("Outputs").Children.Select(o =>
                 o.ExpressionVariables<DynamicValueVariable<string>>().Single(v => v.VariableName.Value == "ExpressionSystem.Output/Id").Value.Value).ToHashSet();
-            const string prefix = "ExpressionSystem.Catalog.Clip/";
+            const string prefix = "ExpressionSystem.Clip/";
             foreach (var binding in entry.ExpressionVariables<DynamicValueVariable<float>>())
                 Check(binding.VariableName.Value.StartsWith(prefix, StringComparison.Ordinal) &&
-                    binding.Slot.Name == binding.VariableName.Value["ExpressionSystem.Catalog.Clip/".Length..] &&
+                    binding.Slot.Name == binding.VariableName.Value["ExpressionSystem.Clip/".Length..] &&
                     keys.Contains(binding.VariableName.Value[prefix.Length..]) && DynamicVariableHelper.IsValidName(binding.Slot.Name),
                     "each clip-scoped binding matches a readable output key");
         }
@@ -370,7 +370,7 @@ internal static class ExpressionGraphChecks
             foreach (var child in slot.Children) pending.Push(child);
         }
         var method = Descendant(expressions, "API/Method");
-        Check(ExpressionTestFields.Reference<Slot>(expressions, "Static.API") == expressions.FindChild("API"),
+        Check(ExpressionTestFields.Reference<Slot>(expressions, "Reference.API") == expressions.FindChild("API"),
             "shared API reference targets this avatar's API root after generation, clone and reload");
         Check(expressions.FindChild("Method") == null && expressions.FindChild("Internal") == null &&
             expressions.FindChild("API").Children.Select(child => child.Name).OrderBy(name => name)
@@ -476,7 +476,7 @@ internal static class ExpressionGraphChecks
         var core = Descendant(expressions, "API/Internal");
         Check(core.ExpressionVariables<DynamicValueVariable<int>>().All(v => v.VariableName.Value != "ExpressionSystem/SelectionStatus"),
             "Core contains no SelectionStatus diagnostic variable");
-        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().Where(v => !v.VariableName.Value.StartsWith("ExpressionSystem/Static.", StringComparison.Ordinal) &&
+        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().Where(v => !v.VariableName.Value.StartsWith("ExpressionSystem/Reference.", StringComparison.Ordinal) &&
                 !v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal))
             .Select(v => v.VariableName.Value).SequenceEqual(new[] { "ExpressionSystem/State.CurrentExpression" }),
             "Core stores only the current expression, without intermediate diagnostic references");
@@ -488,18 +488,18 @@ internal static class ExpressionGraphChecks
             .GetType().GetGenericArguments().SequenceEqual(new[] { typeof(Slot) }), "Playback receives a Slot");
         Check(Descendant(expressions, "API/Method/SelectMenuExpression").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => n.GetType().Name != "Children" && !n.GetType().Name.StartsWith("ForEachObject", StringComparison.Ordinal)),
-            "Select validates the supplied Slot without scanning Catalog");
+            "Select validates the supplied Slot without scanning Clips");
         var selectNodes = Descendant(expressions, "API/Method/SelectMenuExpression").GetComponentsInChildren<ProtoFluxNode>();
         var selectCalls = selectNodes.OfType<Nodes.Sequence>().Single().Calls;
         Check(selectCalls.Count == 5 &&
             selectCalls[1] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> leftClear &&
-            leftClear.Path.Target is Nodes.ValueObjectInput<string> leftPath && leftPath.Value.Value == "ExpressionSystem/State.LeftGesture" &&
+            leftClear.Path.Target is Nodes.ValueObjectInput<string> leftPath && leftPath.Value.Value == "ExpressionSystem/State.Gesture.Left" &&
             leftClear.Value.Target is Nodes.ValueInput<int> leftZero && leftZero.Value.Value == 0 &&
             selectCalls[2] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> rightClear &&
-            rightClear.Path.Target is Nodes.ValueObjectInput<string> rightPath && rightPath.Value.Value == "ExpressionSystem/State.RightGesture" &&
+            rightClear.Path.Target is Nodes.ValueObjectInput<string> rightPath && rightPath.Value.Value == "ExpressionSystem/State.Gesture.Right" &&
             rightClear.Value.Target is Nodes.ValueInput<int> rightZero && rightZero.Value.Value == 0 &&
             selectCalls[3] == selectNodes.Single(n => n.GetType().Name == "DynamicImpulseTriggerWithObject`1"),
-            "Select clears State.LeftGesture then State.RightGesture before dispatching the selected expression in one Sequence");
+            "Select clears State.Gesture.Left then State.Gesture.Right before dispatching the selected expression in one Sequence");
         var menuSelectNodes = Descendant(expressions, "API/Method/SelectMenuExpression").GetComponentsInChildren<ProtoFluxNode>();
         Check(TriggerTags(menuSelectNodes).SequenceEqual(new[] { "ExpressionSystem/Internal.ApplyExpression" }) &&
             !menuSelectNodes.SelectMany(node => node.Slot.GetComponentsInChildren<GlobalValue<string>>()).Any(value =>
@@ -516,10 +516,10 @@ internal static class ExpressionGraphChecks
         Check(playback.Concat(expressions.FindChild("Outputs").GetComponentsInChildren<ProtoFluxNode>())
             .All(n => n.GetType().Name != "GetSlotActive"),
             "playback and tracking do not gate values on slot activity");
-        foreach (var entry in expressions.FindChild("Catalog").Children)
-            Check(!entry.ExpressionVariables<DynamicValueVariable<bool>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Loop") &&
-                !entry.ExpressionVariables<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionSystem.Catalog.Clip/Duration"),
-                "Catalog has no playback settings");
+        foreach (var entry in expressions.FindChild("Clips").Children)
+            Check(!entry.ExpressionVariables<DynamicValueVariable<bool>>().Any(v => v.VariableName.Value == "ExpressionSystem.Clip/Loop") &&
+                !entry.ExpressionVariables<DynamicValueVariable<float>>().Any(v => v.VariableName.Value == "ExpressionSystem.Clip/Duration"),
+                "Clips has no playback settings");
     }
 
     public static void Report(Slot expressions)

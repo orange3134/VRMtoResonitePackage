@@ -11,8 +11,8 @@ internal sealed partial class ExpressionSystemSetup
         // Fixed system state binds to the named ancestor space; selected clips stay dynamic.
         var g = new ExpressionFlux(_selection);
         var core = g.Ref(_api);
-        var left = g.Read<int>(core, SystemSpace, "State.LeftGesture");
-        var right = g.Read<int>(core, SystemSpace, "State.RightGesture");
+        var left = g.Read<int>(core, SystemSpace, "State.Gesture.Left");
+        var right = g.Read<int>(core, SystemSpace, "State.Gesture.Right");
         var candidate = ReadGesturePair(g, left, right);
         var select = g.Trigger<Slot>(core, g.Text(PlaybackTickTag), candidate);
         ReceiveUpdate(g, SelectionTickTag, select);
