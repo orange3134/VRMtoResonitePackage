@@ -13,7 +13,7 @@ internal sealed partial class ExpressionSystemSetup
     internal const string TrySetGestureRightTag = "ExpressionSystem/Method.TrySetGesture.Right";
     internal const string SetGestureLeftTag = "ExpressionSystem/Method.SetGesture.Left";
     internal const string SetGestureRightTag = "ExpressionSystem/Method.SetGesture.Right";
-    internal const string MenuSelectTag = "ExpressionSystem/Internal.SelectMenuExpression";
+    internal const string MenuSelectTag = "ExpressionSystem/Method.SelectMenuExpression";
     internal const string ContextMenuSelected = "State.ContextMenuSelected";
     internal const string ResetTag = "ExpressionSystem/Method.Reset";
     internal const string ToggleHandGesturesTag = "ExpressionSystem/Method.ToggleHandGestures";
@@ -34,6 +34,8 @@ internal sealed partial class ExpressionSystemSetup
         _root = Record(avatar, "Expressions", SystemSpace);
         _catalog = _root.AddSlot("Catalog");
         _api = _root.AddSlot("API");
+        // Method accepts calls from outside API; Internal is shared only within API.
+        // Event owns automatic startup and condition-change processing.
         var internalSlot = _api.AddSlot("Internal");
         _method = _api.AddSlot("Method");
         _events = _api.AddSlot("Event");

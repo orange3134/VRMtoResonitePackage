@@ -4,7 +4,7 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 [変数・定数リファレンス](expression-variables.md)を参照。
 
 2026-11-06: ContextMenuの選択保持を `ExpressionSystem/State.ContextMenuSelected`（bool、初期値false）へ分離した。
-Catalog・表情サブメニュー・Imported menuは専用の `ExpressionSystem/Internal.SelectMenuExpression` を呼ぶ。
+Catalog・表情サブメニュー・Imported menuは専用の `ExpressionSystem/Method.SelectMenuExpression` を呼ぶ。
 nullまたは自身のCatalog直下のSlotだけを受理する。1つの同期Sequenceで保持を解除し、
 左右Gestureを0に戻し、ApplyExpressionへSlotを送り、最後に非nullなら保持をtrueにする。
 2026-11-07: 実入力から呼ばれていなかった中継のMethod.SelectExpressionを削除し、メニュー側に処理を統合した。
@@ -314,14 +314,14 @@ Expressions/
       DV/                          Clip空間のfloat変数
         Body.Smile                 Body.Smileの固定値（float）
   API/                             公開・内部Impulseの共通送信先
-    Event/                         イベントの格納先
+    Event/                         条件の変化や起動で自動実行する処理
       OnAvatarWorn/                初期化・着用開始の監視・ResetState呼び出し
-    Internal/                      入力・選択・再生ロジック
+    Internal/                      API内からのみ呼ばれる共通処理
       ResetState/                  Impulse受信による状態リセット
       UpdateSelection/             対応表からの選択と切り替え
       ApplyExpression/             終端ポーズの取得・通常出力へのWrite
-      SelectMenuExpression/        メニュー専用の表情選択・保持解除
-    Method/
+    Method/                        API外から呼ばれる公開処理
+      SelectMenuExpression/        メニューの表情選択・保持解除
       TrySetGesture.Left|TrySetGesture.Right/  許可判定付きのint入力・SetGestureへ転送
       SetGesture.Left|SetGesture.Right/        共通のint入力・左右値更新と表情選択
       ToggleHandGestures/           両手の許可をまとめて切り替え
@@ -591,10 +591,10 @@ Backは表情選択APIを送らず、選択中の表情やハンドジェスチ�
 分類は変換時に固定する。変換後のGestureTable編集による自動再分類は行わない。
 表情SlotはCatalog直下に保ち、サブメニュー配下の項目からSlot参照を送る。表示LabelはCatalog項目のLabelからValueCopyで取得する。
 項目のEnabledを自動制御しない。
-押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをInternal.SelectMenuExpressionへ送る。選択済みの項目はnullを送り、表情とState.ContextMenuSelectedを解除する。着用状態に関わらずnullまたは自身のCatalog直下の表情Slotを受理し、ApplyExpressionが着用条件に従ってState.CurrentExpressionへ設定して適用する。
+押下時にButtonDynamicImpulseTriggerWithReference<Slot>が表情SlotをMethod.SelectMenuExpressionへ送る。選択済みの項目はnullを送り、表情とState.ContextMenuSelectedを解除する。着用状態に関わらずnullまたは自身のCatalog直下の表情Slotを受理し、ApplyExpressionが着用条件に従ってState.CurrentExpressionへ設定して適用する。
 State.LeftGesture=0、State.RightGesture=0を書いてからApplyExpressionを呼び、非nullの選択中はState.ContextMenuSelected=trueで他の表情の適用を停止する。入力値の更新・対応表の評価は続ける。Config.AllowHandGesture.Left・Rightは変更しない。メニュー操作ではGestureTableを再評価しないため、未割り当てでも直接選択できる。
 ReferenceEqualityDriver<Slot>がState.CurrentExpressionと項目の表情Slotを比較し、BooleanReferenceDriver<Slot>がPressedData.Referenceを選択中はnull、それ以外は表情Slotへ切り替える。Catalogの直接項目・左右のサブメニュー・Imported menuに共通で適用し、解除後の押下で再選択できる。表情の固定参照はFalseTargetに保持する。コンポーネントの変更通知で送信参照が更新されるため、同一フレーム内の更新を挟まない連続呼び出しでは切り替えが反映されない。
-Internal.SelectMenuExpressionへ同じ非nullの表情Slotを直接再送した場合は解除せず、ApplyExpressionの参照更新と通常出力の走査も省略する。
+Method.SelectMenuExpressionへ同じ非nullの表情Slotを直接再送した場合は解除せず、ApplyExpressionの参照更新と通常出力の走査も省略する。
 表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `State.CurrentExpression` を参照して駆動する。
 Catalog・Imported menuともに選択中の表情は緑、それ以外は白。null用の白いOptionを先頭に置き、
 参照先の表情を削除した項目が未選択状態で緑にならないようにする。
@@ -659,9 +659,27 @@ VariableNameはExpressionSystem.Catalog.Clip/と対応するOutput.Idを連結�
 
 ## 外部イベント API（タグ名はVersion 85）
 
+APIの分類は実際の呼び出し元で決める。API外から呼ぶ処理はMethod、API内だけで呼ぶ処理はInternal、
+起動や条件変化で自動実行する処理はEventに置く。API内からも呼ばれる公開処理はMethodに置く。
+
+| 分類 | 処理 | 呼び出し元・起動条件 |
+|---|---|---|
+| Method | TrySetGesture.Left/Right | Inputs/HandGestures |
+| Method | SetGesture.Left/Right | Inputs/Keyboard、API内のTrySetGesture |
+| Method | SelectMenuExpression | Catalog、ContextMenuの表情サブメニュー、Imported menu |
+| Method | ToggleHandGestures、Reset | ContextMenu |
+| Internal | ResetState | Method.Reset、Event.OnAvatarWorn |
+| Internal | UpdateSelection | Method.SetGesture.Left/Right |
+| Internal | ApplyExpression | Method.SelectMenuExpression、Internal.UpdateSelection、Internal.ResetState |
+| Event | OnAvatarWorn | 起動、ローカル着用状態の変化 |
+
+2026-11-07: SelectMenuExpressionをInternalからMethodへ移動し、タグも
+`ExpressionSystem/Method.SelectMenuExpression`へ変更した。旧InternalタグのReceiverは生成しない。
+既存パッケージへの反映には再変換が必要。独自の送信元も新しいタグへ変更する。
+
 メニュー選択の引数は表情Slot。旧string ID送信は受理しない。内部ApplyExpressionもSlot引数を必要とし、解除時はnullを送る。公開Method.SelectExpressionは削除済み。
 
-アバター装着者のクライアントで `Expressions/API/Receivers` を対象階層にして発火する。
+アバター装着者のクライアントで `Expressions/API` を対象階層にして発火する。
 左右のGesture入力は `DynamicImpulseReceiverWithValue<int>` で受ける。
 
 | Tag | 引数 | 動作 |
@@ -670,6 +688,7 @@ VariableNameはExpressionSystem.Catalog.Clip/と対応するOutput.Idを連結�
 | `ExpressionSystem/Method.TrySetGesture.Right` | int（範囲制限なし） | Config.AllowHandGesture.Right が true のときMethod.SetGesture.Rightへ転送 |
 | `ExpressionSystem/Method.SetGesture.Left` | int（範囲制限なし） | メニュー保持中もジェスチャー許可に関係なく左手を更新。設定は維持。表情適用の可否はApplyExpressionが判定 |
 | `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし） | メニュー保持中もジェスチャー許可に関係なく右手を更新。設定は維持。表情適用の可否はApplyExpressionが判定 |
+| `ExpressionSystem/Method.SelectMenuExpression` | Slot（自身のCatalog直下）、解除用のnull | 左右Gestureを0にして表情を選択・保持する。nullで保持を解除。許可設定は維持 |
 | `ExpressionSystem/Method.ToggleHandGestures` | なし | 両手とも許可なら両手を停止、それ以外は両手を許可。左右値・表情は維持 |
 | `ExpressionSystem/Method.Reset` | なし | メニュー保持と表情を解除してBaseへ戻し、左右を0にする。ジェスチャー許可設定は維持 |
 
@@ -690,7 +709,8 @@ Dynamic ImpulseはネットワークRPCではない。API内の左右値・許�
 
 旧 `ResoPon/Expression/v3/Select` と `v3/Automatic` は生成しない。
 `ExpressionSystem/Method.SelectExpression` も廃止した。メニューと同じ保持を伴う選択は
-`ExpressionSystem/Internal.SelectMenuExpression`、保持を伴わない表情適用は `ExpressionSystem/Internal.ApplyExpression` を使う。
+`ExpressionSystem/Method.SelectMenuExpression`、GestureTableに従う選択は `ExpressionSystem/Method.SetGesture.Left`・`Right` を使う。
+`ExpressionSystem/Internal.ApplyExpression` はAPI内の実装用とし、外部向けの操作APIとしては扱わない。
 保持の解除にはメニューからnullを送るかResetを使う。ジェスチャーの受付可否は `Config.AllowHandGesture.Left`・`Right` で設定する。
 
 ## FaceEmo に合わせた表情候補の検出

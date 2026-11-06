@@ -1,5 +1,11 @@
 # Expression integration checks
 
+2026-11-07: API operations are classified by their callers. SelectMenuExpression
+moves to Method with the public ExpressionSystem/Method.SelectMenuExpression tag.
+Checks require seven public receivers, three internal boards and OnAvatarWorn in
+Event, and reject the old internal menu tag through generation, clone and reload.
+Existing Catalog, submenu and imported-menu interactions use the public receiver.
+
 2026-11-07: Removed Method.SelectExpression; Internal.SelectMenuExpression now
 validates the Slot, releases the hold, clears both hands, calls ApplyExpression,
 and sets the hold directly. Graph checks require six public receivers and no old

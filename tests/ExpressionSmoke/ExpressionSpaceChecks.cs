@@ -53,8 +53,8 @@ internal static class ExpressionSpaceChecks
         var internalSlot = root.FindChild("API").FindChild("Internal");
         Check(root.FindChild("Core") == null && internalSlot != null &&
             internalSlot.Children.Select(child => child.Name).OrderBy(name => name)
-                .SequenceEqual(new[] { "ApplyExpression", "ResetState", "SelectMenuExpression", "UpdateSelection" }),
-            "Internal directly contains exactly the four logic boards");
+                .SequenceEqual(new[] { "ApplyExpression", "ResetState", "UpdateSelection" }),
+            "Internal contains the three boards called only from within API");
         Check(root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/", StringComparison.Ordinal))
             .All(v => v.VariableName.Value == "ExpressionSystem/State.CurrentExpression" ||

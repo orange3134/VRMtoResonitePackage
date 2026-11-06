@@ -14,7 +14,7 @@ internal sealed partial class ExpressionSystemSetup
         BuildHandReceiver(new(_method.AddSlot("TrySetGesture.Right")), "Right", TrySetGestureRightTag, checkPermission: true);
         BuildHandReceiver(new(_method.AddSlot("SetGesture.Left")), "Left", SetGestureLeftTag, checkPermission: false);
         BuildHandReceiver(new(_method.AddSlot("SetGesture.Right")), "Right", SetGestureRightTag, checkPermission: false);
-        BuildMenuSelectReceiver(new(_selection.Parent.AddSlot("SelectMenuExpression")));
+        BuildMenuSelectReceiver(new(_method.AddSlot("SelectMenuExpression")));
         BuildHandGesturesToggleReceiver(new(_method.AddSlot("ToggleHandGestures")));
         var reset = new ExpressionFlux(_method.AddSlot("Reset"));
         Link(reset.Receiver(ResetTag, false), "OnTriggered", reset.Trigger(reset.Ref(_api), ResetStateTag));
