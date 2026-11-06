@@ -101,7 +101,7 @@ internal sealed partial class ExpressionSystemSetup
         rootItem.OnlyForSide.Value = null;
         var items = menu.AddSlot("Items");
         menu.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
-        // Keep clips directly under Catalog for the Select API and copied templates.
+        // Keep clips directly under Catalog for menu selection and copied templates.
         // Only menu entries are grouped, using the final compiled gesture assignments.
         var mapped = _compiled.Pairs.Where(id => id != null).ToHashSet();
         foreach (var (assigned, label) in new[] { (true, "Hand sign expressions"), (false, "Other expressions") })

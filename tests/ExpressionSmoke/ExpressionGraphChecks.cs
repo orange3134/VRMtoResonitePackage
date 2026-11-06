@@ -173,7 +173,7 @@ internal static class ExpressionGraphChecks
         Check(Descendant(expressions, "API/Internal/UpdateSelection").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => !n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "gesture selection has no state-change monitors");
-        Check(Descendant(expressions, "API/Method/SelectExpression").GetComponentsInChildren<ProtoFluxNode>()
+        Check(Descendant(expressions, "API/Internal/SelectMenuExpression").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => n is not Nodes.Strings.FormatString), "direct selection does not look up gesture pairs");
         Check(nodes.All(n => n.Group?.IsValid == true), "all expression Flux groups are valid");
         Check(nodes.All(n => n.Slot.Parent.GetComponents<ProtoFluxNode>().Count == 0), "Flux nodes belong to logic boards, not other nodes");
@@ -345,7 +345,7 @@ internal static class ExpressionGraphChecks
         foreach (string path in new[] { "API/Event/OnAvatarWorn", "API/Internal/ResetState", "API/Internal/UpdateSelection", "API/Internal/ApplyExpression", "API/Internal/SelectMenuExpression",
             "API/Method/TrySetGesture.Left", "API/Method/TrySetGesture.Right",
             "API/Method/SetGesture.Left", "API/Method/SetGesture.Right",
-            "API/Method/SelectExpression", "API/Method/ToggleHandGestures", "API/Method/Reset" })
+            "API/Method/ToggleHandGestures", "API/Method/Reset" })
         {
             var board = Descendant(expressions, path);
             Check(board != null && boards.Any(g => g.Key == board), "independent logic board exists: " + path);
@@ -375,8 +375,8 @@ internal static class ExpressionGraphChecks
         Check(expressions.FindChild("Method") == null && expressions.FindChild("Internal") == null &&
             expressions.FindChild("API").Children.Select(child => child.Name).OrderBy(name => name)
                 .SequenceEqual(new[] { "Event", "Internal", "Method" }) &&
-            method.FindChild("Receivers") == null && method.Children.Count == 7,
-            "API contains Event, Internal and Method, with seven direct public operation boards");
+            method.FindChild("Receivers") == null && method.Children.Count == 6,
+            "API contains Event, Internal and Method, with six direct public operation boards");
         var resetNodes = Descendant(expressions, "API/Internal/ResetState").GetComponentsInChildren<ProtoFluxNode>();
         var holdReaders = nodes.Where(node => node.GetType().Name == "DynamicVariableValueInput`1" &&
             node.Slot.GetComponentsInChildren<GlobalValue<string>>().Any(value =>
@@ -412,11 +412,11 @@ internal static class ExpressionGraphChecks
             "OnAvatarWorn only sends ResetState, without removal notifications");
         var publicReceivers = method.GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
-        Check(publicReceivers.Length == 7, "exactly seven public API receivers");
-        foreach (string removed in new[] { "AllowHandGestures", "AllowHandGesturesLeft", "AllowHandGesturesRight",
+        Check(publicReceivers.Length == 6, "exactly six public API receivers");
+        foreach (string removed in new[] { "SelectExpression", "AllowHandGestures", "AllowHandGesturesLeft", "AllowHandGesturesRight",
             "ToggleHandGesturesLeft", "ToggleHandGesturesRight" })
             Check(Descendant(expressions, "API/Method/" + removed) == null,
-                "unused permission API board is absent: " + removed);
+                "unused API board is absent: " + removed);
         var tags = expressions.GetComponentsInChildren<GlobalValue<string>>().Select(value => value.Value.Value)
             .Concat(nodes.OfType<Nodes.ValueObjectInput<string>>().Select(node => node.Value.Value));
         Check(tags.All(tag => tag is not ("ExpressionSystem/Event.OnAvatarWorn" or "ExpressionSystem/Event.OnAvatarRemoved")),
@@ -443,8 +443,7 @@ internal static class ExpressionGraphChecks
                 receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ExpressionSystem/Method.SetGesture." + hand,
                 "SetGesture has a shared int receiver independent of the input source: " + hand);
         }
-        Check(publicReceivers.Single(node => node.Slot.Parent.Name == "SelectExpression").GetType().GetGenericArguments().Single() == typeof(Slot),
-            "direct Catalog selection receives a Slot");
+        Check(!tags.Contains("ExpressionSystem/Method.SelectExpression"), "removed Select API has no senders or receivers");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Reset").GetType().Name == "DynamicImpulseReceiver",
             "reset receives an impulse without a payload");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "ToggleHandGestures").GetType().Name == "DynamicImpulseReceiver",
@@ -482,24 +481,25 @@ internal static class ExpressionGraphChecks
         var playback = Descendant(expressions, "API/Internal/ApplyExpression").GetComponentsInChildren<ProtoFluxNode>();
         Check(playback.Single(n => n.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal))
             .GetType().GetGenericArguments().SequenceEqual(new[] { typeof(Slot) }), "Playback receives a Slot");
-        Check(Descendant(expressions, "API/Method/SelectExpression").GetComponentsInChildren<ProtoFluxNode>()
+        Check(Descendant(expressions, "API/Internal/SelectMenuExpression").GetComponentsInChildren<ProtoFluxNode>()
             .All(n => n.GetType().Name != "Children" && !n.GetType().Name.StartsWith("ForEachObject", StringComparison.Ordinal)),
             "Select validates the supplied Slot without scanning Catalog");
-        var selectNodes = Descendant(expressions, "API/Method/SelectExpression").GetComponentsInChildren<ProtoFluxNode>();
+        var selectNodes = Descendant(expressions, "API/Internal/SelectMenuExpression").GetComponentsInChildren<ProtoFluxNode>();
         var selectCalls = selectNodes.OfType<Nodes.Sequence>().Single().Calls;
-        Check(selectCalls.Count == 3 &&
-            selectCalls[0] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> leftClear &&
+        Check(selectCalls.Count == 5 &&
+            selectCalls[1] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> leftClear &&
             leftClear.Path.Target is Nodes.ValueObjectInput<string> leftPath && leftPath.Value.Value == "ExpressionSystem/State.LeftGesture" &&
             leftClear.Value.Target is Nodes.ValueInput<int> leftZero && leftZero.Value.Value == 0 &&
-            selectCalls[1] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> rightClear &&
+            selectCalls[2] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> rightClear &&
             rightClear.Path.Target is Nodes.ValueObjectInput<string> rightPath && rightPath.Value.Value == "ExpressionSystem/State.RightGesture" &&
             rightClear.Value.Target is Nodes.ValueInput<int> rightZero && rightZero.Value.Value == 0 &&
-            selectCalls[2] == selectNodes.Single(n => n.GetType().Name == "DynamicImpulseTriggerWithObject`1"),
+            selectCalls[3] == selectNodes.Single(n => n.GetType().Name == "DynamicImpulseTriggerWithObject`1"),
             "Select clears State.LeftGesture then State.RightGesture before dispatching the selected expression in one Sequence");
         var menuSelectNodes = Descendant(expressions, "API/Internal/SelectMenuExpression").GetComponentsInChildren<ProtoFluxNode>();
-        Check(!menuSelectNodes.OfType<Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int>>().Any() &&
-            TriggerTags(menuSelectNodes).SequenceEqual(new[] { "ExpressionSystem/Method.SelectExpression" }),
-            "menu selection delegates hand clearing and pose application to the shared SelectExpression method");
+        Check(TriggerTags(menuSelectNodes).SequenceEqual(new[] { "ExpressionSystem/Internal.ApplyExpression" }) &&
+            !menuSelectNodes.SelectMany(node => node.Slot.GetComponentsInChildren<GlobalValue<string>>()).Any(value =>
+                value.Value.Value is "modular_avatar/AvatarWornLocal" or "modular_avatar/AvatarWorn"),
+            "menu selection directly applies poses without an intermediate method or wear gate");
         var currentWrites = nodes.Where(n => n.GetType().Name == "WriteDynamicObjectVariable`1" &&
             n.Slot.Parent.GetComponentsInChildren<Nodes.ValueObjectInput<string>>().Any(v =>
                 v.Value.Value == "ExpressionSystem/State.CurrentExpression")).ToArray();

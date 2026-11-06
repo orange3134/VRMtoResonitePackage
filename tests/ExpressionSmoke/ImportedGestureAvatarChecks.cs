@@ -110,7 +110,7 @@ internal static class ImportedGestureAvatarChecks
         }
         else Check(distinctPoses.Count >= 8, "Gesture inputs did not produce eight distinct visible poses");
         int visible = 0;
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(receiverRoot, ExpressionSystemSetup.SelectTag, true, null);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(receiverRoot, ExpressionSystemSetup.ResetTag, true);
         for (int i = 0; i < 5; i++) await default(NextUpdate);
         foreach (var expression in root.FindChild("Catalog").Children)
         {
@@ -173,7 +173,7 @@ internal static class ImportedGestureAvatarChecks
             Check(selectedItem.Label.ActiveLink == null && selectedItem.Label.Value == editedLabel, "Can edit imported menu label directly");
             try
             {
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(receiverRoot, ExpressionSystemSetup.SelectTag, true, null);
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(receiverRoot, ExpressionSystemSetup.ResetTag, true);
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
                 Check(importedButton.PressedData.Reference.Target == selected, "Saved imported-menu Slot reference survives a label edit");
                 SetHandGesturesAllowed(core, true);

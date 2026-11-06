@@ -131,8 +131,13 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
                 "exactly one int gesture receiver for " + tag);
         }
         void Gesture(int hand, int gesture) => Request(hand == 0 ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, gesture);
-        void Select(string name) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-            ExpressionSystemSetup.SelectTag, true, catalog.FindChild(name));
+        void Apply(string name)
+        {
+            // Prepare neutral hand state for playback checks without selecting a table row.
+            Set(core, "State.LeftGesture", 0); Set(core, "State.RightGesture", 0);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
+                "ExpressionSystem/Internal.ApplyExpression", true, catalog.FindChild(name));
+        }
         void AllowInput(bool enabled = true) => SetHandGesturesAllowed(core, enabled);
         async Task Frames(int count = 30) { for (int i = 0; i < count; i++) await default(NextUpdate); }
         Check(core.FindChild("SourceState") == null && core.FindChild("ParameterState") == null && expressions.FindChild("Rules") == null,
@@ -186,7 +191,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Gesture(0, 6); Gesture(1, 7);
         Check(Gestures(core) == (6, 7) && Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Animated"),
             "selection ignores a conflicting legacy numeric key");
-        Gesture(0, 0); Gesture(1, 0); Select("Animated");
+        Gesture(0, 0); Gesture(1, 0); Apply("Animated");
         Check(Get<int>(core, "State.LeftGesture") == 0 && Get<int>(core, "State.RightGesture") == 0 && Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Animated"),
             "direct selection preserves both gestures");
         Set(table, "L6R7", previousHighPair); decoy.Destroy();
@@ -235,11 +240,11 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Gesture(0, 1); Gesture(1, 1);
         await Frames();
         Check(BothHandsAllowed(core), "ordinary input is initially enabled");
-        Select("Smile"); await Frames();
+        Apply("Smile"); await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
         Check(Math.Abs(field.Value - 1) < 0.01 && BothHandsAllowed(core) &&
             Gestures(core) == (0, 0),
-            "direct API selection clears both gestures and preserves permissions without holding input");
+            "playback applies the prepared pose without changing permissions or holding input");
         AllowInput(false);
         var foreignParent = avatar.AddSlot("Foreign catalog");
         var foreign = catalog.FindChild("Smile").Duplicate(foreignParent);
@@ -250,7 +255,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             Set(core, "State.LeftGesture", 3); Set(core, "State.RightGesture", 4);
             foreach (Slot invalid in new[] { avatar, catalog, foreign })
             {
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, ExpressionSystemSetup.SelectTag, true, invalid);
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, ExpressionSystemSetup.MenuSelectTag, true, invalid);
                 Check(NoHandsAllowed(core) && Gestures(core) == (3, 4) &&
                     Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Smile"), "invalid Slot preserves menu selection");
             }
@@ -258,16 +263,17 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             {
                 catalog.ActiveSelf = catalogActive;
                 await Frames(3);
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, ExpressionSystemSetup.SelectTag, true, inactive);
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, ExpressionSystemSetup.MenuSelectTag, true, inactive);
                 Check(Reference<Slot>(core, "State.CurrentExpression") == inactive && NoHandsAllowed(core) &&
                     Gestures(core) == (0, 0), "direct selection accepts an inactive clip even under an inactive Catalog");
                 await Frames();
                 Check(Math.Abs(field.Value - 1) < 0.01, "inactive direct selection applies its pose");
             }
             catalog.ActiveSelf = true;
-            Select("Smile");
-            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, "Smile") == 0,
-                "Select API no longer accepts string payloads");
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
+            Apply("Smile");
+            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, "Smile") == 0,
+                "menu selection does not accept string payloads");
         }
         finally { catalog.ActiveSelf = true; foreignParent.Destroy(); inactive.Destroy(); }
         Gesture(0, 0); Gesture(1, 0); await Frames();
@@ -287,7 +293,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Angry") &&
             Gestures(core) == (6, 7), "next gesture event replaces direct selection using both stored gestures");
         Set(table, "L6R7", previousHighPair);
-        Gesture(0, 1); Gesture(1, 1); Select("Smile");
+        Gesture(0, 1); Gesture(1, 1); Apply("Smile");
         AllowInput(); await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
         Check(BothHandsAllowed(core) && Gestures(core) == (0, 0) &&
@@ -303,7 +309,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(catalog.FindChild("Animated").GetComponent<ContextMenuItemSource>().Enabled,
             "unmapped expression keeps its menu item enabled");
 
-        Select("Animated");
+        Apply("Animated");
         Check(Math.Abs(SelectedValue(expressions.FindChild("Outputs").FindChild("Smile")) - 1) < 0.001f,
             "animated clip stores its final key before the next frame");
         await Frames(40);
@@ -476,14 +482,14 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         tracking.Value.Value = 0.4f; await Frames();
         Check(Math.Abs(field.Value - 0.4f) < 0.01, "existing tracking driver continues through proxy");
         Set(table, "L0R2", catalog.FindChild("Angry"));
-        Select("Angry");
+        Apply("Angry");
         Check(Math.Abs(SelectedValue(expressions.FindChild("Outputs").FindChild("Smile")) - 0.7f) < 0.001f,
             "selection immediately writes the tracked pose");
         await Frames();
         Check(Math.Abs(field.Value - 0.7f) < 0.001f, "tracking applies the final pose without interpolation");
         var wearer = avatar.Parent;
         // Departure retains state but suppresses the pose, even with mapped Neutral.
-        Select("Angry");
+        Apply("Angry");
         AllowInput(false);
         Set(core, "State.LeftGesture", 3); Set(core, "State.RightGesture", 4);
         Set(table, "L0R0", catalog.FindChild("Angry"));
@@ -499,9 +505,9 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Get<int>(core, "State.LeftGesture") == 1 && Get<int>(core, "State.RightGesture") == 2 &&
             Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Angry"),
             "unworn gesture APIs update both hands while Internal Selection retains its wearer gate");
-        Select("Animated");
+        Apply("Animated");
         Check(BothHandsAllowed(core) && Gestures(core) == (0, 0) && Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Angry"),
-            "unworn Select clears gestures while Internal Playback rejects the pose");
+            "unworn Playback rejects the pose with prepared neutral hand state");
         AllowInput(false);
         Gesture(0, 7); Gesture(1, 7);
         Check(Gestures(core) == (0, 0),

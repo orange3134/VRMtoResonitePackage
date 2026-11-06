@@ -60,7 +60,7 @@ DynamicVariable を直接読む外部処理は新しい名前へ変更する。�
 Version 22で左右を明示する参照名に変更し、Version 28で `.Pair` を除いた `GestureTable.LnRm` に変更した。例：左1・右2は
 `GestureTable.L1R2`。選択時に左×8＋右の番号へ変換せず、左右を文字列化して直接参照する。
 状態の診断値も数値の `PairIndex` から文字列の `PairKey` へ変更したが、実行処理には使わないためVersion 79で削除した。
-Select APIは表情Slotを受け取り、自身のCatalog直下で有効な表情かを検証し、左右のGesture値を0にしてからApplyExpressionへ渡す。State.CurrentExpressionの設定はApplyExpressionが担当する。nullによる解除も左右値をクリアする。
+Internal.SelectMenuExpressionは表情Slotを受け取り、自身のCatalog直下で有効な表情かを検証し、左右のGesture値を0にしてからApplyExpressionへ渡す。State.CurrentExpressionの設定はApplyExpressionが担当する。nullによる解除も左右値をクリアする。
 生成アバターは旧 `Pair.0`〜`Pair.63` を参照しない。旧パッケージの変更には再変換が必要。
 
 Version 20から `Config.SmoothingSpeed` を共有する。各SmoothValueと同じSlotの
@@ -81,7 +81,7 @@ Clipにはシェイプごとのfloat変数だけを置く。Id・DisplayNameは�
 Version 21ではメニュー項目の Enabled を対応表の参照有無や表情の Active・Enabled から駆動しない。
 `MenuAvailable`、`GestureTable/Logic`、`Inputs/ContextMenu/Logic`、内部 `MenuRefresh` を生成しない。
 直接選択と Imported menu の項目には自動の選択可否制御を付けず、表の変更を監視してメニューを走査しない。
-Select APIはGestureTableへの割り当てを条件にせず、Catalogの表情をSlotのアクティブ状態に関わらず選択する。
+Internal.SelectMenuExpressionはGestureTableへの割り当てを条件にせず、Catalogの表情をSlotのアクティブ状態に関わらず選択する。
 自身のCatalog直下ではない非null Slotは受理せず、選択状態・左右値・許可を変更しない。nullは解除として受理し、左右値を0にしてから表情を解除する。
 
 各表情の `ExpressionSystem.Catalog.Clip` 空間に、Output.Idと同名の
@@ -127,7 +127,7 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 公開仕様は[Resonite Wikiの命名制限](https://wiki.resonite.com/Dynamic_variables#Naming_restrictions)も参照。
 
 表情を追加するには既存のCatalogエントリーをCatalogへ複製する。Version 83ではAPI/TemplatesとAPI/Examplesを生成しない。
-コピー後はDV直下のfloat値とメニューのLabelを整える。Select APIには複製先のSlotを送る。GestureTableへの割り当ては任意。選択にはSlot参照を使い、識別子変数は持たない。
+コピー後はDV直下のfloat値とメニューのLabelを整える。Internal.SelectMenuExpressionには複製先のSlotを送る。GestureTableへの割り当ては任意。選択にはSlot参照を使い、識別子変数は持たない。
 
 ## 入力・選択・再生の状態（Expressions/DV）
 
@@ -135,8 +135,8 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 |---|---|---|---|
 | `Config.AllowHandGesture.Left` / `Config.AllowHandGesture.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとTrySetGesture APIだけの受付可否。SetGesture・メニューはこの設定で停止しない。表情選択・解除・初期化・リセット・再着用・複製・保存読込では各設定値を維持する。VRではサブメニューの4択（両手有効・左手のみ・右手のみ・両手無効）、デスクトップでは両手トグル、または変数の直接編集で変更可能 |
 | `State.ContextMenuSelected` | bool | false | ContextMenuで非nullの表情を選ぶとtrue。選択解除またはResetStateでfalse。条件判定はApplyExpressionだけで行い、trueの間は表情適用（nullによる解除を含む）を拒否する。左右Gestureの更新・対応表の評価は継続する。許可設定とは独立 |
-| `State.LeftGesture` / `State.RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。SelectExpressionでは表情の適用前に両方0へ戻す |
-| `State.CurrentExpression` | Slot | null | ApplyExpressionが受信した表情Slot。UpdateSelectionは対応表の参照をそのまま渡し、Select APIは非nullの場合に自身のCatalog直下か確認する。解除はnull |
+| `State.LeftGesture` / `State.RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。SelectMenuExpressionでは表情の適用前に両方0へ戻す |
+| `State.CurrentExpression` | Slot | null | ApplyExpressionが受信した表情Slot。UpdateSelectionは対応表の参照をそのまま渡し、SelectMenuExpressionは非nullの場合に自身のCatalog直下か確認する。解除はnull |
 
 状態の DynamicVariable に保持する表情参照は State.CurrentExpression だけ。UpdateSelection は対応表から読み取ったSlot（未割当・削除済みならnull）をそのままApplyExpressionへ送り、ApplyExpressionがState.CurrentExpressionへ設定する。
 MappedExpression／CandidateExpression の診断用 DynamicVariable は生成しない。
@@ -322,8 +322,7 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 |---|---|---|
 | `TrySetGestureLeftTag` / `TrySetGestureRightTag` | `ExpressionSystem/Method.TrySetGesture.Left` / `ExpressionSystem/Method.TrySetGesture.Right` | int（範囲制限なし）。対応するConfig.AllowHandGesture.Left・Right がtrueの場合だけSetGestureへ転送 |
 | `SetGestureLeftTag` / `SetGestureRightTag` | `ExpressionSystem/Method.SetGesture.Left` / `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし）。メニュー保持中もジェスチャー許可に関係なく左右値を更新。フラグは維持。表情適用の可否はApplyExpressionが判定 |
-| `SelectTag` | `ExpressionSystem/Method.SelectExpression` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、左右Gestureを0にしてからApplyExpressionへ渡す。nullも同じ順序、非nullの範囲外は無視。メニュー保持中は表情適用だけが拒否される。許可設定と保持boolは変更しない |
-| `MenuSelectTag` | `ExpressionSystem/Internal.SelectMenuExpression` | Slot。ContextMenu専用。ローカル着用中、nullまたは自身のCatalog直下の表情を受理。保持を一時解除し、Method.SelectExpressionを同期呼び出し、最後にState.ContextMenuSelected=(Slotが非null)を設定。左右Gestureのクリアと表情適用は共通メソッドが担当。許可設定は維持 |
+| `MenuSelectTag` | `ExpressionSystem/Internal.SelectMenuExpression` | Slot。ContextMenu用。着用状態に関わらず、nullまたは自身のCatalog直下の表情を受理。保持をfalse、左右Gestureを0にし、ApplyExpressionへ送信してからState.ContextMenuSelected=(Slotが非null)を設定。実際の表情反映はApplyExpressionの着用条件に従う。許可設定は維持 |
 | `ToggleHandGesturesTag` | `ExpressionSystem/Method.ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
 | `ResetTag` | `ExpressionSystem/Method.Reset` | 引数なし。ResetStateへ転送し、未着用時も左右値・表情を初期状態へ戻す。許可設定は維持する |
 | `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Resetと着用開始のEventから共用する。着用判定なしでState.ContextMenuSelected=false、左右値=0に戻し、ApplyExpressionへnullを送る。許可設定は維持する。表情解除はApplyExpressionの着用条件に従う |
@@ -331,6 +330,7 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `PlaybackTickTag` | `ExpressionSystem/Internal.ApplyExpression` | Slot。State.ContextMenuSelected=falseのとき、受信SlotをState.CurrentExpressionへ設定し、終端ポーズを同期適用。nullは解除。非nullはローカル装着者だけが受理し、未装着時もnullは受理する |
 
 Internal の4つは公開操作用ではない。メニューボタンの送信値はコンポーネントの PressedData に保持され、DynamicVariable ではない。
+2026-11-07: メニューの中継にしか使われていなかったMethod.SelectExpressionとSelectTagを削除した。旧タグのReceiverは生成しない。
 イベント間の通知タグはOnAvatarRemovedの削除とともに廃止した。
 Version 74で未使用の `ResoPon/Expression/Internal/Initialize` を廃止した。現在の自動初期化はAPI/Event/OnAvatarWornからInternal/ResetStateを呼び出して実行する。
 Version 75の個別ハンドメニューは `ButtonToggle.TargetValue` から自身の `Config.AllowHandGesture.Left`・`Right` のValueを直接変更する。両手メニューは引き続きToggle APIを使う。

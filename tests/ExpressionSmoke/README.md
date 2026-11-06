@@ -1,5 +1,12 @@
 # Expression integration checks
 
+2026-11-07: Removed Method.SelectExpression; Internal.SelectMenuExpression now
+validates the Slot, releases the hold, clears both hands, calls ApplyExpression,
+and sets the hold directly. Graph checks require six public receivers and no old
+Select receiver or sender. Unworn menu checks verify hold updates, invalid Slot
+rejection, null clearing and rewear reset; pose writes retain ApplyExpression's
+wear condition. Menu and permission checks cover all four saved permission modes.
+
 2026-11-06: ApplyExpression compares the received Slot with CurrentExpression
 before writing it. Repeated Slots, including null, skip the output traversal.
 Output checks use sentinel values to cover repeated gestures, different gestures

@@ -95,7 +95,7 @@ internal static class HandGesturePermissionChecks
             await Frames();
         }
         var expression = expressions.FindChild("Catalog").Children.First();
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, expression);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, expression);
         State(true, true);
         SetHandGesturesAllowed(core, false);
         State(false, false);
@@ -200,7 +200,7 @@ internal static class HandGesturePermissionChecks
                 Check(BothHandsAllowed(core), "early global toggle enables saved false permissions without an implicit reset");
                 Preserved();
                 var selected = expressions.FindChild("Catalog").Children.First();
-                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, selected);
+                ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, selected);
                 Check(BothHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == selected &&
                     Gesture("Left") == 0 && Gesture("Right") == 0,
                     "early direct selection clears hand values and selects without lifecycle initialization");

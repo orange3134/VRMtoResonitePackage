@@ -238,16 +238,25 @@ internal static class ExpressionOutputWriteChecks
             Near(b.Value, 0.123f, "unworn ResetState does not write static Base");
             Select(1);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureRightTag, true, 1);
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true,
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true,
                 catalog.FindChild("Short"));
             await Frames();
             Check(Get<int>(core, "State.RightGesture") == 0 && BothHandsAllowed(core) &&
-                Reference<Slot>(core, "State.CurrentExpression") == null,
-                "unworn Select clears hand input while Internal Playback keeps the pose cleared");
+                Reference<Slot>(core, "State.CurrentExpression") == null && ContextMenuSelected(core),
+                "unworn menu selection clears hands and sets the hold while Playback rejects the pose");
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, catalog);
+            Check(ContextMenuSelected(core), "invalid unworn menu selection preserves the hold");
+            Set<Slot>(core, "State.CurrentExpression", ramp);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, ExpressionSystemSetup.MenuSelectTag, true, null);
+            Check(!ContextMenuSelected(core) && Reference<Slot>(core, "State.CurrentExpression") == null,
+                "unworn menu clearing releases the hold and clears saved selection");
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true,
+                catalog.FindChild("Short"));
             tracking.Value = 0.65f; await Frames();
             Near(a.Value, 0.65f, "unworn tracking continues to follow Base");
             Near(b.Value, 0.123f, "unworn inputs and tracking leave static output untouched");
             EquipAvatar(avatar); await Frames(30);
+            Check(!ContextMenuSelected(core), "wear initialization releases a hold selected while unworn");
             Near(b.Value, 0.123f, "re-equip skips static output when selection was already cleared while unworn");
             Select(1); await Frames();
             Near(a.Value, 1, "re-equip re-enables selection without a hierarchy change");

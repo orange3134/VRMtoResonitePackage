@@ -13,7 +13,6 @@ internal sealed partial class ExpressionSystemSetup
     internal const string TrySetGestureRightTag = "ExpressionSystem/Method.TrySetGesture.Right";
     internal const string SetGestureLeftTag = "ExpressionSystem/Method.SetGesture.Left";
     internal const string SetGestureRightTag = "ExpressionSystem/Method.SetGesture.Right";
-    internal const string SelectTag = "ExpressionSystem/Method.SelectExpression";
     internal const string MenuSelectTag = "ExpressionSystem/Internal.SelectMenuExpression";
     internal const string ContextMenuSelected = "State.ContextMenuSelected";
     internal const string ResetTag = "ExpressionSystem/Method.Reset";
