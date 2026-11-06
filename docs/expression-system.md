@@ -6,7 +6,9 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 2026-11-06: ContextMenuの選択保持を `ExpressionSystem/State.ContextMenuSelected`（bool、初期値false）へ分離した。
 Catalog・表情サブメニュー・Imported menuは専用の `ExpressionSystem/Internal.SelectMenuExpression` を呼ぶ。
 ローカル着用中、nullまたは自身のCatalog直下のSlotだけを受理する。1つの同期Sequenceで保持を解除し、
-左右Gestureを0に戻し、ApplyExpressionへSlotを送り、最後に非nullなら保持をtrueにする。
+Method.SelectExpressionをSlot付きImpulseで呼び、最後に非nullなら保持をtrueにする。
+2026-11-07: 左右GestureのクリアとApplyExpressionへの送信はMethod.SelectExpressionに共通化した。
+メニュー側は保持を解除する前にもSlotを検証し、無効な要求で保持状態を変更しない。別ボード間は同期Impulseで接続する。
 選択中は別のメニュー表情へ変更でき、選択済み項目の再押下（null）またはResetStateで保持を解除する。
 無効なSlotは保持状態も変更しない。選択中のCatalogを削除した場合も保持は残るので、Resetか別のメニュー操作で解除する。
 2026-11-07: 保持の条件判定はInternal.ApplyExpressionだけに集約した。

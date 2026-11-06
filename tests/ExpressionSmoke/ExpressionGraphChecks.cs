@@ -405,7 +405,7 @@ internal static class ExpressionGraphChecks
             eventNodes.All(node => node.GetType().Name is not ("DelayUpdates" or "WriteDynamicValueVariable`1" or "DynamicImpulseReceiver")),
             "OnAvatarWorn owns startup and initialization without departure delay or state cleanup");
         string[] TriggerTags(IEnumerable<ProtoFluxNode> boardNodes) => boardNodes
-            .Where(node => node.GetType().Name == "DynamicImpulseTrigger")
+            .Where(node => node.GetType().Name.StartsWith("DynamicImpulseTrigger", StringComparison.Ordinal))
             .Select(node => ((Nodes.ValueObjectInput<string>)((ISyncRef)ExpressionFlux.Member(node, "Tag")).Target).Value.Value)
             .OrderBy(tag => tag).ToArray();
         Check(TriggerTags(eventNodes).SequenceEqual(new[] { "ExpressionSystem/Internal.ResetState" }),
@@ -496,6 +496,10 @@ internal static class ExpressionGraphChecks
             rightClear.Value.Target is Nodes.ValueInput<int> rightZero && rightZero.Value.Value == 0 &&
             selectCalls[2] == selectNodes.Single(n => n.GetType().Name == "DynamicImpulseTriggerWithObject`1"),
             "Select clears State.LeftGesture then State.RightGesture before dispatching the selected expression in one Sequence");
+        var menuSelectNodes = Descendant(expressions, "API/Internal/SelectMenuExpression").GetComponentsInChildren<ProtoFluxNode>();
+        Check(!menuSelectNodes.OfType<Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int>>().Any() &&
+            TriggerTags(menuSelectNodes).SequenceEqual(new[] { "ExpressionSystem/Method.SelectExpression" }),
+            "menu selection delegates hand clearing and pose application to the shared SelectExpression method");
         var currentWrites = nodes.Where(n => n.GetType().Name == "WriteDynamicObjectVariable`1" &&
             n.Slot.Parent.GetComponentsInChildren<Nodes.ValueObjectInput<string>>().Any(v =>
                 v.Value.Value == "ExpressionSystem/State.CurrentExpression")).ToArray();

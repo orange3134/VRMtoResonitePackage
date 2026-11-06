@@ -323,7 +323,7 @@ Dynamic Variable Input の名前や Receiver の Tag には GlobalValue<string> 
 | `TrySetGestureLeftTag` / `TrySetGestureRightTag` | `ExpressionSystem/Method.TrySetGesture.Left` / `ExpressionSystem/Method.TrySetGesture.Right` | int（範囲制限なし）。対応するConfig.AllowHandGesture.Left・Right がtrueの場合だけSetGestureへ転送 |
 | `SetGestureLeftTag` / `SetGestureRightTag` | `ExpressionSystem/Method.SetGesture.Left` / `ExpressionSystem/Method.SetGesture.Right` | int（範囲制限なし）。メニュー保持中もジェスチャー許可に関係なく左右値を更新。フラグは維持。表情適用の可否はApplyExpressionが判定 |
 | `SelectTag` | `ExpressionSystem/Method.SelectExpression` | Slot。自身のCatalog直下の表情をアクティブ状態に関わらず受け取り、左右Gestureを0にしてからApplyExpressionへ渡す。nullも同じ順序、非nullの範囲外は無視。メニュー保持中は表情適用だけが拒否される。許可設定と保持boolは変更しない |
-| `MenuSelectTag` | `ExpressionSystem/Internal.SelectMenuExpression` | Slot。ContextMenu専用。ローカル着用中、nullまたは自身のCatalog直下の表情を受理。保持を一時解除し、左右Gesture=0、ApplyExpression送信、State.ContextMenuSelected=(Slotが非null)の順に同期実行。許可設定は維持 |
+| `MenuSelectTag` | `ExpressionSystem/Internal.SelectMenuExpression` | Slot。ContextMenu専用。ローカル着用中、nullまたは自身のCatalog直下の表情を受理。保持を一時解除し、Method.SelectExpressionを同期呼び出し、最後にState.ContextMenuSelected=(Slotが非null)を設定。左右Gestureのクリアと表情適用は共通メソッドが担当。許可設定は維持 |
 | `ToggleHandGesturesTag` | `ExpressionSystem/Method.ToggleHandGestures` | 引数なし。両手とも許可なら両手を停止、それ以外は両手を許可。左右値と表情は維持 |
 | `ResetTag` | `ExpressionSystem/Method.Reset` | 引数なし。ResetStateへ転送し、未着用時も左右値・表情を初期状態へ戻す。許可設定は維持する |
 | `ResetStateTag` | `ExpressionSystem/Internal.ResetState` | 引数なし。公開Resetと着用開始のEventから共用する。着用判定なしでState.ContextMenuSelected=false、左右値=0に戻し、ApplyExpressionへnullを送る。許可設定は維持する。表情解除はApplyExpressionの着用条件に従う |
