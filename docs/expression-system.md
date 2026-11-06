@@ -7,7 +7,8 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 
 | 旧名 | 新名 |
 |---|---|
-| `References.*` | `Reference.*` |
+| `References.*` | `Static.*` |
+| `Reference.*` | `Static.*` |
 | `AllowHandGestures.Left` / `Right` | `Config.AllowHandGesture.Left` / `Right` |
 | `SmoothingSpeed` | `Config.SmoothingSpeed` |
 | `LeftGesture` / `RightGesture` | `State.LeftGesture` / `State.RightGesture` |
@@ -83,8 +84,8 @@ Sequence自体は入れ子にしない。現在はEventからResetStateへImpuls
 ExpressionSmokeで生成・複製・保存再読込後にSequence同士の直結がないことを確認する。
 
 2026-11-05: `Expressions/API` を作成し、InternalとMethodをその直下へ移動した。
-公開・内部の全DynamicImpulseは `ExpressionSystem/Reference.API` が指すこのAPIを送信先とし、
-タグで受信処理を選ぶ。`Reference.Internal` のDVと入力ノードは生成しない。
+公開・内部の全DynamicImpulseは `ExpressionSystem/Static.API` が指すこのAPIを送信先とし、
+タグで受信処理を選ぶ。`Static.Internal` のDVと入力ノードは生成しない。
 APIは整理用Slotで、DynamicVariableSpaceは追加しない。状態変数は従来のExpressionSystem空間を使う。
 
 2026-11-05: 実行時に未使用の `ExpressionSystem/Version` と `DV/Version` を削除した。
@@ -93,7 +94,7 @@ Clip形式として読み、旧パッケージにVersionがある場合だけ従
 公開処理は `API/Receivers` を廃止して `Method` 直下へ移し、受信ボード名をタグ末尾へ統一した。
 内部の旧Selection・Playback・Lifecycleは、それぞれUpdateSelection・ApplyExpression・ResetStateとなる。
 この時点ではResetStateに自動初期化・着用監視も残っていたが、現在はAPI/Eventへ分離している。
-この時点では送信先変数 `Reference.API` はMethodを参照していた。タグ・引数・処理内容は維持した。
+この時点では送信先変数 `Static.API` はMethodを参照していた。タグ・引数・処理内容は維持した。
 以下のVersion番号は過去の変更記録であり、現行の生成物にはVersion変数を持たせない。
 
 Version 85ではDynamicImpulseのタグを `ExpressionSystem/Method.*`（公開操作）と
@@ -117,7 +118,7 @@ Version 82ではSelectionの対応表読み取り結果をPlayback送信ノー�
 
 Version 81では対応表への固定参照を `ExpressionSystem/GestureTable` に変更し、
 `Expressions/DV/GestureTable` 自体にDynamicReferenceVariable<Slot>を付けて自分のSlotを参照する。
-旧 `Reference.GestureTable`・`Reference.DV.GestureTable` とその専用スロットは生成しない。
+旧 `Static.GestureTable`・`Static.DV.GestureTable` とその専用スロットは生成しない。
 子の `L0R0` などは従来どおり `ExpressionSystem/GestureTable.L0R0` で表情Slotを参照する。
 
 Version 80では対応表の参照名を明示し、入力階層を整理した。
@@ -154,7 +155,7 @@ Ifを8個から5個へ削減し、Lifecycle全体は45から43ノードになっ
 他ユーザーが着用中なら共有状態を消さずローカル初期化フラグだけを戻す分岐は維持する。
 
 Version 73では、`Expressions/API/Receivers/Logic` を廃止し、その子の12個の受信処理スロットを
-`Receivers` 直下へ置く。各処理内のノード構成・公開Tag・送信先の `Reference.API` は維持する。
+`Receivers` 直下へ置く。各処理内のノード構成・公開Tag・送信先の `Static.API` は維持する。
 受信処理を直接参照する場合のパスは `API/Receivers/SetGestureLeft` などになる。
 
 Version 72では、入力元ではなく処理の役割を表すAPI名へ変更する。左右とも同じ対応になる。
@@ -285,7 +286,7 @@ Expressions/
     GestureTable/                  対応表の変数をまとめるスロット
       L0R0〜L7R7                   64個の Catalog 参照
     Config.SmoothingSpeed          補間速度
-    Reference.*                    API・Catalog・内部Slotの固定参照
+    Static.*                       API・Catalog・内部Slotの固定参照
   Catalog/                         表情ごとの定義と最終値の一覧
     各表情/                        メニューのLabelに名前を直接保存
       DV/                          Clip空間のfloat変数
@@ -631,7 +632,7 @@ VariableNameはExpressionSystem.Catalog.Clip/と対応するOutput.Idを連結�
 例：ExpressionSystem.Catalog.Clip/Body.Smile。独立したBinding空間やBindings参照は生成しない。
 新しいシェイプを追加する場合は、対応する Outputs とメッシュへの接続も用意する。
 通常出力の名前付き変数・子レコードの編集後は表情を再選択する。追跡出力の名前付き変数の編集は自動反映する。
-外部から直接適用する場合は、Reference.APIが指すAPIスロットへExpressionSystem/Internal.ApplyExpressionを表情Slot付きで送る。State.CurrentExpressionを先に編集する必要はない。
+外部から直接適用する場合は、Static.APIが指すAPIスロットへExpressionSystem/Internal.ApplyExpressionを表情Slot付きで送る。State.CurrentExpressionを先に編集する必要はない。
 
 ## 外部イベント API（タグ名はVersion 85）
 

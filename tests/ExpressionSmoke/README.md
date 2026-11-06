@@ -1,6 +1,6 @@
 # Expression integration checks
 
-2026-11-06: System DV keys and their slots use Reference.* for fixed references,
+2026-11-06: System DV keys and their slots use Static.* for fixed references,
 Config.AllowHandGesture.Left/Right and Config.SmoothingSpeed for settings, and
 State.LeftGesture/RightGesture/CurrentExpression for runtime state. Placement
 checks require the new slots and reject old variable aliases. Dynamic input,

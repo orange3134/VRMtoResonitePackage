@@ -370,7 +370,7 @@ internal static class ExpressionGraphChecks
             foreach (var child in slot.Children) pending.Push(child);
         }
         var method = Descendant(expressions, "API/Method");
-        Check(ExpressionTestFields.Reference<Slot>(expressions, "Reference.API") == expressions.FindChild("API"),
+        Check(ExpressionTestFields.Reference<Slot>(expressions, "Static.API") == expressions.FindChild("API"),
             "shared API reference targets this avatar's API root after generation, clone and reload");
         Check(expressions.FindChild("Method") == null && expressions.FindChild("Internal") == null &&
             expressions.FindChild("API").Children.Select(child => child.Name).OrderBy(name => name)
@@ -463,7 +463,7 @@ internal static class ExpressionGraphChecks
         var core = Descendant(expressions, "API/Internal");
         Check(core.ExpressionVariables<DynamicValueVariable<int>>().All(v => v.VariableName.Value != "ExpressionSystem/SelectionStatus"),
             "Core contains no SelectionStatus diagnostic variable");
-        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().Where(v => !v.VariableName.Value.StartsWith("ExpressionSystem/Reference.", StringComparison.Ordinal) &&
+        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().Where(v => !v.VariableName.Value.StartsWith("ExpressionSystem/Static.", StringComparison.Ordinal) &&
                 !v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal))
             .Select(v => v.VariableName.Value).SequenceEqual(new[] { "ExpressionSystem/State.CurrentExpression" }),
             "Core stores only the current expression, without intermediate diagnostic references");

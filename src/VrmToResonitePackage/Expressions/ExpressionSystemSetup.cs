@@ -51,8 +51,8 @@ internal sealed partial class ExpressionSystemSetup
         }
         Reference<Slot>(_root, "State.CurrentExpression", null);
         Data(_root, "Config.SmoothingSpeed", DefaultSmoothingSpeed);
-        Reference(_root, "Reference.API", _api);
-        Reference(_root, "Reference.Catalog", _catalog);
+        Reference(_root, "Static.API", _api);
+        Reference(_root, "Static.Catalog", _catalog);
     }
 
     public static Task<Slot> BuildAsync(Slot avatar, ExpressionModel model, Func<ExpressionBinding, IField<float>> resolve,

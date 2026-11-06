@@ -59,12 +59,12 @@ internal static class ExpressionSpaceChecks
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/", StringComparison.Ordinal))
             .All(v => v.VariableName.Value == "ExpressionSystem/State.CurrentExpression" ||
                 v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal) ||
-                v.VariableName.Value.StartsWith("ExpressionSystem/Reference.", StringComparison.Ordinal)),
-            "fixed Slot references use Reference; selected expression uses State; mappings use GestureTable");
+                v.VariableName.Value.StartsWith("ExpressionSystem/Static.", StringComparison.Ordinal)),
+            "fixed Slot references use Static; selected expression uses State; mappings use GestureTable");
         Check(root.FindChild("DV").Children.All(child => !child.Name.StartsWith("Core.", StringComparison.Ordinal)),
             "state variable slots have no Core prefix");
         foreach (string key in new[] { "Config.AllowHandGesture.Left", "Config.AllowHandGesture.Right", "Config.SmoothingSpeed",
-            "State.LeftGesture", "State.RightGesture", "State.CurrentExpression", "Reference.API", "Reference.Catalog" })
+            "State.LeftGesture", "State.RightGesture", "State.CurrentExpression", "Static.API", "Static.Catalog" })
             Check(root.FindChild("DV").FindChild(key) != null, "renamed system DV slot exists: " + key);
 
         var spaces = root.GetComponentsInChildren<DynamicVariableSpace>();
@@ -83,6 +83,7 @@ internal static class ExpressionSpaceChecks
         void Placement(Component variable, string path)
         {
             Check(!path.Contains("/References.", StringComparison.Ordinal) &&
+                !path.Contains("/Reference.", StringComparison.Ordinal) &&
                 !path.StartsWith("ExpressionSystem/AllowHandGestures.", StringComparison.Ordinal) &&
                 path is not ("ExpressionSystem/SmoothingSpeed" or "ExpressionSystem/LeftGesture" or
                     "ExpressionSystem/RightGesture" or "ExpressionSystem/CurrentExpression"),

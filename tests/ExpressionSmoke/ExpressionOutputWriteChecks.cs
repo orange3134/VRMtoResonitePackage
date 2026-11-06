@@ -94,7 +94,7 @@ internal static class ExpressionOutputWriteChecks
             Near(a.Value, 1, "looping ramp stays at its final pose");
             Near(b.Value, 0, "time does not restart or advance the fixed pose");
             var outputReference = expressions.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
-                .Single(v => v.VariableName.Value == "ExpressionSystem/Reference.Outputs");
+                .Single(v => v.VariableName.Value == "ExpressionSystem/Static.Outputs");
             var emptyOutputs = expressions.AddSlot("Temporary empty outputs");
             try
             {
