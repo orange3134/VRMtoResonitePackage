@@ -14,6 +14,8 @@ internal sealed partial class ExpressionSystemSetup
     internal const string SetGestureLeftTag = "ExpressionSystem/Method.SetGesture.Left";
     internal const string SetGestureRightTag = "ExpressionSystem/Method.SetGesture.Right";
     internal const string SelectTag = "ExpressionSystem/Method.SelectExpression";
+    internal const string MenuSelectTag = "ExpressionSystem/Internal.SelectMenuExpression";
+    internal const string ContextMenuSelected = "State.ContextMenuSelected";
     internal const string ResetTag = "ExpressionSystem/Method.Reset";
     internal const string ToggleHandGesturesTag = "ExpressionSystem/Method.ToggleHandGestures";
     internal static string HandGesturePermission(string hand) => "Config.AllowHandGesture." + hand;
@@ -50,6 +52,7 @@ internal sealed partial class ExpressionSystemSetup
             Data(_root, HandGesturePermission(hand), true);
         }
         Reference<Slot>(_root, "State.CurrentExpression", null);
+        Data(_root, ContextMenuSelected, false);
         Data(_root, "Config.SmoothingSpeed", DefaultSmoothingSpeed);
         Reference(_root, "Static.API", _api);
         Reference(_root, "Static.Catalog", _catalog);

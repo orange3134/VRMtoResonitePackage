@@ -75,7 +75,7 @@ internal sealed partial class ExpressionSystemSetup
         var trigger = item.AttachComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
         trigger.Target.Target = _api;
         trigger.ExcludeDisabled.Value = true;
-        trigger.PressedData.Tag.Value = SelectTag;
+        trigger.PressedData.Tag.Value = MenuSelectTag;
         trigger.PressedData.Reference.Target = expression;
         // Keep the authored expression separate from the payload, which becomes null
         // while selected. These local references also remap when a Catalog entry is copied.

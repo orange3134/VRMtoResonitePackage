@@ -15,6 +15,8 @@ internal static class ExpressionTestFields
         .Single(v => v.VariableName.Value == VariablePath(slot, "Config.AllowHandGesture." + hand)).Value.Value;
     public static bool BothHandsAllowed(Slot slot) => HandGesturesAllowed(slot, "Left") && HandGesturesAllowed(slot, "Right");
     public static bool NoHandsAllowed(Slot slot) => !HandGesturesAllowed(slot, "Left") && !HandGesturesAllowed(slot, "Right");
+    public static bool ContextMenuSelected(Slot slot) => slot.ExpressionVariables<DynamicValueVariable<bool>>()
+        .Single(v => v.VariableName.Value == "ExpressionSystem/State.ContextMenuSelected").Value.Value;
 
     // Prepare permissions without depending on removed public setter APIs.
     // The standard space write also updates bound Dynamic Inputs synchronously.

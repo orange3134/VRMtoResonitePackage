@@ -96,6 +96,8 @@ internal static class HandGesturePermissionChecks
         }
         var expression = expressions.FindChild("Catalog").Children.First();
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, expression);
+        State(true, true);
+        SetHandGesturesAllowed(core, false);
         State(false, false);
         bothToggle.Pressed(null, default);
         State(true, true);
@@ -199,7 +201,7 @@ internal static class HandGesturePermissionChecks
                 Preserved();
                 var selected = expressions.FindChild("Catalog").Children.First();
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, selected);
-                Check(NoHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == selected &&
+                Check(BothHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == selected &&
                     Gesture("Left") == 0 && Gesture("Right") == 0,
                     "early direct selection clears hand values and selects without lifecycle initialization");
                 earlyPair = (0, 0);
@@ -212,6 +214,8 @@ internal static class HandGesturePermissionChecks
                 PressOption(items, "Both hands disabled");
                 Check(NoHandsAllowed(core), "early menu disables both permissions without resetting");
                 Preserved();
+                // ButtonValueSet writes the field; let bound Dynamic Inputs observe it.
+                for (int i = 0; i < 3; i++) await default(NextUpdate);
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesTag, true);
                 Check(BothHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == selected,
                     "early global toggle preserves the selected expression");

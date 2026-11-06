@@ -53,8 +53,8 @@ internal static class ExpressionSpaceChecks
         var internalSlot = root.FindChild("API").FindChild("Internal");
         Check(root.FindChild("Core") == null && internalSlot != null &&
             internalSlot.Children.Select(child => child.Name).OrderBy(name => name)
-                .SequenceEqual(new[] { "ApplyExpression", "ResetState", "UpdateSelection" }),
-            "Internal directly contains exactly the three logic boards");
+                .SequenceEqual(new[] { "ApplyExpression", "ResetState", "SelectMenuExpression", "UpdateSelection" }),
+            "Internal directly contains exactly the four logic boards");
         Check(root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/", StringComparison.Ordinal))
             .All(v => v.VariableName.Value == "ExpressionSystem/State.CurrentExpression" ||
@@ -64,7 +64,7 @@ internal static class ExpressionSpaceChecks
         Check(root.FindChild("DV").Children.All(child => !child.Name.StartsWith("Core.", StringComparison.Ordinal)),
             "state variable slots have no Core prefix");
         foreach (string key in new[] { "Config.AllowHandGesture.Left", "Config.AllowHandGesture.Right", "Config.SmoothingSpeed",
-            "State.LeftGesture", "State.RightGesture", "State.CurrentExpression", "Static.API", "Static.Catalog" })
+            "State.LeftGesture", "State.RightGesture", "State.CurrentExpression", "State.ContextMenuSelected", "Static.API", "Static.Catalog" })
             Check(root.FindChild("DV").FindChild(key) != null, "renamed system DV slot exists: " + key);
 
         var spaces = root.GetComponentsInChildren<DynamicVariableSpace>();

@@ -42,7 +42,7 @@ internal sealed partial class ExpressionSystemSetup
         // Non-null selections require the local wearer; unworn instances accept only clearing.
         var accept = g.Or(wearer, g.And(g.Not(g.AvatarWorn), g.IsNull<Slot>(selected)));
         // Compare before writing CurrentExpression; repeated Slots (including null) do not sweep Outputs.
-        Link(receiver, "OnTriggered", g.If(g.And(accept, g.NotEqual<Slot>(selected, current)), g.Sequence(
+        Link(receiver, "OnTriggered", g.If(g.And(accept, AcceptExpressionInput(g), g.NotEqual<Slot>(selected, current)), g.Sequence(
             g.Write<Slot>(core, SystemSpace, "State.CurrentExpression", selected),
             g.If(wearer, refresh))));
         // OnAvatarWorn initializes through ResetState's impulse; no separate startup or wear refresh.

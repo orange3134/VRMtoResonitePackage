@@ -342,7 +342,7 @@ internal static class ExpressionGraphChecks
                 string.Join(", ", owners.Select(b => RelativePath(expressions, b))));
         }
 
-        foreach (string path in new[] { "API/Event/OnAvatarWorn", "API/Internal/ResetState", "API/Internal/UpdateSelection", "API/Internal/ApplyExpression",
+        foreach (string path in new[] { "API/Event/OnAvatarWorn", "API/Internal/ResetState", "API/Internal/UpdateSelection", "API/Internal/ApplyExpression", "API/Internal/SelectMenuExpression",
             "API/Method/TrySetGesture.Left", "API/Method/TrySetGesture.Right",
             "API/Method/SetGesture.Left", "API/Method/SetGesture.Right",
             "API/Method/SelectExpression", "API/Method/ToggleHandGestures", "API/Method/Reset" })
@@ -378,8 +378,12 @@ internal static class ExpressionGraphChecks
             method.FindChild("Receivers") == null && method.Children.Count == 7,
             "API contains Event, Internal and Method, with seven direct public operation boards");
         var resetNodes = Descendant(expressions, "API/Internal/ResetState").GetComponentsInChildren<ProtoFluxNode>();
-        Check(!resetNodes.OfType<Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<bool>>().Any(),
-            "ResetState preserves hand gesture permission settings without bool writes");
+        var resetBoolWrites = resetNodes.OfType<Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<bool>>().ToArray();
+        Check(resetBoolWrites.Length == 1 &&
+            resetBoolWrites[0].Path.Target is Nodes.ValueObjectInput<string> holdPath &&
+            holdPath.Value.Value == "ExpressionSystem/State.ContextMenuSelected" &&
+            resetBoolWrites[0].Value.Target is Nodes.ValueInput<bool> released && !released.Value.Value,
+            "ResetState clears only the menu hold bool, preserving hand gesture permission settings");
         Check(resetNodes.All(node => node.GetType().Name is not ("OnStart" or "StoredValue`1" or "FireOnLocalValueChange`1" or "DelayUpdates")),
             "ResetState contains only impulse-driven reset logic, without lifecycle monitoring");
         Check(resetNodes.All(node => node.GetType().Name != "If") &&
@@ -478,14 +482,14 @@ internal static class ExpressionGraphChecks
             "Select validates the supplied Slot without scanning Catalog");
         var selectNodes = Descendant(expressions, "API/Method/SelectExpression").GetComponentsInChildren<ProtoFluxNode>();
         var selectCalls = selectNodes.OfType<Nodes.Sequence>().Single().Calls;
-        Check(selectCalls.Count == 5 &&
-            selectCalls[2] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> leftClear &&
+        Check(selectCalls.Count == 3 &&
+            selectCalls[0] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> leftClear &&
             leftClear.Path.Target is Nodes.ValueObjectInput<string> leftPath && leftPath.Value.Value == "ExpressionSystem/State.LeftGesture" &&
             leftClear.Value.Target is Nodes.ValueInput<int> leftZero && leftZero.Value.Value == 0 &&
-            selectCalls[3] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> rightClear &&
+            selectCalls[1] is Nodes.FrooxEngine.Variables.WriteDynamicValueVariable<int> rightClear &&
             rightClear.Path.Target is Nodes.ValueObjectInput<string> rightPath && rightPath.Value.Value == "ExpressionSystem/State.RightGesture" &&
             rightClear.Value.Target is Nodes.ValueInput<int> rightZero && rightZero.Value.Value == 0 &&
-            selectCalls[4] == selectNodes.Single(n => n.GetType().Name == "DynamicImpulseTriggerWithObject`1"),
+            selectCalls[2] == selectNodes.Single(n => n.GetType().Name == "DynamicImpulseTriggerWithObject`1"),
             "Select clears State.LeftGesture then State.RightGesture before dispatching the selected expression in one Sequence");
         var currentWrites = nodes.Where(n => n.GetType().Name == "WriteDynamicObjectVariable`1" &&
             n.Slot.Parent.GetComponentsInChildren<Nodes.ValueObjectInput<string>>().Any(v =>

@@ -237,9 +237,10 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(BothHandsAllowed(core), "ordinary input is initially enabled");
         Select("Smile"); await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
-        Check(Math.Abs(field.Value - 1) < 0.01 && NoHandsAllowed(core) &&
+        Check(Math.Abs(field.Value - 1) < 0.01 && BothHandsAllowed(core) &&
             Gestures(core) == (0, 0),
-            "direct selection clears both gestures before applying the expression and disables ordinary input");
+            "direct API selection clears both gestures and preserves permissions without holding input");
+        AllowInput(false);
         var foreignParent = avatar.AddSlot("Foreign catalog");
         var foreign = catalog.FindChild("Smile").Duplicate(foreignParent);
         var inactive = catalog.FindChild("Smile").Duplicate(catalog); inactive.ActiveSelf = false;
@@ -373,17 +374,20 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Set(core, "State.LeftGesture", 5); Set(core, "State.RightGesture", 6);
         otherButton.Pressed(null, default);
         Check(Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Animated") &&
-            Gestures(core) == (0, 0) && NoHandsAllowed(core),
+            Gestures(core) == (0, 0) && BothHandsAllowed(core) && ContextMenuSelected(core),
             "other submenu clears both gestures and selects an unmapped expression");
         var keyboard = expressions.FindChild("Inputs").FindChild("Keyboard");
         Check(keyboard.Children.Count == 2, "keyboard exposes settings for each hand");
         var shortcut = keyboard.FindChild("Right").FindChild("DV").FindChild("Tag");
         Request(Get<string>(shortcut, "Tag"), 7); await Frames();
-        Check(Get<int>(core, "State.RightGesture") == 7 && NoHandsAllowed(core),
-            "keyboard binding remains accepted after direct menu selection disables hand gestures");
+        Check(Get<int>(core, "State.RightGesture") == 0 && BothHandsAllowed(core) && ContextMenuSelected(core),
+            "keyboard binding cannot overwrite a menu selection");
         AllowInput();
         Request(Get<string>(shortcut, "Tag"), 7); await Frames();
-        Check(Get<int>(core, "State.RightGesture") == 7, "keyboard binding works after enabling ordinary input");
+        Check(Get<int>(core, "State.RightGesture") == 0, "enabling gestures does not release the menu hold");
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
+        Request(Get<string>(shortcut, "Tag"), 7);
+        Check(Get<int>(core, "State.RightGesture") == 7, "keyboard binding resumes after reset");
 
         var directExpression = catalog.FindChild("Smile");
         var directButton = directExpression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
@@ -403,7 +407,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "Catalog label edits also update the visible grouped menu");
         AllowInput();
         directButton.Pressed(null, default);
-        Check(NoHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == directExpression,
+        Check(BothHandsAllowed(core) && ContextMenuSelected(core) && Reference<Slot>(core, "State.CurrentExpression") == directExpression,
             "direct menu selects by Slot without Clip metadata");
         directExpression.Name = originalName;
         directItem.Label.Value = originalLabel;
@@ -414,11 +418,11 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         addedExpression.GetComponent<ContextMenuItemSource>().Label.Value = "Added expression";
         await Frames(30);
         var addedButton = addedExpression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
-        Check(addedButton.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && addedButton.PressedData.Reference.Target == addedExpression,
+        Check(addedButton.PressedData.Tag.Value == ExpressionSystemSetup.MenuSelectTag && addedButton.PressedData.Reference.Target == addedExpression,
             "copied Catalog menu reference remaps to the new entry");
         AllowInput();
         addedButton.Pressed(null, default);
-        Check(NoHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == addedExpression,
+        Check(BothHandsAllowed(core) && ContextMenuSelected(core) && Reference<Slot>(core, "State.CurrentExpression") == addedExpression,
             "copied Catalog entry is directly selectable without a GestureTable mapping");
         var addedBinding = addedExpression.ExpressionVariables<DynamicValueVariable<float>>().First();
         Check(addedBinding.Slot.WriteDynamicVariable(addedBinding.VariableName.Value, 0.65f) == DynamicVariableWriteResult.Success, "write the named copied value");
@@ -432,7 +436,10 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         ExpressionGraphChecks.CheckMenuColors(expressions);
         addedExpression.Destroy(); AllowInput(); await Frames();
 
-        Select("Smile"); await Frames();
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
+        AllowInput(false);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, catalog.FindChild("Smile"));
+        await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
         var clone = avatar.Duplicate(avatar.Parent); EquipAvatar(clone); await Frames(90);
         ExpressionGraphChecks.CheckLayout(clone.FindChild("Expressions"));
@@ -443,7 +450,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         ExpressionGraphChecks.CheckMenuColors(clone.FindChild("Expressions"));
         ExpressionGraphChecks.CheckMenuColors(expressions);
         var cloneCore = clone.FindChild("Expressions").FindChild("API").FindChild("Internal");
-        Check(Gestures(cloneCore) == (0, 0) && NoHandsAllowed(cloneCore),
+        Check(Gestures(cloneCore) == (0, 0) && NoHandsAllowed(cloneCore) && !ContextMenuSelected(cloneCore) && ContextMenuSelected(core),
             "clone resets hand inputs and preserves disabled ordinary input");
         SetHandGesturesAllowed(cloneCore, true);
         var cloneApi = clone.FindChild("Expressions").FindChild("API");
@@ -461,6 +468,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         clone.Destroy();
         catalog.FindChild("Smile").Destroy(); await Frames();
         Check(Math.Abs(field.Value - 0.2f) < 0.01, "deleting selected expression restores base");
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
         Set(table, "L0R0", (Slot)null);
         AllowInput(); Gesture(0, 0); Gesture(1, 0);
         tracking.Value.Value = 0.4f; await Frames();
@@ -474,6 +482,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var wearer = avatar.Parent;
         // Departure retains state but suppresses the pose, even with mapped Neutral.
         Select("Angry");
+        AllowInput(false);
         Set(core, "State.LeftGesture", 3); Set(core, "State.RightGesture", 4);
         Set(table, "L0R0", catalog.FindChild("Angry"));
         avatar.Parent = world.RootSlot;
@@ -489,8 +498,9 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Angry"),
             "unworn gesture APIs update both hands while Internal Selection retains its wearer gate");
         Select("Animated");
-        Check(NoHandsAllowed(core) && Gestures(core) == (0, 0) && Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Angry"),
+        Check(BothHandsAllowed(core) && Gestures(core) == (0, 0) && Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Angry"),
             "unworn Select clears gestures while Internal Playback rejects the pose");
+        AllowInput(false);
         Gesture(0, 7); Gesture(1, 7);
         Check(Gestures(core) == (0, 0),
             "unworn TrySetGesture still checks each hand permission");
@@ -559,7 +569,9 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(BothHandsAllowed(core) &&
             Gestures(core) == (0, 0) && Math.Abs(field.Value - 0.4f) < 0.01,
             "reattaching initializes hand state, selection and tracking");
-        Select("Angry"); await Frames();
+        AllowInput(false);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, catalog.FindChild("Angry"));
+        await Frames();
         var graph = avatar.SaveObject(DependencyHandling.CollectAssets);
         var record = RecordHelper.CreateForObject<SkyFrost.Base.Record>(avatar.Name, world.LocalUser.MachineID, null);
         string packagePath = Path.Combine(artifacts, "Expression.resonitepackage");
@@ -578,7 +590,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await ExpressionDynamicInputChecks.CheckEdits(restoredExpressions);
         var restoredCore = restoredExpressions.FindChild("API").FindChild("Internal");
         Check(Gestures(restoredCore) == (0, 0) &&
-            Reference<Slot>(restoredCore, "State.CurrentExpression") == null && NoHandsAllowed(restoredCore),
+            Reference<Slot>(restoredCore, "State.CurrentExpression") == null && NoHandsAllowed(restoredCore) &&
+            !ContextMenuSelected(restoredCore) && ContextMenuSelected(core),
             "package reload resets hand inputs and selection while preserving saved permissions");
         SetHandGesturesAllowed(restoredCore, true);
         Set(restoredExpressions.FindChild("DV").FindChild("GestureTable"), "L0R2", restoredExpressions.FindChild("Catalog").FindChild("Angry"));

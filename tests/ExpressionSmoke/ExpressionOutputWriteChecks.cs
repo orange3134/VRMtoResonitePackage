@@ -240,7 +240,6 @@ internal static class ExpressionOutputWriteChecks
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureRightTag, true, 1);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true,
                 catalog.FindChild("Short"));
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesTag, true);
             await Frames();
             Check(Get<int>(core, "State.RightGesture") == 0 && BothHandsAllowed(core) &&
                 Reference<Slot>(core, "State.CurrentExpression") == null,

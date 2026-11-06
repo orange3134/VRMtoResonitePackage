@@ -53,7 +53,7 @@ internal static class ImportedGestureAvatarChecks
         }
         await KeyboardShortcutChecks.Run(root);
         var core = root.FindChild("API").FindChild("Internal"); var table = root.FindChild("DV").FindChild("GestureTable");
-        var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Left").FindChild("Items");
+        var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null, "Saved menu has no hand submenus");
         var receiverRoot = root.FindChild("API");
         SetHandGesturesAllowed(core, true);
@@ -119,7 +119,7 @@ internal static class ImportedGestureAvatarChecks
                 "Saved direct menu is enabled independently of table membership and expression state");
             visible++;
             expression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().Pressed(null, default);
-            Check(NoHandsAllowed(core) && Gestures(core) == (0, 0) &&
+            Check(BothHandsAllowed(core) && ContextMenuSelected(core) && Gestures(core) == (0, 0) &&
                 Reference<Slot>(core, "State.CurrentExpression") == expression,
                 "Saved direct menu clears gestures and selects the Catalog expression");
             for (int i = 0; i < 2; i++) await default(NextUpdate);
@@ -135,8 +135,12 @@ internal static class ImportedGestureAvatarChecks
         Check(toggle.PressedTag.Value == ExpressionSystemSetup.ToggleHandGesturesTag,
             "Saved hand gesture button sends a toggle impulse");
         toggle.Pressed(null, default);
+        Check(NoHandsAllowed(core) && ContextMenuSelected(core), "permission toggle preserves the menu hold");
+        toggle.Pressed(null, default);
         Check(BothHandsAllowed(core) && Get<int>(core, "State.LeftGesture") == heldLeft && Get<int>(core, "State.RightGesture") == heldRight,
             "Enabling ordinary input retains the saved menu pair");
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(receiverRoot, ExpressionSystemSetup.ResetTag, true);
+        Check(!ContextMenuSelected(core), "saved reset releases menu hold");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureLeftTag, true, 0);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureRightTag, true, 0);
         Check(Gestures(core) == (0, 0), "Saved normal input works after enabling");
@@ -155,7 +159,7 @@ internal static class ImportedGestureAvatarChecks
         if (importedMenu != null)
         {
             var importedButton = importedMenu.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithReference<Slot>>()
-                .FirstOrDefault(button => button.PressedData.Tag.Value == ExpressionSystemSetup.SelectTag && mappedExpressions.Contains(button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target) &&
+                .FirstOrDefault(button => button.PressedData.Tag.Value == ExpressionSystemSetup.MenuSelectTag && mappedExpressions.Contains(button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target) &&
                     button.Slot.GetComponent<ContextMenuItemSource>().Enabled);
             Check(importedButton != null, "Imported menu contains an actual Slot selection button");
             var selected = importedButton.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target;
@@ -172,7 +176,7 @@ internal static class ImportedGestureAvatarChecks
                 SetHandGesturesAllowed(core, true);
                 Check(BothHandsAllowed(core), "Ordinary input is enabled before imported button verification");
                 importedButton.Pressed(null, default);
-                Check(NoHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == selected,
+                Check(BothHandsAllowed(core) && ContextMenuSelected(core) && Reference<Slot>(core, "State.CurrentExpression") == selected,
                     "Saved imported-menu button selects by Slot independently of its label");
                 Console.WriteLine("PASS: saved imported-menu button selects its Slot synchronously despite label edits");
             }

@@ -451,6 +451,12 @@ internal static class ExpressionInputEventChecks
             Allow(true);
             Gesture("Left", 4); await Frames(5);
             Check(Get<int>(core, "State.LeftGesture") == 4, "enabling gestures does not resend a held keyboard chord");
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, smile);
+            Key(InputKey.Keypad1, false); await Frames(5);
+            Key(InputKey.Keypad1, true); await Frames(5);
+            Check(ContextMenuSelected(core) && Gestures(core) == (0, 0) && Reference<Slot>(core, "State.CurrentExpression") == smile,
+                "a fresh physical keyboard chord cannot overwrite the held menu expression");
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
             Key(InputKey.Keypad1, false);
             await Frames(5);
             Key(InputKey.Keypad1, true);

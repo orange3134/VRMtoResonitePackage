@@ -21,7 +21,7 @@ internal static class ExpressionResetChecks
             .GetComponent<ButtonDynamicImpulseTrigger>();
         void PrepareSelection()
         {
-            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true, expression);
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.MenuSelectTag, true, expression);
             // Direct state edits keep a pose selected while preparing non-neutral reset input.
             Check(core.WriteDynamicVariable("ExpressionSystem/State.LeftGesture", 5) == DynamicVariableWriteResult.Success &&
                 core.WriteDynamicVariable("ExpressionSystem/State.RightGesture", 6) == DynamicVariableWriteResult.Success,
@@ -31,6 +31,7 @@ internal static class ExpressionResetChecks
         {
             // Reset must return to Base even if neutral has an assigned expression.
             neutral.Reference.Target = expression;
+            SetHandGesturesAllowed(core, false);
             PrepareSelection();
             Check(Get<int>(core, "State.LeftGesture") == 5 && Get<int>(core, "State.RightGesture") == 6 &&
                 NoHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == expression,
@@ -54,7 +55,7 @@ internal static class ExpressionResetChecks
             {
                 Check(Get<int>(core, "State.LeftGesture") == 0 && Get<int>(core, "State.RightGesture") == 0 &&
                     HandGesturesAllowed(core, "Left") == left && HandGesturesAllowed(core, "Right") == right &&
-                    Reference<Slot>(core, "State.CurrentExpression") == null,
+                    Reference<Slot>(core, "State.CurrentExpression") == null && !ContextMenuSelected(core),
                     "reset synchronously clears expression and hands while preserving each hand permission");
                 Check(outputs.All(o => !TryReadSelectedValue(o, out _)), "reset clears every resolved output binding");
             }

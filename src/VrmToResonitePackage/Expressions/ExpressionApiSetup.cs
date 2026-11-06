@@ -15,6 +15,7 @@ internal sealed partial class ExpressionSystemSetup
         BuildHandReceiver(new(_method.AddSlot("SetGesture.Left")), "Left", SetGestureLeftTag, checkPermission: false);
         BuildHandReceiver(new(_method.AddSlot("SetGesture.Right")), "Right", SetGestureRightTag, checkPermission: false);
         BuildSelectReceiver(new(_method.AddSlot("SelectExpression")));
+        BuildSelectReceiver(new(_selection.Parent.AddSlot("SelectMenuExpression")), fromMenu: true);
         BuildHandGesturesToggleReceiver(new(_method.AddSlot("ToggleHandGestures")));
         var reset = new ExpressionFlux(_method.AddSlot("Reset"));
         Link(reset.Receiver(ResetTag, false), "OnTriggered", reset.Trigger(reset.Ref(_api), ResetStateTag));
@@ -37,8 +38,11 @@ internal sealed partial class ExpressionSystemSetup
         }
         var mutation = g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),
             g.Trigger(g.Ref(_api), SelectionTickTag));
-        Link(receiver, "OnTriggered", mutation);
+        Link(receiver, "OnTriggered", g.If(AcceptExpressionInput(g), mutation));
     }
+
+    private IWorldElement AcceptExpressionInput(ExpressionFlux g) =>
+        g.Not(g.Read<bool>(g.Ref(_api), SystemSpace, ContextMenuSelected));
 
     private static IWorldElement FormatGesturePair(ExpressionFlux g, string format, IWorldElement left, IWorldElement right)
     {
@@ -56,18 +60,23 @@ internal sealed partial class ExpressionSystemSetup
         return g.Read<Slot>(null, path);
     }
 
-    private void BuildSelectReceiver(ExpressionFlux g)
+    private void BuildSelectReceiver(ExpressionFlux g, bool fromMenu = false)
     {
-        var receiver = g.Receiver<Slot>(SelectTag);
+        var receiver = g.Receiver<Slot>(fromMenu ? MenuSelectTag : SelectTag);
         var selected = Out(receiver, "Value");
         var valid = g.Or(g.IsNull<Slot>(selected),
             g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", selected)), g.Ref(_catalog)));
         // Clear hand state before applying the selected pose, without evaluating the gesture table.
-        var select = g.Sequence(HandGesturePermissionWrites(g, g.Constant(false))
-            .Append(WriteHand(g, "Left", g.Constant(0)))
-            .Append(WriteHand(g, "Right", g.Constant(0)))
-            .Append(g.Trigger<Slot>(g.Ref(_api), g.Text(PlaybackTickTag), selected)).ToArray());
-        Link(receiver, "OnTriggered", g.If(valid, select));
+        var actions = new List<IWorldElement>();
+        // Menu selection alone may replace a held expression. Temporarily release
+        // the gate within this synchronous sequence, then hold the accepted pose.
+        if (fromMenu) actions.Add(g.Write<bool>(g.Ref(_api), SystemSpace, ContextMenuSelected, g.Constant(false)));
+        actions.Add(WriteHand(g, "Left", g.Constant(0)));
+        actions.Add(WriteHand(g, "Right", g.Constant(0)));
+        actions.Add(g.Trigger<Slot>(g.Ref(_api), g.Text(PlaybackTickTag), selected));
+        if (fromMenu) actions.Add(g.Write<bool>(g.Ref(_api), SystemSpace, ContextMenuSelected, g.Not(g.IsNull<Slot>(selected))));
+        var accept = fromMenu ? g.And(valid, g.AvatarWornLocal) : g.And(valid, AcceptExpressionInput(g));
+        Link(receiver, "OnTriggered", g.If(accept, g.Sequence(actions.ToArray())));
     }
 
     private IWorldElement[] HandGesturePermissionWrites(ExpressionFlux g, IWorldElement value) =>

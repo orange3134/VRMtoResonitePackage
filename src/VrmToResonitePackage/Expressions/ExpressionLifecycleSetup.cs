@@ -9,7 +9,7 @@ internal sealed partial class ExpressionSystemSetup
     private void ReceiveUpdate(ExpressionFlux g, string tag, IWorldElement action)
     {
         var receiver = g.Receiver(tag, false);
-        Link(receiver, "OnTriggered", g.If(g.AvatarWornLocal, action));
+        Link(receiver, "OnTriggered", g.If(g.And(g.AvatarWornLocal, AcceptExpressionInput(g)), action));
     }
 
     private void BuildResetState()
@@ -17,6 +17,7 @@ internal sealed partial class ExpressionSystemSetup
         var g = new ExpressionFlux(_resetState);
         var core = g.Ref(_api);
         var cleanup = new List<IWorldElement>();
+        cleanup.Add(g.Write<bool>(core, SystemSpace, ContextMenuSelected, g.Constant(false)));
         foreach (string hand in new[] { "Left", "Right" })
         {
             cleanup.Add(g.Write<int>(core, SystemSpace, "State." + hand + "Gesture", g.Constant(0)));
