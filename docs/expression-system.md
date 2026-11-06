@@ -797,6 +797,7 @@ ApplyExpression は表情Slot付きImpulseの受理時に、現在と異なるSl
 表情にトラックがない出力は Base を使い、ある出力は<Output.Id>名の変数の固定値を使う。
 出力ごとの `TrackingWeight`（0〜1）で Base の混合率を調整できる。
 瞬きは `BlinkMode` で別に合成する。0は通常の混合、1は表情値と Base の最大値、2は最小値を採用する。
+EyeLinearDriver.CloseSubtractLimits の計算式と代替案は [表情と瞬き合成](expression-blink.md) を参照する。単独の減算では現在のmax/minと等価にならない。
 生成時に既存の `EyeLinearDriver.Eyes[].OpenCloseTarget` を検出した出力だけ、閉じる方向に合わせて1または2に初期化する。
 開いている表情でも瞬きが通り、閉じている表情は瞬きが終わっても開かない。切り替え時も瞬きの振幅を減らさない。
 口パク・視線などの他のドライバーにはこの合成を自動適用しない。
