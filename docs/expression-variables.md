@@ -130,7 +130,7 @@ IsValidName・ProcessName・ParsePathを128ケースで直接検証した。
 
 | 名前 | 型 | 初期値 | 更新元・役割 |
 |---|---|---|---|
-| `AllowHandGestures.Left` / `AllowHandGestures.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとTrySetGesture APIだけの受付可否。SetGesture・メニューはこの設定で停止しない。表情の直接選択で両方false。初期化・リセット・再着用・複製・保存読込では各設定値を維持する。個別メニューのButtonToggleや変数の直接編集で変更可能 |
+| `AllowHandGestures.Left` / `AllowHandGestures.Right` | bool | 各true | **設定**。該当する手のハンドジェスチャーとTrySetGesture APIだけの受付可否。SetGesture・メニューはこの設定で停止しない。表情の直接選択で両方false。初期化・リセット・再着用・複製・保存読込では各設定値を維持する。VRではサブメニューの4択（両手有効・左手のみ・右手のみ・両手無効）、デスクトップでは両手トグル、または変数の直接編集で変更可能 |
 | `LeftGesture` / `RightGesture` | int | 0 | API が受理した各手の int 値。範囲制限なし。SelectExpressionでは表情の適用前に両方0へ戻す |
 | `CurrentExpression` | Slot | null | ApplyExpressionが受信した表情Slot。UpdateSelectionは対応表の参照をそのまま渡し、Select APIは非nullの場合に自身のCatalog直下か確認する。解除はnull |
 

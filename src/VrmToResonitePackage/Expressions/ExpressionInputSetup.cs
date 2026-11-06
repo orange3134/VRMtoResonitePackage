@@ -49,21 +49,21 @@ internal sealed partial class ExpressionSystemSetup
         _root.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>()
             .Single(v => v.VariableName.Value == Path(SystemSpace, HandGesturePermission(hand))).Value;
 
-    private void GesturePermissionMenuColor(Slot item, string hand = null)
+    private void GesturePermissionMenuColor(Slot item, bool left = true, bool right = true, bool option = false)
     {
         var driver = item.AttachComponent<ValueOptionDescriptionDriver<bool>>();
-        if (hand != null) driver.Value.Target = HandGesturePermissionField(hand);
-        else
+        var selectedState = item.AttachComponent<ValueField<bool>>();
+        var condition = item.AttachComponent<MultiBoolConditionDriver>();
+        condition.Mode.Value = MultiBoolConditionDriver.ConditionMode.All;
+        foreach (var (hand, enabled) in new[] { ("Left", left), ("Right", right) })
         {
-            var both = item.AttachComponent<ValueField<bool>>();
-            var condition = item.AttachComponent<MultiBoolConditionDriver>();
-            condition.Mode.Value = MultiBoolConditionDriver.ConditionMode.All;
-            condition.Conditions.Add().Field.Target = HandGesturePermissionField("Left");
-            condition.Conditions.Add().Field.Target = HandGesturePermissionField("Right");
-            condition.Target.Target = both.Value;
-            driver.Value.Target = both.Value;
+            var match = condition.Conditions.Add();
+            match.Field.Target = HandGesturePermissionField(hand);
+            match.Invert.Value = !enabled;
         }
-        driver.DefaultOption.Color.Value = new colorX(1f, 0f, 0f, 1f, ColorProfile.Linear);
+        condition.Target.Target = selectedState.Value;
+        driver.Value.Target = selectedState.Value;
+        driver.DefaultOption.Color.Value = option ? colorX.White : new colorX(1f, 0f, 0f, 1f, ColorProfile.Linear);
         var selected = driver.Options.Add();
         selected.ReferenceValue.Value = true;
         selected.Color.Value = SelectedMenuColor;
@@ -129,17 +129,7 @@ internal sealed partial class ExpressionSystemSetup
                 SelectMenuTrigger(item, expression);
             }
         }
-        var mode = items.AddSlot("Hand gestures"); MenuItem(mode, mode.Name);
-        var toggleButton = mode.AttachComponent<ButtonDynamicImpulseTrigger>();
-        toggleButton.Target.Target = _api;
-        toggleButton.ExcludeDisabled.Value = true;
-        toggleButton.PressedTag.Value = ToggleHandGesturesTag;
-        GesturePermissionMenuColor(mode);
-        var single = items.AddSlot(side + " hand gestures");
-        MenuItem(single, single.Name);
-        var toggle = single.AttachComponent<ButtonToggle>();
-        toggle.TargetValue.Target = HandGesturePermissionField(side.ToString());
-        GesturePermissionMenuColor(single, side.ToString());
+        BuildGesturePermissionMenu(menu, items);
         var reset = items.AddSlot("Reset settings"); MenuItem(reset, reset.Name);
         var resetButton = reset.AttachComponent<ButtonDynamicImpulseTrigger>();
         resetButton.Target.Target = _api;
@@ -168,6 +158,52 @@ internal sealed partial class ExpressionSystemSetup
                     SelectMenuTrigger(slot, expression);
                 }
             }
+        }
+    }
+
+    private void BuildGesturePermissionMenu(Slot menu, Slot items)
+    {
+        var group = items.AddSlot("Hand gesture options");
+        var groupSource = MenuItem(group, "Hand gestures");
+        var children = group.AddSlot("Items");
+        group.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = children;
+        var back = children.AddSlot("Back"); MenuItem(back, "Back");
+        back.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
+        foreach (var (label, left, right) in new[]
+        {
+            ("Both hands enabled", true, true),
+            ("Left hand only", true, false),
+            ("Right hand only", false, true),
+            ("Both hands disabled", false, false)
+        })
+        {
+            var item = children.AddSlot(label); MenuItem(item, label);
+            foreach (var (hand, enabled) in new[] { ("Left", left), ("Right", right) })
+            {
+                var set = item.AttachComponent<ButtonValueSet<bool>>();
+                set.TargetValue.Target = HandGesturePermissionField(hand);
+                set.SetValue.Value = enabled;
+            }
+            GesturePermissionMenuColor(item, left, right, option: true);
+        }
+
+        var mode = items.AddSlot("Hand gestures");
+        var toggleSource = MenuItem(mode, mode.Name);
+        var toggleButton = mode.AttachComponent<ButtonDynamicImpulseTrigger>();
+        toggleButton.Target.Target = _api;
+        toggleButton.ExcludeDisabled.Value = true;
+        toggleButton.PressedTag.Value = ToggleHandGesturesTag;
+        GesturePermissionMenuColor(mode);
+
+        // Keep the board outside the filtered entries so it runs in both modes.
+        // Disabled item sources are omitted when ContextMenuSubmenu collects entries.
+        var g = new ExpressionFlux(menu.AddSlot("Gesture menu visibility"));
+        var vr = g.Node("UserVR_Active", null, ("User", g.Owner(_root)));
+        foreach (var (source, visible) in new[] { (groupSource, (IWorldElement)vr), (toggleSource, g.Not(vr)) })
+        {
+            var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<bool>)
+                g.Node("ValueFieldDrive", typeof(bool), ("Value", visible));
+            driver.GetRootProxy(addIfMissing: true).Drive.Target = source.EnabledField;
         }
     }
 

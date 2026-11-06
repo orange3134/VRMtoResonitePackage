@@ -3,6 +3,18 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-06: ContextMenuのジェスチャー許可をモード別に表示する。VRでは `Hand gestures` サブメニューに
+`Both hands enabled`（両手有効）、`Left hand only`（左手のみ有効）、`Right hand only`（右手のみ有効）、
+`Both hands disabled`（両手無効）と `Back` を置く。左右どちらのExpressionsメニューでも同じ4択を使う。
+各選択肢の2つの `ButtonValueSet<bool>` が左右の許可を設定し、再選択でも反転しない。
+一致する選択肢を緑、それ以外を白にする。許可だけを変更し、左右GestureとCurrentExpressionは保持する。
+デスクトップではサブメニューを隠し、両手をまとめて切り替える `Hand gestures` トグルのみ表示する。
+両手有効なら両手無効へ、それ以外（片手のみ有効も含む）なら両手有効へ切り替え、色は従来どおり緑／赤。
+`Inputs/ContextMenu/Left・Right/Gesture menu visibility` の `UserVR_Active` が装着者のVR状態を読み、
+サブメニュー入口とトグルの `ContextMenuItemSource.EnabledField` を逆の条件で駆動する。
+実DLLの `ContextMenuSubmenu` は `excludeDisabled: true` で項目を集めるため、無効な入口は表示されない。
+表示判定のFluxは入口の外に置き、両モードで動作させる。表示変更はメニューを開くときに反映される。
+
 2026-11-06: ContextMenuが呼ぶSelectExpressionで、左右のGestureを0にしてから表情を設定する。
 Catalog検証後、1つのSequenceで左右の許可をfalse、LeftGesture=0、RightGesture=0、ApplyExpression送信の順に実行する。
 CurrentExpressionの書き込みはApplyExpressionが担当する。SetGestureやUpdateSelectionを経由せず、途中でGestureTableを再評価しない。
@@ -541,8 +553,9 @@ Select APIへ同じ非nullの表情Slotを直接再送した場合は解除せ�
 表情項目のColorは `ReferenceOptionDescriptionDriver<Slot>` が `CurrentExpression` を参照して駆動する。
 Catalog・Imported menuともに選択中の表情は緑、それ以外は白。null用の白いOptionを先頭に置き、
 参照先の表情を削除した項目が未選択状態で緑にならないようにする。
-ジェスチャー許可トグルのColorは `ValueOptionDescriptionDriver<bool>` が片手の許可、または両手のANDを読み、
-有効（true）なら緑、無効（false）なら赤にする。両DriverともLabel・Spriteは駆動せず、Enabledの自動制御も追加しない。
+ジェスチャー許可項目のColorは `ValueOptionDescriptionDriver<bool>` が `MultiBoolConditionDriver` の結果を読む。
+VRの4択は左右の許可がその選択肢と一致すれば緑、それ以外は白。デスクトップのトグルは両手のANDがtrueなら緑、falseなら赤。
+両DriverともLabel・Spriteは駆動しない。ジェスチャー設定の入口だけは上記のモード判定でEnabledを制御する。
 参照はアバター複製時に複製先へ再対応し、Catalogエントリーを複製した項目は自分自身の表情を比較対象にする。
 Catalog の Slot を固定用に保持する Override 変数は生成しない。
 

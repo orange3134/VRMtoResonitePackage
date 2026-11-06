@@ -33,9 +33,10 @@ internal static class ExpressionGraphChecks
                 Check(!driver.Label.IsLinkValid && !driver.Sprite.IsLinkValid,
                     "expression color driver preserves label and sprite bindings");
             }
-            else if (item.Slot.GetComponent<ButtonToggle>() is { } direct)
+            else if (item.Slot.GetComponents<ButtonValueSet<bool>>() is { Count: > 0 } setters)
             {
-                CheckPermissionColor(item, direct.TargetValue.Target.Value);
+                bool selected = setters.All(set => set.TargetValue.Target.Value == set.SetValue.Value);
+                CheckPermissionColor(item, selected, option: true);
                 continue;
             }
             else if (item.Slot.GetComponent<ButtonDynamicImpulseTrigger>() is { } toggle &&
@@ -51,13 +52,14 @@ internal static class ExpressionGraphChecks
             Check(item.Color.Value.Equals(active ? green : colorX.White),
                 "only the currently selected menu option is green: " + item.Slot.Name);
         }
-        void CheckPermissionColor(ContextMenuItemSource item, bool allow)
+        void CheckPermissionColor(ContextMenuItemSource item, bool allow, bool option = false)
         {
             var driver = item.Slot.GetComponent<ValueOptionDescriptionDriver<bool>>();
             Check(driver != null && driver.Color.IsLinkValid && driver.Color.Target == item.Color,
                 "permission menu Color uses ValueOptionDescriptionDriver: " + item.Slot.Name);
             var red = new colorX(1f, 0f, 0f, 1f, Renderite.Shared.ColorProfile.Linear);
-            Check(item.Color.Value.Equals(allow ? green : red), "hand gesture toggle is green when on and red when off");
+            Check(item.Color.Value.Equals(allow ? green : option ? colorX.White : red),
+                "gesture choices highlight the exact permission pair; desktop toggle is green when both hands are on");
         }
     }
 
@@ -100,8 +102,13 @@ internal static class ExpressionGraphChecks
         Check(!expressions.GetComponentsInChildren<DynamicValueVariable<bool>>().Any(v =>
             v.VariableName.Value == "ExpressionSystem.Catalog.Clip/MenuAvailable"),
             "menu availability state is absent");
+        var modeEntries = new[] { "Left", "Right" }.SelectMany(hand =>
+            new[] { "Hand gesture options", "Hand gestures" }.Select(name =>
+                Descendant(expressions, $"Inputs/ContextMenu/{hand}/Items/{name}")?.GetComponent<ContextMenuItemSource>()))
+            .Where(item => item != null).ToHashSet();
         Check(expressions.GetComponentsInChildren<ContextMenuItemSource>().All(item =>
-            item.EnabledField.ActiveLink == null), "menu item Enabled fields have no automatic drivers");
+            (item.EnabledField.ActiveLink != null) == modeEntries.Contains(item)),
+            "only the VR gesture submenu and desktop toggle have automatic visibility drivers");
         Check(Descendant(expressions, "Inputs/HandGestures").GetComponent<Comment>()?.Text.Value
             .Contains("Copyright (c) 2022-2025 rhenium, kazu0617, orange") == true,
             "controller source license survives generation, clone and package reload");
@@ -181,8 +188,9 @@ internal static class ExpressionGraphChecks
         Check(updates.Length == 0, "expression system contains no LocalUpdate");
         Check(nodes.All(n => n.GetType().Name != "ReferenceDrive`1"), "no playback reference drives");
         Check(nodes.Where(n => n.GetType().Name == "ValueFieldDrive`1").All(n =>
-            Board(n).Name == "Tracking" && Board(n).Parent.Parent == expressions.FindChild("Outputs")),
-            "continuous drives are limited to live tracking");
+            Board(n).Name == "Tracking" && Board(n).Parent.Parent == expressions.FindChild("Outputs") ||
+            Board(n).Name == "Gesture menu visibility" && Board(n).Parent.Parent == Descendant(expressions, "Inputs/ContextMenu")),
+            "continuous drives are limited to live tracking and gesture menu visibility");
         Check(nodes.Any(n => n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "state transitions use local change detectors");
         Check(expressions.GetComponentsInChildren<DynamicValueVariable<bool>>()

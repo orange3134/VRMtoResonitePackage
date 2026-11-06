@@ -1,5 +1,13 @@
 # Expression integration checks
 
+2026-11-06: VR gesture permissions use four explicit choices in a submenu;
+desktop shows only the combined-hand toggle. Checks cover every initial and
+selected permission pair, repeated selection, unchanged gesture/pose state,
+exact-pair colors, Back navigation references and local avatar field targets.
+Mocking only the VR sensor verifies mutually exclusive menu collection in both
+modes and return transitions. These checks run after generation, cloning and
+package reload; early-input checks also exercise the new choices.
+
 2026-11-06: SelectExpression clears LeftGesture and RightGesture before sending
 the selected Slot to ApplyExpression. Graph checks enforce this order in one
 flat Sequence through generation, cloning and reload. Menu checks seed both
