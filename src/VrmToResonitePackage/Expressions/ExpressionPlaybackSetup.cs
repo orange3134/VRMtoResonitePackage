@@ -26,9 +26,7 @@ internal sealed partial class ExpressionSystemSetup
         // separate live driver, without per-shape change detectors or impulses.
         var value = g.Local<float>();
         var wearer = g.AvatarWornLocal;
-        var canWrite = g.Or(wearer, g.And(g.Not(g.AvatarWorn),
-            g.Node("IsLocalUser", null, ("User", g.Node("HostUser")))));
-        var current = g.Choose<Slot>(wearer, g.Read<Slot>(core, SystemSpace, "State.CurrentExpression"), g.Ref<Slot>(null));
+        var current = g.Read<Slot>(core, SystemSpace, "State.CurrentExpression");
         var refresh = g.Each(g.Ref(_outputs), output =>
         {
             var result = MixOutput(g, output, wearer, current);
@@ -37,7 +35,7 @@ internal sealed partial class ExpressionSystemSetup
                 g.If(g.NotEqual<float>(value, g.Read<float>(output, OutputSpace, "Result")),
                     g.Write<float>(output, OutputSpace, "Result", value))));
         });
-        // Only the wearer writes a pose. The host follows Base on unworn copies.
+        // Only the local wearer writes static outputs, including Base restoration.
         var receiver = g.Receiver<Slot>(PlaybackTickTag);
         var selected = Out(receiver, "Value");
         // Explicit reset may clear state even without local wear authority.
@@ -45,12 +43,9 @@ internal sealed partial class ExpressionSystemSetup
         var accept = g.Or(wearer, g.And(g.Not(g.AvatarWorn), g.IsNull<Slot>(selected)));
         Link(receiver, "OnTriggered", g.If(accept, g.Sequence(
             g.Write<Slot>(core, SystemSpace, "State.CurrentExpression", selected),
-            g.If(canWrite, refresh))));
-        g.OnChanged<bool>(canWrite, g.If(canWrite, refresh));
-        // A host can keep write authority across dequip. Refresh Base even when
-        // canWrite stays true, without clearing the saved expression state.
-        g.OnChanged<bool>(wearer, g.If(canWrite, refresh));
-        g.OnStart(g.If(canWrite, refresh));
+            g.If(wearer, refresh))));
+        g.OnChanged<bool>(wearer, g.If(wearer, refresh));
+        g.OnStart(g.If(wearer, refresh));
         foreach (var output in _outputSlots.Values)
         {
             if (!output.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<ISyncRef>>().Any(v =>

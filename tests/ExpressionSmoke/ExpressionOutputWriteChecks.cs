@@ -35,7 +35,9 @@ internal static class ExpressionOutputWriteChecks
             Clip("Hold", 1, Curve("A", 0.2f, 0.8f, 1, hold: true));
             Clip("StaticOnly", 1, Curve("B", 0, 0, 1));
             var expressions = await ExpressionSystemSetup.BuildAsync(avatar, model, binding => binding.Shape == "A" ? a : b, menu: false);
+            b.Value = 0.123f;
             await Frames(90);
+            Near(b.Value, 0.123f, "unworn startup does not write static Base even on the host");
             var core = expressions.FindChild("API").FindChild("Internal"); var catalog = expressions.FindChild("Catalog");
             var table = expressions.FindChild("DV").FindChild("GestureTable"); var outputs = expressions.FindChild("Outputs");
             var outputA = outputs.FindChild("A"); var outputB = outputs.FindChild("B");
@@ -56,6 +58,7 @@ internal static class ExpressionOutputWriteChecks
                 "before equip the API accepts the gesture value while Internal Selection rejects the pose");
             Near(a.Value, 0.2f, "unassigned avatar retains tracking Base");
             EquipAvatar(avatar); await Frames(30);
+            Near(b.Value, 0.3f, "first local wear initializes static output to Base");
             Select(1); await Frames(); Near(a.Value, 1, "short clip reaches its final pose");
             Select(2); await Frames(); Near(a.Value, 0.2f, "track order can change for A"); Near(b.Value, 0.6f, "track order can change for B");
             Select(3); await Frames(); Near(a.Value, 0.7f, "sparse clip drives its own shape"); Near(b.Value, 0.3f, "missing track restores Base");
@@ -188,7 +191,7 @@ internal static class ExpressionOutputWriteChecks
             await Frames(); Select(1); await Frames();
             Near(a.Value, 1, "new variable with the same name is resolved without Output references");
             tracking.Value = 0.8f; await Frames();
-            // An uninitialized unworn copy must not display a saved active expression.
+            // A worn source can copy a transient true wear flag; tracking settles to Base.
             Select(1); await Frames();
             var unworn = avatar.Duplicate(avatar.World.RootSlot);
             await Frames();
@@ -203,12 +206,23 @@ internal static class ExpressionOutputWriteChecks
             Check(Get<int>(core, "State.RightGesture") == 1 && Reference<Slot>(core, "State.CurrentExpression") == shortClip,
                 "identification dequip retains selection without a hierarchy change");
             Near(a.Value, 0.8f, "dequip restores tracked output Base");
-            Near(b.Value, 0.3f, "dequip restores static output Base");
+            Near(b.Value, 0.8f, "dequip retains static output even on the host");
+            b.Value = 0.123f;
+            var unwornCopy = avatar.Duplicate(avatar.World.RootSlot);
+            await Frames();
+            var unwornStatic = unwornCopy.FindChild("Expressions").FindChild("Outputs").FindChild("B");
+            Near(Get<float>(unwornStatic, "Result"), 0.123f, "cloning an unworn avatar does not write static Base on startup");
+            unwornCopy.Destroy();
             Playback(ramp);
             Check(Reference<Slot>(core, "State.CurrentExpression") == shortClip, "unworn Playback rejects non-null payloads and retains selection");
+            Near(b.Value, 0.123f, "unworn non-null Playback does not write static output");
             Set<Slot>(core, "State.CurrentExpression", ramp);
             Playback(null);
             Check(Reference<Slot>(core, "State.CurrentExpression") == null, "unworn Playback accepts explicit clearing");
+            Near(b.Value, 0.123f, "unworn clearing does not write static Base");
+            ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, "ExpressionSystem/Internal.ResetState", true);
+            await Frames();
+            Near(b.Value, 0.123f, "unworn ResetState does not write static Base");
             Select(1);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SetGestureRightTag, true, 1);
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, ExpressionSystemSetup.SelectTag, true,
@@ -220,17 +234,20 @@ internal static class ExpressionOutputWriteChecks
                 "unworn Select clears hand input while Internal Playback keeps the pose cleared");
             tracking.Value = 0.65f; await Frames();
             Near(a.Value, 0.65f, "unworn tracking continues to follow Base");
+            Near(b.Value, 0.123f, "unworn inputs and tracking leave static output untouched");
             EquipAvatar(avatar); await Frames(30);
+            Near(b.Value, 0.3f, "re-equip initializes static output to Base");
             Select(1); await Frames();
             Near(a.Value, 1, "re-equip re-enables selection without a hierarchy change");
             avatar.Parent = avatar.World.RootSlot; await Frames(30);
             Check(Get<int>(core, "State.RightGesture") == 1 && Reference<Slot>(core, "State.CurrentExpression") == shortClip,
                 "hierarchy departure retains state despite different worn-flag update order");
             Near(a.Value, 0.65f, "hierarchy departure restores tracking Base");
-            Near(b.Value, 0.3f, "hierarchy departure restores static Base without a reset impulse");
+            Near(b.Value, 0.8f, "hierarchy departure retains static output without a reset impulse");
             avatar.Parent = parent; await Frames(30);
             Check(Get<int>(core, "State.RightGesture") == 0 && Reference<Slot>(core, "State.CurrentExpression") == null,
                 "reattachment resets retained state before input");
+            Near(b.Value, 0.3f, "reattachment restores static Base before input");
             Select(1); await Frames(); Near(a.Value, 1, "reattachment accepts input after worn flags update");
             Check(expressions.GetComponentsInChildren<ProtoFluxNode>().Count(n => n.GetType().Name == "LocalUpdate") == 0,
                 "output updates are event driven without LocalUpdate");

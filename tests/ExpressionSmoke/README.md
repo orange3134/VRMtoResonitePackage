@@ -36,9 +36,10 @@ Tests enable gestures explicitly when preparing later input checks.
 2026-11-06: Remove OnAvatarRemoved, its delay and both lifecycle notification tags.
 OnAvatarWorn rearms its local initialization flag when local wear becomes false;
 shared gestures, permissions and selection survive dequip until reset or rewear.
-Output tests verify tracked and static outputs return to Base without clearing
-selection, including a host retaining write authority and unchanged UserRoot.
-Playback also refreshes on local wear changes. Rewear initializes retained state;
+Output tests verify tracked outputs return to Base and static outputs retain
+their last values, including dequip beneath an unchanged UserRoot. Unworn startup,
+cloning, selection and reset do not write static outputs even on the host.
+Playback refreshes only during local wear. Rewear initializes retained state;
 graph checks reject the removed board and tags through generation/clone/reload.
 
 2026-11-05: Remove the local-wearer condition from ResetState and share its

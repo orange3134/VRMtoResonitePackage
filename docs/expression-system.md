@@ -47,8 +47,8 @@ Catalog・左右のサブメニュー・Imported menuとAPI直接呼び出しで
 2026-11-06: OnAvatarRemovedとイベント間の2つの通知タグを削除した。
 脱着時は左右値・許可・State.CurrentExpressionを保持し、OnAvatarWornのローカル初期化フラグだけを解除する。
 次の着用時にResetStateで初期化する。脱着の2更新待機と遅延タスクは生成しない。
-通常出力はApplyExpressionでAvatarWornLocalの変化も監視し、ホストの書き込み権限が脱着前後で変わらなくてもBaseへ戻す。
-追跡出力は従来どおり未着用時にBaseへ追従する。保持した表情は未着用中の見た目へ適用しない。
+通常出力はApplyExpressionでAvatarWornLocalの変化も監視し、ローカル着用開始時に再適用する。未着用時のホスト書き込みは行わず、脱着時は最後の出力値を保持する。
+追跡出力は従来どおり未着用時にBaseへ追従する。
 
 2026-11-05: ResetStateのAvatarWornLocal条件を削除した。公開Resetと直接のResetStateは未着用時にも受理する。
 OnAvatarRemovedの左右値・許可・表情のクリアはResetStateへのDynamicImpulse呼び出しに置き換えた。
@@ -361,7 +361,7 @@ AnimX・AnimationProvider・AssetLoader・トラック検索・サンプラー�
 瞬き以外のメッシュ出力のResultはSmoothValue<float>.TargetValueを参照するDynamicField<float>。
 SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、標準ドライバーが実メッシュへ反映する。
 瞬き出力のResultはBlendShapes[].Valueを直接参照し、Trackingの合成結果を補間せず反映する。
-通常出力は装着者だけが値をWriteし、未装着時はホストがBaseを適用する。
+通常出力はローカル装着者だけが値をWriteし、未装着時はホストも書き込まず最後の値を保持する。
 追跡対象は各クライアントで選択中の表情の名前付き変数と各自のBaseを合成し、未装着時はBaseを使う。
 切り替え補間はSmoothValueに任せ、FadeIn / FadeOut / FadeDuration / FadeWeight / Snapshot は生成しない。
 連続・ループアニメーションも再生しない。Loop / Duration と再生時計は生成しない。
@@ -378,7 +378,7 @@ SmoothValue.ValueがDynamicBlendShapeDriverのBlendShapes[].ValueをDriveし、�
 | UpdateSelection | 受理した左右のSetGesture APIイベントからの同期呼び出しのみ（TrySetGestureからの転送も含む） |
 | キーボード | 左右それぞれの10キーの条件が変化したとき。新しく成立した割当だけ送信 |
 | 機種別入力 | 入力受付状態・判定した手形・Grip/Trigger 押下状態・安定待ち成立状態の変化 |
-| ApplyExpression | 選択イベント内で保存済みValueを即時適用。初期化・リセットはnullを同期送信。OnStartと書き込み権限の変化でも更新。通常出力へ一括Write |
+| ApplyExpression | ローカル着用中だけ通常出力へ一括Write。選択イベント内で保存済みValueを即時適用。初期化・リセットはnullを同期送信。OnStartとローカル着用開始でも再適用 |
 | Outputs | 通常出力にはFluxなし。既存の追跡がある出力だけTrackingのDriveで継続合成。変更監視・通知は置かない |
 
 入力・装着状態の変更監視には FireOnChange 系の `FireOnLocalValueChange<T>`／`FireOnLocalObjectChange<T>` を使う。
@@ -478,7 +478,7 @@ SelectionStatus は生成・計算しない。入力モードは Config.AllowHan
 
 Event・UpdateSelection・キーボード・機種別入力は `AvatarWornLocal` で更新を制御する。
 ResetState自体は着用状態で制限せず、公開Resetと着用開始から共用する。
-`AvatarWorn` は誰かが装着中かの判定に使い、未装着時のホストによるBase適用と各クライアントの追跡合成を切り替える。
+`AvatarWorn` は誰かが装着中かの判定に使い、表情解除の受付条件と各クライアントの追跡合成を切り替える。
 UserRoot配下への配置だけでは装着とみなさない。AvatarUserReferenceAssigner の装着通知と階層からIdentificationが算出した値を共通の判定元とする。
 API/Event/OnAvatarWorn 内の保存されない `StoredValue<bool>` が初期化済みかを記録する。
 着用開始時は初期化済みフラグを立て、最後にResetStateへImpulseを送る。
@@ -486,16 +486,17 @@ AvatarWornLocal=falseのときは初期化済みフラグだけを解除し、�
 OnAvatarRemovedやイベント間の通知タグ、脱着用の遅延タスクは生成しない。
 
 - 装着開始・初回起動：AvatarWornLocal=true になれば初期化する。入力イベントがなければ State.CurrentExpression=null のままにする。
-- 取り外し：左右値・入力許可・State.CurrentExpressionを保持し、初期化済みフラグだけを解除する。出力側の着用判定で見た目をBaseへ戻す。
-- 未装着中：選択更新は停止する。通常出力は初期化・権限取得・ローカル着用状態の変化時にホストがBaseをWriteし、追跡対象は専用DriveがBaseに追従する。明示API呼び出しがなければ共有状態を維持する。
+- 取り外し：左右値・入力許可・State.CurrentExpressionと通常出力の最後の値を保持し、初期化済みフラグだけを解除する。追跡出力はBaseへ戻す。
+- 未装着中：選択更新と通常出力のWriteは停止する。ホストも通常出力を書き込まず、追跡対象は専用DriveがBaseに追従する。明示API呼び出しがなければ共有状態を維持する。
 - 再装着・複製・読み込み：初回のローカル着用時に左右値を0、State.CurrentExpressionをnullに戻す。左右の入力許可は保存値を維持する。APIが先に届いても初期化は呼ばず、先行入力のGesture値と表情は後続のResetState初期化でクリアされる。
 
 OnAvatarWornはAvatarWornLocalの変化をFireOnLocalValueChangeで検出し、装着者の履歴は保持しない。
 一度falseを検出した後の再着用は、以前の2更新待機内であっても新しい着用として初期化する。
-通常出力はcanWriteとAvatarWornLocalの両方の変化を監視する。元の装着者がホストの場合にcanWriteがtrueのままでもBaseを反映し、別の装着者がいる間は書き込まない。
+通常出力のForEachは、受理したApplyExpression Impulse・OnStart・AvatarWornLocalの変化から、AvatarWornLocal=trueの場合だけ実行する。ホスト判定と権限変更の監視は生成しない。未装着時の明示Resetは状態を解除するが通常出力には書き込まない。
 APIは着用状態にかかわらず受信処理を実行し、選択・表情適用はInternal側の条件に従う。ResetStateには着用条件を置かない。
 変更イベントが処理される前に外して同じユーザーへ戻し、判定結果が変わらなかった場合は連続した装着として扱う。
 未装着中も追跡用Driveは各クライアントのBaseに追従する。
+着用中の個体を複製した直後は、コピーされたAvatarWornLocal=trueがIdentificationの再評価まで残り、着用初期化が走る場合がある。未着用からの複製は通常出力を保持する。未着用時の書き込み抑止の回帰確認では、元個体の着用判定がfalseに落ち着いてから複製する。
 既存パッケージへ反映するには再変換・再インポートが必要。
 
 ### ResetStateの共通化と受付条件
@@ -783,14 +784,14 @@ FaceEmoのIsFaceMotionに合わせ、BlendTreeの候補判定は直下の最初�
 最後に開始姿勢へ戻るループ素材は、その戻った姿勢を採用する。途中の最大値や任意フレームは推測しない。
 変換後は出力先と最終値だけを保存する。元カーブ・キー列・接線・AnimXは含めない。
 
-Playback は選択イベント・表情参照の変化時に、Outputsを1回走査する。
+ApplyExpression は表情Slot付きImpulseの受理時・OnStart・ローカル着用開始時に、ローカル着用中だけOutputsを1回走査する。表情参照の直接編集だけでは通常出力を更新しない。
 各OutputのIdを変数名に使い、State.CurrentExpressionのClip空間からfloat値を直接読む。FoundValue=falseの場合だけBaseを使い、0の値は有効な表情値として適用する。
 表情値の子スロットの走査やOutput参照との比較はない。同名変数を同一空間に複数作ると値を共有するため、生成時に衝突しない名前を割り当てる。
 続いて通常出力を合成し、Resultと違う場合だけ書き込む。追跡用Driveの対象にはWriteしない。
 無変化時の全出力巡回も出力ごとの変更監視もない。通常出力のBase・TrackingWeight・BlinkMode編集は再選択で適用する。
-通常出力のClip変数の編集も再選択で適用する。追跡出力は名前で直接読むため、値・名前・変数の追加削除は自動反映する。表情選択・初期化・権限取得で固定ポーズと通常出力を更新する。
-装着者または未装着時のホストだけが共有Writerを実行する。追跡用Driveは全クライアントでローカル評価する。
-未装着時は、保存・複製で選択状態が残っていてもResultはBaseとなる。
+通常出力のClip変数の編集も再選択で適用する。追跡出力は名前で直接読むため、値・名前・変数の追加削除は自動反映する。ローカル着用中の表情選択・初期化・着用開始で固定ポーズと通常出力を更新する。
+ローカル装着者だけが通常出力のWriterを実行する。追跡用Driveは全クライアントでローカル評価する。
+未装着時は、保存・複製で選択状態が残っていても追跡出力のResultはBaseとなる。通常出力のResultは未装着判定中には書き換えない。
 
 既存の瞬き・口パク等のドライバーは Outputs の `Base` に接続し直す。
 表情にトラックがない出力は Base を使い、ある出力は<Output.Id>名の変数の固定値を使う。

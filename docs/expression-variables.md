@@ -161,7 +161,7 @@ ApplyExpressionへnullを送り、State.CurrentExpressionの解除と通常出�
 
 装着が終了しても左右値・入力許可・State.CurrentExpressionは保持し、ResetStateは呼ばない。
 未装着で生成・複製したインスタンスや閲覧者のクライアントも自動クリアを書き込まない。
-未装着中はUpdateSelectionを実行しない。通常出力は初期化・権限取得・AvatarWornLocalの変化時にホストがBaseをWriteし、追跡出力は専用DriveがBaseに追従する。
+未装着中はUpdateSelectionと通常出力のWriteを実行しない。通常出力は最後の値を保持し、追跡出力は専用DriveがBaseに追従する。
 再装着・複製・読み込み後の最初の処理では再び初期化する。
 
 ## Outputs/各 BlendShape
@@ -186,7 +186,7 @@ DynamicVariable としてのパスと float 型は同じなので、Read Dynamic
 選択イベント内で各出力のIdと同名のClip変数を読み、通常出力のResultをWriteする。Binding参照・HasPose・Poseコピーは生成しない。
 元から追跡ドライバーがある出力だけTrackingのValueFieldDriveで継続合成する。
 出力ごとのFireOnLocalChange・通知イベント、LocalUpdate・アセット検索・サンプリング・切り替え補間は生成しない。
-未装着時は Result=Base とする。装着中は以下の式で評価する。通常出力のWriteは値が異なる場合だけ行う。
+未装着時は追跡出力のみ Result=Base とし、通常出力は最後の値を保持する。装着中は以下の式で評価する。通常出力のWriteはローカル装着者だけが値が異なる場合に行う。
 
 ```text
 sample  = 選択表情に<Output.Id>名のfloat変数がある ? その値 : Base
