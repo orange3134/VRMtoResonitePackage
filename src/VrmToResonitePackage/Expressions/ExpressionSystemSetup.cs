@@ -83,11 +83,32 @@ internal sealed partial class ExpressionSystemSetup
         setup.BuildLifecycle();
         ExpressionFlux.BindSlotReferences(setup._root);
         ExpressionFlux.Arrange(setup._root);
+        setup.ArrangeSlots();
         setup.LogDiagnostics();
         int assigned = setup._compiled.Pairs.Count(id => id != null && setup._clips.ContainsKey(id));
         Console.WriteLine($"Expression system: {setup._clips.Count} clips, {setup._outputSlots.Count} outputs, {assigned}/64 gesture pairs assigned, " +
             $"{setup._root.GetComponentsInChildren<ProtoFluxNode>().Count} Flux nodes");
         return Task.FromResult(setup._root);
+    }
+
+    private void ArrangeSlots()
+    {
+        // Finalize ordering after generated Reference.* slots and optional Drivers exist.
+        int RootOrder(Slot slot) => slot.Name switch
+        {
+            "API" => 0, "Clips" => 1, "Outputs" => 2,
+            "DV" => 3, "Inputs" => 4, "Drivers" => 5, _ => 6
+        };
+        int VariableOrder(Slot slot) => slot.Name.Split('.')[0] switch
+        {
+            "Config" => 0, "State" => 1, "Reference" => 2, _ => 3
+        };
+        _root.SortChildren((a, b) => RootOrder(a).CompareTo(RootOrder(b)));
+        _root.FindChild("DV").SortChildren((a, b) =>
+        {
+            int group = VariableOrder(a).CompareTo(VariableOrder(b));
+            return group != 0 ? group : string.CompareOrdinal(a.Name, b.Name);
+        });
     }
 
     private void BuildClips(Func<ExpressionBinding, IField<float>> resolve, Func<IField<float>, float?> initialWeight)

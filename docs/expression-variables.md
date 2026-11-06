@@ -23,6 +23,10 @@ Inputs/HandGesturesのSlot名は維持し、機種別レコードのDVSpace名�
 
 ## 名前・型・編集区分
 
+Expressions直下の表示順はAPI、Clips、Outputs、DV、Inputs、Drivers（生成される場合）。
+Expressions/DV直下はConfig.*、State.*、Reference.*の順に並べ、各分類内は名前のOrdinal順にする。
+GestureTableはその後ろに置く。自動生成するReference.*が揃った後でSlot.SortChildrenにより順序を確定する。
+
 変数名は `空間名/項目名`。以下の項目一覧では空間名を省略する。
 例えば状態変数の `State.Gesture.Left` は `ExpressionSystem/State.Gesture.Left`、Clips の表情値 `Body.Smile` は `ExpressionSystem.Clip/Body.Smile`。
 システム内で単一のモジュールは ExpressionSystem 空間を共有する。状態変数には `State.`、設定には `Config.`、固定参照には `Reference.`、対応表の行には `GestureTable.` を付ける。

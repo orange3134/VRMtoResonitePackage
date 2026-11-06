@@ -298,21 +298,6 @@ flowchart LR
 
 ```text
 Expressions/
-  DV/                              システム共通の変数（1変数1子 Slot）
-    State.Gesture.Left              左手の入力状態
-    State.Gesture.Right             右手の入力状態
-    Config.AllowHandGesture.Left    左手の入力許可
-    Config.AllowHandGesture.Right   右手の入力許可
-    State.CurrentExpression        現在の表情（Slot参照）
-    State.ContextMenuSelected      メニュー選択中の表情適用停止（bool）
-    GestureTable/                  対応表の変数をまとめるスロット
-      L0R0〜L7R7                   64個の Clips 参照
-    Config.SmoothingSpeed          補間速度
-    Reference.*                       API・Clips・内部Slotの固定参照
-  Clips/                         表情ごとの定義と最終値の一覧
-    各表情/                        メニューのLabelに名前を直接保存
-      DV/                          Clip空間のfloat変数
-        Body.Smile                 Body.Smileの固定値（float）
   API/                             公開・内部Impulseの共通送信先
     Event/                         条件の変化や起動で自動実行する処理
       OnAvatarWorn/                初期化・着用開始の監視・ResetState呼び出し
@@ -326,11 +311,24 @@ Expressions/
       SetGesture.Left|SetGesture.Right/        共通のint入力・左右値更新と表情選択
       ToggleHandGestures/           両手の許可をまとめて切り替え
       Reset/                       表情・左右値を初期状態へ戻す（許可設定は維持）
+  Clips/                         表情ごとの定義と最終値の一覧
+    各表情/                        メニューのLabelに名前を直接保存
+      DV/                          Clip空間のfloat変数
+        Body.Smile                 Body.Smileの固定値（float）
   Outputs/                         BlendShape ごとのベース入力と最終出力
     各 BlendShape/                 出力定義・Base・Result
       Tracking/                    既存の追跡がある出力だけ自動合成するDrive
-  Drivers/各 Renderer/            DynamicBlendShapeDriver、必要なシェイプのみ登録
-    瞬き以外の各シェイプ/         SmoothValue<float>、TargetValue → BlendShapes[].Value
+  DV/                              システム共通の変数（1変数1子 Slot）
+    Config.AllowHandGesture.Left    左手の入力許可
+    Config.AllowHandGesture.Right   右手の入力許可
+    Config.SmoothingSpeed          補間速度
+    State.ContextMenuSelected      メニュー選択中の表情適用停止（bool）
+    State.CurrentExpression        現在の表情（Slot参照）
+    State.Gesture.Left              左手の入力状態
+    State.Gesture.Right             右手の入力状態
+    Reference.*                       API・Clips・内部Slotの固定参照
+    GestureTable/                  対応表の変数をまとめるスロット
+      L0R0〜L7R7                   64個の Clips 参照
   Inputs/
     ContextMenu/                   両手で共有するExpressions入口（OnlyForSide=null）
       Items/                       表情一覧・ジェスチャー許可・Reset・Imported menu
@@ -343,6 +341,8 @@ Expressions/
       Touch|Index|Vive|WindowsMR|Cosmos/   削除できる機種別入力
         Left/Logic/                左手の入力検出・安定化・通知
         Right/Logic/               右手の入力検出・安定化・通知
+  Drivers/各 Renderer/            DynamicBlendShapeDriver、必要なシェイプのみ登録
+    瞬き以外の各シェイプ/         SmoothValue<float>、TargetValue → BlendShapes[].Value
 ```
 
 Internal に入力元の一覧・優先順位・有効期限・汎用 Animator パラメーターは持たない。
