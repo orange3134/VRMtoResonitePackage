@@ -6,7 +6,7 @@ Resoniteのコンテキストメニュー、外部Dynamic Impulseから選択す
 既存パッケージを更新する場合は再変換・再インポートする。
 
 設定の型と初期値は[変数リファレンス](expression-variables.md)、
-取り込み条件は[VRChat表情の検出と割り当て](face-emo-expression-import.md)、
+取り込み条件は[VRChat表情の検出と割り当て](vrchat-expression-import.md)、
 機種ごとの判定は[コントローラー入力](controller-gestures.md)を参照。
 
 ## 対応範囲

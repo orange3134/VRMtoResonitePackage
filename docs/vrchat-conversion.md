@@ -46,7 +46,7 @@ Prefab・FBXの初期ウェイトを収集した後に表情を推定する。
 
 表情はFaceEmoの通常形式／CAC形式を `VrchatFaceEmoExpressionImporter` で読み、最初のパターンだけを
 Clipsと左右64通りへ変換する。通常形式は後ろのFXレイヤーを優先して条件付き分岐を選び、
-CACは番号順の14表情セットの最初を選ぶ。詳細は [表情の検出と割り当て](face-emo-expression-import.md) を参照。
+CACは番号順の14表情セットの最初を選ぶ。詳細は [表情の検出と割り当て](vrchat-expression-import.md) を参照。
 ハンド割り当てはClips確定後、`FaceEmoGestureConditions` がEntry・Any State・通常遷移・入れ子Exitを
 辿って検出済みClipを選ぶ。Driverの有無や位置を固定せず、途中のSet・既知値のCopy/Addにも対応する。
 未知の条件を既定値で埋めず、任意の実行履歴や時間経過は再現しない。

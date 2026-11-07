@@ -10,7 +10,7 @@
 |---|---|
 | [表情システム](expression-system.md) | 対応範囲、操作、生成階層、選択保持、ライフサイクル、公開API、編集方法 |
 | [変数リファレンス](expression-variables.md) | 空間・名前・型・初期値、出力キー、瞬きと追跡の合成・接続 |
-| [VRChat表情の検出と割り当て](face-emo-expression-import.md) | 顔候補、最初のセット、通常・CAC形式、ハンド割り当て解析、制限 |
+| [VRChat表情の検出と割り当て](vrchat-expression-import.md) | 顔候補、最初のセット、通常・CAC形式、ハンド割り当て解析、制限 |
 | [コントローラー入力](controller-gestures.md) | 5機種の判定表、待機と入力破棄、出典・ライセンス |
 
 ## 変換処理

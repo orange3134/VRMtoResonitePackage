@@ -6,8 +6,6 @@ Expression Menu、Expression Parameters、MA Parametersから表情セットを�
 ハンド割り当ては、FaceEmoでClipsを確定した後、後述のグラフ解析でその中から選択する。
 MA Absolute/Appendは入力FXを順番に並べるためだけに使い、追加FXも同じFaceEmo基準で読む。
 VRMの規格上の表情定義と、変換後のResonite側の入力・出力グラフは別の責務として維持する。
-基準にした外部実装はFaceEmo 1.7.0、commit `829f9ddf5d75aa28cbfa93293ade8c901f191ea0` の
-`Editor/Detail/AV3/Importers/ExpressionImporter.cs` と `Runtime/Domain/Mode.cs`。
 以下はResoPonの取り込み仕様。操作と出力は[表情システム](expression-system.md)を参照。
 
 顔はDescriptorのViseme用メッシュ、Blendshapesのまぶた用メッシュ、ルート直下の `Body` の
@@ -17,6 +15,30 @@ DescriptorのViseme名と既知の `vrc.v_*` 名を除外し、まばたきは�
 アバターに設定された初期ウェイトは追跡ドライバーの設定前に保存する。
 メッシュ照合前の `--vrchat-dump` は仮の結果で、最初のセットの確定と後続クリップの削除は
 `VrchatExpressionDetection.FilterFaceCurves` で行う。比較にはUnityのApproximately相当を使う。
+
+## 参照元とライセンス
+
+FaceEmo 1.7.0（commit `829f9ddf5d75aa28cbfa93293ade8c901f191ea0`）のソースを基準に、
+表情取り込みの判定処理をUnity YAML解析と固定ポーズ生成へ移植している。
+名称の参照だけではないため、FaceEmo由来の部分について
+[THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md#faceemo) に著作権表示
+`Copyright (c) 2023 suzuryg` とMITライセンス全文を収録する。
+
+| FaceEmo側（Packages/jp.suzuryg.face-emo/以下） | 使用している処理とResoPon側の対応 |
+|---|---|
+| Editor/Detail/AV3/Importers/ExpressionImporter.cs | 通常・CAC分岐の収集、条件の除外、片手Neutralの補完、レイヤー・分岐順序、最初のパターン選択、顔カーブの初期値との差分。主にVrchatFaceEmoExpressionImporterとVrchatExpressionDetection |
+| Editor/Detail/AV3/Importers/ImportUtility.cs | 顔bindingによるMotion判定、BlendTreeの最初・最後の子の扱い。VrchatExpressionParserとVrchatFaceEmoExpressionImporterの候補検出 |
+| Editor/Detail/AV3/AV3Utility.cs | Viseme→まぶた→直下Bodyの顔メッシュ選択と既知viseme名の除外。VrchatAvatarParserとVrchatExpressionDetection |
+| Runtime/Domain/Mode.cs | 左右64組ごとの先勝ち評価と到達しない分岐の判定。VrchatFaceEmoExpressionImporter.SelectFirstSet |
+
+FaceEmoのUnity Editorパッケージ・UI・画像・同梱ライブラリを取り込む構成ではない。
+`FaceEmoGestureConditions` のAnimatorグラフ解析やResonite用の出力は別の処理であり、
+上記のソース使用範囲と、後述の変換仕様・制限を区別する。
+
+通知ファイル全体はEXEへ埋め込み、build・publishの出力先にもコピーする。
+一方、生成アバターのHandGestures通知はAvatar Expression Editor用で、先頭のMIT本文より前を
+説明として読み、ライセンス本文は専用JSONから生成する。FaceEmoの節はその後ろに置き、
+コントローラー由来の通知と混在させない。
 
 ## 通常形式の最初の表情セット
 
