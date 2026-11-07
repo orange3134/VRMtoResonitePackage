@@ -8,7 +8,7 @@ internal static class ExpressionDynamicInputChecks
     {
         CheckSlotReferences(root);
         var modules = root.FindChild("Inputs").FindChild("HandGestures");
-        foreach (var module in modules.Children)
+        foreach (var module in modules.Children.Where(module => module.Name != "THIRD-PARTY-NOTICES"))
         {
             var settings = module.ExpressionVariables<DynamicValueVariable<float>>();
             foreach (string hand in new[] { "Left", "Right" })
@@ -58,7 +58,7 @@ internal static class ExpressionDynamicInputChecks
     {
         CheckSlotReferences(root);
         var modules = root.FindChild("Inputs").FindChild("HandGestures");
-        var module = modules.Children.First();
+        var module = modules.Children.First(module => module.Name != "THIRD-PARTY-NOTICES");
         var field = module.ExpressionVariables<DynamicValueVariable<float>>()
             .Single(value => value.VariableName.Value == "ExpressionSystem.Input.HandGesture/StabilitySeconds");
         var key = root.FindChild("Inputs").FindChild("Keyboard").FindChild("Left").FindChild("DV").FindChild("Key.1")
@@ -111,7 +111,7 @@ internal static class ExpressionDynamicInputChecks
         Check(!root.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Any(v =>
             v.VariableName.Value.StartsWith("ExpressionSystem/Reference.Inputs.HandGestures.", StringComparison.Ordinal)),
             "hand-module references are absent from the system space");
-        foreach (var module in root.FindChild("Inputs").FindChild("HandGestures").Children)
+        foreach (var module in root.FindChild("Inputs").FindChild("HandGestures").Children.Where(module => module.Name != "THIRD-PARTY-NOTICES"))
         {
             var local = module.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>();
             Check(local.Count == 0, "local writes need no hand references: " + module.Name);

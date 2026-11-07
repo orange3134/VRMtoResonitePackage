@@ -2,7 +2,7 @@
 
 ## Avatar Expression Editor
 
-The controller gesture classifiers in ResoPon are adapted from the behavior of
+The controller gesture classifiers are adapted from the behavior of
 Avatar Expression Editor v1.12.1 and its bundled hand-sign add-ons, inspected in
 Resonite. The source tool contains the following MIT license notice.
 

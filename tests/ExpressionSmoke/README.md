@@ -1,5 +1,10 @@
 # Expression integration checks
 
+2026-11-07: Controller attribution lives in HandGestures/THIRD-PARTY-NOTICES,
+with the complete license in its Avatar Expression Editor (MIT License) child.
+Graph checks verify separate attribution and unchanged license text after
+generation, cloning and package reload; HandGestures itself has no Comment.
+
 2026-11-07: Both gesture menu entrances display Hand gestures: Both / LeftOnly /
 RightOnly / None through ValueOptionDescriptionDriver<bool2> (X=Left, Y=Right). Checks cover all four
 permission field combinations, menu choices, desktop toggles, VR visibility changes,

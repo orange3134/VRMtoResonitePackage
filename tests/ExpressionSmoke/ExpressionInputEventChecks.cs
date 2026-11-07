@@ -13,14 +13,15 @@ internal static class ExpressionInputEventChecks
         var core = expressions.FindChild("API").FindChild("Internal");
         var api = expressions.FindChild("API");
         var catalog = expressions.FindChild("Clips");
-        var modules = expressions.FindChild("Inputs").FindChild("HandGestures");
+        var modules = expressions.FindChild("Inputs").FindChild("HandGestures").Children
+            .Where(module => module.Name != "THIRD-PARTY-NOTICES").ToArray();
         var mocks = expressions.Parent.AddSlot("Temporary sensor inputs");
         var restore = new List<(ISyncRef Port, IWorldElement Target)>();
         // Save the equip-assigned reference so the worn flags can also exercise dequip.
         var assigner = expressions.Parent.FindChild("Avatar Root Identification")
             .GetComponent<FrooxEngine.CommonAvatar.AvatarUserReferenceAssigner>();
         var wearerReferences = assigner.References.Select(r => (Reference: r, User: r.Target)).ToArray();
-        var originalStability = modules.Children.ToDictionary(module => module, module => Get<float>(module, "StabilitySeconds"));
+        var originalStability = modules.ToDictionary(module => module, module => Get<float>(module, "StabilitySeconds"));
         void Gesture(string side, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
             api, side == "Left" ? ExpressionSystemSetup.TrySetGestureLeftTag : ExpressionSystemSetup.TrySetGestureRightTag, true, value);
         void Allow(bool value) => SetHandGesturesAllowed(core, value);
@@ -64,7 +65,7 @@ internal static class ExpressionInputEventChecks
             Check(Reference<Slot>(core, "State.CurrentExpression") == smile && menuItem.EnabledField.Value,
                 "gesture event selects the restored clip");
 
-            foreach (var module in modules.Children)
+            foreach (var module in modules)
             foreach (string side in new[] { "Left", "Right" })
             {
                 var hand = module.FindChild(side);

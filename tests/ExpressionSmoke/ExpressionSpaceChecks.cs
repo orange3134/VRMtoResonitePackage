@@ -23,11 +23,12 @@ internal static class ExpressionSpaceChecks
         var inputs = root.FindChild("Inputs");
         Records(inputs.FindChild("Keyboard"), "ExpressionSystem.Input.Keyboard");
         var modules = inputs.FindChild("HandGestures");
-        Check(modules.FindChild("Modules") == null && modules.Children.All(module =>
+        var controllers = modules.Children.Where(module => module.Name != "THIRD-PARTY-NOTICES").ToArray();
+        Check(modules.FindChild("Modules") == null && controllers.All(module =>
             new[] { "Touch", "Index", "Vive", "WindowsMR", "Cosmos" }.Contains(module.Name)),
-            "controller modules live directly under HandGestures without a Modules wrapper");
-        Records(modules, "ExpressionSystem.Input.HandGesture");
-        foreach (var module in modules.Children)
+            "controller modules live beside THIRD-PARTY-NOTICES directly under HandGestures");
+        foreach (var module in controllers) expected.Add(module, "ExpressionSystem.Input.HandGesture");
+        foreach (var module in controllers)
         foreach (string side in new[] { "Left", "Right" })
         {
             var hand = module.FindChild(side);

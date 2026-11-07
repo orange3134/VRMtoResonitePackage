@@ -121,9 +121,22 @@ internal static class ExpressionGraphChecks
         Check(expressions.GetComponentsInChildren<ContextMenuItemSource>().All(item =>
             (item.EnabledField.ActiveLink != null) == modeEntries.Contains(item)),
             "only the VR gesture submenu and desktop toggle have automatic visibility drivers");
-        Check(Descendant(expressions, "Inputs/HandGestures").GetComponent<Comment>()?.Text.Value
-            .Contains("Copyright (c) 2022-2025 rhenium, kazu0617, orange") == true,
-            "controller source license survives generation, clone and package reload");
+        var handGestures = Descendant(expressions, "Inputs/HandGestures");
+        var notices = handGestures.FindChild("THIRD-PARTY-NOTICES");
+        string attribution = notices?.GetComponent<Comment>()?.Text.Value;
+        string license = notices?.FindChild("Avatar Expression Editor (MIT License)")?.GetComponent<Comment>()?.Text.Value;
+        Check(handGestures.GetComponent<Comment>() == null &&
+            attribution?.Contains("Avatar Expression Editor v1.12.1") == true &&
+            !attribution.Contains("Copyright (c)") && !attribution.Contains("ResoPon"),
+            "controller attribution is separate from its license under THIRD-PARTY-NOTICES");
+        using (var notice = new StreamReader(typeof(ExpressionSystemSetup).Assembly.GetManifestResourceStream("ResoPon.ControllerGestureNotice")))
+        {
+            string text = notice.ReadToEnd();
+            string expectedLicense = text[text.IndexOf("MIT License", StringComparison.Ordinal)..];
+            Check(license == expectedLicense && license.StartsWith("MIT License", StringComparison.Ordinal) &&
+                license.Contains("Copyright (c) 2022-2025 rhenium, kazu0617, orange"),
+                "complete controller source license survives generation, clone and package reload");
+        }
         Check(expressions.FindChild("Inputs").GetComponentsInChildren<ProtoFluxNode>().All(n => n.GetType().Name != "OnStart"),
             "input modules run on changes without OnStart impulses");
         ExpressionDynamicInputChecks.CheckBindings(expressions);
@@ -374,7 +387,7 @@ internal static class ExpressionGraphChecks
             Check(board.Count() <= MaximumBoardNodes, $"board node budget ({MaximumBoardNodes}): {path} has {board.Count()}");
 
         }
-        foreach (var module in Descendant(expressions, "Inputs/HandGestures").Children)
+        foreach (var module in Descendant(expressions, "Inputs/HandGestures").Children.Where(module => module.Name != "THIRD-PARTY-NOTICES"))
             foreach (string hand in new[] { "Left", "Right" })
                 Check(boards.Any(b => b.Key == Descendant(module, hand + "/Logic")),
                     "controller hand has an independent board: " + module.Name + "/" + hand);

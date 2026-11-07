@@ -264,7 +264,14 @@ internal sealed partial class ExpressionSystemSetup
     {
         var root = _inputs.AddSlot("HandGestures");
         using (var notice = new StreamReader(typeof(ExpressionSystemSetup).Assembly.GetManifestResourceStream("ResoPon.ControllerGestureNotice")))
-            root.AttachComponent<Comment>().Text.Value = notice.ReadToEnd();
+        {
+            string text = notice.ReadToEnd();
+            int licenseStart = text.IndexOf("\nMIT License", StringComparison.Ordinal);
+            if (licenseStart < 0) throw new InvalidDataException("Controller gesture MIT license is missing from third-party notices.");
+            var notices = root.AddSlot("THIRD-PARTY-NOTICES");
+            notices.AttachComponent<Comment>().Text.Value = text[..licenseStart].Trim();
+            notices.AddSlot("Avatar Expression Editor (MIT License)").AttachComponent<Comment>().Text.Value = text[(licenseStart + 1)..];
+        }
         foreach (string device in new[] { "TouchController", "IndexController", "ViveController", "WindowsMRController", "CosmosController" })
         {
             var module = Record(root, device.Replace("Controller", ""), GestureSettingsSpace);
