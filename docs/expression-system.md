@@ -3,6 +3,18 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-07: 生成処理の静的調査では、表情システムが固定文言として出力する `ResoPon` は、
+`Expressions/Inputs/HandGestures` の `Comment.Text` に含まれる。
+`ExpressionInputSetup.BuildGestures` が埋め込みリソースの `THIRD-PARTY-NOTICES.md` 全文を保存するため、
+冒頭の説明文 `The controller gesture classifiers in ResoPon are adapted from the behavior of` も出力される。
+メニュー生成の有無にかかわらず、このCommentを生成する。
+`ResoPon.ControllerGestureNotice` はリソースの検索名であり、検索名自体は保存しない。
+`resopon:neutral` と `resopon:pair:*` はコンパイル時のClip IDで、生成物には文字列として保存しない。
+現行のAPI TagとDynamicVariableSpace名は `ExpressionSystem` 系で、コードコメントも出力されない。
+入力アバター由来の表情名・メッシュ名等はこの固定文言の調査対象外。
+表情システム外には `MeshLoadingSetup` のSlot名 `<color=cyan>ResoPon</color> - Mesh loaded check` がある。
+これはソースと埋め込み通知の確認結果であり、実パッケージの再生成・再読込による検証ではない。
+
 2026-11-07: `Select expression`の入口色は`State.ContextMenuSelected`へ直接追従する。
 `ValueOptionDescriptionDriver<bool>`でtrueなら緑、falseなら白を駆動する。
 ハンドサインによる表情表示だけでは入口を緑にせず、メニュー選択の保持状態を示す。
