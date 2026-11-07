@@ -1,0 +1,126 @@
+using FrooxEngine;
+using InputKey = Renderite.Shared.Key;
+
+internal static class ExpressionSpaceChecks
+{
+    public static void Run(Slot root)
+    {
+        var expected = new Dictionary<Slot, string>
+        {
+            [root] = "ExpressionSystem"
+        };
+        void Records(Slot parent, string name)
+        {
+            foreach (var child in parent.Children.Where(child => child.Name != "DV")) expected.Add(child, name);
+        }
+        void Clips(Slot parent)
+        {
+            Records(parent, "ExpressionSystem.Clip");
+        }
+        Clips(root.FindChild("Clips"));
+        Records(root.FindChild("Outputs"), "ExpressionSystem.Output");
+        var inputs = root.FindChild("Inputs");
+        Records(inputs.FindChild("Keyboard"), "ExpressionSystem.Input.Keyboard");
+        var modules = inputs.FindChild("HandGestures");
+        var controllers = modules.Children.ToArray();
+        Check(controllers.All(module =>
+            new[] { "Touch", "Index", "Vive", "WindowsMR", "Cosmos" }.Contains(module.Name)),
+            "controller modules live directly under HandGestures");
+        foreach (var module in controllers) expected.Add(module, "ExpressionSystem.Input.HandGesture");
+        foreach (var module in controllers)
+        foreach (string side in new[] { "Left", "Right" })
+        {
+            var hand = module.FindChild(side);
+            Check(hand.FindChild("DV") == null && hand.GetComponentsInChildren<DynamicVariableSpace>().Count == 0,
+                "controller hands keep transient state inside Flux: " + module.Name + "/" + side);
+            Check(hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.DelayWithValueSecondsFloat<int>>().Count == 1 &&
+                hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Async.StartAsyncTask>().Count == 1,
+                "each controller hand schedules delayed input snapshots");
+            var delayed = hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.DelayWithValueSecondsFloat<int>>().Single();
+            var start = hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.FrooxEngine.Async.StartAsyncTask>().Single();
+            var timeout = hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Actions.LocalImpulseTimeoutSeconds>().Single();
+            Check(start.TaskStart.Target == timeout.Trigger && timeout.Next.Target == delayed &&
+                timeout.Timeout.Target == delayed.Duration.Target,
+                "async tasks pass through the per-hand timeout before capturing input, with the same duration");
+            Check(!hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.ProtoFluxNode>().Any(node =>
+                node.AllImpulses.Any(port => port.Target == timeout.Reset)),
+                "input changes and departure do not reset the authored timeout");
+        }
+
+        var internalSlot = root.FindChild("API").FindChild("Internal");
+        Check(root.FindChild("Core") == null && internalSlot != null &&
+            internalSlot.Children.Select(child => child.Name).OrderBy(name => name)
+                .SequenceEqual(new[] { "ApplyExpression", "ResetState", "UpdateSelection" }),
+            "Internal contains the three boards called only from within API");
+        Check(root.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+            .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/", StringComparison.Ordinal))
+            .All(v => v.VariableName.Value == "ExpressionSystem/State.CurrentExpression" ||
+                v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal) ||
+                v.VariableName.Value.StartsWith("ExpressionSystem/Reference.", StringComparison.Ordinal)),
+            "fixed Slot references use Reference; selected expression uses State; mappings use GestureTable");
+        foreach (string key in new[] { "Config.AllowHandGesture.Left", "Config.AllowHandGesture.Right", "Config.SmoothingSpeed",
+            "State.Gesture.Left", "State.Gesture.Right", "State.CurrentExpression", "State.ContextMenuSelected", "Reference.API", "Reference.Clips" })
+            Check(root.FindChild("DV").FindChild(key) != null, "system DV slot exists: " + key);
+
+        var spaces = root.GetComponentsInChildren<DynamicVariableSpace>();
+        Check(spaces.Count == expected.Count, "every record has exactly one explicit schema space");
+        foreach (var space in spaces)
+        {
+            Check(expected.TryGetValue(space.Slot, out string name) && space.SpaceName.Value == name,
+                "space matches record schema: " + space.Slot.Name);
+            Check(space.OnlyDirectBinding.Value == (name != "ExpressionSystem"),
+                "the shared system space binds Core fields and child table rows");
+        }
+        // Check prefixes independently of the generator's helpers, including child table
+        // variables and optional output drivers, before and after package serialization.
+        string Prefix(Slot slot) => ExpressionTestFields.VariablePath(slot, "");
+        var occupied = new HashSet<Slot>();
+        void Placement(Component variable, string path)
+        {
+            var space = variable.Slot.GetComponentInParents<DynamicVariableSpace>();
+            var data = space.Slot.FindChild("DV");
+            bool tableRow = path.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal);
+            var container = tableRow ? data?.FindChild("GestureTable") : data;
+            Check(data != null && data.Parent == space.Slot && variable.Slot.Parent == container,
+                "variable lives in its DV container or GestureTable group: " + path);
+            Check(variable.Slot.Name == (tableRow ? path["ExpressionSystem/GestureTable.".Length..] : path[(path.IndexOf('/') + 1)..]),
+                "variable slot is named after its key: " + path);
+            Check(occupied.Add(variable.Slot), "one variable per slot: " + path);
+        }
+        void Values<T>()
+        {
+            // Drivers consume a variable at their target; only definitions belong in DV.
+            foreach (var variable in root.GetComponentsInChildren<DynamicVariableBase<T>>()
+                .Where(variable => variable is not DynamicValueVariableDriver<T>))
+            {
+                Placement(variable, variable.VariableName.Value);
+                Check(variable.VariableName.Value.StartsWith(Prefix(variable.Slot), StringComparison.Ordinal),
+                    "value belongs to its record's space: " + variable.VariableName.Value);
+            }
+        }
+        void References<T>() where T : class, IWorldElement
+        {
+            foreach (var variable in root.GetComponentsInChildren<DynamicReferenceVariable<T>>())
+            {
+                Placement(variable, variable.VariableName.Value);
+                Check(variable.VariableName.Value.StartsWith(Prefix(variable.Slot), StringComparison.Ordinal),
+                    "reference belongs to its record's space: " + variable.VariableName.Value);
+            }
+        }
+        Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
+        References<Slot>(); References<IField<float>>(); References<ISyncRef>();
+        Check(root.ExpressionVariables<DynamicValueVariable<bool>>().Count(v =>
+            v.VariableName.Value is "ExpressionSystem/Config.AllowHandGesture.Left" or "ExpressionSystem/Config.AllowHandGesture.Right") == 2,
+            "gesture permission is stored independently for Left and Right");
+        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("State.Gesture.Left", out _),
+            "Core fields are readable from the system root");
+        Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),
+            "table rows are readable from the system root");
+        Console.WriteLine("SPACES: explicit record schemas and variable prefixes verified");
+    }
+
+    private static void Check(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+}

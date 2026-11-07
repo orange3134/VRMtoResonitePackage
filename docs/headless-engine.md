@@ -30,7 +30,7 @@ Resonite本体とResoPon、または複数のResoPonプロセスでDataディレ
 `Instance.lock` や暗号鍵が競合し、`Invalid password` やDB破損につながる。
 
 - 実行ごとに `%LOCALAPPDATA%/ResoPon/Data-xxxxxxxx` を作る。
-- 終了時に削除し、次回起動時も孤児ディレクトリを掃除する。
+- 終了前はLocalKeyだけを保存してDataのロックを維持し、プロセス終了後の孤児ディレクトリを次回起動時に掃除する。
 - 掃除時は `Instance.lock` で生存中プロセスを判定する。
 - `LocalKey.bin` だけは共有し、MachineIDを安定させる。
 - Cacheは `%LOCALAPPDATA%/ResoPon/Cache` を共有する。

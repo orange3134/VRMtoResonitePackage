@@ -207,7 +207,17 @@ public static class VrchatAvatarParser
         foreach (string excluded in avatar.EditorOnlyFbxGuids)
             UniLog.Log($"Skipping EditorOnly model before import: {package.ByGuid(excluded)?.LogicalPath} (fbx={excluded})");
         ApplyFbxDefaultBlendShapeWeights(avatar);
-        VrchatAnimatorFaceParser.Apply(package, effectiveDescriptor.Root, avatar);
+        var expressionComponents = new List<YamlNode>();
+        foreach (var entry in package.PrefabGraph.Scenes)
+        {
+            var included = IncludedPrefabObjects(package, entry.Guid, entry.Scene, avatar,
+                new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase));
+            expressionComponents.AddRange(entry.Scene.MonoBehaviours.Where(c =>
+                included.Contains(c.Root?["m_GameObject"]?.FileID ?? 0)).Select(c => c.Root));
+        }
+        var expressionDescriptor = VrchatModularExpressionInputs.Create(effectiveDescriptor.Root, expressionComponents);
+        VrchatAnimatorFaceParser.Apply(package, expressionDescriptor, avatar);
+        avatar.Expressions = VrchatExpressionParser.Parse(package, expressionDescriptor, expressionComponents);
         ParsePhysics(package, selected.Source.Guid, avatar);
         ParseModularAvatarComponents(package, selected.Source.Guid, avatar);
         return avatar;
@@ -230,6 +240,8 @@ public static class VrchatAvatarParser
                 avatar.FbxBlendShapeNames.TryAdd(rendererName, names);
                 avatar.ModelBlendShapeNames[new VrchatGameObjectReference(guid, rendererName)] = names;
             }
+            foreach (var (path, aliases) in resolver.BlendShapeAliasesByPath)
+                avatar.ModelBlendShapeAliasesByPath[new(guid, path)] = aliases;
             foreach (var (path, names) in resolver.BlendShapeNamesByPath)
                 avatar.ModelBlendShapeNamesByPath[new(guid, path)] = names;
             foreach ((string path, IReadOnlyList<float> weights) in
@@ -1234,6 +1246,7 @@ public static class VrchatAvatarParser
             int byGuid = 0, bySignature = 0, strippedOwner = 0;
             foreach (YamlDocument mono in scene.MonoBehaviours)
             {
+                if (!IsAvatarDescriptor(mono)) continue;
                 if (mono.Root?["m_Script"]?.Guid == VrchatConstants.AvatarDescriptorScriptGuid)
                 {
                     byGuid++;
@@ -1311,12 +1324,15 @@ public static class VrchatAvatarParser
     }
 
     /// <summary>
-    /// True if a MonoBehaviour is a VRCAvatarDescriptor — either by its known script GUID or, so that
+    /// True if a MonoBehaviour is a VRCAvatarDescriptor — either by its known script GUID/type or, so that
     /// SDK-version GUID differences still work, by its characteristic serialized field signature.
     /// </summary>
     private static bool IsAvatarDescriptor(YamlDocument mono)
     {
-        if (mono.Root?["m_Script"]?.Guid == VrchatConstants.AvatarDescriptorScriptGuid)
+        // The SDK DLL GUID is shared with audio components; the fileID identifies the type.
+        // 11500000 also supports standalone MonoScript assets.
+        if (mono.Root?["m_Script"]?.Guid == VrchatConstants.AvatarDescriptorScriptGuid &&
+            mono.Root["m_Script"].FileID is 542108242 or 11500000)
         {
             return true;
         }
@@ -1777,6 +1793,19 @@ public static class VrchatAvatarParser
         // FBX GUID/fileID so the imported renderer name is preserved.
         string visemeMesh = ResolveReferenceGameObjectName(package, scene, d?["VisemeSkinnedMesh"], modelResolvers);
         var visemeTarget = ResolveDescriptorMeshTarget(package, descriptorGuid, d?["VisemeSkinnedMesh"], avatar.FbxGuid);
+        // FaceEmo selects one face mesh: visemes, eyelids, then the direct Body child.
+        var faceReference = lipSync == 3 && (d?["VisemeSkinnedMesh"]?.FileID ?? 0) != 0
+            ? d["VisemeSkinnedMesh"]
+            : d?["customEyeLookSettings"]?["eyelidType"]?.AsInt() == 2 &&
+              (d["customEyeLookSettings"]["eyelidsSkinnedMesh"]?.FileID ?? 0) != 0
+                ? d["customEyeLookSettings"]["eyelidsSkinnedMesh"] : null;
+        avatar.ExpressionFaceTarget = faceReference == null ? null :
+            ResolveDescriptorMeshTarget(package, descriptorGuid, faceReference, avatar.FbxGuid);
+        avatar.ExpressionFacePath = faceReference == null ? "Body" : null;
+        if (faceReference != null && ResolveObjectIdentity(package, faceReference.Guid ?? descriptorGuid, faceReference.FileID ?? 0) ==
+            ResolveObjectIdentity(package, d["VisemeSkinnedMesh"]?.Guid ?? descriptorGuid, d["VisemeSkinnedMesh"]?.FileID ?? 0))
+            foreach (var shape in visemeShapes?.Seq ?? new())
+                if (!string.IsNullOrEmpty(shape.AsString())) avatar.ExpressionVisemeNames.Add(shape.AsString());
         // Explicit null is authored intent, not a failed lookup eligible for global fallback.
         if (lipSync == 3 && visemeShapes?.Seq != null && d?["VisemeSkinnedMesh"]?.FileID != 0)
         {

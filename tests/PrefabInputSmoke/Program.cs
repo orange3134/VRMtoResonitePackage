@@ -51,6 +51,26 @@ static void Run()
     string otherGuid = new('b', 32);
     string materialGuid = new('c', 32);
     string selected = Asset("Assets/Selected.prefab", selectedGuid, Avatar("Selected"));
+    string descriptorWithAudio = Asset("Assets/DescriptorWithAudio.prefab", "acd00000000000000000000000000001",
+        Avatar("DescriptorWithAudio").Replace("fileID: 11500000", "fileID: 542108242") + """
+
+--- !u!1 &10
+GameObject:
+  m_Name: Audio_CommonIndicator
+--- !u!4 &11
+Transform:
+  m_GameObject: {fileID: 10}
+  m_Father: {fileID: 2}
+--- !u!114 &12
+MonoBehaviour:
+  m_GameObject: {fileID: 10}
+  m_Script: {fileID: 1610797297, guid: 67cc4cb7839cd3741b63733d5adf0442, type: 3}
+  Gain: 10
+  EnableSpatialization: 1
+""");
+    using (var package = UnityPackage.Open(descriptorWithAudio))
+        Check(VrchatAvatarParser.ListAvatars(package).Single().Name == "DescriptorWithAudio",
+            "SDK DLL GUID shared by avatar and audio components must identify only the descriptor type");
     PrefabGraphChecks.Run(Asset);
     Asset("Assets/Other.prefab", otherGuid, Avatar("Other"));
     Asset("Library/PackageCache/com.example.materials@123/Surface.mat", materialGuid, "Material:\n  m_Name: Surface\n");
@@ -905,6 +925,11 @@ Transform:
     Check(cleared.Visemes.Count == 0 && cleared.Blink == null &&
           VrchatModelAdapter.ToVrmModel(cleared).Expressions.Count == 0,
         "Descriptor arrays can shrink and object references can be explicitly cleared");
+    var noBlink = Read(settings
+        + Change("customEyeLookSettings.eyelidsBlendshapes", "ffffffff1300000014000000")
+        + Change("customEyeLookSettings.eyelidsBlendshapes.Array.data[0]", "-1") + localObjects);
+    Check(noBlink.Blink == null && VrchatModelAdapter.ToVrmModel(noBlink).Expressions.All(e => e.Preset != "blink"),
+        "Descriptor Blink=-1 never substitutes LookingUp/LookingDown indices (Plum layout)");
     Check(Read(settings + Change("enableEyeLook", "0") + localObjects).LeftEyeBoneName == null,
         "Variant can disable inherited eye settings");
     var stripped = Read(settings + Change("VisemeSkinnedMesh", "{fileID: 904}", true) + localObjects + $$"""

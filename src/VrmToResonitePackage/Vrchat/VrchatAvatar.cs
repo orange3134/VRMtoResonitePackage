@@ -10,6 +10,10 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 public sealed class VrchatAvatar
 {
+    public Expressions.ExpressionModel Expressions { get; set; } = new();
+    public VrchatBoneTarget ExpressionFaceTarget { get; set; }
+    public string ExpressionFacePath { get; set; }
+    public HashSet<string> ExpressionVisemeNames { get; } = new(StringComparer.Ordinal);
     public List<VrchatPhysicsPlacement> PhysicsPlacements { get; } = new();
     /// <summary>Root prefab GameObject name (also the avatar/display name).</summary>
     public string Name { get; set; }
@@ -72,6 +76,7 @@ public sealed class VrchatAvatar
         new(StringComparer.Ordinal);
     public Dictionary<VrchatGameObjectReference, IReadOnlyList<string>> ModelBlendShapeNames { get; } = new();
     public Dictionary<VrchatModelRendererReference, IReadOnlyList<string>> ModelBlendShapeNamesByPath { get; } = new();
+    public Dictionary<VrchatModelRendererReference, IReadOnlyDictionary<string, string>> ModelBlendShapeAliasesByPath { get; } = new();
 
     public IReadOnlyList<string> BlendShapeNamesFor(string fbxGuid, string rendererName, string objectKey = null,
         string rendererPath = null)

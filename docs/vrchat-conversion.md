@@ -37,9 +37,21 @@ UnityのLibraryやVRChat SDKの実行環境は不要。
 必要になる場合がある。`RendererTemplateScenes` はその用途だけに削除前の文書を提供する。
 Renderer自身やマテリアルを復活させてはいけない。
 
-Animatorの表情推定と他レイヤーとの競合判定は `VrchatAnimatorGraph` の到達可能性を共有する。
+AnimatorからのViseme・Blink推定と他レイヤーとの競合判定は `VrchatAnimatorGraph` の到達可能性を共有する。
 未接続のstateに競合するclipがあるだけでは表情を除外しない。到達可能な競合は保守的に除外する。
 Prefab・FBXの初期ウェイトを収集した後に表情を推定する。
+
+ハンドジェスチャー・Resoniteのコンテキストメニュー・外部イベントによる表情切り替えの使い方と対応範囲は
+[表情システム](expression-system.md)を参照する。Viseme／Blink推定とは別に解析し、共通の出力へ接続する。
+
+表情はFaceEmoの通常形式／CAC形式を `VrchatFaceEmoExpressionImporter` で読み、最初のパターンだけを
+Clipsと左右64通りへ変換する。通常形式は後ろのFXレイヤーを優先して条件付き分岐を選び、
+CACは番号順の14表情セットの最初を選ぶ。詳細は [表情の検出と割り当て](vrchat-expression-import.md) を参照。
+ハンド割り当てはClips確定後、`FaceEmoGestureConditions` がEntry・Any State・通常遷移・入れ子Exitを
+辿って検出済みClipを選ぶ。Driverの有無や位置を固定せず、途中のSet・既知値のCopy/Addにも対応する。
+未知の条件を既定値で埋めず、任意の実行履歴や時間経過は再現しない。
+材質・Transform・イベント等の混在は顔カーブ抽出を妨げず、顔以外の効果は実行しない。
+顔のパスと実Rendererの一致、初期ウェイトとの差分を確認してからセットを確定する。
 
 FBXの初期ブレンドシェイプ値は、同名Rendererをまとめず、配置識別子とモデル内の完全なパスで保持する。
 `UnityFbxBlendShapeDefaults` はFBXの `Connections` をたどり、channel → blendshape → geometry → modelの
@@ -62,7 +74,9 @@ CLIの `--avatar` を使う。出力名は入力package名ではなく選択し�
 - ブロックシーケンスは親キーと同じindentになるUnity YAML形式を扱う。
 - 長いplain scalarの継続行を結合する。`m_ShaderKeywords` の途中で解析を切らない。
 - double-quoted scalarの `\uXXXX` をデコードし、日本語GameObject名を正しく照合する。
-- `VRCAvatarDescriptor` はscript GUIDだけでなくフィールド署名でも検出する。
+- `VRCAvatarDescriptor` はscript GUIDとfileIDを確認し、SDK差異には固有フィールド署名も使う。
+  DLL内Descriptorは542108242、単独MonoScriptは11500000を認める。
+  同じDLLのGUIDを持つ音声コンポーネント等をDescriptorと誤認しない。
 - prefab、prefab variant、composition、`.unity` scene内のprefab instanceを候補に含める。
 - 候補一覧では重いFBX配置・material解決を遅延し、選択された候補だけを詳細解析する。
 - `m_RemovedGameObjects` があっても継承した Descriptor の候補を除外しない。
@@ -86,6 +100,8 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   exclusion and physics references; sibling branches remain part of the model.
 
 ## FBXの選択と合成
+
+### 配置の識別と不要なテンプレートの除去
 
 - Mesh template selection and EditorOnly exclusions compare complete captured model
   paths after removing only the synthetic `RootNode` prefix (and leading slashes).
@@ -148,6 +164,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   mesh供給元のFBX instanceがroot placeholder配下にある場合、置換Slotをplaceholderの親へ
   先に退避してから子を移す。複製時の親を保ったまま移すと祖先を自身の子にしてしまう。
 - `.unity` のcompositionもprefabと同じcollectorで配置・上書き・ローカル参照を解決する。
+
+### 物理参照と顔Rendererの捕捉
+
 - PhysBoneのroot、ignore、collider参照はモデルのinstance identityとpathを保持し、
   prefab GUID/Transform fileIDに対応する生成済みSlotがあれば先に使用する。
   共通モデルの physics node も prefab GUID/Transform fileID を優先して intern し、
@@ -176,6 +195,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   missing identities must not fall back to other same-named renderers. An explicit
   `VisemeSkinnedMesh: {fileID: 0}` suppresses descriptor viseme bindings even when inherited
   shape names and `lipSync=3` remain.
+
+### Viseme・Blink推定の成立条件
+
 - Face inference rejects motions that also animate the target renderer's `m_Enabled`
   or `m_IsActive` on its GameObject or any ancestor (including the empty root path).
   Even constant visibility curves can differ from prefab defaults; face drivers cannot
@@ -217,6 +239,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   and FBX weights are collected before face inference, but a neutral curve cannot be
   assumed redundant across Animator states. Reject multi-curve face motions conservatively: a single-shape driver
   cannot also clear another authored shape, even when its required value is zero.
+
+### 主モデルと骨格の統合
+
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
   少数の名前一致だけでは推定しない。
@@ -350,6 +375,26 @@ Blendshape repair selects original tables by imported model identity or the auth
 copy's GameObject identity. Same-named copies must not replace the primary model's
 table. Descriptor blink indices resolve through the referenced renderer's source mesh,
 so an accessory with a different shape order retains its own blink name.
+
+Descriptor に有効な Blink 番号と renderer があれば、既存の Parser → ModelAdapter → AvatarSetup の経路で OpenCloseTarget まで設定する。
+未割当の -1 は設定情報の欠如として扱い、名前検出で補うかは別の方針になる。
+
+### 瞬きが未設定の場合
+
+Descriptorの `eyelidsBlendshapes` はBlink / LookingUp / LookingDownの順。
+先頭の-1は瞬き未割当であり、残りの番号を瞬きの代わりに使わない。
+例えばPlum v1.0.1は `[-1, 19, 20]` なので、メッシュにvrc.Blinkが存在しても
+Descriptorから瞬きは作られない。
+
+Animatorからの補完は、初期状態のループClip、開0・閉100を持つ単一shape、
+BlendShape名が大文字小文字を除いて `blink` と完全一致、他レイヤーとの競合なし、などを満たす場合だけ。
+`eye_blink_1` のような名前はこの条件を満たさない。
+
+ResoPonはAvatarCreatorのBlendShape名ヒューリスティクスによる補完を行わない。
+瞬きがないアバターを再変換するだけで接続先が増えるとは限らない。
+瞬きの接続は表情システムの構築前に確定し、OpenCloseTargetをOutputs/Baseへ付け替える。
+表情構築後の最終ウェイトへEyeLinearDriverを追加すると既存Driveと競合する。
+合成・接続は[表情の出力変数](expression-variables.md#出力)を参照。
 
 ## PhysBone
 

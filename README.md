@@ -132,7 +132,16 @@ Resonite（FrooxEngine）のインポーターには特定のVRMでクラッシ�
 
 ## 制限事項
 
+表情メニュー、機種別ジェスチャー、キーボード、外部 Dynamic Impulse の設定方法は
+[表情システム](docs/expression-system.md)を参照してください。対応する VRChat Animator の範囲と、
+自動変換できない設定の手動割り当て方法も記載しています。
+
 - MToon/liltoonの完全再現はできません（ResoniteのXiexeToonへの近似マッピング）
 - VRMの表情（happy/angry等）のフェイストラッキング連動は`--face-tracking`指定時のみ、
   かつ名前ヒューリスティクスによる割り当てです
 - VRM 1.0のコンストレイント（VRMC_node_constraint）は未対応
+
+## ライセンス
+
+本アプリは [MIT License](LICENSE) で公開しています。
+外部由来の処理・素材の著作権表示と許諾文は [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) を参照してください。

@@ -2,6 +2,7 @@ using Elements.Core;
 using FrooxEngine;
 using VrmToResonitePackage.Vrm;
 
+// Portions adapted from modular-avatar-resonite; see THIRD-PARTY-NOTICES.md.
 namespace VrmToResonitePackage;
 
 /// <summary>

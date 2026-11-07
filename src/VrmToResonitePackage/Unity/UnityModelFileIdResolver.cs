@@ -20,6 +20,8 @@ public sealed class UnityModelFileIdResolver
     internal Dictionary<string, bool[]> MeshWeightedBonesByPath { get; } = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNames =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _blendShapeAliasesByPath = new(StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> BlendShapeAliasesByPath => _blendShapeAliasesByPath;
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNamesByPath =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<float>> _blendShapeDefaultWeightsByPath =
@@ -49,6 +51,7 @@ public sealed class UnityModelFileIdResolver
         => fileId == 0 ? null : IsRootFileId(fileId) ? "RootNode" :
            _names.TryGetValue(fileId, out string name) ? name : null;
 
+    internal IReadOnlySet<string> PossibleBlendShapeNames { get; private set; }
     public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNames => _blendShapeNames;
     public IReadOnlyDictionary<string, IReadOnlyList<string>> BlendShapeNamesByPath => _blendShapeNamesByPath;
     public IReadOnlyDictionary<string, IReadOnlyList<float>> BlendShapeDefaultWeightsByPath =>
@@ -254,6 +257,14 @@ public sealed class UnityModelFileIdResolver
                     }
                 }
             }
+            // A conservative superset across every mesh/submesh and source channel. Publish only
+            // after successful import so callers can prove that an animation target is absent.
+            var possibleShapes = scene.Meshes.SelectMany(mesh => mesh.MeshAnimationAttachments)
+                .SelectMany(shape => new[] { shape.Name, BlendShapeNameNormalizer.CollapseRepeatedName(shape.Name ?? "") })
+                .Concat(_defaultWeightChannels.SelectMany(channel => new[] { channel.Name, channel.ShapeName }))
+                .Concat(_blendShapeNamesByPath.Values.SelectMany(names => names))
+                .Where(name => !string.IsNullOrEmpty(name)).ToHashSet(StringComparer.Ordinal);
+            PossibleBlendShapeNames = possibleShapes;
         }
         catch (Exception ex)
         {
@@ -291,6 +302,10 @@ public sealed class UnityModelFileIdResolver
             }
             names.Add(name);
         }
+        var aliases = BlendShapeNameNormalizer.ChannelAliases(names,
+            _defaultWeightChannels.Where(c => c.RendererPath == path).Select(c => (c.Name, c.ShapeName)));
+        for (int i = 0; i < names.Count; i++) names[i] = aliases.GetValueOrDefault(names[i], names[i]);
+        if (aliases.Count > 0) _blendShapeAliasesByPath[path] = aliases;
         _blendShapeNames.TryAdd(node.Name, names);
         _blendShapeNamesByPath[path] = names;
         var defaults = new float[names.Count];

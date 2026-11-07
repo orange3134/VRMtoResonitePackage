@@ -48,3 +48,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-local-avatar.ps
 
 コミット前に `git check-ignore .local/avatar-tests.json` と `git diff --cached` で、
 パス・ログ・アバター本体がステージされていないことを確認する。
+
+`-SkipBuild` で同じDLLを使う複数の変換を同秒に起動すると、DLL横の `Logs/convert_yyyyMMdd_HHmmss.log`
+が衝突する。並行検証には既定の実行別ビルドを使う。また、実行中のDLLへビルド出力を上書きしない。
+
+### 利用中の EXE まで修正が反映されているか確認する
+
+専用ディレクトリでの回帰テストが成功しても、通常利用する `publish/ResoPon.exe` は更新されない。
+修正後も同じ症状が報告された場合は、まず実際の変換ログ冒頭の ResoPon バージョンと実行場所を
+確認する。別フォルダーの検証用 EXE だけを生成して完了としない。
+通常利用する publish 出力を更新する場合は、EXE と依存 DLL をまとめて publish し、
+その場所の EXE を使って実入力の変換・生成パッケージの inspect を実行する。
+Windows の GUI EXE を PowerShell から検証するときは `Start-Process -Wait -PassThru` と
+`-WindowStyle Hidden` を使い、プロセスの終了コードとログを確認する。
+表情の修正ではログの割り当て数と保存済みパッケージの再生も確認する。
+アバターと検証結果は引き続き `.tmp_verify/` に置く。
+
+単一ファイル publish は、出力先に以前からある `ResoPon.dll` を更新しない。
+DLL を併置して直接実行・参照する環境では、同じ publish ビルドの
+`bin/Release/win-x64/ResoPon.dll` も揃え、古い併置 DLL を検証対象にしない。
+EXE の実変換ログのバージョンと、参照する DLL のバージョン・SHA-256を確認する。

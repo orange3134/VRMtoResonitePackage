@@ -4,8 +4,10 @@ using FrooxEngine;
 using FrooxEngine.CommonAvatar;
 using FrooxEngine.FinalIK;
 using Renderite.Shared;
+using VrmToResonitePackage.Expressions;
 using VrmToResonitePackage.Vrm;
 
+// Portions adapted from modular-avatar-resonite; see THIRD-PARTY-NOTICES.md.
 namespace VrmToResonitePackage;
 
 /// <summary>Tunable knobs for the avatar setup; defaults match typical VRM avatars.</summary>
@@ -809,7 +811,7 @@ internal static class AvatarSetup
         space.SpaceName.Value = ModularAvatarNamespace;
         space.OnlyDirectBinding.Value = true;
 
-        ImportAvatarRootIdentification(root);
+        EnsureAvatarRootIdentification(root);
 
         IAssetProvider<FrooxEngine.Material> invisibleMaterial = GetOrCreateInvisibleMaterial(root);
         int configured = 0;
@@ -860,7 +862,7 @@ internal static class AvatarSetup
         space.SpaceName.Value = ModularAvatarNamespace;
         space.OnlyDirectBinding.Value = true;
 
-        ImportAvatarRootIdentification(root);
+        EnsureAvatarRootIdentification(root);
 
         Dictionary<string, Slot> slotsByName = SlotIndex.Build(root);
         Slot firstPersonBone = ResolveFirstPersonBone(root, vrm, slotsByName, nodeSlots);
@@ -1169,10 +1171,16 @@ internal static class AvatarSetup
         }
     }
 
-    private static void ImportAvatarRootIdentification(Slot root)
+    internal static void EnsureAvatarRootIdentification(Slot root)
     {
-        // The imported identification graph consumes this reference to determine whether
-        // the avatar is worn. Keep its value driven so dynamic-variable linking cannot clear it.
+        var space = root.GetComponents<DynamicVariableSpace>()
+            .FirstOrDefault(s => s.SpaceName.Value == ModularAvatarNamespace)
+            ?? root.AttachComponent<DynamicVariableSpace>();
+        space.SpaceName.Value = ModularAvatarNamespace;
+        space.OnlyDirectBinding.Value = true;
+
+        // Publish the avatar root for Modular Avatar consumers. Keep its value driven
+        // so dynamic-variable linking cannot clear it.
         const string variableName = ModularAvatarNamespace + "/AvatarRoot";
         var variable = root.GetComponents<DynamicReferenceVariable<Slot>>()
             .FirstOrDefault(v => v.VariableName.Value == variableName)
@@ -1191,65 +1199,31 @@ internal static class AvatarSetup
             return;
         }
 
-        string tempPath = Path.Combine(Path.GetTempPath(),
-            "ResoPon_AvatarRootIdentification_" + Guid.NewGuid().ToString("N") + ".resonitepackage");
-        try
-        {
-            using (System.IO.Stream resource = typeof(AvatarSetup).Assembly.GetManifestResourceStream(
-                       "VrmToResonitePackage.Resources.AvatarRootIdentification.resonitepackage"))
-            {
-                if (resource == null)
-                {
-                    UniLog.Warning("Avatar Root Identification resource が見つかりませんでした。VRM FirstPerson の装着判定をスキップします。");
-                    return;
-                }
+        Slot identification = root.AddSlot("Avatar Root Identification");
+        var worn = identification.AttachComponent<DynamicValueVariable<bool>>();
+        worn.VariableName.Value = ModularAvatarNamespace + "/AvatarWorn";
+        var wornLocal = identification.AttachComponent<DynamicValueVariable<bool>>();
+        wornLocal.VariableName.Value = AvatarWornLocalVariable;
 
-                using FileStream file = File.Create(tempPath);
-                resource.CopyTo(file);
-            }
+        var g = new ExpressionFlux(identification.AddSlot("Check Avatar Worn"));
+        var wearer = (FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.RefObjectInput<User>)
+            g.Node("RefObjectInput", typeof(User));
+        var assigner = identification.AttachComponent<AvatarUserReferenceAssigner>();
+        assigner.AssignMode.Value = AvatarUserReferenceAssigner.Mode.Whitelist;
+        assigner.References.Add().Target = wearer.Target;
+        var activeUser = g.Owner(root);
+        var isWorn = g.And(g.Not(g.IsNull<User>(wearer)), g.Equal<User>(activeUser, wearer));
 
-            using RecordPackage package = RecordPackage.Decode(tempPath);
-            SkyFrost.Base.Record record = package.MainRecord;
-            if (record == null)
-            {
-                UniLog.Warning("Avatar Root Identification package に main record がありません。VRM FirstPerson の装着判定をスキップします。");
-                return;
-            }
-
-            string signature = RecordPackage.GetAssetSignature(new Uri(record.AssetURI));
-            using System.IO.Stream asset = package.ReadAsset(signature);
-            DataTreeDictionary graph = DataTreeConverter.LoadAuto(asset);
-            if (graph == null)
-            {
-                UniLog.Warning("Avatar Root Identification package の DataTree を読み込めませんでした。VRM FirstPerson の装着判定をスキップします。");
-                return;
-            }
-
-            Slot packageRoot = root.AddSlot("Avatar Root Identification");
-            packageRoot.LoadObject(graph, record);
-            packageRoot.ForeachComponentInChildren(delegate(IPackageImportEventReceiver receiver)
-            {
-                receiver.OnPackageImported();
-            }, includeLocal: false, cacheItems: true);
-        }
-        catch (Exception ex)
-        {
-            UniLog.Warning($"Avatar Root Identification package の読み込みに失敗しました。VRM FirstPerson の装着判定をスキップします: {ex.Message}");
-        }
-        finally
-        {
-            try
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
-            catch
-            {
-                // Temp cleanup is best-effort.
-            }
-        }
+        // Preserve the shared AvatarWorn value and the client-local AvatarWornLocal drive.
+        var sharedWorn = identification.AttachComponent<ValueField<bool>>();
+        var wornDrive = (FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<bool>)
+            g.Node("ValueFieldDrive", typeof(bool), ("Value", isWorn));
+        wornDrive.GetRootProxy(addIfMissing: true).Drive.Target = sharedWorn.Value;
+        worn.Value.DriveFrom(sharedWorn.Value);
+        var localDrive = (FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<bool>)
+            g.Node("ValueFieldDrive", typeof(bool), ("Value", g.And(isWorn, g.IsOwner(root))));
+        localDrive.GetRootProxy(addIfMissing: true).Drive.Target = wornLocal.Value;
+        ExpressionFlux.Arrange(identification);
     }
 
     private static IAssetProvider<FrooxEngine.Material> GetOrCreateInvisibleMaterial(Slot root)
@@ -1326,6 +1300,7 @@ internal sealed class BlendshapeResolver
     private readonly Dictionary<string, Slot> _slotsByName;
     private readonly Dictionary<SkinnedMeshRenderer, string> _rendererPaths;
     private readonly Dictionary<int, SkinnedMeshRenderer[]> _identityRenderers = new();
+    private readonly Dictionary<IField<float>, float> _initialWeights = new();
 
     public BlendshapeResolver(Slot root, VrmModel vrm) : this(root, vrm, null) { }
 
@@ -1335,6 +1310,12 @@ internal sealed class BlendshapeResolver
         _renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>();
         _slotsByName = SlotIndex.Build(root);
         _rendererPaths = _renderers.ToDictionary(skin => skin, skin => RelativePath(skin.Slot));
+        foreach (var skin in _renderers)
+            for (int i = 0; i < skin.MeshBlendshapeCount; i++)
+            {
+                var field = skin.BlendShapeWeights.GetElement(i);
+                _initialWeights[field] = field.Value;
+            }
         foreach (int node in vrm.NodeTargets.Keys)
         {
             Slot slot = null;
@@ -1354,6 +1335,36 @@ internal sealed class BlendshapeResolver
     {
         return ResolveWithRenderer(bind).field;
     }
+
+    public IField<float> ResolveExpression(Expressions.ExpressionBinding binding)
+    {
+        string path = string.Join("/", new[] { _vrm.MeshBindingRootPath, binding.Path }.Where(p => !string.IsNullOrEmpty(p)));
+        var matches = _renderers.Where(skin => !skin.IsDestroyed && (_rendererPaths[skin] == path ||
+            (_vrm.MeshBindingRootPath == null && binding.Path.Length > 0 &&
+             _rendererPaths[skin].EndsWith("/" + binding.Path, StringComparison.Ordinal)))).ToArray();
+        return matches.Length == 1 ? matches[0].TryGetBlendShape(binding.Shape) : null;
+    }
+
+    internal IReadOnlyDictionary<Expressions.ExpressionBinding, float> ExpressionFaceValues(
+        IEnumerable<Expressions.ExpressionBinding> bindings)
+    {
+        var result = new Dictionary<Expressions.ExpressionBinding, float>();
+        if (_vrm.ExpressionFaceMeshIndex < 0) return result;
+        var faces = EnumerateCandidates(new VrmExpressionBind { MeshIndex = _vrm.ExpressionFaceMeshIndex })
+            .Distinct().ToArray();
+        if (faces.Length != 1) return result;
+        var fields = Enumerable.Range(0, faces[0].BlendShapeWeights.Count).Select(i => (IField<float>)faces[0].BlendShapeWeights.GetElement(i)).ToHashSet();
+        foreach (var binding in bindings.Distinct())
+        {
+            if (_vrm.ExpressionVisemeNames.Contains(binding.Shape) || Vrchat.VrchatExpressionDetection.IsViseme(binding.Shape)) continue;
+            var field = ResolveExpression(binding);
+            if (field != null && fields.Contains(field) && _initialWeights.TryGetValue(field, out float baseline))
+                result[binding] = baseline;
+        }
+        return result;
+    }
+
+    public float? InitialWeight(IField<float> field) => field != null && _initialWeights.TryGetValue(field, out float value) ? value : null;
 
     public (SkinnedMeshRenderer skin, IField<float> field) ResolveWithRenderer(VrmExpressionBind bind)
     {

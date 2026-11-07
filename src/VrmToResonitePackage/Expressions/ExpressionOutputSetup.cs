@@ -1,0 +1,68 @@
+using FrooxEngine;
+
+namespace VrmToResonitePackage.Expressions;
+
+internal sealed partial class ExpressionSystemSetup
+{
+    private const float DefaultSmoothingSpeed = 10f;
+    private readonly Dictionary<SkinnedMeshRenderer, DynamicBlendShapeDriver> _meshDrivers = new();
+    private Slot _drivers;
+
+    private static string UniqueChildName(Slot parent, string name)
+    {
+        string candidate = name;
+        for (int suffix = 2; parent.Children.Any(s => s.Name == candidate); suffix++)
+            candidate = $"{name} ({suffix})";
+        return candidate;
+    }
+
+    private static (SkinnedMeshRenderer Renderer, string Name) ResolveShape(IField<float> field)
+    {
+        var renderer = field.FindNearestParent<SkinnedMeshRenderer>();
+        if (renderer == null) return (null, null);
+        int index = Enumerable.Range(0, renderer.BlendShapeWeights.Count)
+            .Single(i => renderer.BlendShapeWeights.GetElement(i) == field);
+        string name = renderer.BlendShapeName(index);
+        if (string.IsNullOrEmpty(name) || renderer.TryGetBlendShape(name) != field)
+            throw new InvalidOperationException($"Cannot resolve a unique blendshape name: {renderer.Slot.Name}[{index}]");
+        return (renderer, name);
+    }
+
+    private IField<float> BuildOutputTarget(IField<float> field, float initialValue, bool blink)
+    {
+        var (renderer, name) = ResolveShape(field);
+        // Standalone fields are written directly; meshes remain grouped by identity.
+        if (renderer == null) return field;
+        if (!_meshDrivers.TryGetValue(renderer, out var driver))
+        {
+            _drivers ??= _root.AddSlot("Drivers");
+            driver = _drivers.AddSlot(UniqueChildName(_drivers, renderer.Slot.Name)).AttachComponent<DynamicBlendShapeDriver>();
+            driver.Renderer.Target = renderer;
+            _meshDrivers.Add(renderer, driver);
+        }
+        var shape = driver.BlendShapes.Add();
+        shape.BlendShapeName.Value = name;
+        shape.Value.Value = initialValue;
+        // Adding an entry does not refresh native targets when Renderer is unchanged.
+        // Link each entry explicitly, including entries added after an asset await.
+        if (!shape._drive.TryLink(field))
+            throw new InvalidOperationException($"Cannot drive blendshape: {renderer.Slot.Name}/{name}");
+        // EyeLinearDriver already supplies the blink's timing. Smoothing the mixed
+        // output delays both edges and attenuates short blinks. Keep expression
+        // max/min composition, but pass eyelid values straight to the native driver.
+        if (blink) return shape.Value;
+        var smooth = driver.Slot.AddSlot(UniqueChildName(driver.Slot, name)).AttachComponent<SmoothValue<float>>();
+        smooth.Speed.Value = DefaultSmoothingSpeed;
+        var speed = smooth.Slot.AttachComponent<DynamicValueVariableDriver<float>>();
+        speed.VariableName.Value = ExpressionFlux.Path(ExpressionSpaces.SystemSpace, "Config.SmoothingSpeed");
+        speed.DefaultValue.Value = DefaultSmoothingSpeed;
+        speed.Target.Target = smooth.Speed;
+        smooth.WriteBack.Value = false;
+        smooth.TargetValue.Value = initialValue;
+        if (!smooth.Value.TryLink(shape.Value))
+            throw new InvalidOperationException($"Cannot smooth blendshape: {renderer.Slot.Name}/{name}");
+        // Selection writes only the destination. SmoothValue owns interpolation,
+        // including retargeting mid-transition; the native driver keeps name binding.
+        return smooth.TargetValue;
+    }
+}

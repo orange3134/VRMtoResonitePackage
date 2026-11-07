@@ -1,0 +1,90 @@
+using FrooxEngine;
+using FrooxEngine.ProtoFlux;
+using Nodes = FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes;
+using static VrmToResonitePackage.Expressions.ExpressionFlux;
+using static VrmToResonitePackage.Expressions.ExpressionSpaces;
+
+namespace VrmToResonitePackage.Expressions;
+
+internal sealed partial class ExpressionSystemSetup
+{
+    private void BuildApi()
+    {
+        BuildHandReceiver(new(_method.AddSlot("TrySetGesture.Left")), "Left", TrySetGestureLeftTag, checkPermission: true);
+        BuildHandReceiver(new(_method.AddSlot("TrySetGesture.Right")), "Right", TrySetGestureRightTag, checkPermission: true);
+        BuildHandReceiver(new(_method.AddSlot("SetGesture.Left")), "Left", SetGestureLeftTag, checkPermission: false);
+        BuildHandReceiver(new(_method.AddSlot("SetGesture.Right")), "Right", SetGestureRightTag, checkPermission: false);
+        BuildMenuSelectReceiver(new(_method.AddSlot("SelectMenuExpression")));
+        BuildHandGesturesToggleReceiver(new(_method.AddSlot("ToggleHandGestures")));
+        var reset = new ExpressionFlux(_method.AddSlot("Reset"));
+        Link(reset.Receiver(ResetTag, false), "OnTriggered", reset.Trigger(reset.Ref(_api), ResetStateTag));
+    }
+
+    private IWorldElement WriteHand(ExpressionFlux g, string hand, IWorldElement gesture) =>
+        g.Write<int>(g.Ref(_api), SystemSpace, "State.Gesture." + hand, gesture);
+
+    private void BuildHandReceiver(ExpressionFlux g, string hand, string tag, bool checkPermission)
+    {
+        var receiver = g.Receiver<int>(tag);
+        if (checkPermission)
+        {
+            // Gesture inputs mutate their hand through SetGesture.
+            // Early gestures with saved false permissions are intentionally dropped.
+            Link(receiver, "OnTriggered", g.If(
+                g.Read<bool>(g.Ref(_api), SystemSpace, HandGesturePermission(hand)),
+                SendHandInput(g, g.Text(hand == "Left" ? SetGestureLeftTag : SetGestureRightTag), Out(receiver, "Value"))));
+            return;
+        }
+        var mutation = g.Sequence(WriteHand(g, hand, Out(receiver, "Value")),
+            g.Trigger(g.Ref(_api), SelectionTickTag));
+        Link(receiver, "OnTriggered", mutation);
+    }
+
+    private static IWorldElement FormatGesturePair(ExpressionFlux g, string format, IWorldElement left, IWorldElement right)
+    {
+        var node = (Nodes.Strings.FormatString)
+            g.Node("FormatString", null, ("Format", g.Text(format)));
+        node.Parameters.Add((INodeObjectOutput<object>)g.Node("Box", typeof(int), ("Input", left)));
+        node.Parameters.Add((INodeObjectOutput<object>)g.Node("Box", typeof(int), ("Input", right)));
+        return node;
+    }
+
+    private IWorldElement ReadGesturePair(ExpressionFlux g, IWorldElement left, IWorldElement right)
+    {
+        var path = FormatGesturePair(g, Path(SystemSpace, "GestureTable.L{0}R{1}"), left, right);
+        // With no Source, ReadDynamicVariable resolves the named ancestor space.
+        return g.Read<Slot>(null, path);
+    }
+
+    private void BuildMenuSelectReceiver(ExpressionFlux g)
+    {
+        var receiver = g.Receiver<Slot>(MenuSelectTag);
+        var selected = Out(receiver, "Value");
+        // Validate before releasing the hold so invalid menu requests preserve it.
+        var valid = g.Or(g.IsNull<Slot>(selected),
+            g.Equal<Slot>(g.Node("GetParentSlot", null, ("Instance", selected)), g.Ref(_clipRoot)));
+        // Wear authority is checked only when applying the pose.
+        Link(receiver, "OnTriggered", g.If(valid, g.Sequence(
+            g.Write<bool>(g.Ref(_api), SystemSpace, ContextMenuSelected, g.Constant(false)),
+            WriteHand(g, "Left", g.Constant(0)),
+            WriteHand(g, "Right", g.Constant(0)),
+            g.Trigger<Slot>(g.Ref(_api), g.Text(PlaybackTickTag), selected),
+            g.Write<bool>(g.Ref(_api), SystemSpace, ContextMenuSelected, g.Not(g.IsNull<Slot>(selected))))));
+    }
+
+    private IWorldElement[] HandGesturePermissionWrites(ExpressionFlux g, IWorldElement value) =>
+        new[] { "Left", "Right" }
+            .Select(side => (IWorldElement)g.Write<bool>(g.Ref(_api), SystemSpace, HandGesturePermission(side), value)).ToArray();
+
+    private void BuildHandGesturesToggleReceiver(ExpressionFlux g)
+    {
+        var core = g.Ref(_api);
+        // Match the authored Salt graph: capture NAND once per impulse before either write.
+        var enabled = g.Local<bool>();
+        var capture = g.Set<bool>(enabled, g.Node("NAND_Bool", null,
+            ("A", g.Read<bool>(core, SystemSpace, HandGesturePermission("Left"))),
+            ("B", g.Read<bool>(core, SystemSpace, HandGesturePermission("Right")))));
+        Link(capture, "OnWritten", g.Sequence(HandGesturePermissionWrites(g, enabled)));
+        Link(g.Receiver(ToggleHandGesturesTag, false), "OnTriggered", capture);
+    }
+}

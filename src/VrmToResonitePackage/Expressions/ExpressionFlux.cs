@@ -1,0 +1,346 @@
+using System.Reflection;
+using Elements.Core;
+using FrooxEngine;
+using FrooxEngine.ProtoFlux;
+using ProtoFlux.Core;
+using Nodes = FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes;
+
+namespace VrmToResonitePackage.Expressions;
+
+/// <summary>Builds stock ProtoFlux components. No converter callback is retained in the exported graph.</summary>
+internal sealed class ExpressionFlux
+{
+    private readonly Slot _root;
+    private int _nodeIndex;
+    private readonly Dictionary<(Type, object), IWorldElement> _constants = new();
+    private readonly Dictionary<(Type, IWorldElement, IWorldElement), IWorldElement> _reads = new();
+    private readonly Dictionary<(Type, string), IWorldElement> _dynamicInputs = new();
+    private readonly Dictionary<(Type, IWorldElement), IWorldElement> _references = new();
+    private readonly Dictionary<Slot, IWorldElement> _owners = new();
+    private readonly Dictionary<Slot, IWorldElement> _ownerChecks = new();
+    private IWorldElement _now;
+    private static Dictionary<string, Type[]> _types;
+    public ExpressionFlux(Slot root)
+    {
+        _root = root;
+    }
+
+    private Slot NodeSlot(Type type, string detail = null)
+    {
+        string name = type.Name.Split('`')[0];
+        if (type.IsGenericType) name += "<" + string.Join(", ", type.GetGenericArguments().Select(t => t.Name)) + ">";
+        if (!string.IsNullOrEmpty(detail)) name += " : " + detail.Replace('\n', ' ').Replace('\r', ' ');
+        return _root.AddSlot($"{_nodeIndex++:D3} {name}");
+    }
+
+    // Resolve fixed Slot literals after namespace-local reads have been optimized.
+    // Only references that remain connected become exported dynamic variables.
+    public static void BindSlotReferences(Slot expressions)
+    {
+        var nodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
+        var ports = nodes.SelectMany(node => node.AllInputs.Concat(node.NodeReferences)).ToArray();
+        var literalConsumers = nodes.OfType<Nodes.RefObjectInput<Slot>>().ToDictionary(literal => literal,
+            literal => ports.Where(port => OwningNode(port.Target) == literal).ToArray());
+        // Scope hand-module references locally only when every actual consumer is inside it.
+        var owners = literalConsumers.Where(p => p.Value.Length > 0 && p.Key.Target.Target != null)
+            .GroupBy(p => p.Key.Target.Target).ToDictionary(group => group.Key, group =>
+            {
+                var module = NamedSpace(group.Key, ExpressionSpaces.GestureSettingsSpace)?.Slot;
+                return module != null && group.SelectMany(p => p.Value).All(port =>
+                    OwningNode(port)?.Slot.IsChildOf(module) == true) ? module : expressions;
+            });
+        var existing = expressions.FindChild("DV").GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+            .Where(v => v.VariableName.Value is "ExpressionSystem/Reference.API" or "ExpressionSystem/Reference.Clips").ToArray();
+        var references = existing.ToDictionary(v => v.Reference.Target, v => v.VariableName.Value);
+        var usedNames = new Dictionary<Slot, HashSet<string>>();
+        foreach (var literal in nodes.OfType<Nodes.RefObjectInput<Slot>>().ToArray())
+        {
+            var consumers = literalConsumers[literal];
+            if (consumers.Length == 0) { literal.Slot.Destroy(); continue; }
+            var target = literal.Target.Target;
+            if (target == null)
+            {
+                // Unconnected object inputs already evaluate to null.
+                foreach (var consumer in consumers) ((ISyncRef)consumer).Target = null;
+                literal.Slot.Destroy();
+                continue;
+            }
+            if (!references.TryGetValue(target, out var path))
+            {
+                var owner = owners[target];
+                var names = new Stack<string>();
+                for (var slot = target; slot != owner; slot = slot.Parent)
+                {
+                    if (slot == null) throw new InvalidOperationException("Expression Slot reference is outside the system");
+                    names.Push(slot.Name);
+                }
+                path = CreateReference(owner, target, names.Count == 0 ? "Self" : string.Join(".", names));
+                references.Add(target, path);
+            }
+            var input = literal.Slot.AttachComponent<Nodes.FrooxEngine.Variables.DynamicVariableObjectInput<Slot>>();
+            var name = literal.Slot.AddSlot("VariableName").AttachComponent<GlobalValue<string>>();
+            name.Value.Value = path;
+            Link(input, "VariableName", name);
+            foreach (var consumer in consumers) ((ISyncRef)consumer).Target = input.Value;
+            literal.Slot.Name = literal.Slot.Name.Split(' ')[0] + " DynamicVariableObjectInput<Slot> : " + path;
+            literal.Destroy();
+        }
+
+        string CreateReference(Slot owner, Slot target, string name)
+        {
+            if (!usedNames.TryGetValue(owner, out var names))
+                usedNames.Add(owner, names = new HashSet<string>(owner.FindChild("DV").Children.Select(s => s.Name), StringComparer.Ordinal));
+            string key = ExpressionBindingNames.Create("Reference", name, names);
+            return Reference(owner, key, target).VariableName.Value;
+        }
+    }
+
+    /// <summary>Lay out each logic board without changing its functional parent hierarchy.</summary>
+    public static void Arrange(Slot expressions)
+    {
+        // A fixed Source literal can become unused when its reads bind by namespace.
+        // Remove only these pure Slot literals after every board has finished wiring.
+        var allNodes = expressions.GetComponentsInChildren<ProtoFluxNode>();
+        var usedSources = allNodes.SelectMany(node => node.AllInputs.Concat(node.NodeReferences))
+            .Select(input => OwningNode(input.Target)).ToHashSet();
+        foreach (var unused in allNodes.OfType<Nodes.RefObjectInput<Slot>>().Where(node => !usedSources.Contains(node)).ToArray())
+            unused.Slot.Destroy();
+        foreach (var board in expressions.GetComponentsInChildren<ProtoFluxNode>().GroupBy(n => n.Slot.Parent))
+        {
+            var positions = ExpressionFluxLayout.Arrange(board.ToArray());
+            board.Key.LocalPosition = float3.Zero;
+            foreach (var node in board)
+                node.Slot.LocalPosition = new float3(positions[node].x, positions[node].y, 0);
+        }
+    }
+
+    private static ProtoFluxNode OwningNode(IWorldElement element)
+    {
+        for (; element != null; element = element.Parent)
+            if (element is ProtoFluxNode node) return node;
+        return null;
+    }
+
+    public Component Node(string name, Type generic = null, params (string Port, IWorldElement Value)[] inputs)
+    {
+        _types ??= new[] { typeof(Component).Assembly, typeof(Nodes.Sequence).Assembly }
+            .Distinct().SelectMany(a => a.GetTypes()).Where(t => typeof(Component).IsAssignableFrom(t) && !t.IsAbstract &&
+                t.Namespace?.Contains("ProtoFlux") == true).GroupBy(t => t.Name).ToDictionary(g => g.Key, g => g.ToArray());
+        string key = generic == null ? name : name + "`1";
+        if (!_types.TryGetValue(key, out var candidates) || candidates.Length != 1)
+            throw new InvalidOperationException("Ambiguous or missing stock ProtoFlux node: " + key);
+        var type = generic == null ? candidates[0] : candidates[0].MakeGenericType(generic);
+        var node = NodeSlot(type).AttachComponent(type);
+        foreach (var (port, value) in inputs) Link(node, port, value);
+        return node;
+    }
+
+    public static object Member(object node, string field) => node.GetType().GetField(field)?.GetValue(node)
+        ?? throw new InvalidOperationException($"Missing port {node.GetType().FullName}.{field}");
+    public static IWorldElement Out(object node, string port) => (IWorldElement)Member(node, port);
+    public static void Link(object node, string port, IWorldElement target)
+    {
+        var reference = (ISyncRef)Member(node, port);
+        if (target != null && !reference.TargetType.IsInstanceOfType(target))
+            throw new InvalidOperationException($"Cannot connect {target.GetType().Name} to {node.GetType().Name}.{port} ({reference.TargetType})");
+        reference.Target = target;
+    }
+    public IWorldElement Constant<T>(T value, bool shared = true) where T : unmanaged
+    {
+        if (shared && _constants.TryGetValue((typeof(T), value), out var cached)) return cached;
+        var node = NodeSlot(typeof(Nodes.ValueInput<T>), Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)).AttachComponent<Nodes.ValueInput<T>>();
+        node.Value.Value = value;
+        if (shared) _constants[(typeof(T), value)] = node;
+        return node;
+    }
+    public IWorldElement Text(string value)
+    {
+        value ??= "";
+        if (_constants.TryGetValue((typeof(string), value), out var cached)) return cached;
+        var node = NodeSlot(typeof(Nodes.ValueObjectInput<string>), value).AttachComponent<Nodes.ValueObjectInput<string>>();
+        node.Value.Value = value;
+        _constants[(typeof(string), value)] = node;
+        return node;
+    }
+    public IWorldElement Ref<T>(T value) where T : class, IWorldElement
+    {
+        if (_references.TryGetValue((typeof(T), value), out var cached)) return cached;
+        var node = NodeSlot(typeof(Nodes.RefObjectInput<T>), value is Slot slot ? slot.Name : typeof(T).Name).AttachComponent<Nodes.RefObjectInput<T>>();
+        node.Target.Target = value;
+        return _references[(typeof(T), value)] = node;
+    }
+    // Keep clock and owner nodes local to a board: shared node references join Flux groups.
+    public IWorldElement Now => _now ??= Node("WorldTimeFloat");
+    public IWorldElement Owner(Slot root) => _owners.TryGetValue(root, out var owner) ? owner :
+        _owners[root] = _root == root || _root.IsChildOf(root)
+            ? Node("GetActiveUserSelf")
+            : Node("GetActiveUser", null, ("Instance", Ref(root)));
+    public IWorldElement IsOwner(Slot root) => _ownerChecks.TryGetValue(root, out var check) ? check :
+        _ownerChecks[root] = Node("IsLocalUser", null, ("User", Owner(root)));
+    // Expression boards share the identification contract, not their own hierarchy checks.
+    public IWorldElement AvatarWorn => DynamicInput<bool>("modular_avatar", "AvatarWorn");
+    public IWorldElement AvatarWornLocal => DynamicInput<bool>("modular_avatar", "AvatarWornLocal");
+
+    public static string Path(string spaceName, string key) => spaceName + "/" + key;
+    public static string Path(Slot slot, string key) => Path(NamedSpace(slot)?.SpaceName.Value
+        ?? throw new InvalidOperationException("Expression record has no variable space: " + slot.Name), key);
+
+    public IWorldElement Read<T>(IWorldElement source, string spaceName, string key)
+    {
+        string path = Path(spaceName, key);
+        // Dynamic Inputs bind from their own Slot, not from a runtime Source input.
+        // Match the requested namespace through ancestors, even across other schema spaces.
+        if (source is Nodes.RefObjectInput<Slot> reference && reference.Target.Target is Slot slot &&
+            NamedSpace(slot, spaceName) is { } space && space == NamedSpace(_root, spaceName))
+        {
+            return DynamicInput<T>(spaceName, key);
+        }
+        return Read<T>(source, Text(path));
+    }
+
+    public IWorldElement DynamicInput<T>(string spaceName, string key)
+    {
+        string path = Path(spaceName, key);
+        if (_dynamicInputs.TryGetValue((typeof(T), path), out var cached)) return cached;
+        var node = Node(typeof(T).IsValueType ? "DynamicVariableValueInput" : "DynamicVariableObjectInput", typeof(T));
+        var name = node.Slot.AddSlot("VariableName").AttachComponent<GlobalValue<string>>();
+        name.Value.Value = path;
+        Link(node, "VariableName", name);
+        return _dynamicInputs[(typeof(T), path)] = Out(node, "Value");
+    }
+
+    private static DynamicVariableSpace NamedSpace(Slot slot) =>
+        slot.GetComponentInParents<DynamicVariableSpace>();
+    private static DynamicVariableSpace NamedSpace(Slot slot, string name) =>
+        slot.GetComponentInParents<DynamicVariableSpace>(space => space.SpaceName.Value == name);
+    public IWorldElement Read<T>(IWorldElement source, IWorldElement path)
+    {
+        if (_reads.TryGetValue((typeof(T), source, path), out var cached)) return cached;
+        var node = Node(typeof(T).IsValueType ? "ReadDynamicValueVariable" : "ReadDynamicObjectVariable", typeof(T),
+            ("Source", source), ("Path", path));
+        return _reads[(typeof(T), source, path)] = Out(node, "Value");
+    }
+    public Component Write<T>(IWorldElement target, string spaceName, string key, IWorldElement value)
+    {
+        // An unconnected Target resolves the named space from the write node's Slot.
+        if (target is Nodes.RefObjectInput<Slot> reference && reference.Target.Target is Slot slot &&
+            NamedSpace(slot, spaceName) is { } space && space == NamedSpace(_root, spaceName))
+            target = null;
+        return Write<T>(target, Text(Path(spaceName, key)), value);
+    }
+    public Component Write<T>(IWorldElement target, IWorldElement path, IWorldElement value) =>
+        Node(typeof(T).IsValueType ? "WriteDynamicValueVariable" : "WriteDynamicObjectVariable", typeof(T),
+            ("Target", target), ("Path", path), ("Value", value));
+    public Component Local<T>() => Node(typeof(T).IsValueType ? "LocalValue" : "LocalObject", typeof(T));
+    public Component Set<T>(IWorldElement variable, IWorldElement value) =>
+        Node(typeof(T).IsValueType ? "ValueWrite" : "ObjectWrite", typeof(T), ("Variable", variable), ("Value", value));
+    public Component Sequence(params IWorldElement[] actions)
+    {
+        var node = NodeSlot(typeof(Nodes.Sequence)).AttachComponent<Nodes.Sequence>();
+        foreach (var action in actions.Where(a => a != null)) node.Calls.Add((ISyncNodeOperation)action);
+        return node;
+    }
+    public Component If(IWorldElement condition, IWorldElement onTrue, IWorldElement onFalse = null) =>
+        Node("If", null, ("Condition", condition), ("OnTrue", onTrue), ("OnFalse", onFalse));
+    // Local change detectors keep their previous value out of serialized/shared state.
+    // They do not fire for the initial value; use OnStart when an initial action is needed.
+    public void OnChanged<T>(IWorldElement value, IWorldElement action) =>
+        Node(typeof(T).IsValueType ? "FireOnLocalValueChange" : "FireOnLocalObjectChange", typeof(T),
+            ("Value", value), ("OnChange", action));
+    public void OnStart(IWorldElement action) => Node("OnStart", null, ("Trigger", action));
+    public IWorldElement Choose<T>(IWorldElement condition, IWorldElement onTrue, IWorldElement onFalse) =>
+        Node(typeof(T).IsValueType ? "ValueConditional" : "ObjectConditional", typeof(T),
+            ("Condition", condition), ("OnTrue", onTrue), ("OnFalse", onFalse));
+    public IWorldElement Binary<T>(string op, IWorldElement a, IWorldElement b) => Node(op, typeof(T), ("A", a), ("B", b));
+    public IWorldElement Equal<T>(IWorldElement a, IWorldElement b) => Binary<T>(typeof(T).IsValueType ? "ValueEquals" : "ObjectEquals", a, b);
+    public IWorldElement NotEqual<T>(IWorldElement a, IWorldElement b) => Binary<T>(typeof(T).IsValueType ? "ValueNotEquals" : "ObjectNotEquals", a, b);
+    public IWorldElement IsNull<T>(IWorldElement value) where T : class => Node("IsNull", typeof(T), ("Instance", value));
+    public IWorldElement Not(IWorldElement a) => Node("NOT_Bool", null, ("A", a));
+    public IWorldElement And(params IWorldElement[] terms)
+    {
+        if (terms.Length == 0) return Constant(true);
+        if (terms.Length == 1) return terms[0];
+        if (terms.Length == 2) return Node("AND_Bool", null, ("A", terms[0]), ("B", terms[1]));
+        var node = (Nodes.Operators.AND_Multi_Bool)Node("AND_Multi_Bool");
+        foreach (var term in terms) node.Operands.Add((INodeValueOutput<bool>)term);
+        return node;
+    }
+    public IWorldElement Or(params IWorldElement[] terms)
+    {
+        if (terms.Length == 0) return Constant(false);
+        if (terms.Length == 1) return terms[0];
+        if (terms.Length == 2) return Node("OR_Bool", null, ("A", terms[0]), ("B", terms[1]));
+        var node = (Nodes.Operators.OR_Multi_Bool)Node("OR_Multi_Bool");
+        foreach (var term in terms) node.Operands.Add((INodeValueOutput<bool>)term);
+        return node;
+    }
+    public IWorldElement Add(IWorldElement a, IWorldElement b) => Binary<float>("ValueAdd", a, b);
+    public IWorldElement Sub(IWorldElement a, IWorldElement b) => Binary<float>("ValueSub", a, b);
+    public IWorldElement Mul(IWorldElement a, IWorldElement b) => Binary<float>("ValueMul", a, b);
+    public IWorldElement Div(IWorldElement a, IWorldElement b) => Binary<float>("ValueDiv", a, b);
+    public IWorldElement Greater(IWorldElement a, IWorldElement b) => Binary<float>("ValueGreaterThan", a, b);
+    public IWorldElement Lerp(IWorldElement a, IWorldElement b, IWorldElement t) =>
+        Node("ValueLerpUnclamped", typeof(float), ("From", a), ("To", b), ("Lerp", t));
+    public IWorldElement Clamp01(IWorldElement value) => Node("Clamp01_Float", null, ("N", value));
+    public Component Each(IWorldElement parent, Func<IWorldElement, IWorldElement> body)
+    {
+        // None of these loop bodies change the collection; preserve direct-child order.
+        var loop = NodeSlot(typeof(Nodes.ForEachObject<IReadOnlyList<Slot>, Slot>))
+            .AttachComponent<Nodes.ForEachObject<IReadOnlyList<Slot>, Slot>>();
+        Link(loop, "Collection", Node("Children", null, ("Instance", parent)));
+        Link(loop, "LoopIteration", body(Out(loop, "Element")));
+        return loop;
+    }
+    public Component Receiver(string tag, bool withString = true) => Receiver(tag, withString ? typeof(string) : null);
+    public Component Receiver<T>(string tag) => Receiver(tag, typeof(T));
+    private Component Receiver(string tag, Type type)
+    {
+        var node = Node(type == null ? "DynamicImpulseReceiver" : type.IsValueType
+            ? "DynamicImpulseReceiverWithValue" : "DynamicImpulseReceiverWithObject", type);
+        var global = node.Slot.AddSlot("Tag").AttachComponent<GlobalValue<string>>();
+        global.Value.Value = tag;
+        Link(node, "Tag", global);
+        return node;
+    }
+    public Component Trigger(IWorldElement destination, string tag) =>
+        Node("DynamicImpulseTrigger", null, ("TargetHierarchy", destination), ("Tag", Text(tag)),
+            ("ExcludeDisabled", Constant(true)));
+    public Component Trigger(IWorldElement destination, string tag, IWorldElement payload) =>
+        Trigger<string>(destination, Text(tag), payload);
+    public Component Trigger<T>(IWorldElement destination, IWorldElement tag, IWorldElement payload) =>
+        Node(typeof(T).IsValueType ? "DynamicImpulseTriggerWithValue" : "DynamicImpulseTriggerWithObject", typeof(T),
+            ("TargetHierarchy", destination), ("Tag", tag),
+            ("ExcludeDisabled", Constant(true)), ("Value", payload));
+
+    public static Slot Record(Slot parent, string name, string spaceName)
+    {
+        var slot = parent.AddSlot(name);
+        var space = slot.AttachComponent<DynamicVariableSpace>();
+        space.SpaceName.Value = spaceName;
+        space.OnlyDirectBinding.Value = true;
+        return slot;
+    }
+    // All records keep one variable per child under their own space's DV container.
+    public static Slot VariableSlot(Slot context, string name)
+    {
+        var owner = NamedSpace(context)?.Slot
+            ?? throw new InvalidOperationException("Expression record has no variable space: " + context.Name);
+        var data = owner.FindChild("DV") ?? owner.AddSlot("DV");
+        return data.AddSlot(name);
+    }
+
+    public static DynamicValueVariable<T> Data<T>(Slot slot, string name, T value)
+    {
+        var variable = VariableSlot(slot, name).AttachComponent<DynamicValueVariable<T>>();
+        variable.VariableName.Value = Path(slot, name);
+        variable.Value.Value = value;
+        return variable;
+    }
+    public static DynamicReferenceVariable<T> Reference<T>(Slot slot, string name, T value) where T : class, IWorldElement
+    {
+        var variable = VariableSlot(slot, name).AttachComponent<DynamicReferenceVariable<T>>();
+        variable.VariableName.Value = Path(slot, name);
+        variable.Reference.Target = value;
+        return variable;
+    }
+}

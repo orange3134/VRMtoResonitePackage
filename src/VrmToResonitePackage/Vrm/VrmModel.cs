@@ -47,6 +47,8 @@ public sealed class VrmModel
     public List<string> NodeNames { get; } = new();
     public Dictionary<int, Vrchat.VrchatBoneTarget> NodeTargets { get; } = new();
     public string MeshBindingRootPath { get; set; }
+    public int ExpressionFaceMeshIndex { get; set; } = -1;
+    public HashSet<string> ExpressionVisemeNames { get; } = new(StringComparer.Ordinal);
 
     /// <summary>glTF node index -> mesh index (or -1).</summary>
     public List<int> NodeMeshIndices { get; } = new();
