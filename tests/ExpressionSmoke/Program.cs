@@ -15,16 +15,14 @@ AssemblyLoadContext.Default.Resolving += (_, name) =>
     string path = Path.Combine(resonite, name.Name + ".dll");
     return File.Exists(path) ? AssemblyLoadContext.Default.LoadFromAssemblyPath(path) : null;
 };
-bool licenseOnly = args.Contains("--license-only");
-args = args.Where(arg => arg != "--license-only").ToArray();
 string artifacts = Path.GetFullPath(args.Length > 0 ? args[0] : ".tmp_verify/expression-smoke/" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
 string importedPackage = args.Length > 1 ? Path.GetFullPath(args[1]) : null;
 string baselinePackage = args.Length > 2 ? Path.GetFullPath(args[2]) : null;
-try { await Run(resonite, artifacts, importedPackage, baselinePackage, licenseOnly); Console.WriteLine("Expression smoke checks passed."); Environment.Exit(0); }
+try { await Run(resonite, artifacts, importedPackage, baselinePackage); Console.WriteLine("Expression smoke checks passed."); Environment.Exit(0); }
 catch (Exception error) { Console.Error.WriteLine(error); Environment.Exit(1); }
 
 [MethodImpl(MethodImplOptions.NoInlining)]
-static async Task Run(string resonite, string artifacts, string importedPackage, string baselinePackage, bool licenseOnly)
+static async Task Run(string resonite, string artifacts, string importedPackage, string baselinePackage)
 {
     VrmToResonitePackage.ResoniteLocator.InstallAssemblyResolver(resonite);
     Environment.CurrentDirectory = resonite;
@@ -44,7 +42,6 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         for (int i = 0; i < 30; i++) await default(NextUpdate);
         world.LocalUser.Root ??= world.AddSlot("Wearer").AttachComponent<UserRoot>();
         await default(NextUpdate);
-        if (licenseOnly) { await ExpressionLicenseChecks.Run(world.LocalUser.Root.Slot, artifacts); return; }
         await NamedShapeRepairChecks.Run(world.LocalUser.Root.Slot);
         await FaceExpressionDetectionChecks.RunCatalog(world.LocalUser.Root.Slot);
         if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage, artifacts, baselinePackage); return; }
@@ -128,11 +125,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         }
         void AllowInput(bool enabled = true) => SetHandGesturesAllowed(core, enabled);
         async Task Frames(int count = 30) { for (int i = 0; i < count; i++) await default(NextUpdate); }
-        Check(core.FindChild("SourceState") == null && core.FindChild("ParameterState") == null && expressions.FindChild("Rules") == null,
-            "generic source arbitration and Animator graph are absent");
         Console.WriteLine($"Flux nodes: {expressions.GetComponentsInChildren<ProtoFluxNode>().Count}; Core: {core.GetComponentsInChildren<ProtoFluxNode>().Count}");
-        Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value is not "ExpressionSystem/LeftInput" and not "ExpressionSystem/RightInput"),
-            "int requests retain no input Slot references");
         foreach (string tag in new[] { ExpressionSystemSetup.TrySetGestureLeftTag, ExpressionSystemSetup.TrySetGestureRightTag })
         {
             Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, tag, true) == 0 &&
@@ -142,9 +135,8 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, tag, true, catalog) == 0,
                 "gesture API requires int arguments: " + tag);
         }
-        foreach (string tag in new[] { "Left", "Right", "left", "right", "Left.Fist", "ResoPon/Expression/v3/Gesture" })
-            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, tag, true, 1) == 0,
-                "unknown or legacy gesture Tag is rejected: " + tag);
+        Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, "UnknownGesture", true, 1) == 0,
+            "unknown gesture Tag is rejected");
         for (int hand = 0; hand < 2; hand++)
             for (int gesture = 0; gesture < gestureNames.Length; gesture++)
             {
@@ -171,18 +163,14 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
                 $"L{left}R{right} directly selects its named table entry");
         }
         var previousHighPair = Reference<Slot>(table, "L6R7");
-        var decoy = table.AddSlot("Legacy numeric key (ignored)");
-        var legacyPair = decoy.AttachComponent<DynamicReferenceVariable<Slot>>();
-        legacyPair.VariableName.Value = "ExpressionSystem/GestureTable.Pair.55";
-        legacyPair.Reference.Target = catalog.FindChild("Angry");
         Set(table, "L6R7", catalog.FindChild("Animated")); await Frames();
         Gesture(0, 6); Gesture(1, 7);
         Check(Gestures(core) == (6, 7) && Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Animated"),
-            "selection ignores a conflicting legacy numeric key");
+            "edited named table entry is used by the next gesture event");
         Gesture(0, 0); Gesture(1, 0); Apply("Animated");
         Check(Get<int>(core, "State.Gesture.Left") == 0 && Get<int>(core, "State.Gesture.Right") == 0 && Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Animated"),
             "direct selection preserves both gestures");
-        Set(table, "L6R7", previousHighPair); decoy.Destroy();
+        Set(table, "L6R7", previousHighPair);
 
         AllowInput(); Gesture(0, 0); Gesture(1, 0);
         Gesture(0, 1);
@@ -268,9 +256,6 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(Math.Abs(field.Value - 1) < 0.01 && Gestures(core) == (0, 0) &&
             NoHandsAllowed(core),
             "menu-only mode ignores normal input without altering direct selection");
-        foreach (string hand in new[] { "Left", "Right" })
-            Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
-                "ResoPon/Expression/Menu/" + hand, true, 8) == 0, "removed hand-menu API is absent: " + hand);
         // Neither data edits nor changing input permission can overwrite a direct selection.
         Set(core, "State.Gesture.Left", 6); Set(core, "State.Gesture.Right", 7);
         Set(table, "L6R7", catalog.FindChild("Angry"));

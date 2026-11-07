@@ -34,9 +34,9 @@ Modular Avatar の `Editor/images` はMITの対象外だが、本アプリには
 - `THIRD-PARTY-NOTICES.md` は出力フォルダーへのコピーに加え、EXE内のリソースに埋め込む。
   ReleaseにEXEだけを添付する場合も通知は含まれる。
 - 埋め込みリソース名は `ResoPon.ThirdPartyNotices`。通知全文を保持し、生成グラフには転記しない。
-- Release publish の同梱ファイル・EXE内通知、Markdownリンク、
-  [ExpressionSmoke](../tests/ExpressionSmoke/README.md) の `--license-only` を確認する。
-  後者は生成・複製・保存・inspect・再読込後にライセンス注記が追加されていないことを確認する。
+- Release publish の同梱ファイル・EXE内通知とMarkdownリンクを確認する。
+  生成アバターの動作・複製・保存・inspect・再読込は
+  [ExpressionSmoke](../tests/ExpressionSmoke/README.md) で確認する。
 
 ## 調査の境界
 

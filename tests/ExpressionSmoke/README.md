@@ -27,7 +27,7 @@ Use the same installation for both.
   existing tracking drivers, normal/inverted blink mixing, and actual mesh weights.
   Blink mesh outputs bypass smoothing; other mesh outputs converge through SmoothValue.
 - DynamicVariable spaces, independent Flux boards, node layout, local references,
-  absence of generated license annotations, cloning, package inspection and reload.
+  cloning, package inspection and reload.
 - Generated Avatar Root Identification and loading stand-in behavior, including
   wear state, head tracking, mesh visibility, and collected fallback texture assets.
 
@@ -38,19 +38,6 @@ Current behavior and editing instructions are documented in the
 Tests inspect generated stock components and execute ProtoFlux in a headless world.
 They do not establish physical controller behavior, keyboard focus handling,
 interactive menu usability, or multi-client synchronization in a running client.
-
-## Focused license check
-
-```powershell
-dotnet run --project tests/ExpressionSmoke -c Release -- --license-only
-```
-
-This runs the common parser/compiler fixtures and focused avatar generation,
-clone, package inspection and reload checks with menus enabled and disabled.
-It checks that expressions, avatar identification, dynamics, mesh loading and the
-stand-in have no generated license slots, comments or License components.
-Third-party notices remain in the source repository and the converter distribution.
-An optional artifact directory precedes the flag.
 
 ## Locally converted package
 

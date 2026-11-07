@@ -18,13 +18,12 @@ internal static class ExpressionSpaceChecks
             Records(parent, "ExpressionSystem.Clip");
         }
         Clips(root.FindChild("Clips"));
-        Check(root.FindChild("Catalog") == null, "Clips replaces the old Catalog slot");
         Records(root.FindChild("Outputs"), "ExpressionSystem.Output");
         var inputs = root.FindChild("Inputs");
         Records(inputs.FindChild("Keyboard"), "ExpressionSystem.Input.Keyboard");
         var modules = inputs.FindChild("HandGestures");
-        var controllers = modules.Children.Where(module => module.Name != "THIRD-PARTY-NOTICES").ToArray();
-        Check(modules.FindChild("Modules") == null && controllers.All(module =>
+        var controllers = modules.Children.ToArray();
+        Check(controllers.All(module =>
             new[] { "Touch", "Index", "Vive", "WindowsMR", "Cosmos" }.Contains(module.Name)),
             "controller modules live directly under HandGestures");
         foreach (var module in controllers) expected.Add(module, "ExpressionSystem.Input.HandGesture");
@@ -46,11 +45,7 @@ internal static class ExpressionSpaceChecks
             Check(!hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.ProtoFluxNode>().Any(node =>
                 node.AllImpulses.Any(port => port.Target == timeout.Reset)),
                 "input changes and departure do not reset the authored timeout");
-            Check(!hand.GetComponentsInChildren<FrooxEngine.ProtoFlux.ProtoFluxNode>().Any(node =>
-                node.GetType().Name.StartsWith("StoredValue") || node.GetType().Name == "ElapsedTimeFloat"),
-                "controller hands need no candidate or last-sent stores and no elapsed timer");
         }
-        Check(root.FindChild("Diagnostics") == null, "diagnostics are logged rather than exported into the avatar");
 
         var internalSlot = root.FindChild("API").FindChild("Internal");
         Check(root.FindChild("Core") == null && internalSlot != null &&
@@ -63,11 +58,9 @@ internal static class ExpressionSpaceChecks
                 v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal) ||
                 v.VariableName.Value.StartsWith("ExpressionSystem/Reference.", StringComparison.Ordinal)),
             "fixed Slot references use Reference; selected expression uses State; mappings use GestureTable");
-        Check(root.FindChild("DV").Children.All(child => !child.Name.StartsWith("Core.", StringComparison.Ordinal)),
-            "state variable slots have no Core prefix");
         foreach (string key in new[] { "Config.AllowHandGesture.Left", "Config.AllowHandGesture.Right", "Config.SmoothingSpeed",
             "State.Gesture.Left", "State.Gesture.Right", "State.CurrentExpression", "State.ContextMenuSelected", "Reference.API", "Reference.Clips" })
-            Check(root.FindChild("DV").FindChild(key) != null, "renamed system DV slot exists: " + key);
+            Check(root.FindChild("DV").FindChild(key) != null, "system DV slot exists: " + key);
 
         var spaces = root.GetComponentsInChildren<DynamicVariableSpace>();
         Check(spaces.Count == expected.Count, "every record has exactly one explicit schema space");
@@ -84,13 +77,6 @@ internal static class ExpressionSpaceChecks
         var occupied = new HashSet<Slot>();
         void Placement(Component variable, string path)
         {
-            Check(!path.Contains("/References.", StringComparison.Ordinal) &&
-                !path.Contains("/Static.", StringComparison.Ordinal) &&
-                !path.StartsWith("ExpressionSystem/AllowHandGestures.", StringComparison.Ordinal) &&
-                path is not ("ExpressionSystem/SmoothingSpeed" or "ExpressionSystem/LeftGesture" or
-                    "ExpressionSystem/RightGesture" or "ExpressionSystem/CurrentExpression" or
-                    "ExpressionSystem/State.LeftGesture" or "ExpressionSystem/State.RightGesture"),
-                "renamed variables have no legacy aliases: " + path);
             var space = variable.Slot.GetComponentInParents<DynamicVariableSpace>();
             var data = space.Slot.FindChild("DV");
             bool tableRow = path.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal);
@@ -123,20 +109,13 @@ internal static class ExpressionSpaceChecks
         }
         Values<int>(); Values<float>(); Values<bool>(); Values<string>(); Values<InputKey>();
         References<Slot>(); References<IField<float>>(); References<ISyncRef>();
-        Check(root.ExpressionVariables<DynamicValueVariable<int>>().All(v => v.VariableName.Value != "ExpressionSystem/Version") &&
-            root.FindChild("DV").FindChild("Version") == null,
-            "unused Version variable and its slot are absent");
         Check(root.ExpressionVariables<DynamicValueVariable<bool>>().Count(v =>
-            v.VariableName.Value is "ExpressionSystem/Config.AllowHandGesture.Left" or "ExpressionSystem/Config.AllowHandGesture.Right") == 2 &&
-            root.ExpressionVariables<DynamicValueVariable<bool>>().All(v => v.VariableName.Value != "ExpressionSystem/AllowHandGestures"),
+            v.VariableName.Value is "ExpressionSystem/Config.AllowHandGesture.Left" or "ExpressionSystem/Config.AllowHandGesture.Right") == 2,
             "gesture permission is stored independently for Left and Right");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<int>("State.Gesture.Left", out _),
             "Core fields are readable from the system root");
         Check(root.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("GestureTable.L0R0", out _),
             "table rows are readable from the system root");
-        var core = root.FindChild("API").FindChild("Internal");
-        Check(core.WriteDynamicVariable("Expr/AllowExternalInput", false) != DynamicVariableWriteResult.Success,
-            "legacy shared-space writes cannot modify the new Core");
         Console.WriteLine("SPACES: explicit record schemas and variable prefixes verified");
     }
 

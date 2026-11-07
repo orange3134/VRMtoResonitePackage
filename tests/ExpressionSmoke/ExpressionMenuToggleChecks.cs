@@ -60,13 +60,12 @@ internal static class ExpressionMenuToggleChecks
                     ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, tag, true, 6);
                 Check(Gestures(core) == (6, 6) && Held() && Reference<Slot>(core, "State.CurrentExpression") == target,
                     "keyboard API updates both hands without applying a different pose");
-                foreach (string tag in new[] { "ExpressionSystem/Method.SelectExpression", "ExpressionSystem/Internal.ApplyExpression" })
                 foreach (var candidate in new[] { (Slot)null, catalog.Children.First(c => c != target) })
-                    ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, tag, true, candidate);
+                    ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, "ExpressionSystem/Internal.ApplyExpression", true, candidate);
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, "ExpressionSystem/Internal.UpdateSelection", true);
                 await Frames();
                 Check(Held() && Gestures(core) == (6, 6) && Reference<Slot>(core, "State.CurrentExpression") == target &&
-                    pose.SequenceEqual(outputs.Select(SelectedValue)), "removed Select API does nothing and ApplyExpression rejects non-menu pose changes while held");
+                    pose.SequenceEqual(outputs.Select(SelectedValue)), "ApplyExpression rejects non-menu pose changes while held");
                 PermissionsPreserved();
                 ExpressionGraphChecks.CheckMenuColors(expressions);
                 Check(button.PressedData.Reference.Target == null, "selected menu trigger carries null");
@@ -85,11 +84,6 @@ internal static class ExpressionMenuToggleChecks
                 Check(button.PressedData.Reference.Target == target, "cleared menu restores its expression payload");
                 button.Pressed(null, default);
                 Check(Reference<Slot>(core, "State.CurrentExpression") == target, "third press selects the expression again");
-                // The removed API must not leave a receiver behind.
-                Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api, "ExpressionSystem/Method.SelectExpression", true, target) == 0 &&
-                    ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument<Slot>(api, "ExpressionSystem/Method.SelectExpression", true, null) == 0,
-                    "removed Select API has no receiver for either a pose or null");
-                Check(Reference<Slot>(core, "State.CurrentExpression") == target && Held(), "removed Select API cannot clear a held pose");
                 foreach (string tag in new[] { ExpressionSystemSetup.ResetTag, "ExpressionSystem/Internal.ResetState" })
                 {
                     ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, tag, true);

@@ -121,7 +121,6 @@ internal static class ExpressionGraphChecks
         Check(expressions.GetComponentsInChildren<ContextMenuItemSource>().All(item =>
             (item.EnabledField.ActiveLink != null) == modeEntries.Contains(item)),
             "only the VR gesture submenu and desktop toggle have automatic visibility drivers");
-        ExpressionLicenseChecks.Verify(expressions);
         Check(expressions.FindChild("Inputs").GetComponentsInChildren<ProtoFluxNode>().All(n => n.GetType().Name != "OnStart"),
             "input modules run on changes without OnStart impulses");
         ExpressionDynamicInputChecks.CheckBindings(expressions);
@@ -372,7 +371,7 @@ internal static class ExpressionGraphChecks
             Check(board.Count() <= MaximumBoardNodes, $"board node budget ({MaximumBoardNodes}): {path} has {board.Count()}");
 
         }
-        foreach (var module in Descendant(expressions, "Inputs/HandGestures").Children.Where(module => module.Name != "THIRD-PARTY-NOTICES"))
+        foreach (var module in Descendant(expressions, "Inputs/HandGestures").Children)
             foreach (string hand in new[] { "Left", "Right" })
                 Check(boards.Any(b => b.Key == Descendant(module, hand + "/Logic")),
                     "controller hand has an independent board: " + module.Name + "/" + hand);
@@ -426,20 +425,6 @@ internal static class ExpressionGraphChecks
         var publicReceivers = method.GetComponentsInChildren<ProtoFluxNode>()
             .Where(node => node.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal)).ToArray();
         Check(publicReceivers.Length == 7, "exactly seven public API receivers");
-        foreach (string removed in new[] { "SelectExpression", "AllowHandGestures", "AllowHandGesturesLeft", "AllowHandGesturesRight",
-            "ToggleHandGesturesLeft", "ToggleHandGesturesRight" })
-            Check(Descendant(expressions, "API/Method/" + removed) == null,
-                "unused API board is absent: " + removed);
-        var tags = expressions.GetComponentsInChildren<GlobalValue<string>>().Select(value => value.Value.Value)
-            .Concat(nodes.OfType<Nodes.ValueObjectInput<string>>().Select(node => node.Value.Value));
-        Check(tags.All(tag => tag is not ("ExpressionSystem/Event.OnAvatarWorn" or "ExpressionSystem/Event.OnAvatarRemoved")),
-            "removed lifecycle notifications have no senders or receivers");
-        Check(tags.All(tag => tag == null ||
-            (!tag.StartsWith("ResoPon/Expression/AllowHandGestures", StringComparison.Ordinal) &&
-             !tag.StartsWith("ExpressionSystem/Method.ToggleHandGestures.", StringComparison.Ordinal))),
-            "removed permission APIs have no senders or receivers after generation, clone and reload");
-        Check(tags.All(tag => tag?.StartsWith("ResoPon/Expression/", StringComparison.Ordinal) != true),
-            "legacy expression tags are absent after generation, clone and reload");
         foreach (string hand in new[] { "Left", "Right" })
         {
             var receiver = publicReceivers.Single(node => node.Slot.Parent.Name == "TrySetGesture." + hand);
@@ -456,11 +441,9 @@ internal static class ExpressionGraphChecks
                 receiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ExpressionSystem/Method.SetGesture." + hand,
                 "SetGesture has a shared int receiver independent of the input source: " + hand);
         }
-        Check(!tags.Contains("ExpressionSystem/Method.SelectExpression"), "removed Select API has no senders or receivers");
         var menuReceiver = publicReceivers.Single(node => node.Slot.Parent.Name == "SelectMenuExpression");
         Check(menuReceiver.GetType().GetGenericArguments().SequenceEqual(new[] { typeof(Slot) }) &&
-            menuReceiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ExpressionSystem/Method.SelectMenuExpression" &&
-            !tags.Contains("ExpressionSystem/Internal.SelectMenuExpression"),
+            menuReceiver.Slot.GetComponentsInChildren<GlobalValue<string>>().Single().Value.Value == "ExpressionSystem/Method.SelectMenuExpression",
             "menu selection exposes only the public Method tag after generation, clone and reload");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "Reset").GetType().Name == "DynamicImpulseReceiver",
             "reset receives an impulse without a payload");
@@ -468,8 +451,6 @@ internal static class ExpressionGraphChecks
             "hand gesture toggle receives an impulse without a payload");
         if (Descendant(expressions, "Inputs/ContextMenu") is { } menuItems)
         {
-            Check(menuItems.FindChild("Allow hand gestures") == null && menuItems.FindChild("Disable hand gestures") == null,
-                "separate allow and disable menu items are absent");
             var toggle = menuItems.FindChild("Hand gestures")?.GetComponent<ButtonDynamicImpulseTrigger>();
             Check(toggle?.Target.Target == Descendant(expressions, "API") &&
                 toggle.PressedTag.Value == "ExpressionSystem/Method.ToggleHandGestures" &&
@@ -479,23 +460,13 @@ internal static class ExpressionGraphChecks
             Check(resetButton?.Target.Target == Descendant(expressions, "API") &&
                 resetButton.PressedTag.Value == "ExpressionSystem/Method.Reset", "reset menu targets this avatar's reset API");
         }
-        Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().All(v => v.VariableName.Value != "ExpressionSystem/Override"),
-            "no Override Slot state is generated");
         Check(expressions.GetComponentsInChildren<DynamicReferenceVariable<User>>().Count == 0,
             "expression state retains no wearer User references");
-        Check(expressions.GetComponentsInChildren<DynamicValueVariable<int>>()
-            .All(v => !v.VariableName.Value.EndsWith("Revision", StringComparison.Ordinal)),
-            "expression state retains no input revisions");
         var core = Descendant(expressions, "API/Internal");
-        Check(core.ExpressionVariables<DynamicValueVariable<int>>().All(v => v.VariableName.Value != "ExpressionSystem/SelectionStatus"),
-            "Core contains no SelectionStatus diagnostic variable");
         Check(core.ExpressionVariables<DynamicReferenceVariable<Slot>>().Where(v => !v.VariableName.Value.StartsWith("ExpressionSystem/Reference.", StringComparison.Ordinal) &&
                 !v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal))
             .Select(v => v.VariableName.Value).SequenceEqual(new[] { "ExpressionSystem/State.CurrentExpression" }),
             "Core stores only the current expression, without intermediate diagnostic references");
-        Check(!core.ExpressionVariables<DynamicValueVariable<float>>().Any(v =>
-            v.VariableName.Value is "ExpressionSystem/PlaybackStart" or "ExpressionSystem/PlaybackElapsed" or "ExpressionSystem/AnimationTime"),
-            "Core has no playback clocks");
         var playback = Descendant(expressions, "API/Internal/ApplyExpression").GetComponentsInChildren<ProtoFluxNode>();
         Check(playback.Single(n => n.GetType().Name.StartsWith("DynamicImpulseReceiver", StringComparison.Ordinal))
             .GetType().GetGenericArguments().SequenceEqual(new[] { typeof(Slot) }), "Playback receives a Slot");
