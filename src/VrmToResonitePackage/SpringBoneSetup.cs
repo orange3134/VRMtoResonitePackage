@@ -139,6 +139,7 @@ internal static class SpringBoneSetup
             settingsRootVar.Reference.DriveFrom(selfRef.Reference);
 
             _templateRoot = _settingsRoot.AddSlot("Dynamic Bone Settings");
+            ThirdPartyNotices.AddModularAvatar(_settingsRoot);
         }
 
         /// <summary>

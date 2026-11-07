@@ -1199,6 +1199,7 @@ internal static class AvatarSetup
         }
 
         Slot identification = root.AddSlot("Avatar Root Identification");
+        ThirdPartyNotices.AddModularAvatar(identification);
         var worn = identification.AttachComponent<DynamicValueVariable<bool>>();
         worn.VariableName.Value = ModularAvatarNamespace + "/AvatarWorn";
         var wornLocal = identification.AttachComponent<DynamicValueVariable<bool>>();

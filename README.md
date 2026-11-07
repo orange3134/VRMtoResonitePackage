@@ -140,3 +140,8 @@ Resonite（FrooxEngine）のインポーターには特定のVRMでクラッシ�
 - VRMの表情（happy/angry等）のフェイストラッキング連動は`--face-tracking`指定時のみ、
   かつ名前ヒューリスティクスによる割り当てです
 - VRM 1.0のコンストレイント（VRMC_node_constraint）は未対応
+
+## ライセンス
+
+本アプリは [MIT License](LICENSE) で公開しています。
+外部由来の処理・素材の著作権表示と許諾文は [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) を参照してください。

@@ -31,6 +31,7 @@ internal static class MeshLoadingSetup
         PublishHeadPose(root);
 
         Slot loadCheck = root.AddSlot("<color=cyan>ResoPon</color> - Mesh loaded check");
+        ThirdPartyNotices.AddModularAvatar(loadCheck);
         MeshRendererLoadStatus loadStatus = loadCheck.AttachComponent<MeshRendererLoadStatus>();
         DynamicValueVariable<bool> loadVariable = loadCheck.AttachComponent<DynamicValueVariable<bool>>();
         loadVariable.Value.Value = false;

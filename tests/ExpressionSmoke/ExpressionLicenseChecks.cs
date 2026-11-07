@@ -5,6 +5,7 @@ using FrooxEngine.Store;
 using SkyFrost.Base;
 using VrmToResonitePackage;
 using VrmToResonitePackage.Expressions;
+using VrmToResonitePackage.Vrm;
 using Comment = FrooxEngine.Comment;
 
 internal static class ExpressionLicenseChecks
@@ -36,6 +37,32 @@ internal static class ExpressionLicenseChecks
                 ((IField<bool>)component.GetSyncMember(2)).Value, "source persistence, update order and enabled state");
     }
 
+    private static void VerifyModularAvatar(Slot avatar)
+    {
+        using var stream = typeof(ExpressionSystemSetup).Assembly.GetManifestResourceStream("ResoPon.ControllerGestureNotice");
+        using var reader = new StreamReader(stream);
+        string text = reader.ReadToEnd().Replace("\r\n", "\n");
+        int start = text.IndexOf("## Modular Avatar for Resonite\n", StringComparison.Ordinal);
+        int end = text.IndexOf("\n## ", start + 3, StringComparison.Ordinal);
+        string expected = (end < 0 ? text[start..] : text[start..end]).Trim();
+        foreach (string path in new[] {
+            "Avatar Root Identification",
+            "<color=#00ffff>Avatar Settings</color>",
+            "<color=#00ffff>Avatar Settings</color>/Avatar Loading Display/LoadingStandin",
+            "<color=cyan>ResoPon</color> - Mesh loaded check" })
+        {
+            Slot target = avatar;
+            // Slot names contain markup with slashes, so resolve the two nested paths explicitly.
+            if (path.EndsWith("/LoadingStandin", StringComparison.Ordinal))
+                target = avatar.FindChild("<color=#00ffff>Avatar Settings</color>")
+                    ?.FindChild("Avatar Loading Display")?.FindChild("LoadingStandin");
+            else
+                target = avatar.FindChild(path);
+            Check(target?.FindChild("THIRD-PARTY-NOTICES")?.GetComponent<Comment>()?.Text.Value == expected,
+                "complete Modular Avatar notice at " + path);
+        }
+    }
+
     public static async Task Run(Slot parent, string artifacts)
     {
         foreach (bool menu in new[] { false, true })
@@ -50,10 +77,23 @@ internal static class ExpressionLicenseChecks
                 var curve = new ExpressionCurve { Binding = new("Face", "Smile") };
                 curve.Keys.Add(new(0, 1, 0, 0)); clip.Curves.Add(curve); model.Clips.Add(clip);
                 var expressions = await ExpressionSystemSetup.BuildAsync(avatar, model, _ => field, menu: menu);
+                var hair = avatar.AddSlot("Hair");
+                hair.AddSlot("HairTip").LocalPosition = new float3(0, 0.1f, 0);
+                var vrm = new VrmModel();
+                vrm.NodeNames.Add("Hair");
+                var chain = new VrmSpringChain();
+                chain.RootNodes.Add(0);
+                vrm.SpringChains.Add(chain);
+                SpringBoneSetup.Apply(avatar, vrm, new Dictionary<int, Slot> { [0] = hair });
+                var mesh = avatar.AddSlot("Mesh").AttachComponent<MeshRenderer>();
+                mesh.Mesh.Target = mesh.Slot.AttachComponent<QuadMesh>();
+                await MeshLoadingSetup.Apply(avatar);
                 for (int i = 0; i < 5; i++) await default(NextUpdate);
+                VerifyModularAvatar(avatar);
                 Verify(expressions);
                 clone = avatar.Duplicate(parent);
                 Verify(clone.FindChild("Expressions"));
+                VerifyModularAvatar(clone);
                 var graph = avatar.SaveObject(DependencyHandling.CollectAssets);
                 var record = RecordHelper.CreateForObject<SkyFrost.Base.Record>(avatar.Name, avatar.World.LocalUser.MachineID, null);
                 string package = Path.Combine(artifacts, $"License-{menu}.resonitepackage");
@@ -67,6 +107,7 @@ internal static class ExpressionLicenseChecks
                 await PackageImporter.ImportPackage(package, restored);
                 await default(ToWorld);
                 Verify(restored.FindChild("Expressions"));
+                VerifyModularAvatar(restored);
                 Console.WriteLine($"LICENSE: menu={menu}: generation, clone, package inspection and reload preserve source components");
             }
             finally { restored?.Destroy(); clone?.Destroy(); avatar.Destroy(); }

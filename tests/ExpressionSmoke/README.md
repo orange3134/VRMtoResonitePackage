@@ -47,6 +47,8 @@ dotnet run --project tests/ExpressionSmoke -c Release -- --license-only
 
 This runs the common parser/compiler fixtures and focused license generation,
 clone, package inspection and reload checks with menus enabled and disabled.
+It checks the Avatar Expression Editor source components and the full Modular Avatar
+for Resonite notice on avatar identification, dynamics, mesh loading and the stand-in.
 An optional artifact directory precedes the flag.
 
 ## Locally converted package
