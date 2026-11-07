@@ -1,701 +1,87 @@
 # Expression integration checks
 
-2026-11-07: Controller attribution lives in HandGestures/THIRD-PARTY-NOTICES.
-Its child preserves the source tool's full name including author markup and v1.12.1,
-with the source License and Comment components. Graph checks compare all license
-values and exact text (including original line endings) against the captured resource
-after generation, cloning and package reload; HandGestures itself has no Comment.
-The source Inspector's GizmoLink is not part of the license content.
-Use `dotnet run --project tests/ExpressionSmoke -c Release -- --license-only`
-for focused generation, clone, package inspection and reload checks with menus both
-enabled and disabled. The optional artifact directory still precedes the flag.
-
-2026-11-07: Both gesture menu entrances display Hand gestures: Both / LeftOnly /
-RightOnly / None through ValueOptionDescriptionDriver<bool2> (X=Left, Y=Right). Checks cover all four
-permission field combinations, menu choices, desktop toggles, VR visibility changes,
-and local label bindings after cloning and package reload, alongside existing colors.
-
-2026-11-07: Context submenus use their own Slot as ItemsRoot and collect direct
-children only. There are no intermediate Items containers. Back targets the
-parent menu Slot. Graph checks validate self/parent references and nonrecursive
-collection after generation, cloning and package reload; permission and grouped
-button checks use the same direct hierarchy.
-
-2026-11-07: L0R0 and every reference to its removed clip now release to Base.
-The synthetic authored-baseline clip is also absent from Clips and menus.
-The detected-catalog fixture checks neutral removal, surviving full pose bindings,
-all 64 cells and a nonzero Base restoration after selecting a remaining gesture.
-Saved avatar replay accepts null release cells and verifies their actual outputs.
-Snapshots still read neutral baselines in legacy packages; current packages report
-no authored baseline clip and freeze existing tracking Base for playback checks.
-
-2026-11-07: Direct selection uses one Select expression entrance and numbered
-groups with at most eight expressions plus Back. Boundary fixtures cover empty,
-8/9/16/65-entry catalogs, shared/partial/disjoint hand sets and combination-only
-poses. Generated and imported package checks require complete, unique Clips
-coverage, separate hand categories, consecutive numbering and local Back targets.
-Saved avatar replay presses the actual grouped buttons for every expression.
-Imported menu aliases no longer create duplicate selection paths.
-Detected candidates can have output bindings absent from the authored neutral
-pose. Snapshots record their unavailable baseline as null; saved replay freezes
-their existing tracking Base instead of assuming every output has a neutral key.
-
-2026-11-07: Rename hand state to State.Gesture.Left/Right and fixed references to
-Reference.*, including Reference.Clips. Clips replaces Catalog; clip records use
-ExpressionSystem.Clip and controller records use ExpressionSystem.Input.HandGesture.
-Placement and dynamic binding checks verify the new names through clone/reload.
-Snapshot comparisons still read legacy names to compare authored poses and mappings.
-
-2026-11-07: API operations are classified by their callers. SelectMenuExpression
-moves to Method with the public ExpressionSystem/Method.SelectMenuExpression tag.
-Checks require seven public receivers, three internal boards and OnAvatarWorn in
-Event, and reject the old internal menu tag through generation, clone and reload.
-Existing Clips, submenu and imported-menu interactions use the public receiver.
-
-2026-11-07: Removed Method.SelectExpression; Internal.SelectMenuExpression now
-validates the Slot, releases the hold, clears both hands, calls ApplyExpression,
-and sets the hold directly. Graph checks require six public receivers and no old
-Select receiver or sender. Unworn menu checks verify hold updates, invalid Slot
-rejection, null clearing and rewear reset; pose writes retain ApplyExpression's
-wear condition. Menu and permission checks cover all four saved permission modes.
-
-2026-11-06: ApplyExpression compares the received Slot with CurrentExpression
-before writing it. Repeated Slots, including null, skip the output traversal.
-Output checks use sentinel values to cover repeated gestures, different gestures
-sharing a clip, direct impulses, edited Base and output references, and null resets.
-First wear or rewear with an already-null selection also preserves static output.
-
-2026-11-06: ApplyExpression runs only on Slot impulses; OnAvatarWorn initializes
-startup and local wear through ResetState. Graph checks reject OnStart and local
-change detectors in ApplyExpression after generation, cloning and package reload.
-Existing output and lifecycle checks cover first wear, rewear and unworn values.
-
-2026-11-06: System DV keys and their slots use Reference.* for fixed references,
-Config.AllowHandGesture.Left/Right and Config.SmoothingSpeed for settings, and
-State.Gesture.Left/Right and State.CurrentExpression for runtime state. Placement
-checks require the new slots and reject old variable aliases. Dynamic input,
-menu, smoothing, lifecycle, clone and reload checks use the renamed fields.
-
-2026-11-06: Both hands share one Expressions menu rooted at Inputs/ContextMenu.
-Checks require one RootContextMenuItem without side restrictions, no Left/Right
-menu copies and one mode visibility board through generation, clone and reload.
-Expression selection, Back references, reset, imported controls and gesture
-permission checks all use the shared Items hierarchy.
-
-2026-11-06: VR gesture permissions use four explicit choices in a submenu;
-desktop shows only the combined-hand toggle. Checks cover every initial and
-selected permission pair, repeated selection, unchanged gesture/pose state,
-exact-pair colors, Back navigation references and local avatar field targets.
-Mocking only the VR sensor verifies mutually exclusive menu collection in both
-modes and return transitions. These checks run after generation, cloning and
-package reload; early-input checks also exercise the new choices.
-
-2026-11-06: SelectExpression clears LeftGesture and RightGesture before sending
-the selected Slot to ApplyExpression. Graph checks enforce this order in one
-flat Sequence through generation, cloning and reload. Menu checks seed both
-hands with nonzero values and verify selection and null deselection clear them
-for Clips, both hand menus and imported buttons. Invalid Slots retain state;
-valid direct API calls use the same behavior without reevaluating GestureTable.
-
-2026-11-06: ResetState preserves AllowHandGestures.Left/Right. Menu and direct
-reset checks cover all four permission combinations while still clearing hand
-values and selection. Lifecycle checks retain asymmetric permissions; clone,
-first wear, rewear and package reload retain saved disabled permissions.
-Tests enable gestures explicitly when preparing later input checks.
-
-2026-11-06: Remove OnAvatarRemoved, its delay and both lifecycle notification tags.
-OnAvatarWorn rearms its local initialization flag when local wear becomes false;
-shared gestures, permissions and selection survive dequip until reset or rewear.
-Output tests verify tracked outputs return to Base and static outputs retain
-their last values, including dequip beneath an unchanged UserRoot. Unworn startup,
-cloning, selection and reset do not write static outputs even on the host.
-Playback refreshes only during local wear. Rewear initializes retained state;
-graph checks reject the removed board and tags through generation/clone/reload.
-
-2026-11-05: Remove the local-wearer condition from ResetState and share its
-impulse from OnAvatarRemoved behind the existing departure/handoff guards.
-Graph checks reject duplicated cleanup operations in the removal event.
-Runtime checks verify unworn menu and direct ResetState requests clear hands,
-permissions and saved selection without selecting the mapped Neutral pose;
-UpdateSelection still rejects unworn requests. Existing dequip/rewear,
-clone and package reload checks cover the shared reset path.
-
-2026-11-05: Split departure monitoring and delayed cleanup into OnAvatarRemoved.
-OnAvatarWorn notifies removal monitoring before ResetState; removal completion
-notifies OnAvatarWorn to allow initialization on the next wear. Graph checks
-require independent boards, local flags and matching notification receivers.
-Equip/dequip, unworn clone, rewear and package reload checks cover the split.
-
-2026-11-05: Name the lifecycle board API/Event/OnAvatarWorn. Event is a container;
-its child owns the existing wear/departure lifecycle without changing behavior.
-Layout and early-input checks follow the named board through cloning and reload.
-
-2026-11-05: Move lifecycle monitoring to API/Event. Event owns OnStart, wearer
-changes, the unsaved initialization flag and delayed departure cleanup. Wearing
-sets the flag and sends Internal.ResetState through the shared API reference.
-At this stage ResetState received the impulse behind a local-wearer gate;
-that gate has since been removed to share reset with departure cleanup.
-Layout checks require separate Flux groups and no lifecycle nodes in
-ResetState. Early-input, equip/dequip, manual reset, clone and reload tests cover
-the split, with the early-input fixture invoking Event's actual startup path.
-
-2026-11-05: SelectExpression and ResetState use flat Sequence call lists. Graph
-checks reject Sequence-to-Sequence calls after generation, cloning and package
-reload. Existing permission, reset, lifecycle and pose checks verify execution
-order; the departure cleanup remains guarded by its wearer condition.
-
-2026-11-05: Expression menu buttons send null while their expression is selected.
-Select accepts null to clear the pose while keeping gestures disabled and hand
-values unchanged. Runtime checks cover select/clear/reselect for Clips entries,
-both hand menus and imported controls, including cloned and reloaded avatars.
-Color checks use the authored expression reference rather than the mutable payload.
-Copied Clips entries also clear and reselect; repeated non-null API calls keep
-the selection without reapplying static output. Menu payload drivers settle on component updates between presses.
-
-2026-11-05: Parent Internal and Method under a shared API slot. References.API
-targets that slot for every public/internal impulse. Checks verify the nested
-layout, absence of References.Internal variables/inputs, shared sender bindings,
-menu targets and exact receiver dispatch through generation, cloning and reload.
-
-2026-11-05: Remove the unused Version dynamic variable and flatten API/Receivers
-into Method. Receiver boards match tag suffixes (SetGesture.Left, SelectExpression,
-UpdateSelection, ApplyExpression and ResetState). Layout checks reject the old
-wrappers and Version slot; runtime checks use the new paths through clone/reload.
-References.API now targets Method. Snapshot comparisons treat a missing Version as
-the current flat Clip layout while retaining versioned legacy readers.
-
-Version 85 renames public impulse tags to ExpressionSystem/Method.* and internal
-tags to ExpressionSystem/Internal.*. Existing API, menu, keyboard, controller and
-internal-stage checks use the new names through generation, cloning and reload.
-Graph checks also reject legacy ResoPon/Expression/ tags. Variable names, Slot
-structure, payloads and behavior remain unchanged.
-
-Version 84 leaves Selection's ReadDynamicObjectVariable Source disconnected and
-removes the unused GestureTable self-reference and input. Reference checks verify
-the disconnected Source and removed variables after generation, cloning and reload;
-existing runtime checks cover table edits, selection, missing rows and avatar isolation.
-
-Version 83 removes API/Examples and API/Templates. Clip checks cover Clips only;
-the existing copy/edit/select checks duplicate a Clips entry directly.
-
-Version 81 attaches the ExpressionSystem/GestureTable reference directly to the
-DV/GestureTable slot and targets that slot itself. Checks verify placement, absence
-of both old reference names, root-space reads alongside GestureTable.LnRm rows,
-and bound Selection inputs after generation, cloning and package reload.
-
-Version 80 explicitly binds References.GestureTable to DV/GestureTable and places
-Touch/Index/Vive/WindowsMR/Cosmos directly below Inputs/HandGestures. Structure and
-reference checks reject the old reference name and Modules wrapper after generation,
-cloning and reload. Existing controller input, settings edit and deletion checks use
-the flattened hierarchy.
-
-Version 79 removes the write-only PairKey diagnostic. Graph checks reject its
-variable and references after generation, cloning and reload. Runtime checks assert
-stored hand values and actual CurrentExpression selection, including all 64 table
-rows, idle table edits, direct selection, reset and unworn lifecycle behavior.
-
-Version 78 bypasses SmoothValue for mesh outputs originally driven by an
-EyeLinearDriver.OpenCloseTarget. Real meshes test short closing/reopening pulses,
-independent left/right eyes, reversed ranges, half/fully closed expressions, missing
-tracks and cleared selections with SmoothingSpeed=0.0001. These checks repeat after
-cloning and package reload. Other mesh outputs retain interpolation and shared speed.
-
-Version 77 removes wearer gates from API receivers. Graph checks reject AvatarWorn
-and AvatarWornLocal bindings anywhere under API after generation, cloning and reload.
-Unworn runtime checks cover both TrySetGesture/SetGesture hands, per-hand permission
-rejection, Select disabling permissions, and the combined toggle in both directions.
-Internal Selection/Playback/Reset still reject unworn updates; their tests verify that
-API-written values persist while the pose stays cleared and outputs follow Base.
-Input-module wearer gates and lifecycle initialization remain covered separately.
-
-Version 76 removes the five unused permission APIs: global/per-hand AllowHandGestures
-and per-hand ToggleHandGestures. Graph checks require seven public receivers and reject
-the removed boards and tags after generation, cloning and reload. Permission setup
-uses DynamicVariableSpace.TryWriteValue so bound inputs see changes synchronously;
-actual menu checks still press the individual ButtonToggle and combined-hand impulse
-buttons. Unworn API checks exercise the retained combined toggle.
-
-Version 75 uses ButtonToggle for Left/Right hand gestures menu entries. Checks require
-TargetValue to reference that avatar's corresponding DynamicValueVariable.Value and
-reject an impulse trigger on those entries. Actual button presses cover all four
-permission combinations, independent sides, unchanged hand values/selection, and
-green/red colors, including cloned and reloaded avatars. The combined-hand menu and
-public permission APIs retain their existing checks.
-
-Version 74 removes the unused Internal/Initialize receiver and combines lifecycle
-conditions with AND, reducing its If nodes from eight to five. Graph checks reject
-Initialize sender and receiver tags throughout generated, cloned and reloaded graphs.
-The early-input fixture invokes the actual OnStart action through a temporary receiver;
-it no longer depends on a production initialization API. Unworn private-stage checks
-exercise Internal/Reset. Existing equip/departure checks cover lifecycle initialization
-and cleanup with the two-update delay retained.
-
-Version 73 places all twelve API boards directly below Receivers, removing its Logic
-wrapper. Existing graph and toggle checks use the new paths through generation,
-cloning and package reload. Public tags, References.API and node counts are unchanged.
-
-Version 72 renames Keyboard/Left|Right to SetGesture/Left|Right and Gesture/Left|Right
-to TrySetGesture/Left|Right, with matching receiver board and C# constant names.
-SetGesture is shared by keyboard and other input sources; TrySetGesture forwards to
-it only when that hand's permission is enabled. Both still require a local wearer.
-Existing runtime checks use the new tags; graph checks require their literal names
-and twelve public receivers after generation, cloning and package reload. No legacy
-alias receivers are generated, and node counts/behavior are unchanged from Version 71.
-
-Version 71 removes implicit Initialize calls from all public API receivers. Lifecycle
-startup/wearer events own automatic initialization; explicit Reset still works.
-Graph checks reject Initialize tags under API after generation, cloning and reload.
-Runtime checks cover early keyboard, selection, both/individual permission and toggle
-requests against saved state without resetting it, followed by lifecycle initialization
-clearing early input. The fixture settles direct permission field edits before resetting
-the local lifecycle flag so Dynamic Inputs observe the saved false values.
-
-Version 70 forwards Gesture API values behind only the corresponding hand permission
-If. Keyboard receivers handle wearer checks, hand writes and selection (and, until
-Version 71, initialization).
-Early gestures with saved false permissions are intentionally dropped without replay;
-unlike Version 69, gesture receivers do not initialize before checking permission.
-Runtime checks verify both early rejection and subsequent input after initialization
-on both hands, including clones and package reloads.
-Existing checks cover disabled-hand retention, keyboard bypass, same-frame events,
-controller stop sentinels, wearer isolation and unrestricted integer payloads.
-
-Version 68 removes eight unconditional If nodes from API request handling. Graph
-checks reject constant-true If conditions after generation, cloning and package reload.
-Existing event checks cover initialization order, wearer gates, keyboard bypass,
-gesture permissions, selection and toggles on the simplified paths.
-
-Version 64 replaces the shared permission variable with AllowHandGestures.Left/Right.
-The global bool API still sets both. Version 66 makes global Toggle disable both when
-both are enabled, and enable both otherwise. Both menu copies are tested for all four
-initial combinations, repeated same-frame presses and recovery after individual toggles.
-Version 67 follows Salt's authored NAND/ValueWrite/LocalValue graph. Structural checks
-require two permission writes consuming one captured value, reached through OnWritten,
-with only the wearer If gate. Behavioral checks also run on clones and package reloads.
-HandGesturePermissionChecks covers all four permission combinations, real both/individual
-menu button presses, API payload validation, selection retention, keyboard bypass and
-side-filtered RootContextMenuItem entries before and after cloning/package reload.
-Controller sensor checks disable only the tested hand and assert the opposite permission
-stays enabled. Individual menu colors follow their own fields; the global color follows
-MultiBoolConditionDriver(All).
-
-Version 65 generates complete Left/Right Expressions submenus, with OnlyForSide on
-each root entry and only the matching hand toggle inside each submenu. Checks cover
-both copies of common controls, identical menu contents apart from the hand toggle,
-local Back/Clips references, colors and button behavior after cloning/package reload.
-
-Version 63 stores each keyboard hand's modifier as an editable Renderite.Shared.Key.
-Left defaults to Shift and Right to Control, independent of gesture table priority.
-Sensor checks cover all four modifier combinations for keypad 0-9, both-hand pair
-selection, adding/removing Ctrl while Shift is held, Alt remapping, shared modifiers,
-and an unassigned None modifier. Shortcuts and Dynamic Input edits also run after clone/reload.
-
-Version 59 gives Index fingers separate open and closed comparisons with an
-editable neutral band (20 degrees by default). Both hands run all 243 combinations
-of five open/intermediate/closed finger states against an independent gesture
-oracle, in addition to the existing 32 extreme poses. Checks cover band boundaries,
-zero and negative widths, live setting edits, delayed Neutral expression selection,
-and recovery to Point/Fist/Open. RockNRoll retains its thumb-independent mapping.
-Graph checks verify eight direct gesture rows with an explicit Neutral NOR,
-and the new setting inputs remain bound after cloning and package reload.
-
-Version 60 packs Index comparisons into one ComposeBits_byte: Bit0..4 are
-finger Closed, Bit5 requires all four non-thumb fingers to be Open or Closed,
-and Bit6 is thumb Open. The shared Touch/Index matcher compares single byte
-codes or the three-code RockNRoll lookup before the same eight-row selector.
-Layout checks verify these packed connections, byte comparison inputs and code
-groups after cloning and package reload. The 243-state oracle is unchanged.
-
-Version 61 uses ComposeBits_ushort with all ten finger Closed/Open comparisons
-connected directly, in adjacent pairs from Bit0/1 (index) through Bit8/9 (thumb).
-Both bits are false for an intermediate finger; Bit10..15 remain unused.
-The code matcher is shared with Touch but uses ushort equality and a three-code
-ushort RockNRoll lookup. Checks verify the direct connections, ushort comparison
-inputs and unused ports; the same 243-state oracle still checks classification.
-
-Version 58 places Hand sign expressions and Other expressions directly under Expressions.
-Each group includes a Back item whose ContextMenuSubmenu opens the local Expressions items,
-including after cloning and package reload. There is no intermediate Select expression menu.
-The synthetic fixture checks classification against the compiled 64-pair table,
-deduplication, complete Clips coverage, actual button selection in both groups,
-editable Clips labels, and local menu references after cloning and package reload.
-Empty groups are omitted; grouping is fixed at conversion time.
-
-Run with the installed Resonite runtime and .NET 10:
+Run from the repository root with .NET 10 and an installed Resonite runtime:
 
 ```powershell
+$env:RESOPON_NOPAUSE = '1'
 dotnet run --project tests/ExpressionSmoke -c Release
 ```
 
-An optional first argument selects the artifact directory (default: a timestamped
-directory under `.tmp_verify/expression-smoke`). `RESONITE_PATH` and the MSBuild
-`ResonitePath` property support non-default installations. No avatar assets are
-required; the parser fixture and animated output are generated by the test.
+No avatar assets are required for the default synthetic fixtures. Artifacts go to a
+new timestamped directory under `.tmp_verify/expression-smoke/`; the first argument
+can override that directory. For a non-default installation, set `RESONITE_PATH`
+for runtime loading and pass `-p:ResonitePath="D:\Games\Resonite"` for build references.
+Use the same installation for both.
 
-The test uses actual stock ProtoFlux nodes and animation providers. It checks the
-serialized VRChat menu enum values, gesture conditions, Hermite curves, public
-impulse validation, all 64 compiled gesture pairs, layer composition and history rejection,
-all eight int values on each of the ExpressionSystem/Method.TrySetGesture.Left and ExpressionSystem/Method.TrySetGesture.Right Tags, immediate evaluation of each
-received hand pair (including back-to-back events before the next frame), unchanged-expression
-playback, unrestricted integers (including externally added table rows and missing rows), invalid selection Slots and null deselection, argument-type mismatches, controller inactivity sentinels, last-input retention across removable modules, editable table references, original tracking drivers, same-wearer clones,
-and saving/reimporting/replaying an actual `.resonitepackage`.
-It also verifies one Flux node per slot, node slots directly under each logic board,
-and distinct node positions within each board before and after package reimport.
-Version 62 sets every logic board parent's local Position to (0, 0, 0), including
-after cloning and package reimport. Every connection outside a feedback cycle
-must run from left to right; this includes data inputs and impulse calls. Feedback
-cycles stay within one layer.
-Layout checks also require keyboard inputs to follow port order from top to bottom
-without unrelated nodes splitting the group. Key literals/variables and sender
-Tag/target/ExcludeDisabled inputs must stay close to their consumers. A shuffled
-fixture covers creation-order independence, shallow inputs feeding deep nodes,
-feedback cycles, and repeatable arrangement. The synthetic run
-writes keyboard-layout.json for inspecting the generated coordinates and edges.
-Left and Right must use DynamicImpulseReceiverWithValue<int> with the exact namespaced hand Tags. Generic Left/Right Tags are rejected. MenuLeft/MenuRight and their context submenus are absent; Select receives a Clips Slot and the combined toggle receives no payload; no Command slots may remain.
-Each actual Flux group must stay within one logic board. Core lifecycle, selection,
-playback, the seven public API receivers, and each controller hand have independent
-boards. The test reports node/group counts and enforces a 256-node per-board budget,
-including after package reimport. Module diagnostic counts must match the graph.
-Each Output has its own sampling/mixing/fade board and a driven field exposed as Result.
-Result targets and
-playback diagnostic fields must retain native driver links after import, preventing
-a regression to synchronized writes on every frame.
-Selection/playback diagnostics, gesture permission rejecting hand input while accepting keyboard updates, enabling input again, direct Clips menu selection, a partial
-tracking-to-expression crossfade, wearer departure, rejection of public and internal
-updates without a wearer, first events after reattachment, and independent cloned
-int gesture receivers are checked as runtime behavior.
+## Coverage
 
-The generated avatar helper checks cover the package-free Avatar Root Identification
-and loading thumbnail: equip/dequip, stale wearer references after detaching, head
-tracking, pending/loaded mesh visibility, fallback texture collection, and behavior
-after saving, inspecting and reimporting the resulting package. The converter must
-not contain embedded `.resonitepackage` resources.
+- FaceEmo normal/CAC detection, first-pattern selection, gesture graph resolution,
+  mixed clips, curve validation, and all 64 compiled gesture combinations.
+- Public API tags and argument types, unrestricted integer inputs and extra table
+  rows, invalid/foreign selection Slots, null release, and same-Slot no-op behavior.
+- Menu selection hold, permission settings, reset and wear lifecycle, numbered
+  groups of at most eight expressions, label/color bindings, and direct-child menus.
+- Keyboard rising-edge behavior, controller sensor tables and Index neutral bands,
+  timeout/drop semantics, delayed snapshots, disconnect/VR-exit sentinels, and permissions.
+- Static output writes, sparse named pose values, readable binding keys and collisions,
+  existing tracking drivers, normal/inverted blink mixing, and actual mesh weights.
+  Blink mesh outputs bypass smoothing; other mesh outputs converge through SmoothValue.
+- DynamicVariable spaces, independent Flux boards, node layout, local references,
+  source license preservation, cloning, package inspection and reload.
+- Generated Avatar Root Identification and loading stand-in behavior, including
+  wear state, head tracking, mesh visibility, and collected fallback texture assets.
 
-An optional second argument imports a locally converted avatar instead of the synthetic
-runtime fixture. This mode requires a fully assigned gesture table; animated clips are sampled at Core AnimationTime:
+Current behavior and editing instructions are documented in the
+[expression system](../../docs/expression-system.md),
+[variable reference](../../docs/expression-variables.md), and
+[controller input reference](../../docs/controller-gestures.md).
+Tests inspect generated stock components and execute ProtoFlux in a headless world.
+They do not establish physical controller behavior, keyboard focus handling,
+interactive menu usability, or multi-client synchronization in a running client.
+
+## Focused license check
+
+```powershell
+dotnet run --project tests/ExpressionSmoke -c Release -- --license-only
+```
+
+This runs the common parser/compiler fixtures and focused license generation,
+clone, package inspection and reload checks with menus enabled and disabled.
+An optional artifact directory precedes the flag.
+
+## Locally converted package
+
+The second argument switches runtime validation to an imported avatar package
+with the current expression layout and a generated context menu:
 
 ```powershell
 dotnet run --project tests/ExpressionSmoke -c Release -- .tmp_verify/imported-gestures path/to/avatar.resonitepackage
 ```
 
-It verifies all 16 saved menu int payloads and their hand Tags, then invokes the actual context-menu
-button triggers without editing their values. Each click must synchronously update
-the current pair and selected expression. It checks all 64 selected poses against
-their AnimX tracks and target output fields,
-and requires at least eight distinct poses by default. When the authored avatar has fewer poses,
-set `RESOPON_TEST_EXPECTED_DISTINCT_POSES` to its independently verified count (2–64);
-the test then requires exactly that count. PilicaKumagaya 1.0 uses 6. Saved menu items without automatic Enabled drivers, direct Clips selection preserving the hand pair, rejection of hand gesture input while disabled, and both actual bool mode buttons are also checked. Plum v1.0.1 is the registered local regression case.
-An optional third argument supplies a previous package to compare before the menu test:
+The check sends both hand APIs for all 64 table cells, including null/release cells,
+then compares actual outputs against fixed pose values and Base after smoothing
+settles. External tracking sources are frozen for this comparison; separate blink
+fixtures exercise live tracking. It also presses the saved grouped menu buttons and
+checks selection hold and permission behavior.
+
+At least eight distinct visible poses are required by default. For an avatar with
+fewer poses, set `RESOPON_TEST_EXPECTED_DISTINCT_POSES` to an independently verified
+count from 2 through 64; the test then requires exactly that count. Do not change
+the expected count merely to accept unexpected output.
+
+An optional third argument compares a previous package's semantic snapshot:
 
 ```powershell
 dotnet run --project tests/ExpressionSmoke -c Release -- .tmp_verify/imported-gestures path/to/new.resonitepackage path/to/baseline.resonitepackage
 ```
 
-Comparison covers all 64 table references, catalog settings, output binding identities,
-and complete reserialized AnimX assets (all keys, tangents, and interpolation modes).
-Snapshots and AnimX files are saved under `current-expressions/` and
-`baseline-expressions/` for inspecting differences. The old graph's total nodes,
-largest actual Flux group, and groups spanning boards are reported without requiring
-the legacy package to meet the new board layout.
-Parser/compiler fixtures cover gesture-weight motion time, authored menu-bank defaults,
-and empty/sparse upper layers preserving lower-layer outputs.
+Comparison covers catalog entries, final pose values, output bindings and all 64
+mappings. Snapshot readers support legacy layouts, but intentional semantic changes
+can still fail comparison. Inspect `current-expressions/expressions.json` and
+`baseline-expressions/expressions.json`; legacy compatibility does not imply that
+all old package versions must compare equal to current output.
 
-The single-user headless world explicitly enables `ForceFullUpdateCycle` so input
-and mixer updates run. This setting is not exported in the avatar. The process
-exits without running asynchronous engine shutdown callbacks.
-
-Physical controller sensing, keyboard focus in a desktop client, context-menu
-layout, and multi-client networking still require interactive verification.
-
-Node simplification uses scoped Dynamic Variable Inputs in controller hands, ancestor gesture settings,
-and Core selection/playback diagnostics, plus the local inputs of each Output. Namespace lookup must reach the same space instance from the fixed source
-and the input node; different intervening namespace names do not block that lookup. Dynamic source Slots
-and variable table keys retain ReadDynamic nodes. Core lookups bind to the shared system space from every module. The NATIVE report lists both forms.
-Input proxy checks inspect actual HasValue/DynamicValue for both hands and Core object inputs. Editing
-StabilitySeconds must update that module's hands while other modules retain their values. The same checks
-run on clones and package reloads. Existing same-frame events, editable tables, removable modules,
-wearer departure/reattachment and clone playback cover the synchronization behavior of Core inputs.
-
-Version 23 selects Clips entries directly without changing LeftGesture/RightGesture or the then-existing PairKey diagnostic (removed in Version 79).
-Actual expression buttons disable hand gesture input, write CurrentExpression and execute Playback.
-Unmapped Clips entries and copied templates are selectable. Invalid Slot references preserve selection.
-Only accepted gesture API events run Selection. Data edits, input permission changes and initialization
-must not select a gesture pair. Lifecycle and input actions retain their local change detectors.
-The sensor-event fixture replaces hardware outputs temporarily and executes the exported graph:
-both hands must wait for stability, fire when the timer expires without more sensor changes,
-use device-specific pose classification, require the wearer's VR mode, send -1 on disconnect/VR exit, and redetect on reconnect.
-All keyboard shortcuts (keypad 0 through 9 for each hand) are checked, including an externally added L8R9 expression. Keyboard chords must fire once per press and retain newer manual input while held. Shift+keypad sends Left; Ctrl+keypad sends Right; Ctrl+Shift+keypad sends both. Keypad alone must leave both hands unchanged.
-Idle sentinels prove Selection does not run on unchanged frames. Table edits wait for the next gesture event. Inactive clips remain selectable, and menu Enabled fields remain unchanged.
-Keyboard Flux consists of exactly two boards, Left/Logic and Right/Logic, with one
-bool change detector, IndexOfFirstValueMatch<bool>, and sender per hand. Settings
-live under each hand's DV in the ExpressionSystem.Input.Keyboard space, with Tag,
-Modifier and Key.0 through Key.9 only. Simultaneous keys select the lowest
-index; adding or releasing another key while the chord stays valid does not resend.
-Runtime checks cover modifier key edits, independent hand settings, edited Tags,
-and AvatarWornLocal blocking input even while the avatar remains under the active user.
-Graph checks require no LocalUpdate and two keyboard boards before and after package reload.
-Version 7 retains the Version 6 keyboard schema and moves playback sampling to each Output.
-The avatar identification graph is also installed for avatars without FirstPerson settings.
-The synthetic fixture supplies the wearer reference normally assigned by AvatarUserReferenceAssigner on equip.
-Key.1 reassignment must update only its hand and retain valid Dynamic Input bindings after clone and package reload.
-
-Lifecycle and controller hands retain no User references. Lifecycle StoredValue<bool> flags
-initialize once while worn and rearm when the local user stops wearing the avatar.
-The previous active client clears state once on departure only when no new wearer is present.
-Private stages reject unworn updates, unworn clones do not initialize or repeatedly clear
-stored state, and their first wear restores the base output. Same-frame reattachment API
-requests verify that initialization runs once and does not discard either hand.
-Mapping a Clips entry makes it appear in the menu; copies from the template become usable after assignment.
-The mode bool defaults to true and resets on cloning, loading and reattachment. Ordinary input cannot update
-hand values while disabled, and the first valid event after reattachment initializes before testing the gate.
-
-Version 5 gives each record schema a distinct DynamicVariableSpace name. The fixture
-checks every record's expected name and every value/reference prefix before and after
-package reload, including templates, bindings, child table rows and import warnings.
-Legacy Expr writes must not affect the new Core. Snapshot comparison discovers the
-saved space names so old Expr packages remain usable as semantic baselines. Public
-impulse Tags and payload types are unchanged from Version 4.
-
-Core retains only CurrentExpression as a Slot reference. Selection validates the table
-entry in a local value and writes it directly after snapshotting and configuring the fade.
-Graph checks enforce the absence of intermediate diagnostic references before and after
-package reload. Core must not retain a SelectionStatus field. Disabling the selected clip must clear CurrentExpression,
-and preserve that clip's FadeOut and the previous output snapshot.
-
-Version 7 adds a two-output regression fixture for reordered and missing tracks,
-tracking changes and weight clamping, non-looping endpoints (including Hold),
-edited loop periods, and continued animation after fade completion. It verifies
-that a 0.001-second clip completes a 0.1-second fade, interrupted fades snapshot
-the mixed Result, null selection preserves FadeOut, and an unworn clone follows
-Base despite saved selection state. Playback has no impulse receiver; API calls
-still select synchronously and driven output fields update on the engine cycle.
-Version 8 computes AnimationTime and FadeWeight once in Playback. Each Output uses
-ValueSource to read these fields; graph checks forbid per-output WorldTime/ValueMod.
-Replacing the shared producers verifies that all outputs consume their driven values.
-A switch is checked from its first update: outputs hold Snapshot until Playback's
-evaluated start/expression match the current selection, avoiding stale shared timing.
-
-Version 9 adds a real EyeManager/EyeLinearDriver fixture. Deterministic eye-close
-overrides exercise zero-valued animation tracks, independent eyes, max/min closure,
-closed expressions, missing tracks, fade-in/out, existing viseme weighting, and
-manual BlinkMode edits. The same checks run on a clone and a saved/reloaded package,
-including OpenCloseTarget-to-Base and OriginalDriver reference remapping.
-
-Version 10 replaces per-output ValueCopy with one DynamicBlendShapeDriver per
-renderer. Result is a DynamicField targeting the driven entry's Value. Graph checks
-verify unique renderer ownership, exact entry-to-target links, and no extra entries.
-A real two-mesh fixture covers same-named renderers/shapes, numeric VRM-style bindings,
-a shape added after a Clips asset await, untouched mesh weights, dynamic Result
-reads and Selection snapshots, blink routing, cloning and package reload.
-Standalone test fields are driven directly and exposed through the same DynamicField.
-Imported-package checks wait for driver mesh assets before verifying named shape links.
-
-Controller checks execute the generated Flux against the observed Avatar Expression
-Editor tables for Index/Cosmos/pads and the v52 Touch contact specification: all 128 Touch sensor combinations, all 32 Index finger poses, all 16 Cosmos codes,
-and eight directions on both Vive and Windows MR, for each hand (384 cases total).
-They also cover finger/thumb angle thresholds, sector boundaries and the downward
-seam, editable settings, stability, reconnect, input gates, manual-input retention,
-and independence of the opposite hand. These are single-user mock sensor checks;
-physical controller operation and multiplayer behavior require in-world testing.
-See [controller gesture evidence](../../docs/controller-gestures.md).
-
-`NormalExpressionPatternChecks` verifies FaceEmo's first normal pattern against an
-independent all-64 pose oracle: reverse FX layer priority, stable hand/gesture sorting,
-shadowed branches moved to later patterns, neutral constraints, manual candidates,
-exact face/baseline filtering before pattern selection, event exclusions and BlendTree endpoints.
-It replaces the old router-specific checks. Entry/Exit, nested machines, Write Defaults,
-parameter defaults, Set/non-Set drivers, playback speed and transition timing are now
-explicitly tested as irrelevant to FaceEmo extraction instead of grounds for rejecting a layer.
-MA Absolute/Append continues to supply FX to the same importer.
-
-`CacExpressionChecks` verifies the first numbered 14-entry CAC set, all 64 pairs,
-right-hand priority, grip endpoint, muted/missing/non-face branches and later-set isolation.
-`FaceExpressionDetectionChecks` covers conditionless/nested/zero-weight candidates,
-Contact/PhysBone/bool-toggle exclusions, baseline differences and Clips reset values.
-`MixedExpressionClipChecks` covers mixed tracks, ignored events/playback settings and
-malformed face data. `WeightedCurveChecks` retains its independent Bezier oracle.
-`NamedShapeRepairChecks` verifies exact renderer identity, source-FBX channel names,
-retained weights, aliases, missing names, ambiguous paths and idempotence.
-
-For real avatars, the optional imported-package check saves `current-expressions/expressions.json`
-and replays all 64 gesture API pairs against actual mesh output fields. OriginalDriver inputs are
-stabilized at the authored Neutral pose while the exported tracking mixer stays enabled.
-Independent source-clip checks can use the snapshot without assuming runtime slot IDs.
-Native blink/viseme behavior is covered separately by synthetic tracking tests.
-
-`IndirectFaceEmoChecks` retains the Legnia-shaped nested-selector regression with arbitrary
-parameter names and numbers, both-hand Fist timing and source-layer ordering. It also
-checks that a stalled hand input follows the authored graph and that unresolved paths do
-not discard independent assignments or manual candidates.
-
-`FaceEmoGraphRoutingChecks` checks Clips-first routing independently of Parameter Driver
-placement: driver-free Entry/Any State/ordinary chains, intermediate faces, nested Exit,
-parent-before-child behaviours, Set-Copy-Add chains, cross-FX writers, repeated controllers,
-cycles, transition priority/Mute/Solo, discrete 1D BlendTree children and fallback priority. Every supported fixture checks
-all 64 input pairs against authored expected values. Unseen clips and later FaceEmo patterns
-must never enter the Clips through graph evaluation.
-
-Keyboard defaults use Shift for Left and Ctrl for Right. Runtime checks execute
-the actual keyboard Flux, mocking only KeyHeld sensors and resolving their Key
-inputs through the exported Dynamic Inputs. The same checks run on imported
-packages; the old RESOPON_TEST_KEYBOARD_PRIMARY_HAND setting is no longer used.
-Version 16 inserts a SmoothValue<float> per named mesh-driver entry. Result now
-views TargetValue; selection updates the destination synchronously while Value
-drives the DynamicBlendShapeDriver entry. Real-mesh tests require intermediate
-weights, continuous retargeting during a transition, convergence, blink composition,
-independent same-name renderers, clone and package reload. Graph checks require
-exactly one smoother per mesh output and verify both links. Imported-avatar checks
-wait for smoothing to converge before comparing all 64 final poses with the baseline.
-Speed defaults to 10 and WriteBack is disabled. Generic standalone fields remain direct.
-
-Version 17 merges singleton Core and GestureTable spaces into ExpressionSystem.
-Their keys are Core.* and GestureTable.Pair.*; repeated clip, binding, output,
-input and diagnostic records retain separate spaces with dotted hierarchy names.
-Space checks require exactly one system space, no Core/table spaces, and root
-lookup of both modules. Runtime input, table editing, clone and package reload
-checks exercise the shared scope; snapshot helpers still recognize older schemas.
-
-Version 18 places every dynamic value, reference and DynamicField directly in
-its own child slot under the owning space's DV container. The slot name is the
-variable key. Shared Core.* and GestureTable.Pair.* fields live in Expressions/DV.
-Structure checks cover each variable's owner, parent, name and single occupancy
-before and after package reload. Snapshot helpers also read older record layouts.
-
-Version 20 exposes a single ExpressionSystem/SmoothingSpeed float (default 10) in
-Expressions/DV/SmoothingSpeed. Each mesh SmoothValue.Speed is bound through a
-DynamicValueVariableDriver<float>. The real-mesh fixture changes this value and
-checks every smoother across both renderers, including the tracked blink output.
-It verifies nondefault values survive cloning and package reload, and edits to a
-clone or restored avatar leave the source and sibling speeds unchanged.
-
-Version 21 removes GestureTable/Logic, Inputs/ContextMenu/Logic, MenuAvailable and the
-internal MenuRefresh event. Menu Enabled fields must have no automatic driver after
-generation, cloning and package reload. Runtime checks retain enabled menu items for
-unmapped, disabled and inactive expressions and after removing the last mapping.
-Selection validation and direct Clips ID lookup are covered independently.
-
-Version 22 uses GestureTable.Pair.L0R0 through GestureTable.Pair.L7R7 and the string
-Core.PairKey (initially L0R0, removed in Version 79). All 64 keys and synchronous pair lookups are checked.
-A conflicting legacy numeric key must be ignored. Gesture Selection uses FormatString
-with ExpressionSystem/GestureTable.Pair.L{0}R{1} and no integer multiply/divide/modulo
-for packing or unpacking pair indices, including
-after package reload. The baseline snapshot reader normalizes legacy numeric keys
-only for comparing authored mappings with older packages.
-
-Version 24 renames Core.AllowExternalInput and its bool API to AllowHandGestures.
-Keyboard/Left and Keyboard/Right have separate int receivers that preserve and bypass
-this flag. All 16 actual shortcuts are exercised with hand gestures disabled, including
-modifier exclusion, held chords and reload. Gesture API requests remain gated.
-
-Menu Color is driven by ReferenceOptionDescriptionDriver<Slot> for Clips and imported
-expression items, and ValueOptionDescriptionDriver<bool> for hand-gesture permission.
-Only the current expression / matching flag is green; other options are white. Checks
-cover gesture selection, direct selection, permission changes, copied templates, clone
-isolation and package reload, with no changes to Enabled, label or sprite bindings.
-
-Version 25 adds the Reset settings menu and a payload-free Reset API. ExpressionResetChecks presses the actual button on generated, cloned and imported avatars, checks both hands and expression reset to neutral/Base with gestures enabled, verifies mappings survive, and confirms the next gesture resumes selection. The main fixture originally checked that unworn reset requests were ignored; it now verifies unworn reset is accepted.
-
-Version 28 groups all 64 table rows under Expressions/DV/GestureTable/LnRm,
-removes the empty Expressions/GestureTable slot, and reads
-ExpressionSystem/GestureTable.L{0}R{1} with FormatString. Placement, runtime
-selection, external rows (including keypad 8/9), clone, save and reload checks
-use the new layout. Snapshot comparison can still read older table layouts.
-
-Version 29 removes HasPose and copied Pose values. Playback resolves each output's Binding by Output reference and uses Base when absent. Regression checks cover explicit zero values, sparse live tracking, disabled/deleted bindings, duplicate binding precedence, reset, clone and package reload.
-
-Version 30 uses readable mesh/shape keys for named float variables in one Binding space per expression. Tests cover invalid characters against the installed DLL, replacement and renderer-name collisions, stable ordering, actual names for numeric source bindings, direct lookup, missing variables, live tracking, clone and reload. Snapshot comparisons normalize new readable keys to source binding identities for legacy package comparison.
-
-Version 31 stores Binding.<Output.Id> floats directly in each Clip's DV container. No separate Binding space or Bindings Slot/reference is generated. Checks cover clip-scoped names, direct CurrentExpression changes, missing values, clones and reload; snapshot readers retain support for v30 and earlier layouts.
-
-Version 32 groups Binding.* variable slots under each Clip's DV/Binding slot. Variable names and the owning Clip space stay the same. Placement checks cover generation, cloning and package reload.
-
-Version 33 removes CurrentExpression change detection and slot-activity gates from playback mixing. Static outputs require an explicit Playback impulse after a direct reference edit. Checks cover synchronous selection/reset, inactive output/clip/binding slots, missing values, tracking and dequip cleanup.
-
-Version 34 omits unused Output Path, Shape, Target and Baseline variables. Wiring checks follow Result through SmoothValue and DynamicBlendShapeDriver to the actual field. Snapshots identify targets by relative hierarchy, component and shape, and read authored values from the Neutral clip; legacy Target/Baseline records remain readable for comparisons.
-
-Version 35 writes diagnostic messages and per-board paths/node counts to conversion logs. Space/layout checks verify that no Diagnostics slot or diagnostic spaces are exported, including clones and package reloads. The synthetic diagnostic message exercises the log output.
-
-Version 36 exports fixed Slot references through DynamicReferenceVariable<Slot> and the installed DLL's DynamicVariableObjectInput<Slot>. Checks reject exported RefObjectInput<Slot>, verify all reference inputs bind locally after cloning/reload, and exercise edits to Receiver and Outputs references. Unused source literals generate no variables; shared targets reuse one variable, including a null reference for clearing selections.
-
-Version 37 sends expression Slots to Select and Playback. Playback alone writes CurrentExpression; null clears it, including dequip cleanup. Tests cover invalid/foreign/disabled Slots, rejection of string selection, synchronous null/non-null playback, same-Slot reselection, reference menu buttons, copied templates and package reloads.
-
-Version 38 scopes hand-module references to each module's ExpressionSystem.Input.HandGesture space as References.Left/Right. Checks verify no global module references remain, local reference edits do not affect other modules, and bindings stay local across cloning and package reload.
-
-Version 39 leaves Target unconnected for writes to the same named ancestor space. Checks require implicit targets for Core and hand state, explicit targets for traversed Output.Result, and no unused Core or hand reference variables. Existing runtime tests exercise API and controller writes, cloning, and package reload.
-
-Version 40 represents null constants with unconnected object inputs. Checks reject References.None definitions and input nodes; runtime cases cover empty selections, reset/dequip, unworn Base fallback, cloning and package reload.
-
-Version 41 removes Core. from system state keys, renames fixed Slot references to References.* (excluding CurrentExpression and GestureTable.LnRm), and places Lifecycle/Selection/Playback directly under Internal. Space and graph checks assert this layout and reference naming; runtime, clone and package reload checks use the new state paths.
-
-Version 42 routes all internal impulses through References.Internal targeting the shared Internal parent. Reference checks reject per-board references and inspect internal triggers' TargetHierarchy. Runtime checks send Selection/Reset/Playback to the parent (Initialize was replaced by Reset in Version 74), verify exactly one receiver, and cover API operations, cloning and package reload.
-
-Version 43 renames the public impulse reference to References.API. Existing reference-edit and binding checks use this name before and after cloning and package reload.
-
-Version 44 removes Clip/Enabled and unused Clip/Source metadata. Graph checks reject both definitions and references, including templates, and reject GetSlotActive gates. Runtime checks cover inactive clips in gesture mappings and direct selection under an inactive Clips, null mapping reset, copied templates, cloning and package reload. Pose snapshots no longer include the removed Enabled field.
-
-Version 45 removes Clip Id/DisplayName and writes menu labels directly. Pose floats use Output.Id as the full Clip key and live directly under DV, without the Binding. prefix or group. Checks cover direct label edits, slot renaming, flat placement, variable edits, collisions, templates, cloning and reload. Snapshot comparisons identify clips by Slot name and same-name sibling ordinal and retain legacy pose readers.
-
-Version 46 removes OnStart from keyboard and controller input boards. Graph checks reject OnStart anywhere under Inputs before and after cloning/reload; existing sensor, keyboard, reconnect and equip checks exercise the remaining change-event paths. Internal Lifecycle and Playback retain their startup hooks.
-
-Version 47 groups packed controller codes by gesture. Layout checks require a seven-row bool first-match selector, byte lookups for multi-code gestures, direct comparisons for single codes, and a false RockNRoll row for Cosmos. Group constants follow port order; the existing exhaustive sensor cases verify gesture numbers and unmatched Neutral behavior across clone/reload checks.
-
-Version 48 keeps controller Candidate and last-sent Stable in StoredValue<int>, replaces Since with resettable ElapsedTimeFloat, and removes the hand DV containers/spaces. Runtime checks assert observable API results instead of the removed DV state. Added cases cover an expired timer restarting, candidate replacement during the wait, a brief excursion returning to the last sent pose without overwriting manual input, and the unchanged physical pose being submitted after rewear. Structure checks also run after clone/reload.
-
-Version 49 directly generates the async snapshot graph observed in PC_Akane's Touch/Left
-with FrooxEngine. Each accepted change starts StartAsyncTask -> DelayWithValueSecondsFloat<int>;
-completion sends only if input remains accepted and the captured gesture matches the current one.
-There is no controller Store or ElapsedTimeFloat. Returning to a previously sent pose sends again;
-older matching tasks are not cancelled. Tests cover first Neutral, captured duration despite settings
-edits, mismatching snapshots, input disabled during a pending delay, independent overlapping tasks,
-rewear, zero delay, and every controller code on both hands. Structure checks also run after clone/reload.
-
-Version 50 inserts LocalImpulseTimeoutSeconds between StartAsyncTask and Delay.
-Both use StabilitySeconds. Changes during the cooldown are dropped, not queued,
-and do not extend it. Reset stays unconnected, including across input disable/re-enable.
-Runtime checks cover dropped replacement poses remaining unsent while held, matching
-round trips sending only the admitted snapshot, later input after expiry, quick re-enable
-without duplicate sends, captured durations, and zero timeout on all ten hand graphs.
-Structure checks verify the shared duration source and Trigger/Next wiring after reload.
-Re-enable cases settle mocked sensors while input is disabled before changing permission,
-so the timeout assertions exercise one new accepted pose rather than simultaneous input edits.
-
-Version 51 mirrors the latest PC_Akane Touch graph: UserVR_Active joins the
-acceptance gate, and its false branch sends -1 immediately through the same hand
-sender. All ten controller hand graphs share this behavior. Runtime checks cover
-desktop sensor suppression, VR exit/re-entry, immediate disconnect, pending
-snapshot rejection after VR exit, permission gating, and one-shot/hand isolation.
-The existing timeout and captured-duration checks remain in place.
-
-Version 52 replaces Touch's raw button codes with thumb-contact OR, GripClick,
-TriggerTouch and TriggerClick. Both hands test all 128 raw sensor combinations
-against an independent posture table, including multiple thumb contacts and
-click without touch. Explicit transitions verify resting index -> Neutral through
-the existing delay and a mapped expression, lifted index -> Victory/Open, grip
-plus index contact -> Fist/ThumbsUp, and no resend when only thumb location changes.
-Other devices retain their existing tables; no finger pose output is added.
-
-Version 53 connects all seven Touch sensors directly to separate ComposeBits_byte
-inputs. Thumb-contact combinations expand the grouped byte lookup sizes to
-45/1/15/15/30/1/3 while retaining the seven gesture rows and v52 behavior.
-Layout checks require the exact sensor-to-bit connections and an unused Bit7
-before and after package reload; the independent 128-case posture oracle stays unchanged.
-
-Version 54 orders the seven used Touch outputs as they appear on the stock node:
-YB touch, XA touch, thumb rest, grip click, joystick touch, trigger touch and trigger click.
-Long byte lookups become inclusive IsBetween_Int ranges (6 for Fist, 2 for Point,
-2 for Victory and 4 for RockNRoll) with one shared byte-to-int cast. ThumbsUp retains
-its three sparse codes; Open/Gun retain direct equality. Graph checks verify actual
-output order and forbid large Touch byte lookups; the exhaustive sensor oracle
-covers every range endpoint and gap, alongside clone and package reload checks.
-
-Version 55 removes Touch's contact-only Neutral override after Index+1. Codes
-32..39 and 48..55 already match none of the seven gesture inputs, so unmatched
-Index=-1 becomes Neutral=0 without extra NOT/AND/conditional nodes. Graph checks
-require Index+1 to feed the acceptance gate directly; the existing 128-case
-oracle and resting-index transitions still verify Neutral and mapped expressions.
-
-Version 56 makes Touch Neutral explicit as row 0 of the eight-row bool selector.
-One NOR_Multi_Bool reuses the seven gesture conditions, covering the same 18 of
-128 input patterns. The selector Index now directly supplies gesture 0..7 without
-ValueInc. Graph checks require the NOR's exact condition references and direct
-Index-to-acceptance wiring; other controllers retain seven rows and Index+1.
+Keep local avatar paths and results outside version control, using the
+[local avatar regression workflow](../../docs/local-avatar-tests.md).
+The headless test enables ForceFullUpdateCycle in its world and exits without
+asynchronous engine shutdown callbacks; neither behavior is exported to the avatar.

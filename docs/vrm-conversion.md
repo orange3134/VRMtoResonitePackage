@@ -55,6 +55,9 @@ Resoniteのモデルインポータは `JoinIdenticalVertices` を適用する�
 - `SimpleAvatarProtection` は既定でrootと各SkinnedMeshRendererへ付与し、
   `--no-protection` で無効にする。
 
+感情表情は `VrmExpressionAdapter` から共通の[表情システム](expression-system.md)へ渡す。
+ジェスチャー条件を持たないため、対応表は未割当から始まり、メニューで直接選択できる。
+
 ## VRM FirstPerson
 
 - VRM0はmesh index、VRM1はnode indexでannotationを保持する。VRM1はnodeからmeshへ解決する。
@@ -88,8 +91,7 @@ VRM・VRChat 共通で `MeshLoadingSetup` が対象 renderer の読み込みを�
   オフセットは頭から上に約 0.05236、表示は Y180 度の両面・透過 `UnlitMaterial` の Quad。
   大きさは公開済み `HumanBonePose.head` の原点の Y 座標 × 0.25 を各軸へ設定する。
 - `GetActiveUserSelf` → `UserUserID` → `CloudUserInfo.UserId` からプロフィール画像を取得する。
-  `IconURL` が null なら `Resources/LoadingFallback.png` を使う。これは以前のパッケージの
-  代替画像と同一バイト列で、通常の画像リソースとして LocalDB へインポートする。
+  `IconURL` が null なら `Resources/LoadingFallback.png` を使う。通常の画像リソースとしてLocalDBへインポートする。
   LocalDB は `local:` または `resdb:` URI を返すため、生成時に `resdb:` 固定とは仮定しない。
   画像 URI は texture と fallback 定数の両方に設定し、出力パッケージへのアセット収集対象にする。
 - `AvatarWorn` かつ `IsLocalUser` の場合だけ `RenderTransformOverride(UserView).ScaleOverride=0`。

@@ -1,118 +1,131 @@
-# FaceEmo の既存表情検出
+# VRChat表情の検出と割り当て
 
-調査対象は FaceEmo 1.7.0、commit `829f9ddf5d75aa28cbfa93293ade8c901f191ea0`。
-以下のソースパスは FaceEmo の `Packages/jp.suzuryg.face-emo/` からの相対パス。
-Unity Editor 上の実装を静的に確認した記録であり、ResoPon の実装仕様とは区別する。
+VRChatの表情読み込みは `VrchatFaceEmoExpressionImporter` に一本化している。
+`VrchatExpressionParser` は顔カーブとFX入力を読み、候補検出を統一Importerへ渡す。
+Expression Menu、Expression Parameters、MA Parametersから表情セットを選ぶ処理もない。
+ハンド割り当ては、FaceEmoでClipsを確定した後、後述のグラフ解析でその中から選択する。
+MA Absolute/Appendは入力FXを順番に並べるためだけに使い、追加FXも同じFaceEmo基準で読む。
+VRMの規格上の表情定義と、変換後のResonite側の入力・出力グラフは別の責務として維持する。
+基準にした外部実装はFaceEmo 1.7.0、commit `829f9ddf5d75aa28cbfa93293ade8c901f191ea0` の
+`Editor/Detail/AV3/Importers/ExpressionImporter.cs` と `Runtime/Domain/Mode.cs`。
+以下はResoPonの取り込み仕様。操作と出力は[表情システム](expression-system.md)を参照。
 
-## 入口と入力
+顔はDescriptorのViseme用メッシュ、Blendshapesのまぶた用メッシュ、ルート直下の `Body` の
+順に選ぶ。追加顔メッシュ・FaceEmo設定のExcludedBlendShapesは未対応。
+`BlendshapeResolver.ExpressionFaceValues` が実Rendererの同一性と曲線のパスを照合する。
+DescriptorのViseme名と既知の `vrc.v_*` 名を除外し、まばたきは含める。
+アバターに設定された初期ウェイトは追跡ドライバーの設定前に保存する。
+メッシュ照合前の `--vrchat-dump` は仮の結果で、最初のセットの確定と後続クリップの削除は
+`VrchatExpressionDetection.FilterFaceCurves` で行う。比較にはUnityのApproximately相当を使う。
 
-- `Editor/Detail/View/InspectorView.cs` の `Field_ImportButtons` が
-  `ExpressionImporter.ImportExpressionPatterns(VRCAvatarDescriptor)` を呼ぶ。
-- 中心実装は `Editor/Detail/AV3/Importers/ExpressionImporter.cs`。
-- `ImportUtility.GetFxLayer` は Descriptor の `baseAnimationLayers` から
-  FX の `AnimatorController` を取得する。見つからなければ結果は空。
-  この入口は Expression Menu や MA Merge Animator を直接列挙しない。
-- 出力は FaceEmo の `List<IMode>`。分岐にジェスチャー条件、アニメーションの GUID、
-  目・口の Tracking Control、まばたき設定などを格納する。
-  生成クリップは `Assets/Suzuryg/FaceEmo/Imported/yyyyMMdd_HHmmss/` に保存する。
+## 通常形式の最初の表情セット
 
-## 顔メッシュと表情クリップの判定
+FaceEmoの `ImportNormal` / `GetBranches` / `GetBranch` / `DivideMode` に合わせて読む。
 
-1. `Editor/Detail/AV3/AV3Utility.cs` の `GetFaceMesh` が次の優先順で1メッシュを選ぶ。
-   VisemeBlendShape モードの `VisemeSkinnedMesh`、まぶたが Blendshapes の
-   `eyelidsSkinnedMesh`、アバタールート直下の名前が `Body` の SkinnedMeshRenderer。
-2. `ImportUtility.GetAllFaceBlendShapeValues` がそのメッシュと
-   `AV3Setting.AdditionalSkinnedMeshes` の現在のウェイトを収集する。
-   キーはアバタールートからのパスとシェイプ名。`ExcludedBlendShapes` は取り除く。
-3. 呼び出しは `excludeBlink: false, excludeLipSync: true`。
-   Viseme 設定に列挙されたシェイプに加え、`IsLipSyncBlendShapeName` が
-   `vrc.v_aa` などの既知名を含むと判定したシェイプも除外する。
-4. `ImportUtility.IsFaceMotion` がクリップの float curve binding を調べる。
-   顔シェイプのパス、`blendShape.{name}`、`SkinnedMeshRenderer` 型が一致する
-   binding が1つでもあれば候補。クリップ名から喜怒哀楽などを分類する処理ではない。
-5. 通常の `GetFaceAnimation` はクリップを複製し、対象外の float curve、空の曲線、
-   全キーがメッシュの現在値とほぼ等しい曲線を削除する。
-   差分のある顔曲線が1つも残らなければ取り込まない。残る曲線は時系列のまま保持する。
-   同じ Motion はキャッシュして生成済みのアニメーションを再利用する。
+- 各FXレイヤーのDefault、Entry、Any State、各Stateの遷移先と子StateMachineを調べる。
+  muteされた遷移、直接Stateを指さない遷移、顔Motionを持たない分岐は除く。
+- 条件は左右GestureのEqualsだけを残す。片手Neutral条件には反対の手のNeutralも加える。
+  ジェスチャー条件がなければbool条件だけのトグル、Contact、PhysBone由来の分岐を除く。
+- レイヤー内では最初の条件の手（左→右）とジェスチャー番号で安定ソートし、
+  レイヤー間では後ろのFXを優先する。元のウェイト・マスク・Write Defaultsは評価しない。
+- 顔の初期値との差分がない通常分岐は除外する。各左右組合せで最初に一致する分岐を選び、
+  全組合せで隠れる条件付き分岐は後続パターンに相当するため出力しない。
+- 条件なしの表情はFaceEmoと同様、アニメーションの同一性で重複を除いて第1パターンの
+  Clips候補に残す。条件なし分岐はハンドサインのフォールバックにはならない。
 
-`GetFaceAnimation` の削除対象は `GetCurveBindings` で列挙する float curve。
-ObjectReference curve や AnimationEvent を明示的に削除する処理はここにはないため、
-「顔以外のデータをすべて除去する」と解釈してはいけない。
+最初のパターンだけをResoPonの表情セットにする。通常形式の分岐数は必ずしも14ではない。
+未一致のジェスチャーは表情解除として出力のBaseへ戻す。表情名は元クリップから取得する。
 
-## 通常の Animator の走査
+## ジェスチャー入力から検出済みClipsを選択する
 
-`ImportNormal` → `GetBranches` → `GetBranch` の順に処理する。
+候補検出と入力の割り当てを分離する。まず `VrchatFaceEmoExpressionImporter` が顔Renderer・初期値との差分・
+FaceEmoの分岐順序から先頭セットのClips候補を確定する。その後 `FaceEmoGestureConditions` が左右64通りの
+入力についてAnimatorの到達先を解析し、既に選ばれた候補のClip IDと照合する。解析器自身はClipを読み込んで
+Clipsへ追加しない。状態名やパラメーター名、アバター名、固定の番号対応は判定に使わない。
 
-- 各 FX レイヤーについて Default State、Entry 遷移、Any State 遷移、各 State の
-  遷移先を走査し、子 StateMachine も再帰処理する。
-- mute された遷移、State への直接の遷移先を持たない遷移、顔 Motion でないものは除く。
-- 条件として取り込むのは `GestureLeft` / `GestureRight` の `Equals` のみ。
-  片手だけの Neutral 条件には反対の手の Neutral 条件も加える。
-- 取り込めるジェスチャー条件がない場合、全条件が bool の If / IfNot である分岐、
-  Contact Receiver のパラメーターを使う分岐、PhysBone パラメーターを条件または
-  Motion Time に使う分岐を除く。PhysBone は `_IsGrabbed`、`_IsPosed`、`_Angle`、
-  `_Stretch`、`_Squish` を登録する。ジェスチャー条件があればこの除外処理は通らない。
-- 遷移先の `VRC_AnimatorTrackingControl` から目・口の追跡とまばたきの設定を読む。
-- 後ろの FX レイヤーから分岐を登録する。条件なしの候補は、既存分岐の Base／使用中の
-  左右アニメーションに同じ GUID がなければ後から追加する。
-- 優先する分岐に隠れて FaceEmo 側で到達不能になった条件付き分岐は、別の表情パターンへ
-  分割する。これは `Runtime/Domain/Mode.cs` による左右のジェスチャー組合せの評価であり、
-  元 Animator の状態遷移グラフの到達可能性検証ではない。
+- Parameter Driverは必須ではない。Entry／Default、Any State、通常のState遷移、子StateMachineへの進入、
+  Exitと親の明示的なStateMachine遷移を辿る。比較条件、リスト順、Mute／Solo、Any Stateの自己遷移設定を読む。
+  状態数、遷移段数、Driverの位置を特定の8状態構造へ固定しない。
+- DriverはStateまたはStateMachineへの進入時に評価し、親から子への順序を保つ。
+  Set、既知値のCopy（範囲変換なし）、既知値へのAddに対応し、複数書き込み・途中状態の連鎖も扱う。
+  条件に必要なパラメーターを書き込むレイヤーを依存関係として集め、追加FXやウェイト0のレイヤーも含める。
+  同じControllerを複数回参照した場合も、FX入力の各インスタンスを別に識別する。
+- 各組の計算はNeutralで初期化して収束させ、そこから左右の入力を同時に変更して再び収束させる。
+  各反復では元のレイヤー順に処理する。Neutralのままの状態は再進入しないため、Legniaでは非Neutralの手の
+  Setが有効になり、両手が変わる場合は後ろの右手入力が優先される。任意の実行履歴や入力時刻差は保存しない。
+- 初期値として与えるのは左右GestureとWeightだけ。非ハンドのトグルなどを既定値で固定して推測しない。
+  ただしAND条件に既知のfalseがあれば、その遷移は未知の条件が残っていても不成立と確定できる。
+- 1D BlendTreeはしきい値に一致する子、または範囲外の端の子を選べる場合だけClip IDを返す。
+  補間中の姿勢や2D／Direct BlendTreeから新たな表情を生成しない。Fistは該当する手のWeightを1として扱う。
 
-## BlendTree・握り込み・専用形式
+到達先を確定できたレイヤーでは、途中で通過した表情を採用しない。空MotionやClips外のClipに到達した場合は
+そのレイヤーを通過して下の候補を調べる。後続FaceEmoセットやbool専用候補をグラフ解析によって追加しない。
+未解決のレイヤーには元の直接Gesture条件によるFaceEmo割り当てを残し、確定済みの下位レイヤーより優先順位を
+下げない。最終的にどの候補にも一致しなければ、表情解除として出力のBaseへ戻す。
 
-- `IsFaceMotion` は BlendTree の最初と最後の子を AnimationClip にキャストして調べる。
-  中間の子とネストした BlendTree はこの候補判定では辿らない。
-- 通常取り込みの `GetFaceAnimation` は最後の子を再帰的に選ぶ。BlendTree の補間や
-  パラメーター条件を評価しないため、候補判定を通っても最終的に取り込めない場合がある。
-- Fist 条件と `timeParameterActive` がある State は先頭・末尾を Base／左右トリガー用に
-  分ける。Motion Time のパラメーター名が GestureWeight かどうかまでは検証しない。
-  BlendTree の場合、Base は最初の子の末尾、トリガー側は最後の子の末尾を使う。
-  この `GetFirstFrame` / `GetLastFrame` 経路は通常の `GetFaceAnimation` と異なり、
-  顔以外の float curve を一律には削除しない。
-- 子 StateMachine の Entry 条件に `SYNC_EM_EMOTE` を持つレイヤーを見つけると
-  `ImportCac` 専用経路へ切り替え、通常経路は実行しない。
-  `threshold - 1` を14個単位で分割し、右7種・左7種のジェスチャーに対応させる。
-  `CN_BLINK_ENABLE` / `CN_MOUTH_MORPH_CANCEL_ENABLE` の Parameter Driver も読む。
-- 別の `ImportOptionalClips` は Blink と Mouth Morph Canceller を名前などの規則で探す。
-  Blink はレイヤー名の単語 `blink`、ループ、顔 binding、3キー以上かつ値10以上を含む
-  blendShape 曲線を条件にする。通常の表情候補判定とは別処理。
+未解決になる例は、未知の条件値、未宣言または所有元不明の書き込み、Random／範囲変換Copy、同期レイヤー、
+未知のBehaviour、実行対象の時間待ち・割り込み、Animatorパラメーターを書き換えるAnimation、Animation Event、
+未接続の親Exit、循環・非収束など。解析は256反復とEntry／Exitの256段で打ち切る。
+未知のBehaviourやAnimation Eventを実際に実行することはない。
 
-## 左右の優先順位と生成FX
+FaceEmo候補の保持と既存の直接割り当てへのフォールバックは、このグラフ解析の成否と独立している。
+ログにはClips内で解決できた組数と、未解決のレイヤー・理由を残す。CACは次節の番号による割り当てを使う。
 
-FaceEmo自体に常時右優先・左優先の固定ルールはない。`Runtime/Domain/Mode.cs` の
-`UpdateTable` は左右64組ごとにBranchesを先頭から調べ、`Branch.IsMatched` が最初に成立した
-分岐で打ち切る。`ChangeBranchOrder` は並べ替え後にこの対応表を更新する。
+## CAC形式の最初の表情セット
 
-- 通常インポートはFXレイヤーを逆順にし、レイヤー内では最初の条件のHand、HandGestureでソートする。
-  `Hand.Left=0`、`Right=1` のため、同一レイヤーでは左条件が先になる。
-- CACインポートは表情番号の昇順で右7種・左7種を登録するため、競合すれば先の右条件が採用される。
-- `FxGenerator.GenerateFaceEmoteSetControlLayer` は `GetBranchIndex` で既に計算された対応表を参照し、
-  `GetEmoteIndex` で分岐番号から表情番号を生成する。生成時には表情番号と左右の固定対応はない。
+FaceEmoの `GetCacLayer` と同じく、子StateMachineのEntry条件が `SYNC_EM_EMOTE` を参照する
+最初のレイヤーを見つけたら通常形式の収集を置き換える。
+単一条件・直接State・未muteの遷移を番号順に並べ、`(番号 - 1) / 14` ごとにセットを作る。
+入力の健全性確認としてEqualsと正の整数番号を要求する。顔Motionを含む最初のセットだけを使い、
+1〜7を右手、8〜14を左手のFist〜ThumbsUpへ割り当てる。右手が優先で、欠番は後続セットで補わない。
+CACではFaceEmo同様、顔Motionがあるが初期値との差分がない分岐も初期姿勢として有効にする。
 
-従って、FaceEmo生成FXの `SYNC_EM_EMOTE` が小さい番号であることを根拠に、元の条件が右手だったとは判断できない。
-12Bの同梱設定と生成FXでは左手で表情を選ぶが、CAC形式として再インポートすると右側へ再割り当てされる。
-元アバターの挙動を維持する場合は、候補の検出・先頭セットの選択と、元FXからの左右割り当ての復元を区別する。
+両形式とも、後続セットと無関係なFX・メニュー由来のクリップはClipsに混ぜない。
+採用したセット・ジェスチャー分岐数・手動候補数は `FaceEmo normal:` / `FaceEmo CAC:` に残す。
+元クリップとコンパイルした固定ポーズが両方Clipsに存在することはある。
+対応表への割り当てをメニュー項目の選択条件にはしない。
 
-## 再利用時の判断
+## 固定ポーズへの変換と制限
 
-顔 binding による候補検出と、ハンドジェスチャーへの割り当てを分離する設計が参考になる。
-ただし、非ジェスチャー条件の大半、遷移履歴、レイヤーウェイト・マスク、BlendTree の補間を
-再現する処理ではない。分岐の重複除去も顔ポーズの内容比較ではなく GUID の比較である。
-ResoPon に適用する場合も、候補抽出と元 Animator の挙動再現の保証を分けて考える。
+選ばれた分岐を順序付き条件と初期姿勢のレイヤーへ正規化し、GesturePairCompilerが64通りの
+固定ポーズを作る。同じ結果は再利用する。初期姿勢はコンパイルの中間データとして使い、
+生成時にはL0R0が参照するClipと自動生成の基準Clipを一覧から除く。同じClip IDを参照する
+他のセルもnullにする。出力bindingは保持し、実行時の解除ではOutputs/Baseへ戻る。
 
-## 確認した既存テスト
+BlendTreeの候補判定は直下の最初と最後のAnimationClipを使い、通常ポーズは末尾の子を辿る。
+FistかつMotion Time有効の分岐は先頭・末尾も調べ、離散ハンドサインには握り切った末尾を使う。
+Motion Timeのパラメーター名は限定しない。連続的な握り込みやBlendTreeの補間は出力しない。
 
-`Tests/Editor/Detail/AV3/Impoters/ExpressionImporterTests.cs` の期待値をソースと照合した。
+材質・物体・Transform・参照値・イベント・再生設定が混在していても有効な顔カーブを取り込むが、
+顔以外の処理は実行しない。不正なbinding、非有限値、重複bindingは除外する。
+重み付き接線は検証・正規化を通す。初期値と同じ顔カーブは独立候補から省くが、
+割り当て済み固定ポーズのリセット用には保持する。
 
-- `Import_HandsLayer`: 1パターン・13分岐。追加顔メッシュ、握り込み、追跡設定などを確認。
-  `blink_2frame` が条件なし候補に入るケースには除外すべきという TODO がある。
-- `Import_MimyLabBasic`: 1パターン・14分岐。
-- `Import_CAC`: 3パターン・14／4／4分岐。
+各トラックの最後のキー値だけを保存する。元Animatorの遷移時間・再開始・ループ・再生位相、
+表情ごとの追跡制御は再現せず、既存のResoniteの瞬き・口パクと合成する。
+解決できない出力や対応できない駆動を含むClipは、部分的な顔として出力せず診断を残して除外する。
 
-今回の調査では Unity EditMode テストは実行していない。上記件数は実行結果ではなく、
-既存テストに書かれた期待値である。
+## 回帰確認の観点
 
-## ResoPonへの適用
+| 条件 | 確認する内容 |
+|---|---|
+| 通常形式 | 後ろのFX優先、最初のパターンだけを採用、bool専用・後続セットの候補を混入させない |
+| CAC形式（Sanatia等） | 14番号単位、右優先、欠番を後続セットで補わない |
+| 間接的なハンド入力（Legnia等） | ウェイト0の入力レイヤー、複数段のSet、Neutralからの収束を考慮する |
+| 元FaceEmo設定とCACの違い（12B等） | CACの番号割り当てを元の手の設定と同一視しない |
+| 非ゼロ初期ウェイト | 明示した0・カーブ欠落・解除のBase復帰を区別する |
+| 顔以外のトラックを含むClip | 顔だけを取り込み、イベントや材質の効果を実行しない |
+| パス・Rendererの不一致 | 同名の別メッシュに適用せず、解決不能として診断する |
 
-検出処理の実装とFaceEmoとの違いは [表情システムの実装](expression-system.md#faceemo-に合わせた表情候補の検出) を参照。
+合成データの回帰はExpressionSmokeのNormalExpressionPatternChecks、CacExpressionChecks、
+FaceExpressionDetectionChecks、MixedExpressionClipChecksなどで確認する。
+実アバターのパス・個別結果は `.local/avatar-tests.json` とローカルの結果へ記録し、
+[ローカルアバター回帰テスト](local-avatar-tests.md)で再利用する。
+過去の変換成功や旧版との一致を、現行版の検証結果として引用しない。
+
+## 実装の参照先
+
+- [VrchatExpressionParser.cs](../src/VrmToResonitePackage/Vrchat/VrchatExpressionParser.cs)：FX入力とカーブ。
+- [VrchatFaceEmoExpressionImporter.cs](../src/VrmToResonitePackage/Vrchat/VrchatFaceEmoExpressionImporter.cs)：通常・CAC候補の抽出。
+- [VrchatExpressionDetection.cs](../src/VrmToResonitePackage/Vrchat/VrchatExpressionDetection.cs)：実メッシュ照合と先頭セットの確定。
+- [FaceEmoGestureConditions.cs](../src/VrmToResonitePackage/Vrchat/FaceEmoGestureConditions.cs)：検出済み候補へのハンド割り当て。

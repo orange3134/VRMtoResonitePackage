@@ -37,19 +37,17 @@ UnityのLibraryやVRChat SDKの実行環境は不要。
 必要になる場合がある。`RendererTemplateScenes` はその用途だけに削除前の文書を提供する。
 Renderer自身やマテリアルを復活させてはいけない。
 
-Animatorの表情推定と他レイヤーとの競合判定は `VrchatAnimatorGraph` の到達可能性を共有する。
+AnimatorからのViseme・Blink推定と他レイヤーとの競合判定は `VrchatAnimatorGraph` の到達可能性を共有する。
 未接続のstateに競合するclipがあるだけでは表情を除外しない。到達可能な競合は保守的に除外する。
 Prefab・FBXの初期ウェイトを収集した後に表情を推定する。
 
 ハンドジェスチャー・Resoniteのコンテキストメニュー・外部イベントによる表情切り替えの使い方と対応範囲は
-[表情システムの実装](expression-system.md)、元の設計は
-[表情システム設計](expression-system-design.md)を参照する。Viseme／Blink推定とは別に解析し、共通の出力へ接続する。
+[表情システム](expression-system.md)を参照する。Viseme／Blink推定とは別に解析し、共通の出力へ接続する。
 
 表情はFaceEmoの通常形式／CAC形式を `VrchatFaceEmoExpressionImporter` で読み、最初のパターンだけを
-Catalogと左右64通りへ変換する。通常形式は後ろのFXレイヤーを優先して条件付き分岐を選び、
-CACは番号順の14表情セットの最初を選ぶ。詳細は [表情システム](expression-system.md#faceemo-に合わせた表情候補の検出) を参照。
-従来のAnimator経路投影・既定値固定・Parameter Driver評価ルーターは削除した。
-ハンド割り当てはCatalog確定後、`FaceEmoGestureConditions` がEntry・Any State・通常遷移・入れ子Exitを
+Clipsと左右64通りへ変換する。通常形式は後ろのFXレイヤーを優先して条件付き分岐を選び、
+CACは番号順の14表情セットの最初を選ぶ。詳細は [表情の検出と割り当て](face-emo-expression-import.md) を参照。
+ハンド割り当てはClips確定後、`FaceEmoGestureConditions` がEntry・Any State・通常遷移・入れ子Exitを
 辿って検出済みClipを選ぶ。Driverの有無や位置を固定せず、途中のSet・既知値のCopy/Addにも対応する。
 未知の条件を既定値で埋めず、任意の実行履歴や時間経過は再現しない。
 材質・Transform・イベント等の混在は顔カーブ抽出を妨げず、顔以外の効果は実行しない。
@@ -76,7 +74,9 @@ CLIの `--avatar` を使う。出力名は入力package名ではなく選択し�
 - ブロックシーケンスは親キーと同じindentになるUnity YAML形式を扱う。
 - 長いplain scalarの継続行を結合する。`m_ShaderKeywords` の途中で解析を切らない。
 - double-quoted scalarの `\uXXXX` をデコードし、日本語GameObject名を正しく照合する。
-- `VRCAvatarDescriptor` はscript GUIDだけでなくフィールド署名でも検出する。
+- `VRCAvatarDescriptor` はscript GUIDとfileIDを確認し、SDK差異には固有フィールド署名も使う。
+  DLL内Descriptorは542108242、単独MonoScriptは11500000を認める。
+  同じDLLのGUIDを持つ音声コンポーネント等をDescriptorと誤認しない。
 - prefab、prefab variant、composition、`.unity` scene内のprefab instanceを候補に含める。
 - 候補一覧では重いFBX配置・material解決を遅延し、選択された候補だけを詳細解析する。
 - `m_RemovedGameObjects` があっても継承した Descriptor の候補を除外しない。
@@ -100,6 +100,8 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   exclusion and physics references; sibling branches remain part of the model.
 
 ## FBXの選択と合成
+
+### 配置の識別と不要なテンプレートの除去
 
 - Mesh template selection and EditorOnly exclusions compare complete captured model
   paths after removing only the synthetic `RootNode` prefix (and leading slashes).
@@ -162,6 +164,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   mesh供給元のFBX instanceがroot placeholder配下にある場合、置換Slotをplaceholderの親へ
   先に退避してから子を移す。複製時の親を保ったまま移すと祖先を自身の子にしてしまう。
 - `.unity` のcompositionもprefabと同じcollectorで配置・上書き・ローカル参照を解決する。
+
+### 物理参照と顔Rendererの捕捉
+
 - PhysBoneのroot、ignore、collider参照はモデルのinstance identityとpathを保持し、
   prefab GUID/Transform fileIDに対応する生成済みSlotがあれば先に使用する。
   共通モデルの physics node も prefab GUID/Transform fileID を優先して intern し、
@@ -190,6 +195,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   missing identities must not fall back to other same-named renderers. An explicit
   `VisemeSkinnedMesh: {fileID: 0}` suppresses descriptor viseme bindings even when inherited
   shape names and `lipSync=3` remain.
+
+### Viseme・Blink推定の成立条件
+
 - Face inference rejects motions that also animate the target renderer's `m_Enabled`
   or `m_IsActive` on its GameObject or any ancestor (including the empty root path).
   Even constant visibility curves can differ from prefab defaults; face drivers cannot
@@ -231,6 +239,9 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   and FBX weights are collected before face inference, but a neutral curve cannot be
   assumed redundant across Animator states. Reject multi-curve face motions conservatively: a single-shape driver
   cannot also clear another authored shape, even when its required value is zero.
+
+### 主モデルと骨格の統合
+
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
   少数の名前一致だけでは推定しない。
@@ -368,33 +379,22 @@ so an accessory with a different shape order retains its own blink name.
 Descriptor に有効な Blink 番号と renderer があれば、既存の Parser → ModelAdapter → AvatarSetup の経路で OpenCloseTarget まで設定する。
 未割当の -1 は設定情報の欠如として扱い、名前検出で補うかは別の方針になる。
 
-### Plum の瞬き未設定と AvatarCreator の違い
+### 瞬きが未設定の場合
 
-2026-09-21、Plum v1.0.1 と Resonite 2026.9.18.82 の実 DLL を調査した。
-Plum.prefab は enableEyeLook=1、eyelidType=2、eyelidsSkinnedMesh に参照ありだが、
-eyelidsBlendshapes の packed 値 `ffffffff1300000014000000` は `[-1, 19, 20]`。
-配列は Blink / LookingUp / LookingDown の順なので、瞬きだけが未割当である。
-Body の19・20はそれぞれ vrc.Looking_Up / vrc.Looking_Down。vrc.Blink 自体は18番に存在するが、Descriptor は18を指定していない。
-VrchatAvatarParser は先頭が負なら avatar.Blink を作らない。19・20を代わりの瞬きとして使わない。
+Descriptorの `eyelidsBlendshapes` はBlink / LookingUp / LookingDownの順。
+先頭の-1は瞬き未割当であり、残りの番号を瞬きの代わりに使わない。
+例えばPlum v1.0.1は `[-1, 19, 20]` なので、メッシュにvrc.Blinkが存在しても
+Descriptorから瞬きは作られない。
 
-Animator の補完は、初期状態のループClip、開0・閉100を持つ単一shape、名前が `blink` と完全一致、
-他レイヤーとの競合なし、などを満たす場合だけ。Plum の `eye_blink_1` / `eye_blink_2` はこの名前条件を満たさない。
-avatar.Blink=null のままなので VrchatModelAdapter が blink preset を作らず、AvatarSetup.SetupEyesAndBlink の
-ResolveBinds は空になる。目の回転用コンポーネントは作られるが、EyeLinearDriver.Eyes は0件になる。
+Animatorからの補完は、初期状態のループClip、開0・閉100を持つ単一shape、
+BlendShape名が大文字小文字を除いて `blink` と完全一致、他レイヤーとの競合なし、などを満たす場合だけ。
+`eye_blink_1` のような名前はこの条件を満たさない。
 
-一方、実 DLL の AvatarCreator.SetupEyes はアバター内の SkinnedMeshRenderer ごとに BlendShape 名を走査する。
-NameHeuristicsHelper.SplitName → IsBlinkBlendshape → NameToChirality → GetBetterBlinkCandidate で候補を選び、
-左右別候補が揃えば Left/Right、共通候補なら Combined の OpenCloseTarget を接続する。
-判定には `blink`、`blinking`、`wink`、`eye` と `close` / `closed` の組合せ、日本語のまばたき・ウィンクを使う。
-同点候補は短い名前を優先し、長さも同じなら後から走査した候補を採る。形状の閉じ方を比較しているわけではない。
-AvatarCreator の呼び出し側は Setup Eyes 有効かつ左右の目ボーンが見つかる場合に SetupEyes を実行する。
-Plum の実 FBX 順序に実 DLL の判定関数を適用すると、Left=eye_blink_2_L（26番）、Right=eye_blink_2_R（27番）となった。
-共通候補では vrc.Blink が最上位だが、左右候補が揃うと左右別を使う。これは名前判定の検証で、見た目の比較ではない。
-
-ResoPon は目のピボット配置を AvatarCreator に合わせているが、この BlendShape 名による瞬き補完は実装していない。
-補完を追加するなら、明示的な瞬きbindingを優先し、名前による候補の曖昧さと適用条件を定める必要がある。
-接続は表情システムの構築前に行う。対象が表情の出力にも含まれる場合は、既存の OpenCloseTarget → Outputs/Base への付け替えと BlinkMode 初期化へ渡せる。
-表情構築後に AvatarCreator.SetupEyes をそのまま実行すると、目のpivot/managerの重複や既存Driveとの競合を起こし得る。
+ResoPonはAvatarCreatorのBlendShape名ヒューリスティクスによる補完を行わない。
+瞬きがないアバターを再変換するだけで接続先が増えるとは限らない。
+瞬きの接続は表情システムの構築前に確定し、OpenCloseTargetをOutputs/Baseへ付け替える。
+表情構築後の最終ウェイトへEyeLinearDriverを追加すると既存Driveと競合する。
+合成・接続は[表情の出力変数](expression-variables.md#出力)を参照。
 
 ## PhysBone
 
@@ -499,27 +499,7 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
 - Yuzuki: scene instance、material search fallback
 - Nagma PhysBone: YAML継続行
 - Platinum: Unicode GameObject名
-- Pilica / Kumagaya: `DeformPercent` 既定weight、空中継と単一ポーズ循環の表情抽出
-
-### 熊谷ピリカのハンドサイン表情
-
-PilicaKumagaya 1.0では、左手の空中継状態と表情状態の循環に Tracking Control と Write Defaults off が
-重なり、表情 Clip が読めても左レイヤーが除外されていた。循環内の顔ポーズが一意であることを検証して
-静的に抽出する。`FaceFix=0` の既定条件では右手レイヤーに表情出力がなく、左手の次の6種類を保持する。
-
-| 左手番号 | 主なシェイプの最終値（0〜1） |
-|---|---|
-| 0 / 1 / 2 | 全36項目が0（Default） |
-| 3 | Wink_L=1 |
-| 4 | joy=1 |
-| 5 | Angry=0.5 |
-| 6 | Sorrow=0.5 |
-| 7 | Fun=1 |
-
-各表情で、表にないシェイプの値は0になる。
-
-検証では左右64組を照合し、右手番号を変えても左手の選択が保たれることを確認する。
-同じポーズと空中継だけの循環を許可しても、別ポーズを含む循環や開始状態に依存する選択は許可しない。
+- Pilica / Kumagaya: `DeformPercent` 既定weight
 
 ## 未確定事項
 

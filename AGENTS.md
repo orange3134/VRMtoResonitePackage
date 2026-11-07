@@ -99,8 +99,10 @@ Resonite DLLを `ResonitePath` に指定して再ビルドする。配布版も�
 
 ## 詳細資料の読み分け
 
-作業対象に応じて必要な資料だけを読む。
+作業対象に応じて必要な資料だけを読む。全体の索引は [docs/README.md](docs/README.md) を参照。
 
+- 表情の操作・API・入力・出力・取り込み:
+  [docs/expression-system.md](docs/expression-system.md)
 - FrooxEngine起動、DLL互換性、LocalDB、終了処理:
   [docs/headless-engine.md](docs/headless-engine.md)
 - VRM解析、GLB前処理、座標系、アバター設定、FirstPerson、MToon:
