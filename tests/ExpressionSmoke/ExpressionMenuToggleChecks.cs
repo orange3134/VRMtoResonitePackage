@@ -13,7 +13,10 @@ internal static class ExpressionMenuToggleChecks
         var outputs = expressions.FindChild("Outputs").Children.ToArray();
         var buttons = expressions.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithReference<Slot>>()
             .Where(button => button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target != null).ToArray();
-        Check(buttons.Any(button => button.Slot.Name == "Imported angry"), "imported expression menu is exercised");
+        var menu = expressions.FindChild("Inputs").FindChild("ContextMenu");
+        Check(menu.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithReference<Slot>>()
+            .Count(button => button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target == catalog.FindChild("Angry")) == 1,
+            "the imported Angry pose has exactly one grouped menu button");
         var reset = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items")
             .FindChild("Reset settings").GetComponent<ButtonDynamicImpulseTrigger>();
         try
@@ -103,7 +106,7 @@ internal static class ExpressionMenuToggleChecks
         }
         finally { reset.Pressed(null, default); }
         await Frames();
-        Console.WriteLine($"MENU TOGGLE: {buttons.Length} Clips, shared and imported menu buttons hold/release all input paths with all four permission combinations");
+        Console.WriteLine($"MENU TOGGLE: {buttons.Length} Clips and grouped menu buttons hold/release all input paths with all four permission combinations");
     }
 
     private static async Task Frames() { for (int i = 0; i < 5; i++) await default(NextUpdate); }

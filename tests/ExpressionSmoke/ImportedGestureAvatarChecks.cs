@@ -31,7 +31,8 @@ internal static class ImportedGestureAvatarChecks
                 .SingleOrDefault(v => v.VariableName.Value == "ExpressionSystem.Output/OriginalDriver")?.Reference.Target;
             if (original == null) continue;
             original.Target = null;
-            Check(output.WriteDynamicVariable("ExpressionSystem.Output/Base", ExpressionPackageSnapshot.AuthoredBase(output)) == DynamicVariableWriteResult.Success,
+            float frozenBase = ExpressionPackageSnapshot.AuthoredBase(output) ?? Get<float>(output, "Base");
+            Check(output.WriteDynamicVariable("ExpressionSystem.Output/Base", frozenBase) == DynamicVariableWriteResult.Success,
                 "can stabilize tracking Base for fixed-pose comparison");
         }
         for (int i = 0; i < 6; i++) await default(NextUpdate);
@@ -109,16 +110,18 @@ internal static class ImportedGestureAvatarChecks
             Check(distinctPoses.Count == expected, $"Expected {expected} distinct visible poses, got {distinctPoses.Count}");
         }
         else Check(distinctPoses.Count >= 8, "Gesture inputs did not produce eight distinct visible poses");
+        var directButtons = ExpressionMenuGroupChecks.CheckMenu(root);
         int visible = 0;
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(receiverRoot, ExpressionSystemSetup.ResetTag, true);
         for (int i = 0; i < 5; i++) await default(NextUpdate);
-        foreach (var expression in root.FindChild("Clips").Children)
+        foreach (var button in directButtons)
         {
+            var expression = button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target;
             Check(expression.GetComponent<ContextMenuItemSource>().EnabledField.Value &&
                 expression.GetComponent<ContextMenuItemSource>().EnabledField.ActiveLink == null,
                 "Saved direct menu is enabled independently of table membership and expression state");
             visible++;
-            expression.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().Pressed(null, default);
+            button.Pressed(null, default);
             Check(BothHandsAllowed(core) && ContextMenuSelected(core) && Gestures(core) == (0, 0) &&
                 Reference<Slot>(core, "State.CurrentExpression") == expression,
                 "Saved direct menu clears gestures and selects the Clips expression");
@@ -152,36 +155,25 @@ internal static class ImportedGestureAvatarChecks
         for (int i = 0; i < 2; i++) await default(NextUpdate);
         ExpressionGraphChecks.CheckMenuColors(root);
         Console.WriteLine($"PASS: {visible} Clips direct-menu entries and the hand gesture toggle work without Override state");
-        var importedMenu = menu.FindChild("Imported menu");
-        // All menu items stay enabled; valid Clips Slots can select an expression.
-        var mappedExpressions = root.FindChild("Clips").Children
-            .ToHashSet();
-        if (importedMenu != null && !importedMenu.GetComponentsInChildren<ContextMenuItemSource>().Any(item =>
-            item.Enabled && mappedExpressions.Contains(item.Slot.GetComponent<BooleanReferenceDriver<Slot>>()?.FalseTarget.Target)))
-            importedMenu = null;
-        if (importedMenu != null)
         {
-            var importedButton = importedMenu.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithReference<Slot>>()
-                .FirstOrDefault(button => button.PressedData.Tag.Value == ExpressionSystemSetup.MenuSelectTag && mappedExpressions.Contains(button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target) &&
-                    button.Slot.GetComponent<ContextMenuItemSource>().Enabled);
-            Check(importedButton != null, "Imported menu contains an actual Slot selection button");
-            var selected = importedButton.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target;
+            var groupedButton = directButtons[0];
+            var selected = groupedButton.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target;
             var selectedItem = selected.GetComponent<ContextMenuItemSource>();
             string originalLabel = selectedItem.Label.Value;
-            const string editedLabel = "Edited imported expression label";
+            const string editedLabel = "Edited grouped expression label";
             selectedItem.Label.Value = editedLabel;
-            Check(selectedItem.Label.ActiveLink == null && selectedItem.Label.Value == editedLabel, "Can edit imported menu label directly");
+            Check(selectedItem.Label.ActiveLink == null && selectedItem.Label.Value == editedLabel, "Can edit grouped menu label directly");
             try
             {
                 ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(receiverRoot, ExpressionSystemSetup.ResetTag, true);
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
-                Check(importedButton.PressedData.Reference.Target == selected, "Saved imported-menu Slot reference survives a label edit");
+                Check(groupedButton.PressedData.Reference.Target == selected, "Saved grouped-menu Slot reference survives a label edit");
                 SetHandGesturesAllowed(core, true);
-                Check(BothHandsAllowed(core), "Ordinary input is enabled before imported button verification");
-                importedButton.Pressed(null, default);
+                Check(BothHandsAllowed(core), "Ordinary input is enabled before grouped button verification");
+                groupedButton.Pressed(null, default);
                 Check(BothHandsAllowed(core) && ContextMenuSelected(core) && Reference<Slot>(core, "State.CurrentExpression") == selected,
-                    "Saved imported-menu button selects by Slot independently of its label");
-                Console.WriteLine("PASS: saved imported-menu button selects its Slot synchronously despite label edits");
+                    "Saved grouped-menu button selects by Slot independently of its label");
+                Console.WriteLine("PASS: saved grouped-menu button selects its Slot synchronously despite label edits");
             }
             finally
             {
@@ -189,8 +181,8 @@ internal static class ImportedGestureAvatarChecks
                 for (int i = 0; i < 2; i++) await default(NextUpdate);
                 SetHandGesturesAllowed(core, true);
             }
-            Check(importedButton.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target == selected &&
-                importedButton.PressedData.Reference.Target == null, "Selected imported menu retains its expression but sends null after label edits");
+            Check(groupedButton.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target == selected &&
+                groupedButton.PressedData.Reference.Target == null, "Selected grouped menu retains its expression but sends null after label edits");
         }
         Check(root.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "Invalid imported Flux group");
         await ExpressionResetChecks.Run(root);

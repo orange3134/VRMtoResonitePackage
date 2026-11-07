@@ -69,9 +69,11 @@ internal static class ExpressionGraphChecks
         CheckMenuColors(expressions);
         if (Descendant(expressions, "Inputs/ContextMenu/Items") is { } groups)
         {
-            Check(groups.FindChild("Direct selection") == null,
-                "expression groups open directly from Expressions without an intermediate selection menu");
-            foreach (var group in groups.Children.Where(group => group.Name is "Hand sign expressions" or "Other expressions"))
+            var rootItems = groups;
+            groups = groups.FindChild("Select expression").FindChild("Items");
+            Check(groups.FindChild("Back").GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == rootItems,
+                "group selection Back references local Expressions items after cloning and reload");
+            foreach (var group in groups.Children.Where(group => group.Name != "Back"))
             {
                 var entries = group.GetComponent<ContextMenuSubmenu>().ItemsRoot.Target;
                 Check(entries == group.FindChild("Items") && entries.Children.Count > 1,

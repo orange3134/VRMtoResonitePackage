@@ -101,20 +101,15 @@ internal sealed partial class ExpressionSystemSetup
         rootItem.OnlyForSide.Value = null;
         var items = menu.AddSlot("Items");
         menu.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
-        // Keep clips directly under Clips for menu selection and copied templates.
-        // Only menu entries are grouped, using the final compiled gesture assignments.
-        var mapped = _compiled.Pairs.Where(id => id != null).ToHashSet();
-        foreach (var (assigned, label) in new[] { (true, "Hand sign expressions"), (false, "Other expressions") })
+        // Keep editable clip templates in Clips; expose each once through this entrance.
+        var selection = AddSubmenu(items, "Select expression");
+        var groups = ExpressionMenuGroups.Build(_clips.Keys, _compiled.Pairs);
+        for (int index = 0; index < groups.Count; index++)
         {
-            var entries = _clips.Where(clip => mapped.Contains(clip.Key) == assigned).ToArray();
-            if (entries.Length == 0) continue;
-            var group = items.AddSlot(label); MenuItem(group, label);
-            var children = group.AddSlot("Items");
-            group.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = children;
-            var back = children.AddSlot("Back"); MenuItem(back, "Back");
-            back.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
-            foreach (var (_, expression) in entries)
+            var children = AddSubmenu(selection, (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            foreach (string id in groups[index])
             {
+                var expression = _clips[id];
                 var item = children.AddSlot(expression.Name);
                 var source = MenuItem(item, expression.Name);
                 var labelCopy = item.AttachComponent<ValueCopy<string>>();
@@ -129,30 +124,18 @@ internal sealed partial class ExpressionSystemSetup
         resetButton.Target.Target = _api;
         resetButton.ExcludeDisabled.Value = true;
         resetButton.PressedTag.Value = ResetTag;
-        if (_compiled.Menu.Count > 0)
-        {
-            var imported = items.AddSlot("Imported menu"); MenuItem(imported, imported.Name);
-            var children = imported.AddSlot("Items"); imported.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = children;
-            AddControls(children, _model.Menu);
-        }
-        void AddControls(Slot parent, IEnumerable<ExpressionMenuControl> controls)
-        {
-            foreach (var control in controls)
-            {
-                if (control.Type != 2 && !_compiled.Menu.ContainsKey(control)) continue;
-                var slot = parent.AddSlot(control.Name); MenuItem(slot, control.Name);
-                if (control.Type == 2)
-                {
-                    var children = slot.AddSlot("Items"); slot.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = children;
-                    AddControls(children, control.Children);
-                    if (children.Children.Count == 0) slot.Destroy();
-                }
-                else if (_clips.TryGetValue(_compiled.Menu[control], out var expression))
-                {
-                    SelectMenuTrigger(slot, expression);
-                }
-            }
-        }
+    }
+
+    private static Slot AddSubmenu(Slot parent, string label)
+    {
+        var group = parent.AddSlot(label);
+        MenuItem(group, label);
+        var children = group.AddSlot("Items");
+        group.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = children;
+        var back = children.AddSlot("Back");
+        MenuItem(back, "Back");
+        back.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = parent;
+        return children;
     }
 
     private void BuildGesturePermissionMenu(Slot menu, Slot items)

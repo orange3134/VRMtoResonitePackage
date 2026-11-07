@@ -3,6 +3,17 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-07: 表情直接選択は `Expressions / Select expression / 1, 2, 3, ... / 表情` に統一した。
+各番号グループに表情を最大8個と、1階層戻る `Back` を配置する（Backは表情数に含めない）。
+最終GestureTableの `L0..7R0` と `L0R0..7` をそれぞれ左手・右手単独の集合とし、
+左右共通、左のみ、右のみ、両手の組合せでのみ選べる表情、未割当表情の順に分類する。
+分類をまたいで詰め合わせず、分類内のClips順を保って8個ずつ分割し、全体で連番を付ける。
+左右の集合が同じなら共通グループだけになる。部分的に共通の場合も共通分は1回だけ表示する。
+Clipsの全Slotを対象とし、表情Slotごとに到達可能なメニューボタンを1個だけ生成する。
+同じ表示名の別Slotは省略しない。Imported menuの別名ボタンは生成せず、その表情も同じ一覧から選ぶ。
+Clips直下の編集・複製用テンプレートとラベル追従、選択保持・再押下解除の動作は維持する。
+以下のVersion別記録にある2分類の直接配置やImported menuの構成は旧仕様。
+
 2026-11-06: ContextMenuの選択保持を `ExpressionSystem/State.ContextMenuSelected`（bool、初期値false）へ分離した。
 Clips・表情サブメニュー・Imported menuは専用の `ExpressionSystem/Method.SelectMenuExpression` を呼ぶ。
 nullまたは自身のClips直下のSlotだけを受理する。1つの同期Sequenceで保持を解除し、

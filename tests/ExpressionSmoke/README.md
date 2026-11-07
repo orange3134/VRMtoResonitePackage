@@ -1,5 +1,16 @@
 # Expression integration checks
 
+2026-11-07: Direct selection uses one Select expression entrance and numbered
+groups with at most eight expressions plus Back. Boundary fixtures cover empty,
+8/9/16/65-entry catalogs, shared/partial/disjoint hand sets and combination-only
+poses. Generated and imported package checks require complete, unique Clips
+coverage, separate hand categories, consecutive numbering and local Back targets.
+Saved avatar replay presses the actual grouped buttons for every expression.
+Imported menu aliases no longer create duplicate selection paths.
+Detected candidates can have output bindings absent from the authored neutral
+pose. Snapshots record their unavailable baseline as null; saved replay freezes
+their existing tracking Base instead of assuming every output has a neutral key.
+
 2026-11-07: Rename hand state to State.Gesture.Left/Right and fixed references to
 Reference.*, including Reference.Clips. Clips replaces Catalog; clip records use
 ExpressionSystem.Clip and controller records use ExpressionSystem.Input.HandGesture.

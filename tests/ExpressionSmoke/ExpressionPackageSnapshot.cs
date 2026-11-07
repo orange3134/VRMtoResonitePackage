@@ -105,13 +105,15 @@ internal static class ExpressionPackageSnapshot
         return JsonSerializer.Serialize(new { Path = path.ToArray(), Component = owner.GetType().FullName, Index = component, Shape = shape });
     }
 
-    public static float AuthoredBase(Slot output)
+    public static float? AuthoredBase(Slot output)
     {
         var legacy = output.ExpressionVariables<DynamicValueVariable<float>>()
             .SingleOrDefault(v => v.VariableName.Value == ExpressionTestFields.VariablePath(output, "Baseline"));
         if (legacy != null) return legacy.Value.Value;
         var neutral = ClipRoot(output.Parent.Parent).Children.Last(c => c.Name == "Neutral (authored baseline)");
-        return Pose(neutral)[OutputIdentity(output)];
+        // Detected candidates can add bindings absent from the compiled neutral pose.
+        // Preserve that absence in snapshots instead of inventing an authored value.
+        return Pose(neutral).TryGetValue(OutputIdentity(output), out float value) ? value : null;
     }
 
     // Baseline snapshots also accept pre-v22 numeric keys; generated avatars use only L/R keys.

@@ -29,6 +29,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
     Directory.CreateDirectory(artifacts);
     ParserChecks.Run(artifacts);
     CompilerChecks.Run();
+    ExpressionMenuGroupChecks.Run();
     var runner = new StandaloneFrooxEngineRunner();
     await runner.Initialize(new LaunchOptions { DataDirectory = Path.Combine(artifacts, "Data"), CacheDirectory = Path.Combine(artifacts, "Cache"),
         LogsDirectory = Path.Combine(artifacts, "Logs"), DoNotAutoLoadHome = true, StartInvisible = true, NeverSaveSettings = true,
@@ -101,23 +102,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Check(expressions.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "all generated ProtoFlux groups are valid");
         ExpressionLayoutChecks.SaveKeyboardLayout(expressions, Path.Combine(artifacts, "keyboard-layout.json"));
         ExpressionGraphChecks.CheckLayout(expressions);
-        var directGroups = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
-        var expressionGroups = directGroups.Children.Where(group => group.Name is "Hand sign expressions" or "Other expressions").ToArray();
-        var mappedExpressions = expressions.FindChild("DV").FindChild("GestureTable")
-            .GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Select(row => row.Reference.Target)
-            .Where(target => target != null).ToHashSet();
-        var menuTargets = new HashSet<Slot>();
-        Check(expressionGroups.Length == 2, "mixed Clips offers separate hand sign and other submenus directly under Expressions");
-        foreach (var group in expressionGroups)
-        foreach (var entry in group.FindChild("Items").Children.Where(entry => entry.Name != "Back"))
-        {
-            var target = entry.GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>().PressedData.Reference.Target;
-            Check(menuTargets.Add(target), "direct selection lists each expression once despite repeated gesture mappings");
-            Check(mappedExpressions.Contains(target) == (group.Name == "Hand sign expressions"),
-                "direct menu classification matches the final 64 gesture assignments");
-        }
-        Check(menuTargets.SetEquals(expressions.FindChild("Clips").Children),
-            "both submenus together retain every Clips expression");
+        var directButtons = ExpressionMenuGroupChecks.CheckMenu(expressions);
         await ExpressionDynamicInputChecks.CheckEdits(expressions);
         await HandGesturePermissionChecks.Run(expressions);
         await KeyboardShortcutChecks.Run(expressions);
@@ -366,8 +351,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         var menu = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null,
             "context menu has no hand submenus");
-        var menuButton = directGroups.FindChild("Hand sign expressions").FindChild("Items").FindChild("Smile")
-            .GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
+        var menuButton = directButtons.Single(b => b.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target.Name == "Smile");
         Gesture(0, 0); await Frames(2);
         menuButton.Pressed(null, default);
         Check(Gestures(core) == (0, 0) &&
@@ -375,8 +359,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
             "actual expression menu button clears both gestures and selects directly");
         await Frames();
         Check(Math.Abs(field.Value - 1) < 0.01, "actual menu button applies the selected pose");
-        var otherButton = directGroups.FindChild("Other expressions").FindChild("Items").FindChild("Animated")
-            .GetComponent<ButtonDynamicImpulseTriggerWithReference<Slot>>();
+        var otherButton = directButtons.Single(b => b.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target.Name == "Animated");
         Set(core, "State.Gesture.Left", 5); Set(core, "State.Gesture.Right", 6);
         otherButton.Pressed(null, default);
         Check(Reference<Slot>(core, "State.CurrentExpression") == catalog.FindChild("Animated") &&
