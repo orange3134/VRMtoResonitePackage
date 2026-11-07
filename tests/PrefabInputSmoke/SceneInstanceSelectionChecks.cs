@@ -8,7 +8,47 @@ internal static class SceneInstanceSelectionChecks
         const string baseGuid = "ad130000000000000000000000000081";
         const string sceneGuid = "ad130000000000000000000000000082";
         const string attachmentGuid = "ad130000000000000000000000000083";
-        string original = File.ReadAllText(regularCopy);
+        const string controllerGuid = "ad130000000000000000000000000084";
+        const string clipGuid = "ad130000000000000000000000000085";
+        string original = File.ReadAllText(regularCopy) + $$"""
+
+  ViewPosition: {x: 0, y: 1.5, z: 0.1}
+  lipSync: 3
+  VisemeSkinnedMesh: {fileID: 2}
+  VisemeBlendShapes: [sil, pp, ff, th, dd, kk, ch, ss, nn, rr, aa, e, ih, oh, ou]
+  baseAnimationLayers:
+  - type: 5
+    isDefault: 0
+    animatorController: {fileID: 91, guid: {{controllerGuid}}}
+""";
+        asset("Assets/SceneFace.anim", clipGuid, """
+--- !u!74 &7400000
+AnimationClip:
+  m_Name: SceneExpression
+  m_FloatCurves:
+  - curve:
+      m_Curve:
+      - time: 0
+        value: 100
+    attribute: blendShape.Smile
+    path: Body_Base
+    classID: 137
+""");
+        asset("Assets/SceneFace.controller", controllerGuid, $$"""
+--- !u!91 &91
+AnimatorController:
+  m_AnimatorLayers:
+  - m_Name: Face
+    m_StateMachine: {fileID: 10}
+--- !u!1107 &10
+AnimatorStateMachine:
+  m_DefaultState: {fileID: 20}
+  m_ChildStates:
+  - m_State: {fileID: 20}
+--- !u!1102 &20
+AnimatorState:
+  m_Motion: {fileID: 7400000, guid: {{clipGuid}}}
+""");
         string basePath = asset("Assets/SceneAvatar.prefab", baseGuid, original);
         var baseScene = UnityScene.Parse(original);
         var renderer = baseScene.SkinnedMeshRenderers.Single();
@@ -46,6 +86,9 @@ PrefabInstance:
     - target: {fileID: {{rendererGo}}, guid: {{baseGuid}}}
       propertyPath: m_Name
       value: {{name}}Body
+    - target: {fileID: 34, guid: {{baseGuid}}}
+      propertyPath: ViewPosition.y
+      value: {{id / 1000}}
 --- !u!1 &{{id + 1}} stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 32, guid: {{baseGuid}}}
@@ -107,6 +150,17 @@ Transform:
                 Check(avatar.PhysBones.Any(b => b.RootBoneName == selected + "Helper") &&
                       avatar.PhysBones.All(b => b.RootBoneName != other + "Helper"),
                     "Scene selection keeps added physics only on the selected avatar");
+                if (strippedDescriptor)
+                {
+                    Check(avatar.ViewPosition?.Y == id / 1000 && avatar.Visemes.Count > 0 &&
+                          avatar.Visemes.All(v => v.MeshGameObjectName == selected + "Body") &&
+                          avatar.ExpressionFaceTarget?.Name == selected + "Body" &&
+                          avatar.ExpressionFacePath == null,
+                        "Stripped scene descriptor inherits face settings and selected-instance overrides");
+                    Check(avatar.Expressions.Clips.Any(c => c.Name == "SceneExpression") &&
+                          avatar.DescriptorRootTarget?.Name == selected,
+                        "Stripped scene descriptor retains inherited FX clips and canonical avatar root");
+                }
                 using var view = UnityPrefabInstances.CreateSceneInstanceView(package, sceneGuid, id);
                 var selectedScene = view.ReadScene(view.ByGuid(sceneGuid));
                 Check(selectedScene.Doc(9000) == null && selectedScene.Doc(id + 10) != null &&

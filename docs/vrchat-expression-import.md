@@ -1,5 +1,12 @@
 # VRChat表情の検出と割り当て
 
+シーンの `VRCAvatarDescriptor` が `stripped` の場合、スクリプト参照だけが保存され、
+顔メッシュ・Viseme・FXなどの設定は参照先Prefabにある。選択した配置の
+`UnityPrefabGraph.Identity` から上書き反映済みDescriptorを解決し、その所属シーンで
+ローカル参照を読む。アバタールートも解決先Descriptorの所有GameObjectから取得する。
+Yuzuki 2.1.1はこの形式で、省略データを直接読むと顔メッシュが `Body` のフォールバックに
+なり、MA由来の表情クリップを検出しても顔との照合で全件除外される。
+
 VRChatの表情読み込みは `VrchatFaceEmoExpressionImporter` に一本化している。
 `VrchatExpressionParser` は顔カーブとFX入力を読み、候補検出を統一Importerへ渡す。
 Expression Menu、Expression Parameters、MA Parametersから表情セットを選ぶ処理もない。

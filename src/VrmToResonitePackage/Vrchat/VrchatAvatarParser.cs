@@ -138,7 +138,6 @@ public static class VrchatAvatarParser
                 : UnityPrefabInstances.CreateView(package, selected.Source.Guid, selected.Root != null ? selected.Subtree : null);
             return Parse(view, selected.Name, true);
         }
-        YamlDocument effectiveDescriptor = selected.Descriptor;
         foreach (Candidate c in OrderByPrimary(candidates))
         {
             string mark = c == selected ? "=> 選択" : "   スキップ";
@@ -149,8 +148,17 @@ public static class VrchatAvatarParser
         var descriptorScenes = package.PrefabGraph.Scenes;
         string descriptorGuid = descriptorScenes.FirstOrDefault(entry =>
             ReferenceEquals(entry.Scene.Doc(selected.Descriptor.FileId), selected.Descriptor))?.Guid;
+        // A scene may serialize only a stripped alias of the descriptor. Read its
+        // canonical document after prefab overrides, and resolve local references
+        // in that document's occurrence rather than in the alias's scene.
+        var descriptorIdentity = package.PrefabGraph.Identity(descriptorGuid, selected.Descriptor.FileId);
+        descriptorGuid = descriptorIdentity.Occurrence;
+        var descriptorScene = package.PrefabGraph.Scene(descriptorGuid);
+        var effectiveDescriptor = descriptorScene?.Doc(descriptorIdentity.FileId);
+        if (effectiveDescriptor == null || effectiveDescriptor.Stripped || !IsAvatarDescriptor(effectiveDescriptor))
+            throw new InvalidDataException("The selected avatar descriptor could not be resolved to its prefab settings.");
         var descriptorRoot = ResolveObjectIdentity(package, descriptorGuid,
-            selected.Descriptor.Root?["m_GameObject"]?.FileID ?? 0);
+            effectiveDescriptor.Root?["m_GameObject"]?.FileID ?? 0);
         var avatar = new VrchatAvatar
         {
             Name = selected.Name ?? Path.GetFileNameWithoutExtension(selected.Source.LogicalPath),
@@ -201,7 +209,7 @@ public static class VrchatAvatarParser
         }
         ParseFbxBlendShapeNames(package, avatar);
         ParseHumanoid(package, avatar);
-        ParseDescriptor(package, selected.Scene, effectiveDescriptor, avatar, descriptorGuid);
+        ParseDescriptor(package, descriptorScene, effectiveDescriptor, avatar, descriptorGuid);
         ParseRenderers(package, selected.Source.Guid, avatar);
         avatar.RendererMaterials.RemoveAll(renderer => avatar.EditorOnlyFbxGuids.Contains(renderer.FbxGuid ?? ""));
         foreach (string excluded in avatar.EditorOnlyFbxGuids)
