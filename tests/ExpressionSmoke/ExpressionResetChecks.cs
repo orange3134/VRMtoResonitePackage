@@ -17,7 +17,7 @@ internal static class ExpressionResetChecks
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal))
             .ToDictionary(v => v, v => v.Reference.Target);
         var neutral = mappings.Keys.Single(v => v.VariableName.Value == "ExpressionSystem/GestureTable.L0R0");
-        var button = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Reset settings")
+        var button = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Reset State")
             .GetComponent<ButtonDynamicImpulseTrigger>();
         void PrepareSelection()
         {

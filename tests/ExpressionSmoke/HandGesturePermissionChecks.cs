@@ -158,7 +158,7 @@ internal static class HandGesturePermissionChecks
                     "menu collection shows only the VR submenu or desktop toggle");
                 var visible = items.Children.Select(slot => slot.GetComponent<ContextMenuItemSource>(excludeDisabled: true))
                     .Where(source => source != null).Select(source => source.Slot).ToHashSet();
-                Check(visible.SetEquals(new[] { items.FindChild("Select expression"), items.FindChild("Reset settings"), vr ? group : toggle }),
+                Check(visible.SetEquals(new[] { items.FindChild("Select expression"), items.FindChild("Reset State"), vr ? group : toggle }),
                     "direct-child collection retains expression/reset, omits the entrance and logic board, and selects the mode entry");
                 CheckLabels(menu.Parent.Parent);
             }

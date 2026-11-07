@@ -456,7 +456,7 @@ internal static class ExpressionGraphChecks
                 toggle.PressedTag.Value == "ExpressionSystem/Method.ToggleHandGestures" &&
                 menuItems.GetComponentsInChildren<ButtonDynamicImpulseTrigger>().Count(b => b.PressedTag.Value == toggle.PressedTag.Value) == 1,
                 "one toggle menu targets this avatar's gesture permission API");
-            var resetButton = menuItems.FindChild("Reset settings")?.GetComponent<ButtonDynamicImpulseTrigger>();
+            var resetButton = menuItems.FindChild("Reset State")?.GetComponent<ButtonDynamicImpulseTrigger>();
             Check(resetButton?.Target.Target == Descendant(expressions, "API") &&
                 resetButton.PressedTag.Value == "ExpressionSystem/Method.Reset", "reset menu targets this avatar's reset API");
         }

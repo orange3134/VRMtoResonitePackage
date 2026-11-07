@@ -18,7 +18,7 @@ internal static class ExpressionMenuToggleChecks
             .Count(button => button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target == catalog.FindChild("Angry")) == 1,
             "the imported Angry pose has exactly one grouped menu button");
         var reset = expressions.FindChild("Inputs").FindChild("ContextMenu")
-            .FindChild("Reset settings").GetComponent<ButtonDynamicImpulseTrigger>();
+            .FindChild("Reset State").GetComponent<ButtonDynamicImpulseTrigger>();
         try
         {
             reset.Pressed(null, default);
