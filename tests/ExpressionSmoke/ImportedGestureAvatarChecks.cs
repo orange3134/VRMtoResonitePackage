@@ -54,7 +54,7 @@ internal static class ImportedGestureAvatarChecks
         }
         await KeyboardShortcutChecks.Run(root);
         var core = root.FindChild("API").FindChild("Internal"); var table = root.FindChild("DV").FindChild("GestureTable");
-        var menu = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
+        var menu = root.FindChild("Inputs").FindChild("ContextMenu");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null, "Saved menu has no hand submenus");
         var receiverRoot = root.FindChild("API");
         SetHandGesturesAllowed(core, true);

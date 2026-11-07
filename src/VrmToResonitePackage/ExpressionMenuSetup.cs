@@ -14,10 +14,9 @@ namespace VrmToResonitePackage;
 /// Structure per avatar:
 ///   Expressions slot
 ///     RootContextMenuItem -> ContextMenuItemSource ("Expression")
-///     ContextMenuSubmenu  -> Items slot
+///     ContextMenuSubmenu  -> Expressions slot itself (direct children only)
 ///     SmoothValue&lt;float&gt; x N  (one per unique morph field, drives that field)
 ///     ValueField&lt;int&gt;        (currently selected expression index; Reset = 0)
-///   Expressions/Items slot
 ///     &lt;expression&gt; slot x N
 ///       ContextMenuItemSource (label + icon; color driven white/pink by selection)
 ///       StaticTexture2D + SpriteProvider  (the item's icon)
@@ -147,9 +146,9 @@ internal static class ExpressionMenuSetup
         RootContextMenuItem rootMenuItem = expressionsSlot.AttachComponent<RootContextMenuItem>();
         rootMenuItem.Item.Target = rootItemSource;
 
-        Slot itemsSlot = expressionsSlot.AddSlot("Items");
         ContextMenuSubmenu submenu = expressionsSlot.AttachComponent<ContextMenuSubmenu>();
-        submenu.ItemsRoot.Target = itemsSlot;
+        submenu.ItemsRoot.Target = expressionsSlot;
+        submenu.SearchWholeHierarchy.Value = false;
 
         // One SmoothValue per unique morph field, driving that field. Pressing an
         // emotion item only sets each SmoothValue.TargetValue, so the morph eases in.
@@ -171,7 +170,7 @@ internal static class ExpressionMenuSetup
         int index = 1;
         foreach (ResolvedEmotion emotion in emotions)
         {
-            Slot itemSlot = itemsSlot.AddSlot(emotion.DisplayName);
+            Slot itemSlot = expressionsSlot.AddSlot(emotion.DisplayName);
             ContextMenuItemSource itemSource = itemSlot.AttachComponent<ContextMenuItemSource>();
             itemSource.Label.Value = emotion.DisplayName;
             itemSource.Color.Value = NormalColor; // ドライバーが上書きするが既定として白を入れておく。
@@ -191,7 +190,7 @@ internal static class ExpressionMenuSetup
         }
 
         // Reset item: drives every morph back to zero (index 0).
-        Slot resetSlot = itemsSlot.AddSlot("Reset");
+        Slot resetSlot = expressionsSlot.AddSlot("Reset");
         ContextMenuItemSource resetSource = resetSlot.AttachComponent<ContextMenuItemSource>();
         resetSource.Label.Value = "Reset";
         resetSource.Color.Value = NormalColor;

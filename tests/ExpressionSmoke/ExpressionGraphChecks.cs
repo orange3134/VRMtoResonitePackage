@@ -67,16 +67,17 @@ internal static class ExpressionGraphChecks
     {
         ExpressionSpaceChecks.Run(expressions);
         CheckMenuColors(expressions);
-        if (Descendant(expressions, "Inputs/ContextMenu/Items") is { } groups)
+        if (Descendant(expressions, "Inputs/ContextMenu") is { } groups)
         {
+            ExpressionMenuGroupChecks.CheckHierarchy(groups);
             var rootItems = groups;
-            groups = groups.FindChild("Select expression").FindChild("Items");
+            groups = groups.FindChild("Select expression");
             Check(groups.FindChild("Back").GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == rootItems,
                 "group selection Back references local Expressions items after cloning and reload");
             foreach (var group in groups.Children.Where(group => group.Name != "Back"))
             {
                 var entries = group.GetComponent<ContextMenuSubmenu>().ItemsRoot.Target;
-                Check(entries == group.FindChild("Items") && entries.Children.Count > 1,
+                Check(entries == group && entries.Children.Count > 1,
                     "expression groups use their own nonempty item roots");
                 var back = entries.FindChild("Back");
                 Check(back?.GetComponent<ContextMenuItemSource>()?.Label.Value == "Back" &&
@@ -104,7 +105,7 @@ internal static class ExpressionGraphChecks
             v.VariableName.Value == "ExpressionSystem.Clip/MenuAvailable"),
             "menu availability state is absent");
         var modeEntries = new[] { "Hand gesture options", "Hand gestures" }.Select(name =>
-                Descendant(expressions, $"Inputs/ContextMenu/Items/{name}")?.GetComponent<ContextMenuItemSource>())
+                Descendant(expressions, $"Inputs/ContextMenu/{name}")?.GetComponent<ContextMenuItemSource>())
             .Where(item => item != null).ToHashSet();
         Check(expressions.GetComponentsInChildren<ContextMenuItemSource>().All(item =>
             (item.EnabledField.ActiveLink != null) == modeEntries.Contains(item)),
@@ -455,7 +456,7 @@ internal static class ExpressionGraphChecks
             "reset receives an impulse without a payload");
         Check(publicReceivers.Single(node => node.Slot.Parent.Name == "ToggleHandGestures").GetType().Name == "DynamicImpulseReceiver",
             "hand gesture toggle receives an impulse without a payload");
-        if (Descendant(expressions, "Inputs/ContextMenu/Items") is { } menuItems)
+        if (Descendant(expressions, "Inputs/ContextMenu") is { } menuItems)
         {
             Check(menuItems.FindChild("Allow hand gestures") == null && menuItems.FindChild("Disable hand gestures") == null,
                 "separate allow and disable menu items are absent");

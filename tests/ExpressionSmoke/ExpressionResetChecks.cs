@@ -17,7 +17,7 @@ internal static class ExpressionResetChecks
             .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal))
             .ToDictionary(v => v, v => v.Reference.Target);
         var neutral = mappings.Keys.Single(v => v.VariableName.Value == "ExpressionSystem/GestureTable.L0R0");
-        var button = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Reset settings")
+        var button = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Reset settings")
             .GetComponent<ButtonDynamicImpulseTrigger>();
         void PrepareSelection()
         {
@@ -36,7 +36,7 @@ internal static class ExpressionResetChecks
             Check(Get<int>(core, "State.Gesture.Left") == 5 && Get<int>(core, "State.Gesture.Right") == 6 &&
                 NoHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == expression,
                 "reset starts with both hands non-neutral, a selected expression and gestures disabled");
-            var toggle = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Hand gestures")
+            var toggle = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Hand gestures")
                 .GetComponent<ButtonDynamicImpulseTrigger>();
             void Toggle(bool expected)
             {

@@ -99,10 +99,9 @@ internal sealed partial class ExpressionSystemSetup
         var rootItem = menu.AttachComponent<RootContextMenuItem>();
         rootItem.Item.Target = MenuItem(menu, "Expressions");
         rootItem.OnlyForSide.Value = null;
-        var items = menu.AddSlot("Items");
-        menu.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
+        ConfigureSubmenu(menu, menu);
         // Keep editable clip templates in Clips; expose each once through this entrance.
-        var selection = AddSubmenu(items, "Select expression");
+        var selection = AddSubmenu(menu, "Select expression");
         var groups = ExpressionMenuGroups.Build(_clips.Keys, _compiled.Pairs);
         for (int index = 0; index < groups.Count; index++)
         {
@@ -118,34 +117,37 @@ internal sealed partial class ExpressionSystemSetup
                 SelectMenuTrigger(item, expression);
             }
         }
-        BuildGesturePermissionMenu(menu, items);
-        var reset = items.AddSlot("Reset settings"); MenuItem(reset, reset.Name);
+        BuildGesturePermissionMenu(menu);
+        var reset = menu.AddSlot("Reset settings"); MenuItem(reset, reset.Name);
         var resetButton = reset.AttachComponent<ButtonDynamicImpulseTrigger>();
         resetButton.Target.Target = _api;
         resetButton.ExcludeDisabled.Value = true;
         resetButton.PressedTag.Value = ResetTag;
     }
 
+    private static void ConfigureSubmenu(Slot slot, Slot itemsRoot)
+    {
+        var submenu = slot.AttachComponent<ContextMenuSubmenu>();
+        submenu.ItemsRoot.Target = itemsRoot;
+        submenu.SearchWholeHierarchy.Value = false;
+    }
+
     private static Slot AddSubmenu(Slot parent, string label)
     {
         var group = parent.AddSlot(label);
         MenuItem(group, label);
-        var children = group.AddSlot("Items");
-        group.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = children;
-        var back = children.AddSlot("Back");
+        ConfigureSubmenu(group, group);
+        var back = group.AddSlot("Back");
         MenuItem(back, "Back");
-        back.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = parent;
-        return children;
+        ConfigureSubmenu(back, parent);
+        return group;
     }
 
-    private void BuildGesturePermissionMenu(Slot menu, Slot items)
+    private void BuildGesturePermissionMenu(Slot menu)
     {
-        var group = items.AddSlot("Hand gesture options");
-        var groupSource = MenuItem(group, "Hand gestures");
-        var children = group.AddSlot("Items");
-        group.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = children;
-        var back = children.AddSlot("Back"); MenuItem(back, "Back");
-        back.AttachComponent<ContextMenuSubmenu>().ItemsRoot.Target = items;
+        var group = AddSubmenu(menu, "Hand gesture options");
+        var groupSource = group.GetComponent<ContextMenuItemSource>();
+        groupSource.Label.Value = "Hand gestures";
         foreach (var (label, left, right) in new[]
         {
             ("Both hands enabled", true, true),
@@ -154,7 +156,7 @@ internal sealed partial class ExpressionSystemSetup
             ("Both hands disabled", false, false)
         })
         {
-            var item = children.AddSlot(label); MenuItem(item, label);
+            var item = group.AddSlot(label); MenuItem(item, label);
             foreach (var (hand, enabled) in new[] { ("Left", left), ("Right", right) })
             {
                 var set = item.AttachComponent<ButtonValueSet<bool>>();
@@ -164,7 +166,7 @@ internal sealed partial class ExpressionSystemSetup
             GesturePermissionMenuColor(item, left, right, option: true);
         }
 
-        var mode = items.AddSlot("Hand gestures");
+        var mode = menu.AddSlot("Hand gestures");
         var toggleSource = MenuItem(mode, mode.Name);
         var toggleButton = mode.AttachComponent<ButtonDynamicImpulseTrigger>();
         toggleButton.Target.Target = _api;

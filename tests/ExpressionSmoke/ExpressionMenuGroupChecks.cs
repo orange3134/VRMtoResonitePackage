@@ -35,7 +35,8 @@ internal static class ExpressionMenuGroupChecks
 
     public static ButtonDynamicImpulseTriggerWithReference<Slot>[] CheckMenu(Slot root)
     {
-        var items = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
+        var items = root.FindChild("Inputs").FindChild("ContextMenu");
+        CheckHierarchy(items);
         var selection = items.FindChild("Select expression");
         Check(selection != null && items.FindChild("Imported menu") == null &&
             items.FindChild("Hand sign expressions") == null && items.FindChild("Other expressions") == null,
@@ -76,5 +77,15 @@ internal static class ExpressionMenuGroupChecks
             "no duplicate expression buttons outside the numbered groups");
         Console.WriteLine($"PASS: direct selection has {buttons.Count} unique expressions in {groups.Length} groups (max 8)");
         return buttons.ToArray();
+    }
+
+    public static void CheckHierarchy(Slot menu)
+    {
+        foreach (var submenu in menu.GetComponentsInChildren<ContextMenuSubmenu>())
+        {
+            var expected = submenu.Slot.Name == "Back" ? submenu.Slot.Parent.Parent : submenu.Slot;
+            Check(submenu.ItemsRoot.Target == expected && !submenu.SearchWholeHierarchy.Value,
+                "submenus collect their own direct children; Back collects the parent menu's children");
+        }
     }
 }

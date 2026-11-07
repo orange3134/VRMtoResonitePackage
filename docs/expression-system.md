@@ -3,6 +3,13 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-07: ContextMenuの全サブメニューは、自身のSlotを`ItemsRoot`に指定し、項目を直下に置く。
+中間の`Items` Slotは生成しない。`SearchWholeHierarchy=false`を明示し、入口自身や下位階層の項目を収集しない。
+`Back`のみ、戻り先メニューのSlotを`ItemsRoot`に指定する。
+例えば表情ボタンの実Slotパスは `Inputs/ContextMenu/Select expression/1/表情名` になる。
+インストール済みFrooxEngine.dllの`ContextMenuSubmenu.Pressed`は、この設定で`ItemsRoot.Target.Children`の
+有効な`ContextMenuItemSource`だけを列挙することを確認した。以下の記録の`Items`階層は旧構成。
+
 2026-11-07: 両手ニュートラル（`GestureTable.L0R0`）は表情解除（null）として出力する。
 コンパイル時にL0R0が参照したClip IDと、自動生成の `resopon:neutral` はClipsへ保存せず、
 メニューにも生成しない。同じClip IDを参照する他のGestureTableセルもnullにする。

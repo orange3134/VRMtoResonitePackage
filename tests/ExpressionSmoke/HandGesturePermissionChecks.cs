@@ -14,7 +14,7 @@ internal static class HandGesturePermissionChecks
 
     private static void PressOption(Slot items, string label)
     {
-        foreach (var set in items.FindChild("Hand gesture options").FindChild("Items").FindChild(label)
+        foreach (var set in items.FindChild("Hand gesture options").FindChild(label)
             .GetComponents<ButtonValueSet<bool>>()) set.Pressed(null, default);
     }
 
@@ -26,7 +26,7 @@ internal static class HandGesturePermissionChecks
         var menu = expressions.FindChild("Inputs").FindChild("ContextMenu");
         var root = menu.GetComponent<RootContextMenuItem>();
         var source = menu.GetComponent<ContextMenuItemSource>();
-        var items = menu.FindChild("Items");
+        var items = menu;
         Check(menu.GetComponentsInChildren<RootContextMenuItem>().Count == 1 && root != null &&
             menu.FindChild("Left") == null && menu.FindChild("Right") == null,
             "one shared Expressions root replaces both hand-specific menu trees");
@@ -35,10 +35,10 @@ internal static class HandGesturePermissionChecks
             menu.GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == items,
             "both hands use the same Expressions item and submenu without side restrictions");
         Check(items.FindChild("Left hand gestures") == null && items.FindChild("Right hand gestures") == null &&
-            items.GetComponentsInChildren<RootContextMenuItem>().Count == 0,
+            items.Children.All(child => child.GetComponent<RootContextMenuItem>() == null),
             "individual toggles and extra root entries are absent");
         var group = items.FindChild("Hand gesture options");
-        var options = group.FindChild("Items");
+        var options = group;
         Check(group.GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == options &&
             options.Children.Count == 5 && options.FindChild("Back").GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == items,
             "gesture submenu contains four choices and a Back entry");
@@ -128,15 +128,16 @@ internal static class HandGesturePermissionChecks
             {
                 sensor.Value.Value = vr;
                 for (int i = 0; i < 5; i++) await default(NextUpdate);
-                var items = menu.FindChild("Items");
+                var items = menu;
                 var group = items.FindChild("Hand gesture options");
                 var toggle = items.FindChild("Hand gestures");
                 Check((group.GetComponent<ContextMenuItemSource>(excludeDisabled: true) != null) == vr &&
                     (toggle.GetComponent<ContextMenuItemSource>(excludeDisabled: true) != null) == !vr,
                     "menu collection shows only the VR submenu or desktop toggle");
-                Check(items.Children.Where(slot => slot != group && slot != toggle)
-                    .All(slot => slot.GetComponent<ContextMenuItemSource>(excludeDisabled: true) != null),
-                    "mode switching retains expression and reset menus");
+                var visible = items.Children.Select(slot => slot.GetComponent<ContextMenuItemSource>(excludeDisabled: true))
+                    .Where(source => source != null).Select(source => source.Slot).ToHashSet();
+                Check(visible.SetEquals(new[] { items.FindChild("Select expression"), items.FindChild("Reset settings"), vr ? group : toggle }),
+                    "direct-child collection retains expression/reset, omits the entrance and logic board, and selects the mode entry");
             }
         }
         finally
@@ -206,7 +207,7 @@ internal static class HandGesturePermissionChecks
                     "early direct selection clears hand values and selects without lifecycle initialization");
                 earlyPair = (0, 0);
                 Preserved();
-                var items = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
+                var items = expressions.FindChild("Inputs").FindChild("ContextMenu");
                 PressOption(items, hand + " hand only");
                 Check(HandGesturesAllowed(core, hand) && !HandGesturesAllowed(core, other),
                     "early menu selects the requested hand without initialization");

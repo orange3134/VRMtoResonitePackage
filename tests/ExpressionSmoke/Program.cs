@@ -348,7 +348,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Gesture(0, 1); await Frames();
         touch.Destroy(); await Frames();
         Check(Get<int>(core, "State.Gesture.Left") == 1, "deleting a controller module preserves the last accepted int state");
-        var menu = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items");
+        var menu = expressions.FindChild("Inputs").FindChild("ContextMenu");
         Check(menu.FindChild("Left hand") == null && menu.FindChild("Right hand") == null,
             "context menu has no hand submenus");
         var menuButton = directButtons.Single(b => b.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target.Name == "Smile");
@@ -498,16 +498,16 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Request(ExpressionSystemSetup.SetGestureLeftTag, 3); Request(ExpressionSystemSetup.SetGestureRightTag, 4);
         Check(Get<int>(core, "State.Gesture.Left") == 3 && Get<int>(core, "State.Gesture.Right") == 4 && NoHandsAllowed(core),
             "unworn SetGesture updates both hands independently of permission");
-        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Hand gestures")
+        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Hand gestures")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         Check(BothHandsAllowed(core), "unworn combined toggle enables both hands");
-        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Hand gestures")
+        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Hand gestures")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         Check(NoHandsAllowed(core), "unworn combined toggle disables both hands");
         // Saved/manual state may still contain a pose while the avatar is unworn.
         Set(core, "State.CurrentExpression", catalog.FindChild("Angry"));
         Set(table, "L0R0", catalog.FindChild("Angry"));
-        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Items").FindChild("Reset settings")
+        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Reset settings")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);

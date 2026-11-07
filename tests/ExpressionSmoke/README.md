@@ -1,5 +1,11 @@
 # Expression integration checks
 
+2026-11-07: Context submenus use their own Slot as ItemsRoot and collect direct
+children only. There are no intermediate Items containers. Back targets the
+parent menu Slot. Graph checks validate self/parent references and nonrecursive
+collection after generation, cloning and package reload; permission and grouped
+button checks use the same direct hierarchy.
+
 2026-11-07: L0R0 and every reference to its removed clip now release to Base.
 The synthetic authored-baseline clip is also absent from Clips and menus.
 The detected-catalog fixture checks neutral removal, surviving full pose bindings,
