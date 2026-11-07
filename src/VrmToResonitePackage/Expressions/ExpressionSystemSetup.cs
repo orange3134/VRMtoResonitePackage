@@ -149,6 +149,12 @@ internal sealed partial class ExpressionSystemSetup
             .Where(c => mapped.Contains(c.Id) || c.Id == neutral.Id)
             .Concat(_model.DetectedExpressions.Where(c => definitions.Any(d => d.Id == c.Id)))
             .Where(c => c.Curves.Count > 0).DistinctBy(c => c.Id).ToList();
+        // Neutral is release, not a selectable clip. Keep the compile-time baseline
+        // and its output bindings, but export neither it nor the L0R0 pose.
+        var omitted = new HashSet<string> { neutral.Id };
+        if (_compiled.Pairs[0] is { } neutralPose) omitted.Add(neutralPose);
+        for (int pair = 0; pair < _compiled.Pairs.Length; pair++)
+            if (_compiled.Pairs[pair] is { } id && omitted.Contains(id)) _compiled.Pairs[pair] = null;
         // Allocate readable keys across all clips before creating any drives. Sorting
         // source bindings makes collision suffixes independent of clip/curve ordering.
         var outputNames = new Dictionary<string, string>();
@@ -204,6 +210,7 @@ internal sealed partial class ExpressionSystemSetup
             // A partially resolved face must not be presented as a faithfully imported clip.
             if (clip.Curves.Any(c => !_outputSlots.ContainsKey(c.Binding.Id)))
             { UniLog.Warning($"Expression '{clip.Name}' omitted: one or more output bindings were not resolved"); continue; }
+            if (omitted.Contains(clip.Id)) continue;
             Slot entry = Record(_clipRoot, clip.Name, ClipSpace);
             var values = entry.AddSlot("DV");
             foreach (var curve in clip.Curves)

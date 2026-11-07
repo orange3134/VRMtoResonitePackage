@@ -1,5 +1,13 @@
 # Expression integration checks
 
+2026-11-07: L0R0 and every reference to its removed clip now release to Base.
+The synthetic authored-baseline clip is also absent from Clips and menus.
+The detected-catalog fixture checks neutral removal, surviving full pose bindings,
+all 64 cells and a nonzero Base restoration after selecting a remaining gesture.
+Saved avatar replay accepts null release cells and verifies their actual outputs.
+Snapshots still read neutral baselines in legacy packages; current packages report
+no authored baseline clip and freeze existing tracking Base for playback checks.
+
 2026-11-07: Direct selection uses one Select expression entrance and numbered
 groups with at most eight expressions plus Back. Boundary fixtures cover empty,
 8/9/16/65-entry catalogs, shared/partial/disjoint hand sets and combination-only

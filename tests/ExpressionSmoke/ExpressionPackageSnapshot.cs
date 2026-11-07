@@ -110,7 +110,8 @@ internal static class ExpressionPackageSnapshot
         var legacy = output.ExpressionVariables<DynamicValueVariable<float>>()
             .SingleOrDefault(v => v.VariableName.Value == ExpressionTestFields.VariablePath(output, "Baseline"));
         if (legacy != null) return legacy.Value.Value;
-        var neutral = ClipRoot(output.Parent.Parent).Children.Last(c => c.Name == "Neutral (authored baseline)");
+        var neutral = ClipRoot(output.Parent.Parent).Children.LastOrDefault(c => c.Name == "Neutral (authored baseline)");
+        if (neutral == null) return null; // Current packages keep baseline data in Outputs, not Clips.
         // Detected candidates can add bindings absent from the compiled neutral pose.
         // Preserve that absence in snapshots instead of inventing an authored value.
         return Pose(neutral).TryGetValue(OutputIdentity(output), out float value) ? value : null;

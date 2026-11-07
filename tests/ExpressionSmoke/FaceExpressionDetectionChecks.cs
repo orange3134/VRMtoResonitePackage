@@ -103,12 +103,29 @@ internal static class FaceExpressionDetectionChecks
             var catalog = expressions.FindChild("Clips");
             Check(catalog.FindChild("HiddenToggle") == null, "excluded candidate does not leak back into Clips through internal routing clips");
             Check(catalog.FindChild("Unassigned").ExpressionVariables<FrooxEngine.DynamicValueVariable<float>>().Count == 1, "unmapped catalog candidates contain only baseline differences");
-            Check(catalog.FindChild("Smile").ExpressionVariables<FrooxEngine.DynamicValueVariable<float>>().Count == 2 &&
-                catalog.FindChild("Reset").ExpressionVariables<FrooxEngine.DynamicValueVariable<float>>().Count == 2, "mapped expressions preserve explicit baseline reset curves");
+            Check(catalog.FindChild("Smile").ExpressionVariables<FrooxEngine.DynamicValueVariable<float>>().Count == 2,
+                "remaining mapped expressions preserve explicit baseline reset curves");
+            Check(catalog.FindChild("Reset") == null && catalog.FindChild("Neutral (authored baseline)") == null,
+                "both-hands neutral and synthetic baseline are absent from Clips");
             var mappings = expressions.FindChild("DV").FindChild("GestureTable").ExpressionVariables<FrooxEngine.DynamicReferenceVariable<FrooxEngine.Slot>>()
                 .Where(v => v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.", StringComparison.Ordinal)).ToArray();
-            Check(mappings.Length == 64 && mappings.All(v => v.Reference.Target != null), "all gesture combinations retain an assigned table entry");
-            Console.WriteLine("PASS: detected Clips filters unrelated candidates while preserving mapped reset poses");
+            Check(mappings.Length == 64 && mappings.All(v =>
+                (v.Reference.Target == null) == v.VariableName.Value.StartsWith("ExpressionSystem/GestureTable.L0R", StringComparison.Ordinal)),
+                "all references to the removed neutral clip become release, other mappings survive");
+            ExpressionTestFields.EquipAvatar(root);
+            for (int frame = 0; frame < 60; frame++) await default(FrooxEngine.NextUpdate);
+            var api = expressions.FindChild("API");
+            var core = api.FindChild("Internal");
+            void Left(int value) => FrooxEngine.ProtoFlux.ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
+                api, ExpressionSystemSetup.SetGestureLeftTag, true, value);
+            Left(1);
+            Check(Math.Abs(smileField.Value - 0.8f) < 0.001f, "remaining gesture still applies its pose");
+            Left(0);
+            Check(ExpressionTestFields.Reference<FrooxEngine.Slot>(core, "State.CurrentExpression") == null &&
+                Math.Abs(smileField.Value - 0.25f) < 0.001f && Math.Abs(restField.Value - 0.3f) < 0.001f,
+                "neutral releases to nonzero Base without needing a neutral Clip");
+            ExpressionMenuGroupChecks.CheckMenu(expressions);
+            Console.WriteLine("PASS: detected Clips removes neutral while preserving other mapped poses and release cells");
         }
         finally { root.Destroy(); }
     }

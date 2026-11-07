@@ -198,7 +198,8 @@ ApplyExpressionはImpulse受信だけで実行する。OnStart・着用状態の
 | `OriginalDriver` | ISyncRef | 元のドライバー | 定義。既存 ActiveLink が ISyncRef の場合だけ作成。Baseへ付け替えた駆動参照の記録。生成時は変数の存在でTrackingを作り、実行時は参照がnullでない出力をApplyExpressionのWrite対象から除外する |
 
 Version 34では実行処理に使わないPath・Shape・Target・BaselineのDVを生成しない。
-元の基準値はClipsのresopon:neutral表情に保持し、実際の出力先はResultからSmoothValue（瞬き出力は省略）とDynamicBlendShapeDriverの接続を辿って確認する。
+2026-11-07以降、resopon:neutralとL0R0の表情クリップは保存しない。基準値はコンパイル時だけ使用し、
+実行時の解除はOutputs/Baseへ戻る。実際の出力先はResultからSmoothValue（瞬き出力は省略）とDynamicBlendShapeDriverの接続を辿って確認する。
 
 Result 以外の数値レコードは DynamicValueVariable、Result だけは外部フィールドを参照する DynamicField。
 DynamicVariable としてのパスと float 型は同じなので、Read Dynamic Variable で引き続き読み取れる。

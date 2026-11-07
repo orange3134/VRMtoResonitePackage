@@ -3,7 +3,7 @@ using FrooxEngine.ProtoFlux;
 using VrmToResonitePackage.Expressions;
 using static ExpressionTestFields;
 
-// Optional integration check for a converted avatar with 64 assigned gesture poses (including animated clips).
+// Optional integration check for all 64 gesture cells, including neutral/release cells.
 // Input packages and their paths are supplied locally and are never part of the fixture.
 internal static class ImportedGestureAvatarChecks
 {
@@ -71,11 +71,11 @@ internal static class ImportedGestureAvatarChecks
                 Check(Get<int>(core, "State.Gesture.Left") == l && Get<int>(core, "State.Gesture.Right") == r, "Gestures did not update both hand states synchronously");
                 var mapped = table.ExpressionVariables<DynamicReferenceVariable<Slot>>()
                     .Single(v => v.VariableName.Value == $"ExpressionSystem/GestureTable.L{l}R{r}").Reference.Target;
-                Check(mapped != null && Reference<Slot>(core, "State.CurrentExpression") == mapped, "Missing or incorrect selected pose");
+                Check(Reference<Slot>(core, "State.CurrentExpression") == mapped, "Incorrect selected pose or release");
                 Check(BothHandsAllowed(core),
                     "Imported pair or input mode disagrees with the selected gesture pair");
                 for (int i = 0; i < 6; i++) await default(NextUpdate);
-                var pose = ExpressionPackageSnapshot.Pose(mapped);
+                var pose = mapped == null ? new SortedDictionary<string, float>() : ExpressionPackageSnapshot.Pose(mapped);
                 var smoothing = root.GetComponentsInChildren<SmoothValue<float>>();
                 for (int frame = 0; frame < 600 && smoothing.Any(s => !s.Value.IsLinkValid ||
                     Math.Abs(s.Value.Target.Value - s.TargetValue.Value) > 0.00001f); frame++)
@@ -100,7 +100,7 @@ internal static class ImportedGestureAvatarChecks
                 }
                 ExpressionGraphChecks.CheckMenuColors(root);
                 distinctPoses.Add(string.Join(",", values.Select(v => v.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))));
-                Console.WriteLine($"PASS: saved gesture Left {l}, Right {r} -> {mapped.Name}, {values.Count} output fields checked");
+                Console.WriteLine($"PASS: saved gesture Left {l}, Right {r} -> {mapped?.Name ?? "(release)"}, {values.Count} output fields checked");
             }
         string expectedCount = Environment.GetEnvironmentVariable("RESOPON_TEST_EXPECTED_DISTINCT_POSES");
         if (expectedCount != null)
@@ -128,7 +128,9 @@ internal static class ImportedGestureAvatarChecks
             for (int i = 0; i < 2; i++) await default(NextUpdate);
             ExpressionGraphChecks.CheckMenuColors(root);
         }
-        Check(visible >= distinctPoses.Count, "Saved direct menu exposes every distinct mapped pose");
+        Check(visible >= table.GetComponentsInChildren<DynamicReferenceVariable<Slot>>()
+            .Select(v => v.Reference.Target).Where(target => target != null).Distinct().Count(),
+            "Saved direct menu exposes every distinct mapped clip; release needs no button");
         int heldLeft = Get<int>(core, "State.Gesture.Left"), heldRight = Get<int>(core, "State.Gesture.Right");
         var heldExpression = Reference<Slot>(core, "State.CurrentExpression");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureLeftTag, true, (heldLeft + 1) % 8);
