@@ -102,6 +102,14 @@ internal sealed partial class ExpressionSystemSetup
         ConfigureSubmenu(menu, menu);
         // Keep editable clip templates in Clips; expose each once through this entrance.
         var selection = AddSubmenu(menu, "Select expression");
+        var selectionColor = selection.AttachComponent<ValueOptionDescriptionDriver<bool>>();
+        selectionColor.Value.Target = _root.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>()
+            .Single(v => v.VariableName.Value == Path(SystemSpace, ContextMenuSelected)).Value;
+        selectionColor.DefaultOption.Color.Value = colorX.White;
+        var heldSelection = selectionColor.Options.Add();
+        heldSelection.ReferenceValue.Value = true;
+        heldSelection.Color.Value = SelectedMenuColor;
+        selectionColor.Color.Target = selection.GetComponent<ContextMenuItemSource>().Color;
         var groups = ExpressionMenuGroups.Build(_clips.Keys, _compiled.Pairs);
         for (int index = 0; index < groups.Count; index++)
         {

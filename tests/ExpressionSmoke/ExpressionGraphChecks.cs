@@ -17,6 +17,16 @@ internal static class ExpressionGraphChecks
         HandGesturePermissionChecks.CheckLabels(expressions);
         var current = ExpressionTestFields.Reference<Slot>(expressions.FindChild("API").FindChild("Internal"), "State.CurrentExpression");
         var green = new colorX(0f, 1f, 0f, 1f, Renderite.Shared.ColorProfile.Linear);
+        var selection = Descendant(expressions, "Inputs/ContextMenu/Select expression").GetComponent<ContextMenuItemSource>();
+        var selectionColor = selection.Slot.GetComponent<ValueOptionDescriptionDriver<bool>>();
+        var held = expressions.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>()
+            .Single(v => v.VariableName.Value == "ExpressionSystem/State.ContextMenuSelected");
+        Check(selectionColor != null && selectionColor.Value.Target == held.Value &&
+            selectionColor.Color.IsLinkValid && selectionColor.Color.Target == selection.Color &&
+            !selectionColor.Label.IsLinkValid && !selectionColor.Sprite.IsLinkValid,
+            "Select expression color follows the local menu hold flag without driving its label or sprite");
+        Check(selection.Color.Value.Equals(held.Value.Value ? green : colorX.White),
+            "Select expression is green exactly while ContextMenuSelected is on");
         foreach (var item in expressions.GetComponentsInChildren<ContextMenuItemSource>())
         {
             bool active;

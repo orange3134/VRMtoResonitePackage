@@ -3,6 +3,10 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-07: `Select expression`の入口色は`State.ContextMenuSelected`へ直接追従する。
+`ValueOptionDescriptionDriver<bool>`でtrueなら緑、falseなら白を駆動する。
+ハンドサインによる表情表示だけでは入口を緑にせず、メニュー選択の保持状態を示す。
+
 2026-11-07: Hand gesturesの入口ラベルは、`Config.AllowHandGesture.Left/Right`に応じて
 `Hand gestures: Both / LeftOnly / RightOnly / None`に更新する（実際のハンドサイン値ではなく許可状態）。
 `Gesture menu label`ボードで左を1、右を2として加算し、共通の`ValueField<int>`へ駆動する。
