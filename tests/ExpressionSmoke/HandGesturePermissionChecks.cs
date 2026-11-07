@@ -18,6 +18,24 @@ internal static class HandGesturePermissionChecks
             .GetComponents<ButtonValueSet<bool>>()) set.Pressed(null, default);
     }
 
+    public static void CheckLabels(Slot expressions)
+    {
+        var core = expressions.FindChild("API").FindChild("Internal");
+        bool left = HandGesturesAllowed(core, "Left"), right = HandGesturesAllowed(core, "Right");
+        string expected = "Hand gestures: " + (left ? (right ? "Both" : "LeftOnly") : (right ? "RightOnly" : "None"));
+        var menu = expressions.FindChild("Inputs").FindChild("ContextMenu");
+        var state = menu.FindChild("Gesture menu label").GetComponent<ValueField<int>>();
+        foreach (string name in new[] { "Hand gesture options", "Hand gestures" })
+        {
+            var item = menu.FindChild(name).GetComponent<ContextMenuItemSource>();
+            var driver = item.Slot.GetComponent<ValueOptionDescriptionDriver<int>>();
+            Check(driver != null && driver.Value.Target == state.Value && driver.Label.Target == item.Label &&
+                driver.Label.IsLinkValid && !driver.Color.IsLinkValid && !driver.Sprite.IsLinkValid,
+                name + " label follows local permission state without changing color/sprite drivers");
+            Check(item.Label.Value == expected, name + " label: expected " + expected + ", got " + item.Label.Value);
+        }
+    }
+
     public static async Task Run(Slot expressions)
     {
         var core = expressions.FindChild("API").FindChild("Internal");
@@ -68,6 +86,7 @@ internal static class HandGesturePermissionChecks
         {
             bool left = (combination & 1) != 0, right = (combination & 2) != 0;
             Allow("Left", left); Allow("Right", right); State(left, right);
+            await Frames();
             Keyboard("Left", 6); Keyboard("Right", 7);
             var selected = Reference<Slot>(core, "State.CurrentExpression");
             void Preserved() => Check(Gesture("Left") == 6 && Gesture("Right") == 7 && Reference<Slot>(core, "State.CurrentExpression") == selected,
@@ -138,6 +157,7 @@ internal static class HandGesturePermissionChecks
                     .Where(source => source != null).Select(source => source.Slot).ToHashSet();
                 Check(visible.SetEquals(new[] { items.FindChild("Select expression"), items.FindChild("Reset settings"), vr ? group : toggle }),
                     "direct-child collection retains expression/reset, omits the entrance and logic board, and selects the mode entry");
+                CheckLabels(menu.Parent.Parent);
             }
         }
         finally

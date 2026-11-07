@@ -1,5 +1,10 @@
 # Expression integration checks
 
+2026-11-07: Both gesture menu entrances display Hand gestures: Both / LeftOnly /
+RightOnly / None through ValueOptionDescriptionDriver<int>. Checks cover all four
+permission field combinations, menu choices, desktop toggles, VR visibility changes,
+and local label bindings after cloning and package reload, alongside existing colors.
+
 2026-11-07: Context submenus use their own Slot as ItemsRoot and collect direct
 children only. There are no intermediate Items containers. Back targets the
 parent menu Slot. Graph checks validate self/parent references and nonrecursive

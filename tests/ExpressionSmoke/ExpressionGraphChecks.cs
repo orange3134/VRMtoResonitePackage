@@ -14,6 +14,7 @@ internal static class ExpressionGraphChecks
     public static void CheckMenuColors(Slot expressions)
     {
         if (Descendant(expressions, "Inputs/ContextMenu") == null) return;
+        HandGesturePermissionChecks.CheckLabels(expressions);
         var current = ExpressionTestFields.Reference<Slot>(expressions.FindChild("API").FindChild("Internal"), "State.CurrentExpression");
         var green = new colorX(0f, 1f, 0f, 1f, Renderite.Shared.ColorProfile.Linear);
         foreach (var item in expressions.GetComponentsInChildren<ContextMenuItemSource>())
@@ -190,8 +191,9 @@ internal static class ExpressionGraphChecks
         Check(nodes.All(n => n.GetType().Name != "ReferenceDrive`1"), "no playback reference drives");
         Check(nodes.Where(n => n.GetType().Name == "ValueFieldDrive`1").All(n =>
             Board(n).Name == "Tracking" && Board(n).Parent.Parent == expressions.FindChild("Outputs") ||
-            Board(n).Name == "Gesture menu visibility" && Board(n).Parent == Descendant(expressions, "Inputs/ContextMenu")),
-            "continuous drives are limited to live tracking and gesture menu visibility");
+            Board(n).Name is "Gesture menu visibility" or "Gesture menu label" &&
+                Board(n).Parent == Descendant(expressions, "Inputs/ContextMenu")),
+            "continuous drives are limited to live tracking and gesture menu visibility/labels");
         Check(nodes.Any(n => n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "state transitions use local change detectors");
         Check(expressions.GetComponentsInChildren<DynamicValueVariable<bool>>()

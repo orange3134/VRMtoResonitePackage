@@ -3,6 +3,14 @@
 DynamicVariable の型・初期値・更新元・編集用途とグラフ内の定数は、
 [変数・定数リファレンス](expression-variables.md)を参照。
 
+2026-11-07: Hand gesturesの入口ラベルは、`Config.AllowHandGesture.Left/Right`に応じて
+`Hand gestures: Both / LeftOnly / RightOnly / None`に更新する（実際のハンドサイン値ではなく許可状態）。
+`Gesture menu label`ボードで左を1、右を2として加算し、共通の`ValueField<int>`へ駆動する。
+VRサブメニューとデスクトップの切替ボタンに、それぞれ`ValueOptionDescriptionDriver<int>`を配置し、
+0=None、1=LeftOnly、2=RightOnly、3=BothのLabelだけを駆動する。既存の色・表示条件は維持する。
+インストール済みFrooxEngine.dllで`Value`がフィールド参照、`Label`が文字列のFieldDriveであることを確認した。
+ボードは非表示項目の外に置き、直接の設定編集・メニュー操作・複製・再読込後も両入口が同じ状態を表示する。
+
 2026-11-07: ContextMenuの全サブメニューは、自身のSlotを`ItemsRoot`に指定し、項目を直下に置く。
 中間の`Items` Slotは生成しない。`SearchWholeHierarchy=false`を明示し、入口自身や下位階層の項目を収集しない。
 `Back`のみ、戻り先メニューのSlotを`ItemsRoot`に指定する。
