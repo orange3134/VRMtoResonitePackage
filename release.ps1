@@ -6,7 +6,8 @@ param(
     [string]$Output = "$PSScriptRoot\publish",
     [string]$AssetName = "ResoPon.exe",
     [switch]$CreateTag,
-    [switch]$PushTag
+    [switch]$PushTag,
+    [switch]$Prerelease
 )
 
 $ErrorActionPreference = "Stop"
@@ -87,7 +88,7 @@ $releaseExists = $false
 try {
     $previousErrorActionPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    gh release view $Tag *> $null
+    $existingPrerelease = gh release view $Tag --json isPrerelease --jq .isPrerelease 2>$null
     if ($LASTEXITCODE -eq 0) {
         $releaseExists = $true
     }
@@ -96,9 +97,16 @@ try {
 }
 
 if ($releaseExists) {
+    if ($Prerelease -and $existingPrerelease -ne "true") {
+        throw "Release $Tag already exists as a stable release. Use a new tag for a prerelease."
+    }
     gh release upload $Tag $exePath --clobber
 } else {
-    gh release create $Tag $exePath --title $releaseTitle --notes "Release $Tag."
+    $releaseArgs = @("release", "create", $Tag, $exePath, "--title", $releaseTitle, "--notes", "Release $Tag.")
+    if ($Prerelease) {
+        $releaseArgs += @("--prerelease", "--latest=false")
+    }
+    gh @releaseArgs
 }
 
 if ($LASTEXITCODE -ne 0) {

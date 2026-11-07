@@ -23,6 +23,24 @@ Create and push the tag first, then create/upload the release:
 .\release.ps1 -CreateTag -PushTag
 ```
 
+Publish a prerelease without replacing the latest stable release:
+
+```powershell
+.\release.ps1 -CreateTag -PushTag -Prerelease
+```
+
+`-Prerelease` sets GitHub's prerelease flag and explicitly passes `--latest=false`.
+Use a new tag: the script refuses to upload a prerelease asset over an existing
+stable release. Uploading to an existing prerelease preserves its status.
+
+The app checks GitHub's `/releases/latest` endpoint, which excludes prereleases
+and drafts. Stable users will therefore not be offered this prerelease. The
+prerelease EXE itself still checks for updates when the startup setting is enabled:
+it offers a newer stable version, with user confirmation before installation.
+It does not downgrade to an older stable version or update to another prerelease.
+The GitHub prerelease flag does not disable update checking in the EXE.
+See [GitHub's latest-release API](https://docs.github.com/en/rest/releases/releases#get-the-latest-release).
+
 Use a non-default Resonite install path:
 
 ```powershell
