@@ -5,10 +5,17 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 
 2026-11-07: `Expressions/Inputs/HandGestures/THIRD-PARTY-NOTICES` を設け、
 その `Comment.Text` に引用元・利用方法の説明を保存する。
-直下の `Avatar Expression Editor (MIT License)` Slotの `Comment.Text` には、
-MIT Licenseの表題・著作権表示・許諾条件・免責条項の全文だけを保存する。
-`ExpressionInputSetup.BuildGestures` が埋め込みリソースの `THIRD-PARTY-NOTICES.md` を
-`MIT License` 行で分割する。ライセンス本文は改変せず、行が欠けていれば生成を失敗させる。
+直下のSlot名は、引用元のルート名を作者表記・改行・装飾タグ・`v1.12.1`まで含めてコピーする。
+2026-11-07にResoLoopで接続したResonite 2026.11.5.80のワールドで、
+Avatar Expression EditorのLicense Slotを確認した。`License` と `Comment` を同じSlotに生成し、
+`RequireCredit=false`、`CanExport=false`、
+`CreditString="MIT License Copyright (c) 2022-2025 rhenium, kazu0617, orange"` を保持する。
+両コンポーネントはpersistent=true、UpdateOrder=0、Enabled=true。
+元のComment本文は著作権行の `kazu0617\r, orange\n` を含めて改行も正規化せず、末尾改行も追加しない。
+名称と値は `Resources/AvatarExpressionEditorLicense.json` に保存し、埋め込みリソースから読み込む。
+元のSlotに観測された `GizmoLink` はInspectorのSlotGizmoへの編集用参照なのでコピーしない。
+実DLLで、外部gizmo参照が失われると自分自身を破棄する実装を確認した。
+`THIRD-PARTY-NOTICES.md` は引き続き配布用通知と親Slotの説明に使い、生成するライセンス本文は取得値を使う。
 HandGestures自身にはCommentを置かない。メニュー生成の有無にかかわらず、この構成を生成する。
 以前の混在したCommentに含まれていた `ResoPon` は、通知の説明文から削除した。
 `ResoPon.ControllerGestureNotice` はリソースの検索名であり、検索名自体は保存しない。
@@ -16,7 +23,8 @@ HandGestures自身にはCommentを置かない。メニュー生成の有無に�
 現行のAPI TagとDynamicVariableSpace名は `ExpressionSystem` 系で、コードコメントも出力されない。
 入力アバター由来の表情名・メッシュ名等はこの固定文言の調査対象外。
 表情システム外には `MeshLoadingSetup` のSlot名 `<color=cyan>ResoPon</color> - Mesh loaded check` がある。
-ExpressionSmokeは生成・複製・パッケージ再読込後の説明とライセンスの分離、およびライセンス全文の保持を検証する。
+ExpressionSmokeは生成・複製・パッケージ再読込後の説明とライセンスの分離、正確な名称、両コンポーネントと全値の保持を検証する。
+`--license-only` ではメニューあり・なしの生成、複製、パッケージinspectと再読込を短時間で検証する。
 
 2026-11-07: `Select expression`の入口色は`State.ContextMenuSelected`へ直接追従する。
 `ValueOptionDescriptionDriver<bool>`でtrueなら緑、falseなら白を駆動する。

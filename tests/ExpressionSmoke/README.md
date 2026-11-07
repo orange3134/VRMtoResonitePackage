@@ -1,9 +1,14 @@
 # Expression integration checks
 
-2026-11-07: Controller attribution lives in HandGestures/THIRD-PARTY-NOTICES,
-with the complete license in its Avatar Expression Editor (MIT License) child.
-Graph checks verify separate attribution and unchanged license text after
-generation, cloning and package reload; HandGestures itself has no Comment.
+2026-11-07: Controller attribution lives in HandGestures/THIRD-PARTY-NOTICES.
+Its child preserves the source tool's full name including author markup and v1.12.1,
+with the source License and Comment components. Graph checks compare all license
+values and exact text (including original line endings) against the captured resource
+after generation, cloning and package reload; HandGestures itself has no Comment.
+The source Inspector's GizmoLink is not part of the license content.
+Use `dotnet run --project tests/ExpressionSmoke -c Release -- --license-only`
+for focused generation, clone, package inspection and reload checks with menus both
+enabled and disabled. The optional artifact directory still precedes the flag.
 
 2026-11-07: Both gesture menu entrances display Hand gestures: Both / LeftOnly /
 RightOnly / None through ValueOptionDescriptionDriver<bool2> (X=Left, Y=Right). Checks cover all four

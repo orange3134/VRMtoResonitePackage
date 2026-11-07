@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="../../THIRD-PARTY-NOTICES.md" LogicalName="ResoPon.ControllerGestureNotice" />
+    <EmbeddedResource Include="Resources/AvatarExpressionEditorLicense.json" LogicalName="ResoPon.AvatarExpressionEditorLicense" />
     <None Include="../../THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Resources\LoadingFallback.png" />
     <EmbeddedResource Include="Resources\logo.svg" />

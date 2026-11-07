@@ -15,14 +15,16 @@ AssemblyLoadContext.Default.Resolving += (_, name) =>
     string path = Path.Combine(resonite, name.Name + ".dll");
     return File.Exists(path) ? AssemblyLoadContext.Default.LoadFromAssemblyPath(path) : null;
 };
+bool licenseOnly = args.Contains("--license-only");
+args = args.Where(arg => arg != "--license-only").ToArray();
 string artifacts = Path.GetFullPath(args.Length > 0 ? args[0] : ".tmp_verify/expression-smoke/" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
 string importedPackage = args.Length > 1 ? Path.GetFullPath(args[1]) : null;
 string baselinePackage = args.Length > 2 ? Path.GetFullPath(args[2]) : null;
-try { await Run(resonite, artifacts, importedPackage, baselinePackage); Console.WriteLine("Expression smoke checks passed."); Environment.Exit(0); }
+try { await Run(resonite, artifacts, importedPackage, baselinePackage, licenseOnly); Console.WriteLine("Expression smoke checks passed."); Environment.Exit(0); }
 catch (Exception error) { Console.Error.WriteLine(error); Environment.Exit(1); }
 
 [MethodImpl(MethodImplOptions.NoInlining)]
-static async Task Run(string resonite, string artifacts, string importedPackage, string baselinePackage)
+static async Task Run(string resonite, string artifacts, string importedPackage, string baselinePackage, bool licenseOnly)
 {
     VrmToResonitePackage.ResoniteLocator.InstallAssemblyResolver(resonite);
     Environment.CurrentDirectory = resonite;
@@ -42,6 +44,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         for (int i = 0; i < 30; i++) await default(NextUpdate);
         world.LocalUser.Root ??= world.AddSlot("Wearer").AttachComponent<UserRoot>();
         await default(NextUpdate);
+        if (licenseOnly) { await ExpressionLicenseChecks.Run(world.LocalUser.Root.Slot, artifacts); return; }
         await NamedShapeRepairChecks.Run(world.LocalUser.Root.Slot);
         await FaceExpressionDetectionChecks.RunCatalog(world.LocalUser.Root.Slot);
         if (importedPackage != null) { await ImportedGestureAvatarChecks.Run(world, importedPackage, artifacts, baselinePackage); return; }
