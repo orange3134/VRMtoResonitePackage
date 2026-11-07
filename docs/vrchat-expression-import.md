@@ -36,9 +36,8 @@ FaceEmoのUnity Editorパッケージ・UI・画像・同梱ライブラリを�
 上記のソース使用範囲と、後述の変換仕様・制限を区別する。
 
 通知ファイル全体はEXEへ埋め込み、build・publishの出力先にもコピーする。
-一方、生成アバターのHandGestures通知はAvatar Expression Editor用で、先頭のMIT本文より前を
-説明として読み、ライセンス本文は専用JSONから生成する。FaceEmoの節はその後ろに置き、
-コントローラー由来の通知と混在させない。
+生成アバターにはライセンス用のスロット、Comment、Licenseコンポーネントを追加しない。
+出典と許諾文の管理は[外部ソース・素材のライセンス管理](third-party-licenses.md)を参照する。
 
 ## 通常形式の最初の表情セット
 
