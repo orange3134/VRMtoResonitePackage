@@ -105,7 +105,7 @@ internal sealed partial class ExpressionSystemSetup
         var groups = ExpressionMenuGroups.Build(_clips.Keys, _compiled.Pairs);
         for (int index = 0; index < groups.Count; index++)
         {
-            var children = AddSubmenu(selection, (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            var children = AddSubmenu(selection, "Group " + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
             foreach (string id in groups[index])
             {
                 var expression = _clips[id];

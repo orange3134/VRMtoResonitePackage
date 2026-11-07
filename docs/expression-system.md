@@ -6,7 +6,7 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 2026-11-07: ContextMenuの全サブメニューは、自身のSlotを`ItemsRoot`に指定し、項目を直下に置く。
 中間の`Items` Slotは生成しない。`SearchWholeHierarchy=false`を明示し、入口自身や下位階層の項目を収集しない。
 `Back`のみ、戻り先メニューのSlotを`ItemsRoot`に指定する。
-例えば表情ボタンの実Slotパスは `Inputs/ContextMenu/Select expression/1/表情名` になる。
+例えば表情ボタンの実Slotパスは `Inputs/ContextMenu/Select expression/Group 1/表情名` になる。
 インストール済みFrooxEngine.dllの`ContextMenuSubmenu.Pressed`は、この設定で`ItemsRoot.Target.Children`の
 有効な`ContextMenuItemSource`だけを列挙することを確認した。以下の記録の`Items`階層は旧構成。
 
@@ -18,7 +18,7 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 実行時の表情解除は従来のOutputs/Baseへ戻る経路を使い、瞬き・口パクのBase入力も継続する。
 以下の記録にある「Neutralクリップに基準値を保存」は旧仕様で、現行生成物には該当クリップを置かない。
 
-2026-11-07: 表情直接選択は `Expressions / Select expression / 1, 2, 3, ... / 表情` に統一した。
+2026-11-07: 表情直接選択は `Expressions / Select expression / Group 1, Group 2, Group 3, ... / 表情` に統一した。
 各番号グループに表情を最大8個と、1階層戻る `Back` を配置する（Backは表情数に含めない）。
 最終GestureTableの `L0..7R0` と `L0R0..7` をそれぞれ左手・右手単独の集合とし、
 左右共通、左のみ、右のみ、両手の組合せでのみ選べる表情、未割当表情の順に分類する。

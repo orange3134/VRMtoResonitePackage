@@ -56,7 +56,8 @@ internal static class ExpressionMenuGroupChecks
         var buttons = new List<ButtonDynamicImpulseTriggerWithReference<Slot>>();
         for (int i = 0; i < groups.Length; i++)
         {
-            Check(groups[i].GetComponent<ContextMenuItemSource>().Label.Value == (i + 1).ToString(), "consecutive group numbers");
+            Check(groups[i].GetComponent<ContextMenuItemSource>().Label.Value == "Group " + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "consecutive Group labels");
             var entries = groups[i].GetComponent<ContextMenuSubmenu>().ItemsRoot.Target;
             Check(entries.FindChild("Back").GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == groupsRoot,
                 "group Back returns to group selection");
