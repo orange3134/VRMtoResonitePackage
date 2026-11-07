@@ -260,6 +260,12 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   調査ではUnityの `Library/Artifacts` にある生成済みFBXを付属の `binary2text` で読み、
   Animatorの参照先fileIDとAvatarの対応表を照合できる。これはUnityプロジェクト側の
   インポート結果であり、元の `.unitypackage` 内の `.meta` と区別する。
+  UnityなしでAvatar参照から対応表を取得できる割合を調べる場合は、参照の有無だけを数えない。
+  元データ内のAvatarオブジェクト（Unity classID `90`）とその対応表の実体を確認する。
+  全収録アセットにAvatar実体がなければ、選択Prefabや継承経路によらず取得不可と判定できる。
+  FBX内の生成サブアセットへの参照は、FBX `.meta` の明示対応表と区別して集計する。
+  バイナリ形式の未解析アセットは取得不可と断定せず未判定にし、Prefab入力の
+  `Library/Artifacts` は「Unity生成物を使用しない」集計から除外する。
 - nested animatorはprimary選択に使わず、選択アバタールート直下のAnimatorだけを権威とする。
 - 参照される追加FBXを再帰収集し、各FBXのmaterial mapを混ぜずに保持する。
 - `PrefabInstance.m_TransformParent` とsource objectを辿り、追加FBXを対応する親boneへ配置する。
