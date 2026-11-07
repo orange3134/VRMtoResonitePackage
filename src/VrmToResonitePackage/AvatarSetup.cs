@@ -7,6 +7,7 @@ using Renderite.Shared;
 using VrmToResonitePackage.Expressions;
 using VrmToResonitePackage.Vrm;
 
+// Portions adapted from modular-avatar-resonite; see THIRD-PARTY-NOTICES.md.
 namespace VrmToResonitePackage;
 
 /// <summary>Tunable knobs for the avatar setup; defaults match typical VRM avatars.</summary>
@@ -1199,7 +1200,6 @@ internal static class AvatarSetup
         }
 
         Slot identification = root.AddSlot("Avatar Root Identification");
-        ThirdPartyNotices.AddModularAvatar(identification);
         var worn = identification.AttachComponent<DynamicValueVariable<bool>>();
         worn.VariableName.Value = ModularAvatarNamespace + "/AvatarWorn";
         var wornLocal = identification.AttachComponent<DynamicValueVariable<bool>>();

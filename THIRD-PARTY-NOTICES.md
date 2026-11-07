@@ -216,8 +216,9 @@ Resonite~/ResoniteHook/.
 
 LoadingFallback.png is the fallback texture extracted from that package.
 The reconstructed loading stand-in and other adapted component graphs are
-included in generated avatars. This notice accompanies those graphs and
-the fallback image; it does not license the user's avatar assets.
+included in generated avatars. This source and distribution notice covers
+those adapted parts and the fallback image; it does not license the user's
+avatar assets.
 
 Project: https://github.com/bdunderscore/modular-avatar-resonite
 Audited source: 1ec58b5637f85149d0fea4cd5785024118290df9

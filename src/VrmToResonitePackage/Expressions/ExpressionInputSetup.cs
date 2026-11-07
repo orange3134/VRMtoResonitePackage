@@ -1,5 +1,4 @@
 using Elements.Core;
-using System.Text.Json;
 using FrooxEngine;
 using FrooxEngine.ProtoFlux;
 using Renderite.Shared;
@@ -261,27 +260,10 @@ internal sealed partial class ExpressionSystemSetup
         g.OnChanged<bool>(accepting, send);
     }
 
+    // Gesture classifiers derive from Avatar Expression Editor; see THIRD-PARTY-NOTICES.md.
     private void BuildGestures()
     {
         var root = _inputs.AddSlot("HandGestures");
-        using (var notice = new StreamReader(typeof(ExpressionSystemSetup).Assembly.GetManifestResourceStream("ResoPon.ControllerGestureNotice")))
-        {
-            string text = notice.ReadToEnd();
-            int licenseStart = text.IndexOf("\nMIT License", StringComparison.Ordinal);
-            if (licenseStart < 0) throw new InvalidDataException("Controller gesture MIT license is missing from third-party notices.");
-            var notices = root.AddSlot("THIRD-PARTY-NOTICES");
-            notices.AttachComponent<Comment>().Text.Value = text[..licenseStart].Trim();
-            // Preserve the source tool's full name and license component values, including original line endings.
-            using var sourceStream = typeof(ExpressionSystemSetup).Assembly.GetManifestResourceStream("ResoPon.AvatarExpressionEditorLicense");
-            using var source = JsonDocument.Parse(sourceStream);
-            var values = source.RootElement;
-            var entry = notices.AddSlot(values.GetProperty("toolName").GetString());
-            var license = entry.AttachComponent<License>();
-            license.RequireCredit.Value = values.GetProperty("requireCredit").GetBoolean();
-            license.CreditString.Value = values.GetProperty("creditString").GetString();
-            license.CanExport.Value = values.GetProperty("canExport").GetBoolean();
-            entry.AttachComponent<Comment>().Text.Value = values.GetProperty("commentText").GetString();
-        }
         foreach (string device in new[] { "TouchController", "IndexController", "ViveController", "WindowsMRController", "CosmosController" })
         {
             var module = Record(root, device.Replace("Controller", ""), GestureSettingsSpace);

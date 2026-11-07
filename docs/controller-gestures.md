@@ -140,11 +140,9 @@ UpdateSelectionにはローカル着用条件がある。入力モジュール�
 Touchの接触状態表とIndexの中間域は上記のResoPon仕様を使う。
 AnalogFist・Strength、ViveのOptional.Eye、原版の表情ウェイト合成は移植しない。
 
-配布通知は[THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md)。生成物では
-`Inputs/HandGestures/THIRD-PARTY-NOTICES` のCommentに説明を置き、その子に引用元の名称、
-License、Commentを保存する。メニューを生成しない場合も通知を含める。
-名称・本文・改行・License値は[埋め込みリソース](../src/VrmToResonitePackage/Resources/AvatarExpressionEditorLicense.json)をそのまま使う。
-RequireCredit=false、CanExport=false、著作権行を維持し、InspectorのGizmoLinkは含めない。
+出典・著作権表示・許諾文はソースと配布物の
+[THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) に保持する。
+生成アバターにはライセンス用のスロット、Comment、Licenseコンポーネントを追加しない。
 
 ## 検証と実装
 
@@ -153,5 +151,5 @@ RequireCredit=false、CanExport=false、著作権行を維持し、InspectorのG
 ExpressionInputEventChecksはセンサー出力を置き換え、Touch全128入力、Indexの2値姿勢と5指3状態、
 Cosmos全16コード、Vive・MRの8方向を左右で照合する。境界、設定変更、Timeout中の破棄、
 VR終了、切断・再接続、許可、左右独立性も検証する。
-ライセンスとグラフ構造は生成・複製・保存再読込で確認する。
+グラフ構造とライセンス注記が追加されないことを生成・複製・保存再読込で確認する。
 実機での操作感とVRChatでの見た目との比較はヘッドレステストの対象外。

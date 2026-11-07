@@ -8,7 +8,7 @@
 
 | 参照元 | 対象と確認範囲 |
 |---|---|
-| Avatar Expression Editor | コントローラー判定。元ツールの License / Comment を生成物にも保持。[入力資料](controller-gestures.md)参照 |
+| Avatar Expression Editor | コントローラー判定。著作権表示と許諾文をソース・配布物に保持。[入力資料](controller-gestures.md)参照 |
 | FaceEmo | VRChat表情の検出と選択処理の移植。[取り込み資料](vrchat-expression-import.md)参照 |
 | Resonite.UnitySDK | MaterialTuner、LilToonConverter、VrchatMaterialBuilder、ShaderPropertyFallbackConverter、ベイク計画。MToon・lilToon変換を照合 |
 | lilToon | VrchatMainTextureBaker とレイヤー処理。lil_common_functions.hlsl 等の色補正・グラデーション・アルファマスク・合成 |
@@ -21,9 +21,7 @@
 `LoadingFallback.png` は modular-avatar-resonite の
 `Resonite~/ResoniteHook/MA.Gadgets/resources/loading_standin.resonitepackage` 内の画像とバイト一致する。
 SHA-256 は `30a0bc21f298c2e75427245468405849b6c7ea67eb9ced14ecbc5dc1ef3eabb3`。
-生成アバターの識別・揺れもの設定・メッシュ待機判定・待機表示の各サブツリーにも
-同プロジェクトの通知全文を `THIRD-PARTY-NOTICES` スロットの Comment として保存する。
-そのサブシステムだけを複製しても通知を保持する。
+生成アバターへのライセンスコメント追加は行わず、出典と許諾文はソース・配布物側に保持する。
 
 `Resources/ResoPon.png`、`.ico`、`logo.svg`、`loading.svg`、`arrow.svg` は作者が自作と確認済み。
 Modular Avatar の `Editor/images` はMITの対象外だが、本アプリには含めていない。
@@ -35,14 +33,10 @@ Modular Avatar の `Editor/images` はMITの対象外だが、本アプリには
 - .NET / WPF の共有ランタイムは別途インストールする。native host の通知は残す。
 - `THIRD-PARTY-NOTICES.md` は出力フォルダーへのコピーに加え、EXE内のリソースに埋め込む。
   ReleaseにEXEだけを添付する場合も通知は含まれる。
-- 埋め込み名 `ResoPon.ControllerGestureNotice` は既存の読み出しとの互換性のため維持する。
-  コントローラーの出典表示は最初の MIT License より前を利用するため、先頭の
-  Avatar Expression Editor 節を移動しない。
-- `ThirdPartyNotices` は Modular Avatar for Resonite 節を切り出すため、その見出しを変更するときは
-  コードも合わせて変更する。通知を取得できない場合は変換を失敗させる。
+- 埋め込みリソース名は `ResoPon.ThirdPartyNotices`。通知全文を保持し、生成グラフには転記しない。
 - Release publish の同梱ファイル・EXE内通知、Markdownリンク、
   [ExpressionSmoke](../tests/ExpressionSmoke/README.md) の `--license-only` を確認する。
-  後者は元ツールのライセンスと追加通知の生成・複製・保存・inspect・再読込を確認する。
+  後者は生成・複製・保存・inspect・再読込後にライセンス注記が追加されていないことを確認する。
 
 ## 調査の境界
 

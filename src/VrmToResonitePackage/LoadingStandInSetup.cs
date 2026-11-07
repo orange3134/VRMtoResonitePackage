@@ -7,6 +7,7 @@ using Renderite.Shared;
 using VrmToResonitePackage.Expressions;
 using static VrmToResonitePackage.Expressions.ExpressionFlux;
 
+// Portions adapted from modular-avatar-resonite; see THIRD-PARTY-NOTICES.md.
 namespace VrmToResonitePackage;
 
 /// <summary>Builds the loading thumbnail from stock components and ProtoFlux nodes.</summary>
@@ -16,7 +17,6 @@ internal static class LoadingStandInSetup
     {
         Uri fallbackUri = await ImportFallbackTexture(parent.Engine);
         Slot standIn = parent.AddSlot("LoadingStandin");
-        ThirdPartyNotices.AddModularAvatar(standIn);
         var virtualParent = standIn.AttachComponent<VirtualParent>();
         // The original stand-in follows position/rotation only, retaining avatar scale.
         ((FieldDrive<float3>)virtualParent.GetSyncMember("_targetPos")).Target = standIn.Position_Field;

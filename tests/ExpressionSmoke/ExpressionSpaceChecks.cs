@@ -26,7 +26,7 @@ internal static class ExpressionSpaceChecks
         var controllers = modules.Children.Where(module => module.Name != "THIRD-PARTY-NOTICES").ToArray();
         Check(modules.FindChild("Modules") == null && controllers.All(module =>
             new[] { "Touch", "Index", "Vive", "WindowsMR", "Cosmos" }.Contains(module.Name)),
-            "controller modules live beside THIRD-PARTY-NOTICES directly under HandGestures");
+            "controller modules live directly under HandGestures");
         foreach (var module in controllers) expected.Add(module, "ExpressionSystem.Input.HandGesture");
         foreach (var module in controllers)
         foreach (string side in new[] { "Left", "Right" })

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.Store;
@@ -10,57 +9,16 @@ using Comment = FrooxEngine.Comment;
 
 internal static class ExpressionLicenseChecks
 {
-    public static void Verify(Slot expressions)
+    public static void Verify(Slot root)
     {
-        var handGestures = expressions.FindChild("Inputs").FindChild("HandGestures");
-        var notices = handGestures.FindChild("THIRD-PARTY-NOTICES");
-        string attribution = notices?.GetComponent<Comment>()?.Text.Value;
-        Check(handGestures.GetComponent<Comment>() == null &&
-            attribution?.Contains("Avatar Expression Editor v1.12.1") == true &&
-            !attribution.Contains("Copyright (c)") && !attribution.Contains("ResoPon"), "separate source attribution");
-        using var stream = typeof(ExpressionSystemSetup).Assembly.GetManifestResourceStream("ResoPon.AvatarExpressionEditorLicense");
-        using var source = JsonDocument.Parse(stream);
-        var values = source.RootElement;
-        Check(notices.Children.Count == 1, "one source tool license slot");
-        var entry = notices.Children.Single();
-        Check(entry.Name == values.GetProperty("toolName").GetString(), "exact source tool name, authors, markup and version");
-        var license = entry.GetComponent<License>();
-        var comment = entry.GetComponent<Comment>();
-        Check(entry.GetComponents<Component>().Count == 2 && license != null && comment != null, "source License and Comment components only");
-        Check(license.RequireCredit.Value == values.GetProperty("requireCredit").GetBoolean() &&
-            license.CreditString.Value == values.GetProperty("creditString").GetString() &&
-            license.CanExport.Value == values.GetProperty("canExport").GetBoolean(), "all source License values");
-        Check(comment.Text.Value == values.GetProperty("commentText").GetString(), "exact source Comment text including line endings");
-        foreach (var component in new Component[] { license, comment })
-            Check(((IField<bool>)component.GetSyncMember(0)).Value &&
-                ((IField<int>)component.GetSyncMember(1)).Value == 0 &&
-                ((IField<bool>)component.GetSyncMember(2)).Value, "source persistence, update order and enabled state");
-    }
-
-    private static void VerifyModularAvatar(Slot avatar)
-    {
-        using var stream = typeof(ExpressionSystemSetup).Assembly.GetManifestResourceStream("ResoPon.ControllerGestureNotice");
-        using var reader = new StreamReader(stream);
-        string text = reader.ReadToEnd().Replace("\r\n", "\n");
-        int start = text.IndexOf("## Modular Avatar for Resonite\n", StringComparison.Ordinal);
-        int end = text.IndexOf("\n## ", start + 3, StringComparison.Ordinal);
-        string expected = (end < 0 ? text[start..] : text[start..end]).Trim();
-        foreach (string path in new[] {
-            "Avatar Root Identification",
-            "<color=#00ffff>Avatar Settings</color>",
-            "<color=#00ffff>Avatar Settings</color>/Avatar Loading Display/LoadingStandin",
-            "<color=cyan>ResoPon</color> - Mesh loaded check" })
-        {
-            Slot target = avatar;
-            // Slot names contain markup with slashes, so resolve the two nested paths explicitly.
-            if (path.EndsWith("/LoadingStandin", StringComparison.Ordinal))
-                target = avatar.FindChild("<color=#00ffff>Avatar Settings</color>")
-                    ?.FindChild("Avatar Loading Display")?.FindChild("LoadingStandin");
-            else
-                target = avatar.FindChild(path);
-            Check(target?.FindChild("THIRD-PARTY-NOTICES")?.GetComponent<Comment>()?.Text.Value == expected,
-                "complete Modular Avatar notice at " + path);
-        }
+        Check(!root.GetComponentsInChildren<License>().Any(), "no generated License components");
+        Check(!root.GetComponentsInChildren<Comment>().Any(comment =>
+            comment.Slot.Name == "THIRD-PARTY-NOTICES" ||
+            comment.Text.Value?.Contains("MIT License", StringComparison.Ordinal) == true),
+            "no generated license comments");
+        static bool HasNoticeSlot(Slot slot) => slot.Name == "THIRD-PARTY-NOTICES" || slot.Children.Any(HasNoticeSlot);
+        Check(!HasNoticeSlot(root),
+            "no generated notice slots");
     }
 
     public static async Task Run(Slot parent, string artifacts)
@@ -89,11 +47,11 @@ internal static class ExpressionLicenseChecks
                 mesh.Mesh.Target = mesh.Slot.AttachComponent<QuadMesh>();
                 await MeshLoadingSetup.Apply(avatar);
                 for (int i = 0; i < 5; i++) await default(NextUpdate);
-                VerifyModularAvatar(avatar);
+                Verify(avatar);
                 Verify(expressions);
                 clone = avatar.Duplicate(parent);
                 Verify(clone.FindChild("Expressions"));
-                VerifyModularAvatar(clone);
+                Verify(clone);
                 var graph = avatar.SaveObject(DependencyHandling.CollectAssets);
                 var record = RecordHelper.CreateForObject<SkyFrost.Base.Record>(avatar.Name, avatar.World.LocalUser.MachineID, null);
                 string package = Path.Combine(artifacts, $"License-{menu}.resonitepackage");
@@ -107,8 +65,8 @@ internal static class ExpressionLicenseChecks
                 await PackageImporter.ImportPackage(package, restored);
                 await default(ToWorld);
                 Verify(restored.FindChild("Expressions"));
-                VerifyModularAvatar(restored);
-                Console.WriteLine($"LICENSE: menu={menu}: generation, clone, package inspection and reload preserve source components");
+                Verify(restored);
+                Console.WriteLine($"LICENSE: menu={menu}: generation, clone, package inspection and reload contain no generated license annotations");
             }
             finally { restored?.Destroy(); clone?.Destroy(); avatar.Destroy(); }
         }

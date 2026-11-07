@@ -27,7 +27,7 @@ Use the same installation for both.
   existing tracking drivers, normal/inverted blink mixing, and actual mesh weights.
   Blink mesh outputs bypass smoothing; other mesh outputs converge through SmoothValue.
 - DynamicVariable spaces, independent Flux boards, node layout, local references,
-  source license preservation, cloning, package inspection and reload.
+  absence of generated license annotations, cloning, package inspection and reload.
 - Generated Avatar Root Identification and loading stand-in behavior, including
   wear state, head tracking, mesh visibility, and collected fallback texture assets.
 
@@ -45,10 +45,11 @@ interactive menu usability, or multi-client synchronization in a running client.
 dotnet run --project tests/ExpressionSmoke -c Release -- --license-only
 ```
 
-This runs the common parser/compiler fixtures and focused license generation,
+This runs the common parser/compiler fixtures and focused avatar generation,
 clone, package inspection and reload checks with menus enabled and disabled.
-It checks the Avatar Expression Editor source components and the full Modular Avatar
-for Resonite notice on avatar identification, dynamics, mesh loading and the stand-in.
+It checks that expressions, avatar identification, dynamics, mesh loading and the
+stand-in have no generated license slots, comments or License components.
+Third-party notices remain in the source repository and the converter distribution.
 An optional artifact directory precedes the flag.
 
 ## Locally converted package

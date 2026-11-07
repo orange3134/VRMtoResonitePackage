@@ -3,6 +3,7 @@ using FrooxEngine;
 using FrooxEngine.CommonAvatar;
 using Renderite.Shared;
 
+// Portions adapted from modular-avatar-resonite; see THIRD-PARTY-NOTICES.md.
 namespace VrmToResonitePackage;
 
 /// <summary>
@@ -31,7 +32,6 @@ internal static class MeshLoadingSetup
         PublishHeadPose(root);
 
         Slot loadCheck = root.AddSlot("<color=cyan>ResoPon</color> - Mesh loaded check");
-        ThirdPartyNotices.AddModularAvatar(loadCheck);
         MeshRendererLoadStatus loadStatus = loadCheck.AttachComponent<MeshRendererLoadStatus>();
         DynamicValueVariable<bool> loadVariable = loadCheck.AttachComponent<DynamicValueVariable<bool>>();
         loadVariable.Value.Value = false;

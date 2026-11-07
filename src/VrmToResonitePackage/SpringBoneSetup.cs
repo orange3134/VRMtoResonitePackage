@@ -2,6 +2,7 @@ using Elements.Core;
 using FrooxEngine;
 using VrmToResonitePackage.Vrm;
 
+// Portions adapted from modular-avatar-resonite; see THIRD-PARTY-NOTICES.md.
 namespace VrmToResonitePackage;
 
 /// <summary>
@@ -139,7 +140,6 @@ internal static class SpringBoneSetup
             settingsRootVar.Reference.DriveFrom(selfRef.Reference);
 
             _templateRoot = _settingsRoot.AddSlot("Dynamic Bone Settings");
-            ThirdPartyNotices.AddModularAvatar(_settingsRoot);
         }
 
         /// <summary>
