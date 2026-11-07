@@ -157,6 +157,17 @@ through adaptation. Explicitly cleared viseme references produce no expression b
 Repeated unpacked skins retain their owning model's bone targets. Visible authored
 geometry keeps an independent mesh template when the same FBX also appears beneath
 an EditorOnly parent, and remains eligible as the primary model.
+
+# Humanoid fallback
+
+`HumanoidSkeletonMappingChecks` covers unnamed limbs resolved from rest-pose geometry,
+anatomical ancestry, rotated/scaled/mirrored roots, transparent twist helpers,
+namespace/numbered-finger naming, and conservative face/finger assignment.
+Duplicate names, tied candidates, missing/cyclic parents, missing ancestor poses and
+nonfinite transforms cannot manufacture a complete humanoid. Parser integration checks
+verify geometric primary-model classification and preservation of explicit mappings,
+including partial maps. These checks do not invoke Unity or reproduce Unity's exact scores.
+
 # Material bake decisions
 
 `MaterialBakePlanChecks` verifies the SDK-derived main-texture bake policy without

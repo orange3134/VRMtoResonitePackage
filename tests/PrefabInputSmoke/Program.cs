@@ -30,6 +30,7 @@ catch (Exception error)
 static void Run()
 {
     HumanoidSkeletonNameChecks.Run();
+    HumanoidSkeletonMappingChecks.Run();
     SkinBoneIndexChecks.Run();
     MaterialBakePlanChecks.Run();
     VrmToResonitePackage.ResoniteLocator.InstallAssemblyResolver(
@@ -73,6 +74,7 @@ MonoBehaviour:
         Check(VrchatAvatarParser.ListAvatars(package).Single().Name == "DescriptorWithAudio",
             "SDK DLL GUID shared by avatar and audio components must identify only the descriptor type");
     PrefabGraphChecks.Run(Asset);
+    HumanoidSkeletonMappingChecks.CheckParser(Asset);
     Asset("Assets/Other.prefab", otherGuid, Avatar("Other"));
     Asset("Library/PackageCache/com.example.materials@123/Surface.mat", materialGuid, "Material:\n  m_Name: Surface\n");
     Asset("Library/PackageCache/com.example.materials@stale/Surface.mat", materialGuid, "STALE");

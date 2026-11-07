@@ -244,18 +244,22 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
-  少数の名前一致だけでは推定しない。
+  モデル選択と実際の割り当ては同じ `HumanoidSkeletonMapper` を使い、必須15部位が
+  揃わない推定は採用しない。明示的な対応表は部分的でも優先し、自動補完で変更しない。
   左右の識別は `.L` / `.R` / `_L` / `_R` 接尾辞に加え、`L_` / `R_` と
-  `Left` / `Right` 接頭辞に対応する。残りの名前は既知の骨名との完全一致で判定し、
-  髪・胸・twistなどの補助骨を人体ボーンへ割り当てない。
+  `Left` / `Right` 接頭辞に対応する。namespace、Bip接頭辞、番号付き指などを正規化し、
+  名前の手掛かりを親子関係とrest poseの位置で検証する。髪・胸などの枝は除外し、
+  twistなどの補助骨は階層を辿る際に通過できるが、人体ボーンには割り当てない。
   アイザラ 1.1.1 は `human: []` で、四肢・指が `L_UpperArm` / `R_Index_Proximal`、
   目が `LeftEye` / `RightEye` という混在形式。接尾辞だけの推定では体幹6本しか得られず、
-  メッシュ読込後にアバターセットアップが省略される。接頭辞対応で54本を解決できる。
+  メッシュ読込後にアバターセットアップが省略される。旧接頭辞対応は54本、階層推定は
+  `J_Jaw` を含む55本を解決する。
   ただし `.meta` の `human: []` は、Unityインポート後の `Avatar` にも対応表がないことを
   意味しない。アイザラのPrefabはFBXからAnimatorを継承し、その `m_Avatar` はFBX内の
   `AGS_01Avatar`（fileID `9000000`）を参照する。Unity 2022.3.22f1の生成済みデータでは
-  このAvatarの `m_HumanDescription.m_Human` に55本の対応がある。名前推定の54本とは異なり、
-  `Jaw` が `J_F_D_Hair_2` に割り当てられているため、両者を同一の結果とは扱わない。
+  このAvatarの `m_HumanDescription.m_Human` に55本の対応がある。ただしUnity側は
+  `Jaw` が `J_F_D_Hair_2` に割り当てられており、本変換器の `J_Jaw` とは異なる。
+  同じ本数でもUnityと同一の結果とは扱わない。
   現在の変換器はAnimatorのAvatar参照をモデル選択に使うが、生成済みAvatarの対応表は読まない。
   調査ではUnityの `Library/Artifacts` にある生成済みFBXを付属の `binary2text` で読み、
   Animatorの参照先fileIDとAvatarの対応表を照合できる。これはUnityプロジェクト側の
@@ -266,6 +270,21 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   FBX内の生成サブアセットへの参照は、FBX `.meta` の明示対応表と区別して集計する。
   バイナリ形式の未解析アセットは取得不可と断定せず未判定にし、Prefab入力の
   `Library/Artifacts` は「Unity生成物を使用しない」集計から除外する。
+- Unityの公開実装を調べる際は、2022.3の
+  [AvatarSetupTool](https://github.com/Unity-Technologies/UnityCsReference/blob/2022.3/Editor/Mono/Inspector/Avatar/AvatarSetupTool.cs) と
+  [AvatarAutoMapper](https://github.com/Unity-Technologies/UnityCsReference/blob/2022.3/Editor/Mono/Inspector/Avatar/AvatarAutoMapper.cs) を参照する。
+  インポート時はbind poseとスキン対象の骨を取得し、Biped専用または一般の自動割り当てへ進む。
+  一般の割り当ては階層・名前・左右・方向・長さを評価し、体と手指を分けて処理する。
+  Unityの参照用ソースは製品コードへ移植せず、上記の判断材料に基づく独立実装とする。
+- 本変換器のフォールバックは `.meta` の `skeleton` にある `parentName` とlocal TRSから
+  全体座標を再構成する。名前で一意に識別できるHipsとHeadを基準に中心の鎖を取り、
+  腕・脚は祖先関係を満たす3関節の組み合わせを比較する。名前が不足する関節では、
+  体に対する左右・伸びる方向・隣接する長さの比を使う。ルートの回転とスケールも反映する。
+  顔・指は追加の名前と階層の証拠を必要とし、指は同じ手に属する3関節が揃う場合だけ採用する。
+  同名・同点候補、矛盾する左右名、循環、欠落した親、非有限の変換は推測で解消しない。
+  親の位置が欠ける場合は幾何判定を使わず、親名のない旧形式では一意の名前対応に限定する。
+  Unityのbind pose再標本化、スキン重みの候補選別、T-pose補正は再現していない。
+  中心の骨を名前で特定できないモデルや曖昧な姿勢は未対応として扱い、完全互換を保証しない。
 - nested animatorはprimary選択に使わず、選択アバタールート直下のAnimatorだけを権威とする。
 - 参照される追加FBXを再帰収集し、各FBXのmaterial mapを混ぜずに保持する。
 - `PrefabInstance.m_TransformParent` とsource objectを辿り、追加FBXを対応する親boneへ配置する。

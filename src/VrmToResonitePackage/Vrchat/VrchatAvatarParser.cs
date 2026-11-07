@@ -30,14 +30,8 @@ public static class VrchatAvatarParser
     // These are the required humanoid bones shared by Unity Humanoid and VRM. Requiring the
     // complete core prevents a generic-rig accessory containing only names such as Head or Hips
     // from being treated as the avatar body.
-    private static readonly HashSet<string> RequiredInferredHumanoidBones = new(StringComparer.Ordinal)
-    {
-        "hips", "spine", "head",
-        "leftUpperArm", "leftLowerArm", "leftHand",
-        "rightUpperArm", "rightLowerArm", "rightHand",
-        "leftUpperLeg", "leftLowerLeg", "leftFoot",
-        "rightUpperLeg", "rightLowerLeg", "rightFoot",
-    };
+    private static readonly HashSet<string> RequiredInferredHumanoidBones =
+        new(HumanoidSkeletonMapper.RequiredBones, StringComparer.Ordinal);
 
     private static readonly System.Text.RegularExpressions.Regex BlendShapeWeightPath =
         new(@"^m_BlendShapeWeights\.Array\.data\[(\d+)\]$",
@@ -1513,24 +1507,15 @@ public static class VrchatAvatarParser
 
     private static void ParseHumanoidFromSkeleton(YamlNode meta, VrchatAvatar avatar)
     {
-        YamlNode skeleton = meta["ModelImporter"]?["humanDescription"]?["skeleton"];
-        if (skeleton?.Seq == null)
-        {
-            return;
-        }
-
-        foreach (YamlNode entry in skeleton.Seq)
-        {
-            string boneName = entry?["name"]?.AsString();
-            string vrmName = VrchatConstants.InferHumanNameFromSkeletonName(boneName);
-            if (!string.IsNullOrEmpty(boneName) && vrmName != null)
-            {
-                avatar.HumanBones.TryAdd(vrmName, boneName);
-            }
-        }
+        foreach (var (role, bone) in HumanoidSkeletonMapper.Infer(meta))
+            avatar.HumanBones.Add(role, bone);
         if (avatar.HumanBones.Count > 0)
         {
-            UniLog.Warning($"FBXのhumanDescription.humanが空のため、skeleton名から {avatar.HumanBones.Count} 個のヒューマノイドボーンを推定しました。");
+            UniLog.Warning($"FBXのhumanDescription.humanが空のため、skeletonの階層・位置・名前から {avatar.HumanBones.Count} 個のヒューマノイドボーンを推定しました。");
+        }
+        else
+        {
+            UniLog.Warning("FBXのhumanDescription.humanが空で、skeletonから必須15部位を一意に推定できませんでした。");
         }
     }
 
@@ -1583,19 +1568,7 @@ public static class VrchatAvatarParser
             return HumanoidFbxKind.Explicit;
         }
 
-        var inferredBones = new HashSet<string>(StringComparer.Ordinal);
-        if (humanDescription?["skeleton"]?.Seq != null)
-        {
-            foreach (YamlNode entry in humanDescription["skeleton"].Seq)
-            {
-                string humanName = VrchatConstants.InferHumanNameFromSkeletonName(
-                    entry?["name"]?.AsString());
-                if (humanName != null)
-                {
-                    inferredBones.Add(humanName);
-                }
-            }
-        }
+        var inferredBones = HumanoidSkeletonMapper.Infer(meta).Keys.ToHashSet(StringComparer.Ordinal);
         return inferredBones.IsSupersetOf(RequiredInferredHumanoidBones)
             ? HumanoidFbxKind.Inferred
             : HumanoidFbxKind.None;
