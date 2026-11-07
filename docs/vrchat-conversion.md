@@ -251,6 +251,15 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   アイザラ 1.1.1 は `human: []` で、四肢・指が `L_UpperArm` / `R_Index_Proximal`、
   目が `LeftEye` / `RightEye` という混在形式。接尾辞だけの推定では体幹6本しか得られず、
   メッシュ読込後にアバターセットアップが省略される。接頭辞対応で54本を解決できる。
+  ただし `.meta` の `human: []` は、Unityインポート後の `Avatar` にも対応表がないことを
+  意味しない。アイザラのPrefabはFBXからAnimatorを継承し、その `m_Avatar` はFBX内の
+  `AGS_01Avatar`（fileID `9000000`）を参照する。Unity 2022.3.22f1の生成済みデータでは
+  このAvatarの `m_HumanDescription.m_Human` に55本の対応がある。名前推定の54本とは異なり、
+  `Jaw` が `J_F_D_Hair_2` に割り当てられているため、両者を同一の結果とは扱わない。
+  現在の変換器はAnimatorのAvatar参照をモデル選択に使うが、生成済みAvatarの対応表は読まない。
+  調査ではUnityの `Library/Artifacts` にある生成済みFBXを付属の `binary2text` で読み、
+  Animatorの参照先fileIDとAvatarの対応表を照合できる。これはUnityプロジェクト側の
+  インポート結果であり、元の `.unitypackage` 内の `.meta` と区別する。
 - nested animatorはprimary選択に使わず、選択アバタールート直下のAnimatorだけを権威とする。
 - 参照される追加FBXを再帰収集し、各FBXのmaterial mapを混ぜずに保持する。
 - `PrefabInstance.m_TransformParent` とsource objectを辿り、追加FBXを対応する親boneへ配置する。
