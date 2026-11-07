@@ -29,6 +29,7 @@ catch (Exception error)
 [MethodImpl(MethodImplOptions.NoInlining)]
 static void Run()
 {
+    HumanoidSkeletonNameChecks.Run();
     SkinBoneIndexChecks.Run();
     MaterialBakePlanChecks.Run();
     VrmToResonitePackage.ResoniteLocator.InstallAssemblyResolver(

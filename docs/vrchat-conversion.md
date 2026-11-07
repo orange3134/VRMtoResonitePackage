@@ -245,6 +245,12 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
   少数の名前一致だけでは推定しない。
+  左右の識別は `.L` / `.R` / `_L` / `_R` 接尾辞に加え、`L_` / `R_` と
+  `Left` / `Right` 接頭辞に対応する。残りの名前は既知の骨名との完全一致で判定し、
+  髪・胸・twistなどの補助骨を人体ボーンへ割り当てない。
+  アイザラ 1.1.1 は `human: []` で、四肢・指が `L_UpperArm` / `R_Index_Proximal`、
+  目が `LeftEye` / `RightEye` という混在形式。接尾辞だけの推定では体幹6本しか得られず、
+  メッシュ読込後にアバターセットアップが省略される。接頭辞対応で54本を解決できる。
 - nested animatorはprimary選択に使わず、選択アバタールート直下のAnimatorだけを権威とする。
 - 参照される追加FBXを再帰収集し、各FBXのmaterial mapを混ぜずに保持する。
 - `PrefabInstance.m_TransformParent` とsource objectを辿り、追加FBXを対応する親boneへ配置する。
