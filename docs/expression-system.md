@@ -9,9 +9,11 @@ DynamicVariable の型・初期値・更新元・編集用途とグラフ内の�
 
 2026-11-07: Hand gesturesの入口ラベルは、`Config.AllowHandGesture.Left/Right`に応じて
 `Hand gestures: Both / LeftOnly / RightOnly / None`に更新する（実際のハンドサイン値ではなく許可状態）。
-`Gesture menu label`ボードで左を1、右を2として加算し、共通の`ValueField<int>`へ駆動する。
-VRサブメニューとデスクトップの切替ボタンに、それぞれ`ValueOptionDescriptionDriver<int>`を配置し、
-0=None、1=LeftOnly、2=RightOnly、3=BothのLabelだけを駆動する。既存の色・表示条件は維持する。
+`Gesture menu label`ボードの`Pack_Bool2`でX=左、Y=右の許可状態をまとめ、共通の`ValueField<bool2>`へ駆動する。
+VRサブメニューとデスクトップの切替ボタンに、それぞれ`ValueOptionDescriptionDriver<bool2>`を配置し、
+(false,false)=None、(true,false)=LeftOnly、(false,true)=RightOnly、(true,true)=BothのLabelだけを駆動する。
+intへの符号化は行わない。インストール済みProtoFluxBindings.dllで`Pack_Bool2`のX/Y入力を確認した。
+既存の色・表示条件は維持する。
 インストール済みFrooxEngine.dllで`Value`がフィールド参照、`Label`が文字列のFieldDriveであることを確認した。
 ボードは非表示項目の外に置き、直接の設定編集・メニュー操作・複製・再読込後も両入口が同じ状態を表示する。
 

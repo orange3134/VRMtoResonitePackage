@@ -1,3 +1,4 @@
+using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.ProtoFlux;
 using VrmToResonitePackage.Expressions;
@@ -24,11 +25,13 @@ internal static class HandGesturePermissionChecks
         bool left = HandGesturesAllowed(core, "Left"), right = HandGesturesAllowed(core, "Right");
         string expected = "Hand gestures: " + (left ? (right ? "Both" : "LeftOnly") : (right ? "RightOnly" : "None"));
         var menu = expressions.FindChild("Inputs").FindChild("ContextMenu");
-        var state = menu.FindChild("Gesture menu label").GetComponent<ValueField<int>>();
+        var state = menu.FindChild("Gesture menu label").GetComponent<ValueField<bool2>>();
+        Check(state != null && state.Value.Value.Equals(new bool2(left, right)),
+            "gesture label bool2 stores left permission in X and right permission in Y");
         foreach (string name in new[] { "Hand gesture options", "Hand gestures" })
         {
             var item = menu.FindChild(name).GetComponent<ContextMenuItemSource>();
-            var driver = item.Slot.GetComponent<ValueOptionDescriptionDriver<int>>();
+            var driver = item.Slot.GetComponent<ValueOptionDescriptionDriver<bool2>>();
             Check(driver != null && driver.Value.Target == state.Value && driver.Label.Target == item.Label &&
                 driver.Label.IsLinkValid && !driver.Color.IsLinkValid && !driver.Sprite.IsLinkValid,
                 name + " label follows local permission state without changing color/sprite drivers");

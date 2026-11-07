@@ -1,7 +1,7 @@
 # Expression integration checks
 
 2026-11-07: Both gesture menu entrances display Hand gestures: Both / LeftOnly /
-RightOnly / None through ValueOptionDescriptionDriver<int>. Checks cover all four
+RightOnly / None through ValueOptionDescriptionDriver<bool2> (X=Left, Y=Right). Checks cover all four
 permission field combinations, menu choices, desktop toggles, VR visibility changes,
 and local label bindings after cloning and package reload, alongside existing colors.
 

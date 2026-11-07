@@ -199,25 +199,27 @@ internal sealed partial class ExpressionSystemSetup
     {
         // Keep the permission state live even when one of the menu entries is hidden.
         var board = menu.AddSlot("Gesture menu label");
-        var state = board.AttachComponent<ValueField<int>>();
+        var state = board.AttachComponent<ValueField<bool2>>();
         var g = new ExpressionFlux(board);
         var left = g.Read<bool>(g.Ref(_api), SystemSpace, HandGesturePermission("Left"));
         var right = g.Read<bool>(g.Ref(_api), SystemSpace, HandGesturePermission("Right"));
-        var value = g.Binary<int>("ValueAdd",
-            g.Choose<int>(left, g.Constant(1), g.Constant(0)),
-            g.Choose<int>(right, g.Constant(2), g.Constant(0)));
-        var stateDriver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<int>)
-            g.Node("ValueFieldDrive", typeof(int), ("Value", value));
+        var value = g.Node("Pack_Bool2", null, ("X", left), ("Y", right));
+        var stateDriver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<bool2>)
+            g.Node("ValueFieldDrive", typeof(bool2), ("Value", value));
         stateDriver.GetRootProxy(addIfMissing: true).Drive.Target = state.Value;
         foreach (var source in sources)
         {
-            var driver = source.Slot.AttachComponent<ValueOptionDescriptionDriver<int>>();
+            var driver = source.Slot.AttachComponent<ValueOptionDescriptionDriver<bool2>>();
             driver.Value.Target = state.Value;
             driver.DefaultOption.Label.Value = "Hand gestures: None";
-            foreach (var (index, label) in new[] { (0, "None"), (1, "LeftOnly"), (2, "RightOnly"), (3, "Both") })
+            foreach (var (permissions, label) in new[]
+            {
+                (new bool2(false, false), "None"), (new bool2(true, false), "LeftOnly"),
+                (new bool2(false, true), "RightOnly"), (new bool2(true, true), "Both")
+            })
             {
                 var option = driver.Options.Add();
-                option.ReferenceValue.Value = index;
+                option.ReferenceValue.Value = permissions;
                 option.Label.Value = "Hand gestures: " + label;
             }
             driver.Label.Target = source.Label;
