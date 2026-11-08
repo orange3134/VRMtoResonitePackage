@@ -89,6 +89,40 @@ internal static class CacExpressionChecks
             sparsePoses.Add(actual);
         }
         Check(sparsePoses.Count == 7, "six right-hand expressions plus authored neutral, without mirrored left assignments");
+        string afkGuard = "  - m_ConditionEvent: AFK\n    m_ConditionMode: 2\n    m_EventTreshold: 0\n";
+        string rootEntries = original.Replace("  m_ChildStateMachines:\n  - m_StateMachine: {fileID: 102}\n  - m_StateMachine: {fileID: 101}\n",
+            "  m_EntryTransitions:\n" + string.Concat(Enumerable.Range(1, 28).Reverse().Select(i => $"  - {{fileID: {300 + i}}}\n")));
+        foreach (string layout in new[] { original, rootEntries })
+        foreach (bool guarded in new[] { false, true })
+        {
+            string text = guarded ? layout.Replace("--- !u!1102", afkGuard + "--- !u!1102") : layout;
+            var active = Filter(text);
+            Check(active.ImportedPatterns.Cac && active.Clips.Count == 14 && active.ImportedPatterns.Patterns.Count == 2,
+                "Root and child CAC entries retain only the first numbered set with optional !AFK guard");
+            var table = new GesturePairCompiler(active, active.Clips, _ => 0.17f);
+            for (int l = 0; l < 8; l++) for (int r = 0; r < 8; r++)
+            {
+                int index = r > 0 ? r : l > 0 ? 7 + l : 0;
+                var pose = active.Clips.Concat(table.Generated).Single(c => c.Id == table.Pairs[l * 8 + r]);
+                Check(Math.Abs(pose.Curves.Single().Keys[^1].Value - (index == 0 ? 0.17f : index * 0.03f)) < 0.00001f,
+                    $"Root/child CAC guarded={guarded} maps {l},{r} by source number");
+            }
+        }
+        string guardedRoot = rootEntries.Replace("--- !u!1102", afkGuard + "--- !u!1102");
+        foreach (string layout in new[] { original, rootEntries })
+        {
+            var guardFirst = Filter(layout.Replace("  m_Conditions:\n", "  m_Conditions:\n" + afkGuard));
+            Check(guardFirst.ImportedPatterns.Cac && guardFirst.Clips.Count == 14, "AFK guard order does not change CAC detection");
+        }
+        foreach (string invalidGuard in new[] { afkGuard.Replace("AFK", "OtherToggle"),
+                     afkGuard.Replace("m_ConditionMode: 2", "m_ConditionMode: 1"), afkGuard + afkGuard })
+        {
+            // Leave the remaining numbered entries valid so the bad first slot cannot
+            // fall back to ordinary/manual detection or be filled from another set.
+            var excluded = Filter(guardedRoot.Replace(afkGuard + "--- !u!1102 &201\n", invalidGuard + "--- !u!1102 &201\n"));
+            Check(excluded.Clips.Count == 13 && excluded.Clips.All(c => c.Name != "Emote1"),
+                "Other toggles, AFK-only and malformed extra conditions cannot become CAC hand bindings");
+        }
         Asset("Emote1.anim", 1001, Clip(1, "Clothes"));
         var nonFace = Filter(original);
         Check(nonFace.Clips.Count == 13 && nonFace.Layers.Single().States.All(s => s.Name != "Emote1"), "non-face branch does not shadow another hand after real binding resolution");

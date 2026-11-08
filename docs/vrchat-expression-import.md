@@ -112,12 +112,20 @@ FaceEmo候補の保持と既存の直接割り当てへのフォールバック�
 
 ## CAC形式の最初の表情セット
 
-FaceEmoの `GetCacLayer` と同じく、子StateMachineのEntry条件が `SYNC_EM_EMOTE` を参照する
+FaceEmoの `GetCacLayer` を基準に、子StateMachineのEntry条件が `SYNC_EM_EMOTE` を参照する
 最初のレイヤーを見つけたら通常形式の収集を置き換える。
-単一条件・直接State・未muteの遷移を番号順に並べ、`(番号 - 1) / 14` ごとにセットを作る。
+ResoPonではレイヤー直下のEntryに番号分岐を置くCACも対象にする。
+条件は `SYNC_EM_EMOTE` のEquals単独、またはそれと `AFK` のIfNotの組だけを許可する。
+条件の並び順には依存せず、他のトグル、AFK中だけの表情、余分な条件を無視して採用しない。
+直接State・未muteの遷移を番号順に並べ、`(番号 - 1) / 14` ごとにセットを作る。
 入力の健全性確認としてEqualsと正の整数番号を要求する。顔Motionを含む最初のセットだけを使い、
 1〜7を右手、8〜14を左手のFist〜ThumbsUpへ割り当てる。右手が優先で、欠番は後続セットで補わない。
 CACではFaceEmo同様、顔Motionがあるが初期値との差分がない分岐も初期姿勢として有効にする。
+
+Lina v2.00はルートEntryで番号と `!AFK` を組み合わせる形式。子StateMachineの単一条件だけを
+対象にすると通常形式に誤分類され、顔クリップは残ってもGestureTableが空になる。
+この拡張はAFKではないときの固定表情セットを取り出すためのもので、汎用Animator解析へ
+非ハンドパラメーターの既定値を渡す変更ではない。AFK動作・表情ロック・接触ギミックは再現しない。
 
 両形式とも、後続セットと無関係なFX・メニュー由来のクリップはClipsに混ぜない。
 採用したセット・ジェスチャー分岐数・手動候補数は `FaceEmo normal:` / `FaceEmo CAC:` に残す。

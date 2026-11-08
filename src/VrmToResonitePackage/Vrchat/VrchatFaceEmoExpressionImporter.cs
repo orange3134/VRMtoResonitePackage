@@ -55,20 +55,22 @@ internal sealed class VrchatFaceEmoExpressionImporter
         foreach (var layer in layers)
         {
             var root = scene.Doc(layer["m_StateMachine"]?.FileID ?? 0)?.Root;
-            var entries = (root?["m_ChildStateMachines"]?.Seq ?? new())
+            var childEntries = (root?["m_ChildStateMachines"]?.Seq ?? new())
                 .SelectMany(c => scene.Doc(c["m_StateMachine"]?.FileID ?? 0)?.Root?["m_EntryTransitions"]?.Seq ?? new())
                 .Select(r => scene.Doc(r.FileID ?? 0)?.Root).Where(t => t != null).ToArray();
-            if (!entries.Any(t => t["m_Conditions"]?.Seq?.FirstOrDefault()?["m_ConditionEvent"]?.AsString() == "SYNC_EM_EMOTE")) continue;
+            // Some CAC controllers put the numbered player directly on the layer root
+            // and guard its entries with !AFK. Import the active-avatar face set, without
+            // treating arbitrary toggles or AFK-only motions as gesture assignments.
+            var rootEntries = (root?["m_EntryTransitions"]?.Seq ?? new())
+                .Select(r => scene.Doc(r.FileID ?? 0)?.Root).Where(t => t != null).ToArray();
+            if (!childEntries.Any(t => t["m_Conditions"]?.Seq?.FirstOrDefault()?["m_ConditionEvent"]?.AsString() == "SYNC_EM_EMOTE") &&
+                !rootEntries.Concat(childEntries).Any(t => CacNumber(t) != null)) continue;
             result.Cac = true; result.Patterns.Clear();
             var indexed = new List<(int Index, FaceEmoBranch Branch)>();
-            foreach (var entry in entries)
+            foreach (var entry in rootEntries.Concat(childEntries))
             {
-                var conditions = entry["m_Conditions"]?.Seq;
-                if (entry["m_Mute"]?.AsBool() == true || conditions?.Count != 1 ||
-                    conditions[0]["m_ConditionEvent"]?.AsString() != "SYNC_EM_EMOTE" || conditions[0]["m_ConditionMode"]?.AsInt() != 6) continue;
-                float number = conditions[0]["m_EventTreshold"]?.AsFloat() ?? 0;
-                if (!float.IsFinite(number) || number < 1 || number >= int.MaxValue || number != MathF.Truncate(number)) continue;
-                int index = (int)number - 1;
+                if (CacNumber(entry) is not int number) continue;
+                int index = number - 1;
                 var condition = new ExpressionCondition(index % 14 < 7 ? "GestureRight" : "GestureLeft", 6, index % 7 + 1);
                 var branch = State(scene, entry["m_DstState"]?.FileID ?? 0, new() { condition });
                 if (branch != null) indexed.Add((index, branch));
@@ -122,6 +124,21 @@ internal sealed class VrchatFaceEmoExpressionImporter
                 }
             }
         }
+    }
+
+    private static int? CacNumber(YamlNode entry)
+    {
+        if (entry["m_Mute"]?.AsBool() == true || entry["m_IsExit"]?.AsBool() == true ||
+            (entry["m_DstState"]?.FileID ?? 0) == 0 || (entry["m_DstStateMachine"]?.FileID ?? 0) != 0) return null;
+        var conditions = entry["m_Conditions"]?.Seq;
+        if (conditions?.Count is not (1 or 2)) return null;
+        var selectors = conditions.Where(c => c["m_ConditionEvent"]?.AsString() == "SYNC_EM_EMOTE" &&
+            c["m_ConditionMode"]?.AsInt() == 6).ToArray();
+        if (selectors.Length != 1 || conditions.Any(c => c != selectors[0] &&
+            !(c["m_ConditionEvent"]?.AsString() == "AFK" && c["m_ConditionMode"]?.AsInt() == 2))) return null;
+        float number = selectors[0]["m_EventTreshold"]?.AsFloat(float.NaN) ?? float.NaN;
+        return float.IsFinite(number) && number >= 1 && number < int.MaxValue && number == MathF.Truncate(number)
+            ? (int)number : null;
     }
 
     private FaceEmoBranch State(UnityScene scene, long id, List<ExpressionCondition> conditions)
@@ -262,7 +279,8 @@ internal sealed class VrchatFaceEmoExpressionImporter
             model.Clips.Clear(); model.Clips.AddRange(retained);
             string message = $"FaceEmo {(imported.Cac ? "CAC" : "normal")}: selected first set ({name}), " +
                 $"{selected.Count(b => b.Conditions.Count > 0)} gesture branches, {selected.Count(b => b.Conditions.Count == 0)} manual candidates. " +
-                $"{routedPairs}/64 gesture pairs resolved through Animator paths to existing Catalog candidates. " +
+                (imported.Cac ? "CAC emote numbers map directly to hand gestures. " :
+                    $"{routedPairs}/64 gesture pairs resolved through Animator paths to existing Catalog candidates. ") +
                 "Later patterns, general Animator execution, parameter defaults and Expression Menu are not imported.";
             model.Diagnostics.Add(message); UniLog.Log(message);
             foreach (string diagnostic in imported.GestureRouting?.Diagnostics ?? new())
