@@ -481,6 +481,8 @@ internal static class Converter
                 {
                     await WaitForAssets(assetsSlot);
                 }
+                await Vrchat.VrchatBlendShapeNormals.Apply(root, assetsSlot, avatar, package,
+                    importedMeshSources, authoredObjects);
                 Vrchat.VrchatSceneSetup.ApplyInitialBlendShapes(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
 
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.

@@ -40,6 +40,7 @@ static void Run()
         Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite",
         "runtimes", "win-x64", "native", "assimp.dll"));
     FbxMorphSeamChecks.Run();
+    BlendShapeNormalChecks.Run();
     Console.WriteLine("PASS: FBX morph seams survive vertex welding (7400/7500, compressed arrays, existing colors)");
     var rootResolver = new UnityModelFileIdResolver(null);
     Check(rootResolver.ResolveName(919132149155446097L) == "RootNode" &&

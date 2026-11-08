@@ -424,6 +424,29 @@ GestureTableのweightではなく、FBXインポート時のメッシュ統合�
 形状の検証では変換完了ログだけでなく、元FBXの未統合ポリゴン頂点との比較と、
 保存パッケージを再読込した後のblendshape差分の比較を行う。
 
+### 変形後の法線
+
+FBXの `ModelImporter.tangentSpace.blendShapeNormalImportMode: 1` はUnityの
+Calculate指定。Assimpから取得したshapeの頂点位置が正しくても、折り畳まれた補助面の
+通常時の法線がゼロや不適切な向きなら、展開後に黒い面として見える。
+Shipilka 1.02のL0R5 (`Cry` motion、出力クリップ名 `RockNRoll`) は、
+「照れ」で展開する `Facial` の補助面がこのケースに該当する。
+
+`VrchatBlendShapeNormals` はshape復元後、UnityのCalculate指定があるFBXに対して
+変形後の三角形から法線差分を再生成する。面積・角度の重みは `normalCalculationMode`
+に従う。移動した頂点に接する面とその頂点を対象にし、通常時の位置・法線・
+全shapeの位置差分は保持する。同じ通常時位置・通常時法線・変形先を持つ頂点間では
+UV境界を平滑化する。Unityの全smoothing group処理を再現するものではない。
+
+無関係な面まで再計算すると、複数shapeを同時適用したときに通常時の法線補正が
+重複して加算されるため、非影響部分と空shapeの法線は保持する。
+Import / None / 指定なしにはこの再計算を適用しない。共有mesh/providerは直接変更せず、
+補正済みproviderを生成して同じ設定のrendererだけに割り当てる。
+検証では保存後の表情を合成し、展開した面にゼロ法線や逆向きの法線がないことも確認する。
+
+参考: [Unity ModelImporterNormals](https://docs.unity.com/en-us/engine/7000.0/script-reference/unityeditor/modelimporternormals)、
+[normalCalculationMode](https://docs.unity3d.com/jp/current/ScriptReference/ModelImporter-normalCalculationMode.html)。
+
 ### 名前・初期値・表情への接続
 
 Resoniteは空または微小なshapeを除去するため、Unityのindex参照がずれる場合がある。
