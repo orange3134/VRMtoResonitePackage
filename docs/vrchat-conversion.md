@@ -398,6 +398,34 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 
 ## ブレンドシェイプ
 
+### 同位置の頂点で異なる変形を保持する
+
+Resoniteの `ModelImporter` はAssimpの `JoinIdenticalVertices` を常に有効にする。
+この統合では通常時の頂点属性が比較され、blendshapeの変形先は比較されない。
+そのため、通常時は同位置でも表情で別々に動くcontrol pointが統合されると、
+別の頂点の変形を参照してポリゴンが引き伸ばされる。
+
+`UnityFbxMorphSeams` は、主FBX・追加FBXをインポートする前にバイナリFBXの
+`Shape → BlendShapeChannel → BlendShape → Geometry` 接続と疎な頂点差分を調べる。
+同位置のcontrol point間で位置または法線の差分が異なるgeometryだけに、
+control point IDを持つ一時的な頂点カラー層を追加し、誤った統合を防ぐ。
+既存のカラー層は保持し、空きチャンネルを使う。元FBXは変更せず、作業ディレクトリ内の
+コピーだけを書き換える。元のproperty bytesを保持してnode offsetを再計算するため、
+圧縮配列やモデル・ボーン・マテリアル等の定義は変更しない。
+
+この一時カラーは統合の識別用であり、VRChat経路では主・追加FBXの両方で
+`ImportVertexColors = false` を維持する。ASCII FBXはこの前処理の対象外。
+`PrefabInputSmoke` は7400/7500形式、圧縮配列、既存カラー層の有無を使い、
+通常の頂点統合での破損再現と、対策後の全ポリゴン頂点の変形一致を検証する。
+
+回帰事例: Shipilka 1.02のL5R0 (`RockNRoll`) で有効になる「汗」。
+対策前は210個のポリゴン頂点で最大約0.171mの変形誤差が発生した。
+GestureTableのweightではなく、FBXインポート時のメッシュ統合に原因がある。
+形状の検証では変換完了ログだけでなく、元FBXの未統合ポリゴン頂点との比較と、
+保存パッケージを再読込した後のblendshape差分の比較を行う。
+
+### 名前・初期値・表情への接続
+
 Resoniteは空または微小なshapeを除去するため、Unityのindex参照がずれる場合がある。
 
 - FBX内の元shape順を記録する。
