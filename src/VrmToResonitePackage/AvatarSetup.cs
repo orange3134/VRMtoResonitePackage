@@ -136,6 +136,8 @@ internal static class AvatarSetup
         {
             Slot headsetRef = refs.AddSlot("Headset");
             headsetRef.GlobalPosition = ComputeEyePosition(rig, vrm, up, forward, options);
+            UniLog.Log($"Avatar viewpoint: position={headsetRef.GlobalPosition}, head={head.GlobalPosition}, " +
+                       $"leftEye={rig.TryGetBone(BodyNode.LeftEye)?.GlobalPosition}, rightEye={rig.TryGetBone(BodyNode.RightEye)?.GlobalPosition}, up={up}, forward={forward}");
             headsetRef.GlobalRotation = floatQ.LookRotation(forward, up);
 
             Slot leftRef = refs.AddSlot("LeftHand");

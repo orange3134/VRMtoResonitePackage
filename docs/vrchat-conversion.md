@@ -140,9 +140,10 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   including when nested humanoid clothing is discovered before the unpacked body.
   Select the primary model from visible identities after collecting EditorOnly exclusions.
   Local copied skin bones infer their model within the owning prefab occurrence:
-  prefer the primary model if referenced locally, otherwise the sole local model.
-  With no local mesh source, retain the caller's skeleton context; explicit source
-  ancestors still take precedence. Repeated unpacked skins keep separate skeletons.
+  prefer the primary model if referenced by a local mesh or the root Animator's
+  `m_Avatar`, otherwise the sole local model. With neither source, retain the caller's
+  skeleton context; explicit source ancestors still take precedence.
+  Repeated unpacked skins keep separate skeletons.
   同じモデルがPrefabInstanceとしても配置されている場合は、そのrendererを残す。
   コピーの親がローカル skeleton の骨で、FBX の skin bone と完全な path が一致するときは、
   prefab Transform identity と imported bone target を保持して既存の骨 Slot を使う。
@@ -356,9 +357,16 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   未解決GUIDを `.asset` と同一視してscopeを外してはいけない。
   Descriptor face targets for baked standalone meshes use a unique matching renderer
   path in the selected FBX. Missing or ambiguous matches retain strict prefab identity.
-  With no local FBX mesh references, physics placement retains the selected Animator
-  skeleton context, reusing bones only after skeleton membership and full-path checks;
-  helpers absent from that skeleton remain authored objects.
+  Physics / eye targets and placement capture include the prefab root Animator's
+  `m_Avatar` FBX in their local skeleton candidates, even when only accessories
+  reference FBX meshes directly. Reuse bones only after skeleton membership and
+  full-path checks; helpers absent from that skeleton remain authored objects.
+  Without an explicit Animator, ambiguous physics / eye references retain prefab
+  identity rather than guessing one of several models.
+  Omaneko v1.1 は本体が standalone mesh、小物が複数FBXの構成。小物だけから骨格を
+  推定すると目とPhysBone用にPrefab側の骨が重複生成され、頭は高さ約1.52mなのに
+  目は約1.12m、HeadProxyは約1.13mになる。Animatorの参照先を候補に保持すると目が本体の頭の
+  子になり、目は約1.60m、視点は約1.62mに揃う。視点オフセットだけで補正しない。
 - authored FBX meshのコピーはprefab GUIDとGameObject fileIDから実Slotを保持し、同名でも
   materialと初期blendshapeを個別に適用する。識別子を持たない従来のrendererは、空のoverrideも
   含めて出現順に1対1で消費する。

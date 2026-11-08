@@ -2103,10 +2103,7 @@ public static class VrchatAvatarParser
         var document = scene.Doc(fileId);
         if (document?.ClassId == 4)
         {
-            var localModels = scene.MeshRenderers.Select(r => scene.RendererMesh(r)?.Guid)
-                .Where(g => package.ByGuid(g)?.Extension == ".fbx").Distinct().ToArray();
-            primaryFbxGuid = localModels.Length == 0 || localModels.Contains(primaryFbxGuid) ? primaryFbxGuid :
-                localModels.Length == 1 ? localModels[0] : null;
+            primaryFbxGuid = SelectLocalSkeletonModel(package, scene, primaryFbxGuid);
             string name = scene.ResolveGameObjectName(fileId);
             if (name == null) return null;
             long parentId = document.Root["m_Father"]?.FileID ?? 0;
@@ -3066,14 +3063,11 @@ public static class VrchatAvatarParser
             if (entry == null) continue;
             var included = IncludedPrefabObjects(package, entry.Guid, entry.Scene, avatar, modelResolvers, prefabScenes);
             if (entry.Guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
-            var localModels = entry.Scene.MeshRenderers.Select(r => entry.Scene.RendererMesh(r)?.Guid)
-                .Where(g => package.ByGuid(g)?.Extension == ".fbx").Distinct().ToArray();
             // A local accessory model must not make the primary skeleton become an
             // authored duplicate: humanoid setup still controls the imported body bones.
             // CaptureLocalPlacementParents verifies bone membership and the full path,
             // and explicit source ancestors retain their own model identity.
-            string skeletonModel = localModels.Length == 0 || localModels.Contains(avatar.FbxGuid) ? avatar.FbxGuid :
-                localModels.Length == 1 ? localModels[0] : null;
+            string skeletonModel = SelectLocalSkeletonModel(package, entry.Scene, avatar.FbxGuid);
             var subtree = entry.Scene.SubtreeGameObjectIds(
                 entry.Scene.Doc(target.TransformFileId)?.Root?["m_GameObject"]?.FileID ?? 0);
             if (includeSkeletonAncestors)
@@ -3131,6 +3125,28 @@ public static class VrchatAvatarParser
         }
     }
 
+    private static string SelectLocalSkeletonModel(UnityPackage package, UnityScene scene, string primaryGuid,
+        bool requireUnique = false)
+    {
+        // Baked Mesh assets no longer reference their source FBX. The root Animator's
+        // Avatar still identifies that skeleton, even when accessory FBXs
+        // are the only models referenced directly by the prefab's renderers.
+        var animatorModels = scene.RootGameObjects().SelectMany(scene.ComponentsOf)
+            .Where(component => component.ClassId == 95)
+            .Select(component => component.Root?["m_Avatar"]?.Guid)
+            .Where(g => package.ByGuid(g)?.Extension == ".fbx").ToArray();
+        var models = scene.MeshRenderers.Select(r => scene.RendererMesh(r)?.Guid)
+            .Where(g => package.ByGuid(g)?.Extension == ".fbx")
+            .Concat(animatorModels)
+            .Distinct().ToArray();
+        // A physics/eye reference by itself does not prove which of several skins
+        // owns it. Only an explicit Animator permits retaining the preferred model.
+        if (requireUnique && !animatorModels.Contains(primaryGuid))
+            return models.Length == 1 ? models[0] : null;
+        return models.Length == 0 || models.Contains(primaryGuid) ? primaryGuid :
+            models.Length == 1 ? models[0] : null;
+    }
+
     private static VrchatBoneTarget ResolvePhysicsTarget(UnityPackage package, string guid, long id, string primaryGuid)
     {
         if (package == null || guid == null || id == 0) return null;
@@ -3146,9 +3162,7 @@ public static class VrchatAvatarParser
         {
             var scene = package.ReadScene(asset);
             if (scene.Doc(id)?.ClassId == 1) id = scene.TransformOfGameObject(id)?.FileId ?? 0;
-            var models = scene.MeshRenderers.Select(r => scene.RendererMesh(r)?.Guid)
-                .Where(g => package.ByGuid(g)?.Extension == ".fbx").Distinct().ToArray();
-            primaryGuid = models.Length == 1 ? models[0] : null;
+            primaryGuid = SelectLocalSkeletonModel(package, scene, primaryGuid, requireUnique: true);
         }
         var target = ResolveCopiedBoneTarget(package, guid, id, primaryGuid, new(), new());
         if (target?.Name != null) return target;

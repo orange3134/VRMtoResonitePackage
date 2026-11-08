@@ -1604,6 +1604,41 @@ MeshRenderer:
         Check(transforms.Where(t => t.Key == $"{physicsPackage.InputPrefab.Guid}:121").All(t => t.ImportedBone != null),
             "Physics placement never duplicates the primary skin and humanoid skeleton");
     }
+    const string secondAccessoryGuid = "73737373737373737373737373737376";
+    asset("Assets/SecondPhysicsAccessory.fbx", secondAccessoryGuid, File.ReadAllText(model));
+    foreach (int accessoryCount in new[] { 1, 2 })
+    {
+        string fixture = File.ReadAllText(bakedFile);
+        for (int i = 0; i < accessoryCount; i++)
+        {
+            int id = 400 + i * 100;
+            string accessoryGuid = i == 0 ? extraModelGuid : secondAccessoryGuid;
+            fixture += $"\n--- !u!1 &{id}\nGameObject:\n  m_Name: Accessory{i}\n" +
+                $"--- !u!4 &{id + 1}\nTransform:\n  m_GameObject: {{fileID: {id}}}\n  m_Father: {{fileID: 101}}\n" +
+                $"--- !u!33 &{id + 2}\nMeshFilter:\n  m_GameObject: {{fileID: {id}}}\n  m_Mesh: {{fileID: 4300000, guid: {accessoryGuid}}}\n" +
+                $"--- !u!23 &{id + 3}\nMeshRenderer:\n  m_GameObject: {{fileID: {id}}}\n";
+        }
+        string file = asset("Assets/BakedAccessoryEyes.prefab", "74747474747474747474747474747485", fixture);
+        using var eyePackage = UnityPackage.Open(file);
+        var eyeScene = eyePackage.ReadScene(eyePackage.InputPrefab);
+        var eyeAvatar = new VrchatAvatar { FbxGuid = guid };
+        var descriptor = new YamlDocument { Root = UnityYaml.ParseFlatDocument(
+            "enableEyeLook: 1\ncustomEyeLookSettings:\n  leftEye: {fileID: 121}\n  rightEye: {fileID: 141}\n") };
+        typeof(VrchatAvatarParser).GetMethod("ParseDescriptor", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { eyePackage, eyeScene, descriptor, eyeAvatar, eyePackage.InputPrefab.Guid });
+        typeof(VrchatAvatarParser).GetMethod("ParsePhysics", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { eyePackage, eyePackage.InputPrefab.Guid, eyeAvatar, null });
+        Check(eyeAvatar.LeftEyeBoneTarget?.FbxGuid == guid && eyeAvatar.RightEyeBoneTarget?.FbxGuid == guid,
+            $"Baked body with {accessoryCount} accessory FBXs resolves eyes to the Animator skeleton");
+        var transforms = eyeAvatar.PhysicsPlacements.SelectMany(p => p.Transforms).ToList();
+        foreach (var (id, path) in new[] { (121, "Left/Shared"), (141, "Right/Shared") })
+            Check(transforms.Any(t => t.Key == $"{eyePackage.InputPrefab.Guid}:{id}" &&
+                      t.ImportedBone?.FbxGuid == guid && t.ImportedBone.Path == path) &&
+                  transforms.Where(t => t.Key == $"{eyePackage.InputPrefab.Guid}:{id}").All(t => t.ImportedBone != null),
+                "Descriptor eyes reuse imported bones without an authored duplicate skeleton");
+        Check(transforms.Any(t => t.Name == "PhysicsHelper" && t.ImportedBone == null && t.LocalPosition.Y == 2),
+            "Baked accessory eyes preserve unrelated authored physics helpers");
+    }
     var collect = typeof(VrchatAvatarParser).GetMethod("CollectAuthoredMeshCopy",
         System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
     var accessoryAvatar = new VrchatAvatar { FbxGuid = guid };
