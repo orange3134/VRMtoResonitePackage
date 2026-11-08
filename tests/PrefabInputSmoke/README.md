@@ -168,6 +168,13 @@ nonfinite transforms cannot manufacture a complete humanoid. Parser integration 
 verify geometric primary-model classification and preservation of explicit mappings,
 including partial maps. These checks do not invoke Unity or reproduce Unity's exact scores.
 
+# Expression animation roots
+
+`ExpressionAnimationRootChecks` verifies Unity generation-2 root/renderer IDs against
+an actual FBX hierarchy. Folded roots resolve to the payload; unchanged hierarchies
+retain their basis. Missing parents, traversal, non-renderer references, unrelated
+roots and duplicate folded paths cannot authorize a correction.
+
 # Material bake decisions
 
 `MaterialBakePlanChecks` verifies the SDK-derived main-texture bake policy without

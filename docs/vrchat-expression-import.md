@@ -7,16 +7,16 @@
 Yuzuki 2.1.1はこの形式で、省略データを直接読むと顔メッシュが `Body` のフォールバックに
 なり、MA由来の表情クリップを検出しても顔との照合で全件除外される。
 
-アイザラ1.1.1の `AGS_01` は別のパス不一致を持つ。顔の識別自体は
-`RootNode/AGS/mesh_Face` へ解決でき、FXのCAC形式から12クリップを検出するが、
-アニメーションのbindingは `mesh_Face`、変換器の `MeshBindingRootPath` は `RootNode` になる。
-そのため `ResolveExpression` は存在しない `RootNode/mesh_Face` を検索し、
-`ExpressionFaceValues` が空になって全候補を除外する。Humanoidの推定成否とは別問題。
-Unity側で省略されるモデルルートとインポート階層の対応を保ち、名前の末尾一致へ緩めずに
-アニメーションの基点を解決する必要がある。`mesh_FaceEmo_ADD` の汗などは追加顔メッシュであり、
-下記の単一顔メッシュ制限も別途適用される。
-診断ビルドで基点だけを `RootNode/AGS` に変えると、12候補の取り込みと保存後の
-`Expressions` / `Clips` を確認できる。この固定値は検証用で、汎用修正は未実装。
+アイザラ1.1.1の `AGS_01` では、Unityが省略するモデルルートをFBXインポータが保持する。
+顔は `RootNode/AGS/mesh_Face`、アニメーションのbindingは `mesh_Face` で、
+旧処理は基点を `RootNode` として全候補を除外していた。Humanoidの推定成否とは別問題。
+現在はDescriptorルートと顔Rendererが同じFBXを参照する場合に、Unityのgeneration 2形式の
+ルートfileIDと、bindingの全パスから計算したSkinnedMeshRendererのfileIDを実参照と照合する。
+一意な参照が一致した場合だけ、FBX内の実パスからアニメーションの基点を求める。
+アイザラでは `//RootNode/root/mesh_Face/SkinnedMeshRenderer` の参照から `RootNode/AGS` を得る。
+この基点を欠落シェイプの修復と表情bindingの照合で共有し、Descriptorの配置やリグは移動しない。
+同名・曖昧な参照、異なるモデル、名前だけの一致からは補正しない。対応しないID形式では既存処理を使う。
+`mesh_FaceEmo_ADD` の汗などは追加顔メッシュであり、下記の単一顔メッシュ制限も別途適用される。
 
 VRChatの表情読み込みは `VrchatFaceEmoExpressionImporter` に一本化している。
 `VrchatExpressionParser` は顔カーブとFX入力を読み、候補検出を統一Importerへ渡す。

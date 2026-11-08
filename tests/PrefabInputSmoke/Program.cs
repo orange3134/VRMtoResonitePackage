@@ -75,6 +75,7 @@ MonoBehaviour:
             "SDK DLL GUID shared by avatar and audio components must identify only the descriptor type");
     PrefabGraphChecks.Run(Asset);
     HumanoidSkeletonMappingChecks.CheckParser(Asset);
+    ExpressionAnimationRootChecks.Run(Asset);
     Asset("Assets/Other.prefab", otherGuid, Avatar("Other"));
     Asset("Library/PackageCache/com.example.materials@123/Surface.mat", materialGuid, "Material:\n  m_Name: Surface\n");
     Asset("Library/PackageCache/com.example.materials@stale/Surface.mat", materialGuid, "STALE");

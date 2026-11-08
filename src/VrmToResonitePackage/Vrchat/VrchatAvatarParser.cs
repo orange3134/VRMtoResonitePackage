@@ -220,6 +220,20 @@ public static class VrchatAvatarParser
         var expressionDescriptor = VrchatModularExpressionInputs.Create(effectiveDescriptor.Root, expressionComponents);
         VrchatAnimatorFaceParser.Apply(package, expressionDescriptor, avatar);
         avatar.Expressions = VrchatExpressionParser.Parse(package, expressionDescriptor, expressionComponents);
+        var faceReference = ExpressionFaceReference(effectiveDescriptor.Root);
+        var faceIdentity = ResolveObjectIdentity(package, faceReference?.Guid ?? descriptorGuid, faceReference?.FileID ?? 0);
+        if (descriptorRoot.Guid == faceIdentity.Guid && package.ByGuid(descriptorRoot.Guid)?.Extension == ".fbx")
+        {
+            var resolver = package.ModelFileIds(descriptorRoot.Guid);
+            var roots = avatar.Expressions.Clips.SelectMany(c => c.Curves).Select(c => c.Binding.Path).Distinct()
+                .Select(path => resolver.ResolveAnimationRootPath(descriptorRoot.Id, faceIdentity.Id, path))
+                .Where(path => path != null).Distinct(StringComparer.Ordinal).ToArray();
+            if (roots.Length == 1)
+            {
+                avatar.ExpressionRootTarget = new(descriptorRoot.Guid, roots[0].Split('/')[^1], roots[0]);
+                UniLog.Log($"Expression animation root resolved from Unity renderer fileID: {roots[0]}");
+            }
+        }
         ParsePhysics(package, selected.Source.Guid, avatar);
         ParseModularAvatarComponents(package, selected.Source.Guid, avatar);
         return avatar;
@@ -1775,11 +1789,7 @@ public static class VrchatAvatarParser
         string visemeMesh = ResolveReferenceGameObjectName(package, scene, d?["VisemeSkinnedMesh"], modelResolvers);
         var visemeTarget = ResolveDescriptorMeshTarget(package, descriptorGuid, d?["VisemeSkinnedMesh"], avatar.FbxGuid);
         // FaceEmo selects one face mesh: visemes, eyelids, then the direct Body child.
-        var faceReference = lipSync == 3 && (d?["VisemeSkinnedMesh"]?.FileID ?? 0) != 0
-            ? d["VisemeSkinnedMesh"]
-            : d?["customEyeLookSettings"]?["eyelidType"]?.AsInt() == 2 &&
-              (d["customEyeLookSettings"]["eyelidsSkinnedMesh"]?.FileID ?? 0) != 0
-                ? d["customEyeLookSettings"]["eyelidsSkinnedMesh"] : null;
+        var faceReference = ExpressionFaceReference(d);
         avatar.ExpressionFaceTarget = faceReference == null ? null :
             ResolveDescriptorMeshTarget(package, descriptorGuid, faceReference, avatar.FbxGuid);
         avatar.ExpressionFacePath = faceReference == null ? "Body" : null;
@@ -1843,6 +1853,13 @@ public static class VrchatAvatarParser
             }
         }
     }
+
+    private static YamlNode ExpressionFaceReference(YamlNode descriptor)
+        => descriptor?["lipSync"]?.AsInt() == 3 && (descriptor["VisemeSkinnedMesh"]?.FileID ?? 0) != 0
+            ? descriptor["VisemeSkinnedMesh"]
+            : descriptor?["customEyeLookSettings"]?["eyelidType"]?.AsInt() == 2 &&
+              (descriptor["customEyeLookSettings"]["eyelidsSkinnedMesh"]?.FileID ?? 0) != 0
+                ? descriptor["customEyeLookSettings"]["eyelidsSkinnedMesh"] : null;
 
     private static VrchatBoneTarget ResolveDescriptorMeshTarget(UnityPackage package, string descriptorGuid,
         YamlNode reference, string primaryFbxGuid)

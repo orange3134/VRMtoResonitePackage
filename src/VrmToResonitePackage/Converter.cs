@@ -462,8 +462,13 @@ internal static class Converter
                 Console.WriteLine("アセットの読み込みを待機中...");
                 await WaitForAssets(assetsSlot);
 
+                // Unity may fold the model root while Assimp retains an extra node. Keep this
+                // animation basis separate from descriptor placement and physical transforms.
+                Slot expressionRoot = avatar.ExpressionRootTarget == null ? descriptorRoot :
+                    Vrchat.VrchatSceneSetup.ResolveImportedTarget(avatar.ExpressionRootTarget,
+                        importedMeshSources, importedNodePaths, prefabSlots) ?? descriptorRoot;
                 int repairedBlendshapeMeshes = await Vrchat.VrchatBlendShapeRepair.Apply(root, avatar,
-                    importedMeshSources, authoredObjects, importedNodePaths, descriptorRoot);
+                    importedMeshSources, authoredObjects, importedNodePaths, expressionRoot);
                 if (repairedBlendshapeMeshes > 0)
                 {
                     await WaitForAssets(assetsSlot);
@@ -476,10 +481,10 @@ internal static class Converter
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
                 var physicsNodes = model.NodeTargets.ToDictionary(entry => entry.Key, entry =>
                     Vrchat.VrchatSceneSetup.ResolveImportedTarget(entry.Value, importedMeshSources, importedNodePaths, prefabSlots));
-                if (descriptorRoot is { IsDestroyed: false })
+                if (expressionRoot is { IsDestroyed: false })
                 {
                     var parts = new Stack<string>();
-                    for (Slot slot = descriptorRoot; slot != null && slot != root; slot = slot.Parent) parts.Push(slot.Name);
+                    for (Slot slot = expressionRoot; slot != null && slot != root; slot = slot.Parent) parts.Push(slot.Name);
                     model.MeshBindingRootPath = string.Join("/", parts);
                 }
                 // Retain authored paths before Merge Armature or eye pivots move renderers.
