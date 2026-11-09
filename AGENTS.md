@@ -87,7 +87,8 @@ Resonite DLLを `ResonitePath` に指定して再ビルドする。配布版も�
 
 - `Program.cs` / `GuiApp.cs`: CLI、WPF GUI、引数、子プロセス制御
 - `Converter.cs`: 変換全体の統括
-- `AvatarSetup.cs`: BipedRig、VRIK、視点、表情、FirstPerson
+- `AvatarSetup.cs`: BipedRig、VRIK、視点、口パク・瞬き・視線の追跡、FirstPerson
+- `Expressions/`: VRM・VRChat共通の表情システム、入力、出力、メニュー、VRM表情の取り込み
 - `SpringBoneSetup.cs`: VRM SpringBone / VRChat PhysBoneからDynamicBoneへの変換
 - `MaterialTuner.cs`: VRM MToonからXiexeToonへの変換
 - `Vrm/`: VRM 0.x / 1.0解析、GLB前処理、中間モデル

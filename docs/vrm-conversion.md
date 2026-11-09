@@ -57,7 +57,8 @@ Resoniteのモデルインポータは `JoinIdenticalVertices` を適用する�
 
 感情表情は `VrmExpressionAdapter` から共通の[表情システム](expression-system.md)へ渡す。
 `AvatarSetup` は感情表情のメニューや駆動を生成せず、`Converter` が共通システムを一度だけ構築する。
-メニュー生成の有無は共通の `NoExpressionMenu` オプションで制御する。
+メニュー生成の有無は共通の `NoExpressionMenu` オプション（CLI: `--no-expression-menu`）で制御する。
+無効にするのはメニュー生成だけで、表情クリップ・対応表・ハンドサイン・キーボード・外部APIは生成する。
 左右各0〜7の64通りの対応表に標準プリセットを固定番号で割り当て、ハンドジェスチャー・キーボード・
 メニュー・外部APIから選択できる。番号と両手の優先順位は
 [VRMの標準割り当て](expression-system.md#vrmの標準割り当て)を参照。
@@ -65,6 +66,7 @@ Resoniteのモデルインポータは `JoinIdenticalVertices` を適用する�
 `GesturePairCompiler` は解決済みClipだけを採用し、表の幅をシーン生成とメニュー分類へ渡す。
 VRM 0.xの別名はパーサーでVRM 1.0名へ正規化する。`VrmExpression.IsCustom` を保持し、
 標準プリセットと同名のカスタム表情が欠落プリセットの代わりに割り当たらないようにする。
+VRM0のカスタム表情 `Surprised` は例外として、名前の大文字小文字を区別せず番号6と驚きアイコンに対応させる。
 
 標準番号の根拠はXWear Packager 0.3.4の
 `IO/Runtime/Extension/ForVrc/VrcAssetTemplate/Resources/VrcAssetTemplate.asset` と

@@ -312,7 +312,7 @@ internal sealed class CliOptions
         Console.WriteLine("  --no-avatar              アバターセットアップを行わずモデルのみ変換");
         Console.WriteLine("  --face-tracking          フェイストラッキング用AvatarExpressionDriverを生成");
         Console.WriteLine("  --no-protection          SimpleAvatarProtection（アバター保護）を付けない");
-        Console.WriteLine("  --no-expression-menu     プリセット表情のコンテキストメニューを生成しない");
+        Console.WriteLine("  --no-expression-menu     表情メニューを生成しない（ハンドサイン・キーボード・APIは有効）");
         Console.WriteLine("  --default-user-scale     DefaultUserScaleを付与し着用者を原寸サイズに縮小（低等身アバターの巨大化を防ぐ）");
         Console.WriteLine("  --view-forward <m>       視点の前方オフセット（既定: 目間距離から自動）");
         Console.WriteLine("  --view-up <m>            視点の上方オフセット（既定: 目間距離から自動)");
