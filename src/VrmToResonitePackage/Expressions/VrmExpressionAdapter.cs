@@ -49,8 +49,7 @@ internal static class VrmExpressionAdapter
         // XWear Packager 0.3.4 VrcAssetTemplate / VRC_FaceLayer_Template:
         // Point=sad, Peace=happy, RockNRoll=angry, Gun=surprised, Thumbs up=relaxed.
         // Right Hand overrides Left Hand; empty motions pass the lower layer through.
-        // 8 is our editable extension, with the same empty-motion behavior as 0..2.
-        string[] gestures = { null, null, null, "sad", "happy", "angry", "surprised", "relaxed", null };
+        string[] gestures = { null, null, null, "sad", "happy", "angry", "surprised", "relaxed" };
         model.GestureTable = new string[gestures.Length, gestures.Length];
         string Clip(int gesture) => gestures[gesture] is { } preset ? presets.GetValueOrDefault(preset) : null;
         for (int left = 0; left < gestures.Length; left++)

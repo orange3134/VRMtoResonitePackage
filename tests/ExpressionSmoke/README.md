@@ -17,7 +17,7 @@ Use the same installation for both.
 
 - FaceEmo normal/CAC detection, first-pattern selection, gesture graph resolution,
   mixed clips, curve validation, and all 64 compiled gesture combinations.
-- VRM0/1 parser-to-adapter fixtures: preset aliases and weights, all 81 default
+- VRM0/1 parser-to-adapter fixtures: preset aliases and weights, all 64 default
   mappings, missing/unresolved presets, custom namesakes, neutral release, real
   mesh outputs, blink mixing, grouped menus and saved-package reload.
 - Public API tags and argument types, unrestricted integer inputs and extra table
@@ -52,7 +52,7 @@ with the current expression layout and a generated context menu:
 dotnet run --project tests/ExpressionSmoke -c Release -- .tmp_verify/imported-gestures path/to/avatar.resonitepackage
 ```
 
-The check sends both hand APIs for every table cell (64 for VRChat, 81 for VRM),
+The check sends both hand APIs for every table cell (64 for both VRChat and VRM),
 including null/release cells,
 then compares actual outputs against fixed pose values and Base after smoothing
 settles. External tracking sources are frozen for this comparison; separate blink

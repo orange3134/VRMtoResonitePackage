@@ -59,11 +59,11 @@ internal static class VrmExpressionChecks
                 await PackageImporter.ImportPackage(package, restored); await default(ToWorld); await Frames(120);
                 await Verify(restored, vrm, version, sparse);
                 Check(snapshot == ExpressionPackageSnapshot.Capture(restored.FindChild("Expressions"), Path.Combine(artifacts, name + "-after")),
-                    "VRM catalog, poses, outputs and all 81 mappings survive package reload");
+                    "VRM catalog, poses, outputs and all 64 mappings survive package reload");
             }
             finally { restored?.Destroy(); avatar.Destroy(); }
         }
-        Console.WriteLine("VRM EXPRESSIONS: VRM0/1 presets, missing/custom presets, all 81 cells, outputs, blink, menus and package reload passed");
+        Console.WriteLine("VRM EXPRESSIONS: VRM0/1 presets, missing/custom presets, all 64 cells, outputs, blink, menus and package reload passed");
     }
 
     private static async Task Verify(Slot avatar, VrmModel source, int version, bool sparse)
@@ -77,7 +77,8 @@ internal static class VrmExpressionChecks
         var table = root.FindChild("DV").FindChild("GestureTable");
         var clips = root.FindChild("Clips");
         var api = root.FindChild("API");
-        Check(table.Children.Count == 81 && table.FindChild("L8R8") != null, "VRM exports 0..8 on each hand");
+        Check(table.Children.Count == 64 && table.FindChild("L7R7") != null && table.FindChild("L8R8") == null,
+            "VRM exports exactly 0..7 on each hand");
         Check(clips.Children.Count == (version == 0 ? sparse ? 4 : 6 : sparse ? 5 : 7), "only resolved emotional/custom clips, without neutral or tracking presets");
         var customSurprised = clips.Children.SingleOrDefault(c => c.Name == "Surprised");
         if (customSurprised != null)
@@ -90,8 +91,8 @@ internal static class VrmExpressionChecks
         }
         void Gesture(string hand, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
             hand == "Left" ? ExpressionSystemSetup.SetGestureLeftTag : ExpressionSystemSetup.SetGestureRightTag, true, value);
-        for (int left = 0; left <= 8; left++)
-        for (int right = 0; right <= 8; right++)
+        for (int left = 0; left < 8; left++)
+        for (int right = 0; right < 8; right++)
         {
             // Independent oracle from XWear's Point/Peace/RockNRoll/Gun/Thumbs up states.
             int PresetFor(int gesture) => gesture switch { 3 => 3, 4 => 1, 5 => 2, 6 => 5, 7 => 4, _ => 0 };
@@ -125,7 +126,7 @@ internal static class VrmExpressionChecks
             var target = button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target;
             button.Pressed(null, default); await Frames(12);
             Check(ContextMenuSelected(root) && Reference<Slot>(root, "State.CurrentExpression") == target, "VRM menu selects every clip");
-            Gesture("Left", 8); Gesture("Right", 8);
+            Gesture("Left", 7); Gesture("Right", 7);
             Check(Reference<Slot>(root, "State.CurrentExpression") == target, "menu hold rejects VRM gesture overwrite");
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
         }
@@ -133,12 +134,12 @@ internal static class VrmExpressionChecks
         Near(face.GetBlendShapeWeight("Rest"), 0.12f, "reset uses authored Base, not neutral expression weight");
         Check(Reference<Slot>(root, "State.CurrentExpression") == null && !ContextMenuSelected(root), "VRM reset clears menu and expression");
         var custom = clips.Children.Single(c => c.ExpressionVariables<DynamicValueVariable<float>>().Any(v => Math.Abs(v.Value.Value - 0.9f) < 0.0001f));
-        Check(table.WriteDynamicVariable("ExpressionSystem/GestureTable.L8R8", custom) == DynamicVariableWriteResult.Success,
-            "precreated L8R8 can be assigned to a custom expression");
-        Gesture("Left", 8); Gesture("Right", 8); await Frames(12);
-        Check(Reference<Slot>(root, "State.CurrentExpression") == custom, "extended pair selects custom expression");
-        Near(face.GetBlendShapeWeight("Custom"), 0.9f, "extended pair writes custom shape");
-        Check(table.WriteDynamicVariable<Slot>("ExpressionSystem/GestureTable.L8R8", null) == DynamicVariableWriteResult.Success,
+        Check(table.WriteDynamicVariable("ExpressionSystem/GestureTable.L1R1", custom) == DynamicVariableWriteResult.Success,
+            "unassigned L1R1 can be assigned to a custom expression");
+        Gesture("Left", 1); Gesture("Right", 1); await Frames(12);
+        Check(Reference<Slot>(root, "State.CurrentExpression") == custom, "edited pair selects custom expression");
+        Near(face.GetBlendShapeWeight("Custom"), 0.9f, "edited pair writes custom shape");
+        Check(table.WriteDynamicVariable<Slot>("ExpressionSystem/GestureTable.L1R1", null) == DynamicVariableWriteResult.Success,
             "restore default spare cell");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
         await Frames(12);

@@ -56,7 +56,7 @@ Resoniteのモデルインポータは `JoinIdenticalVertices` を適用する�
   `--no-protection` で無効にする。
 
 感情表情は `VrmExpressionAdapter` から共通の[表情システム](expression-system.md)へ渡す。
-左右各0〜8の対応表に標準プリセットを固定番号で割り当て、ハンドジェスチャー・キーボード・
+左右各0〜7の64通りの対応表に標準プリセットを固定番号で割り当て、ハンドジェスチャー・キーボード・
 メニュー・外部APIから選択できる。番号と両手の優先順位は
 [VRMの標準割り当て](expression-system.md#vrmの標準割り当て)を参照。
 `ExpressionModel.GestureTable` はAnimatorを介さない固定Clip IDの表で、
