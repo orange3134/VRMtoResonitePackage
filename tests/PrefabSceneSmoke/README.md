@@ -1,5 +1,10 @@
 # Prefab scene regression checks
 
+`OutlineExclusionSceneChecks` verifies lilToon zero-width outline removal using a
+vertically asymmetric mask, main UV transforms and repeat sampling. Shared mesh
+users remain isolated, surface material properties and blendshapes survive reload,
+and wholly excluded submeshes need only a material change.
+
 `MaterialLayerChecks` creates small PNG fixtures and verifies lilToon 2nd/3rd
 texture baking: linear-light alpha blending, transparent pixels, ordered blend
 modes, mask UVs, offsets/wrapping, alpha modes, material variant inheritance,

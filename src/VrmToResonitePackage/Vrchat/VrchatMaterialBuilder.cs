@@ -29,6 +29,7 @@ internal static partial class VrchatMaterialBuilder
             StringComparer.OrdinalIgnoreCase);
         var materialCache = new Dictionary<string, IAssetProvider<FrooxEngine.Material>>(
             StringComparer.OrdinalIgnoreCase);
+        var outlineSettings = new Dictionary<XiexeToonMaterial, LilToonInfo>();
 
         // Build one XiexeToon material per unique Unity .mat referenced by the avatar.
         IEnumerable<string> uniqueGuids = avatar.RendererMaterials
@@ -44,6 +45,12 @@ internal static partial class VrchatMaterialBuilder
             if (material != null)
             {
                 materialCache[guid] = material;
+                if (material is XiexeToonMaterial toon)
+                {
+                    var info = ResolveMaterialInfo(guid, package, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                    if (info?.IsLilToon == true && info.UseOutline && info.OutlineDeleteMesh)
+                        outlineSettings[toon] = info;
+                }
             }
             else
             {
@@ -107,6 +114,7 @@ internal static partial class VrchatMaterialBuilder
             }
         }
         UniLog.Log($"liltoonマテリアルを {materialCache.Count} 件生成し、{assigned} スロットに割り当てました。");
+        await ApplyOutlineExclusions(root, assetsSlot, package, outlineSettings);
 
         // The FBX import created bare placeholder materials; drop the ones no renderer references now.
         var referenced = new HashSet<RefID>();

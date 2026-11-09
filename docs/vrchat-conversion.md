@@ -585,6 +585,29 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
 - outline shader variantとoutline property overrideを認識し、`_OutlineWidth` をXiexeToonへ割り当てる。
 - lilToon Rimは表現差が大きいため変換せず、`RimIntensity=0` とする。
 
+### 幅0の輪郭線と目の裏面
+
+lilToonの `_OutlineDeleteMesh=1` は、マスク適用後の幅がほぼ0の頂点を含む輪郭線の面を
+描画しない。XiexeToonは幅0でも反転した面を描画するため、目の裏面などが暗い面として
+表に出ることがある。幅を0にするだけでは防げない。
+
+`VrchatOutlineExclusions` は明示されたこの設定をmaterial variantから継承し、
+main UVのscale/offsetと、lilToonのlinear-repeat・LOD 0サンプリングで判定する。
+メッシュのUVは左下原点なので、上から並ぶデコード画像の行を読む際にVを反転する。
+`abs(_OutlineWidth * 0.01 * mask.r) < 0.000001` となる頂点を含む三角形を、
+同じ表面設定で輪郭線だけを無効にした材質のsubmeshへ移す。面自体は削除しない。
+元の頂点、UV、法線、skin、blendshape、既存material indexは保持し、共有mesh/providerや
+元材質を変更しない。全三角形が対象なら材質だけを差し替える。
+FirstPersonメッシュ生成前に実行し、追加submeshもFirstPersonの材質設定へ引き継ぐ。
+
+設定なし・明示0は対象外。VRChat経路では頂点カラーを取り込まないため、
+`_OutlineVertexR2Width` が非0の場合は警告してこの補正を省略する。
+材質数とsubmesh数が異なるrendererも、追加submeshへの誤割り当てを避けて省略する。
+
+回帰事例: NoraMiaree 1.0.0の `EyesBackSideSurface_off` が動かす目の裏側の66三角形は
+すべてマスク0だった。修正前の保存パッケージでは輪郭線付き材質で描画されていた。
+検証では保存後の材質割り当てだけでなく、全頂点と表情差分、面の集合が維持されることも確認する。
+
 ## 代表的な回帰ケース
 
 詳細なアセット自体はリポジトリへコミットしない。次の名前は不具合の再現条件を探す索引として使う。

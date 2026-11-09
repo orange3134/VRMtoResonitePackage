@@ -67,6 +67,8 @@ public sealed class LilToonInfo
     public bool OutlineLit { get; set; } = true;
     public bool OutlineAlbedoTint { get; set; }
     public string OutlineMaskGuid { get; set; }
+    public bool OutlineDeleteMesh { get; set; }
+    public int OutlineVertexR2Width { get; set; }
 
     public bool UseMatcap { get; set; }
     public Vec4 MatcapColor { get; set; } = new(1f, 1f, 1f, 1f);
@@ -279,6 +281,8 @@ public static class LilToonConverter
             OutlineLit = B("_OutlineEnableLighting", parent?.OutlineLit ?? true),
             OutlineAlbedoTint = B("_OutlineLitApplyTex", parent?.OutlineAlbedoTint ?? false),
             OutlineMaskGuid = TexOrParent("_OutlineWidthMask", parent?.OutlineMaskGuid),
+            OutlineDeleteMesh = B("_OutlineDeleteMesh", parent?.OutlineDeleteMesh ?? false),
+            OutlineVertexR2Width = (int)F("_OutlineVertexR2Width", parent?.OutlineVertexR2Width ?? 0),
 
             UseMatcap = B("_UseMatCap", parent?.UseMatcap ?? false),
             MatcapColor = C("_MatCapColor", parent?.MatcapColor ?? new Vec4(1f, 1f, 1f, 1f)),
