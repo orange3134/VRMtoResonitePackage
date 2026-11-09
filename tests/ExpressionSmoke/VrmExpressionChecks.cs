@@ -19,7 +19,7 @@ internal static class VrmExpressionChecks
 
     public static async Task Run(Slot parent, string artifacts)
     {
-        foreach (var (version, sparse) in new[] { (0, false), (1, false), (1, true) })
+        foreach (var (version, sparse) in new[] { (0, false), (0, true), (1, false), (1, true) })
         {
             string name = $"VRM{version}-{(sparse ? "missing" : "full")}";
             var vrm = Fixture(Path.Combine(artifacts, name + ".vrm"), version, sparse);
@@ -78,13 +78,16 @@ internal static class VrmExpressionChecks
         var clips = root.FindChild("Clips");
         var api = root.FindChild("API");
         Check(table.Children.Count == 81 && table.FindChild("L8R8") != null, "VRM exports 0..8 on each hand");
-        Check(clips.Children.Count == (version == 0 ? 6 : sparse ? 5 : 7), "only resolved emotional/custom clips, without neutral or tracking presets");
-        var customSurprised = clips.Children.Single(c => c.Name == "Surprised");
-        var surpriseSprite = customSurprised.GetComponent<ContextMenuItemSource>().Sprite.Target;
-        Check((surpriseSprite != null) == (version == 0), "custom Surprised gets an icon only for VRM0 compatibility");
-        var surpriseButton = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Select expression")
-            .GetComponentsInChildren<ContextMenuItemSource>().Single(c => c.Label.Value == "Surprised");
-        Check(surpriseButton.Sprite.Target == surpriseSprite, "visible Surprised button retains the clip icon after reload");
+        Check(clips.Children.Count == (version == 0 ? sparse ? 4 : 6 : sparse ? 5 : 7), "only resolved emotional/custom clips, without neutral or tracking presets");
+        var customSurprised = clips.Children.SingleOrDefault(c => c.Name == "Surprised");
+        if (customSurprised != null)
+        {
+            var surpriseSprite = customSurprised.GetComponent<ContextMenuItemSource>().Sprite.Target;
+            Check((surpriseSprite != null) == (version == 0), "custom Surprised gets an icon only for VRM0 compatibility");
+            var surpriseButton = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Select expression")
+                .GetComponentsInChildren<ContextMenuItemSource>().Single(c => c.Label.Value == "Surprised");
+            Check(surpriseButton.Sprite.Target == surpriseSprite, "visible Surprised button retains the clip icon after reload");
+        }
         void Gesture(string hand, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
             hand == "Left" ? ExpressionSystemSetup.SetGestureLeftTag : ExpressionSystemSetup.SetGestureRightTag, true, value);
         for (int left = 0; left <= 8; left++)
@@ -92,13 +95,14 @@ internal static class VrmExpressionChecks
         {
             // Independent oracle from XWear's Point/Peace/RockNRoll/Gun/Thumbs up states.
             int PresetFor(int gesture) => gesture switch { 3 => 3, 4 => 1, 5 => 2, 6 => 5, 7 => 4, _ => 0 };
-            bool Available(int preset) => preset > 0 && !(version == 0 && preset == 5) && !(sparse && preset is 3 or 5);
+            bool Available(int preset) => preset > 0 && !(sparse && preset is 3 or 5);
             int selected = Available(PresetFor(right)) ? PresetFor(right) : Available(PresetFor(left)) ? PresetFor(left) : 0;
             bool assigned = selected > 0;
             var target = Reference<Slot>(table, $"L{left}R{right}");
             Check(assigned ? target != null : target == null, $"VRM mapping availability {left},{right}");
             if (assigned)
-                Check(target.Name == source.Expressions.Single(e => !e.IsCustom && e.Preset == Presets[selected]).Name,
+                Check(target.Name == (version == 0 && selected == 5 ? "Surprised" :
+                    source.Expressions.Single(e => !e.IsCustom && e.Preset == Presets[selected]).Name),
                     "normalized preset, independent of display name and source order");
             Gesture("Left", left); Gesture("Right", right); await Frames(12);
             Check(Reference<Slot>(root, "State.CurrentExpression") == target, "VRM gesture selects table target");
@@ -156,7 +160,7 @@ internal static class VrmExpressionChecks
         }
         // Put a custom namesake before standard groups to catch name-based assignment.
         Add("sad", "unknown", 7, 0.9f, isCustom: true);
-        Add("Surprised", "unknown", 5, 0.7f, isCustom: true);
+        if (version != 0 || !sparse) Add("Surprised", "unknown", 5, 0.7f, isCustom: true);
         string[] v0 = { "neutral", "joy", "angry", "sorrow", "fun", "unknown" };
         for (int i = 5; i >= 0; i--)
         {

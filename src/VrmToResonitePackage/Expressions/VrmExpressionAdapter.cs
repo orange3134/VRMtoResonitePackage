@@ -16,13 +16,13 @@ internal static class VrmExpressionAdapter
             if (expression.Preset is "aa" or "ih" or "ou" or "ee" or "oh" or "blink" or "blinkLeft" or "blinkRight"
                 or "lookUp" or "lookDown" or "lookLeft" or "lookRight") continue;
             // VRM0 has no surprised preset; exporters store it as a named custom expression.
-            // Recognize this compatibility name for the menu icon only, not gesture mapping.
-            string iconPreset = !expression.IsCustom ? expression.Preset :
+            // Share the compatibility preset between menu icons and gesture mapping.
+            string preset = !expression.IsCustom ? expression.Preset :
                 vrm.SpecVersionMajor == 0 && string.Equals(expression.Name, "Surprised", StringComparison.OrdinalIgnoreCase)
                     ? "surprised" : null;
             var clip = new ExpressionClip { Id = "vrm:" + model.Clips.Count + ":" + expression.Preset,
                 Name = expression.Name ?? expression.Preset ?? "Expression", Duration = 1, Source = "VRM",
-                MenuIconUrl = ExpressionMenuSetup.PresetIconUrl(iconPreset) };
+                MenuIconUrl = ExpressionMenuSetup.PresetIconUrl(preset) };
             var weights = new Dictionary<IField<float>, float>();
             foreach (var bind in expression.Binds)
             {
@@ -43,7 +43,7 @@ internal static class VrmExpressionAdapter
             if (clip.Curves.Count > 0)
             {
                 model.Clips.Add(clip);
-                if (!expression.IsCustom && expression.Preset != null) presets.TryAdd(expression.Preset, clip.Id);
+                if (preset != null) presets.TryAdd(preset, clip.Id);
             }
         }
         // XWear Packager 0.3.4 VrcAssetTemplate / VRC_FaceLayer_Template:
