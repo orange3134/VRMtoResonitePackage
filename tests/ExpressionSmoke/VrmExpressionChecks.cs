@@ -78,7 +78,13 @@ internal static class VrmExpressionChecks
         var clips = root.FindChild("Clips");
         var api = root.FindChild("API");
         Check(table.Children.Count == 81 && table.FindChild("L8R8") != null, "VRM exports 0..8 on each hand");
-        Check(clips.Children.Count == (version == 0 ? 5 : sparse ? 4 : 6), "only resolved emotional/custom clips, without neutral or tracking presets");
+        Check(clips.Children.Count == (version == 0 ? 6 : sparse ? 5 : 7), "only resolved emotional/custom clips, without neutral or tracking presets");
+        var customSurprised = clips.Children.Single(c => c.Name == "Surprised");
+        var surpriseSprite = customSurprised.GetComponent<ContextMenuItemSource>().Sprite.Target;
+        Check((surpriseSprite != null) == (version == 0), "custom Surprised gets an icon only for VRM0 compatibility");
+        var surpriseButton = root.FindChild("Inputs").FindChild("ContextMenu").FindChild("Select expression")
+            .GetComponentsInChildren<ContextMenuItemSource>().Single(c => c.Label.Value == "Surprised");
+        Check(surpriseButton.Sprite.Target == surpriseSprite, "visible Surprised button retains the clip icon after reload");
         void Gesture(string hand, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(api,
             hand == "Left" ? ExpressionSystemSetup.SetGestureLeftTag : ExpressionSystemSetup.SetGestureRightTag, true, value);
         for (int left = 0; left <= 8; left++)
@@ -150,6 +156,7 @@ internal static class VrmExpressionChecks
         }
         // Put a custom namesake before standard groups to catch name-based assignment.
         Add("sad", "unknown", 7, 0.9f, isCustom: true);
+        Add("Surprised", "unknown", 5, 0.7f, isCustom: true);
         string[] v0 = { "neutral", "joy", "angry", "sorrow", "fun", "unknown" };
         for (int i = 5; i >= 0; i--)
         {
