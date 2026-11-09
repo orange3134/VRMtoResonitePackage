@@ -49,7 +49,11 @@ internal static class ExpressionMenuGroupChecks
         var groupsRoot = selection.GetComponent<ContextMenuSubmenu>().ItemsRoot.Target;
         Check(groupsRoot.FindChild("Back").GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == items,
             "selection Back returns to Expressions");
-        var groups = groupsRoot.Children.Where(s => s.Name != "Back").ToArray();
+        bool flat = root.FindChild("Clips").Children.Count <= 8;
+        var groups = flat ? new[] { groupsRoot } : groupsRoot.Children.Where(s => s.Name != "Back").ToArray();
+        if (flat)
+            Check(groupsRoot.GetComponentsInChildren<ContextMenuSubmenu>().Count == 2,
+                "small catalogs have only the selection submenu and Back, without subgroups");
         var table = root.FindChild("DV").FindChild("GestureTable")
             .GetComponentsInChildren<DynamicReferenceVariable<Slot>>();
         Slot Pair(int left, int right) => table.Single(v =>
@@ -62,13 +66,16 @@ internal static class ExpressionMenuGroupChecks
         var buttons = new List<ButtonDynamicImpulseTriggerWithReference<Slot>>();
         for (int i = 0; i < groups.Length; i++)
         {
-            Check(groups[i].GetComponent<ContextMenuItemSource>().Label.Value == "Group " + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                "consecutive Group labels");
             var entries = groups[i].GetComponent<ContextMenuSubmenu>().ItemsRoot.Target;
-            Check(entries.FindChild("Back").GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == groupsRoot,
-                "group Back returns to group selection");
-            var groupButtons = entries.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithReference<Slot>>();
-            Check(groupButtons.Count is > 0 and <= 8, "at most eight expressions per menu (Back is navigation)");
+            if (!flat)
+            {
+                Check(groups[i].GetComponent<ContextMenuItemSource>().Label.Value == "Group " + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    "consecutive Group labels");
+                Check(entries.FindChild("Back").GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == groupsRoot,
+                    "group Back returns to group selection");
+            }
+            var groupButtons = entries.Children.SelectMany(s => s.GetComponents<ButtonDynamicImpulseTriggerWithReference<Slot>>()).ToArray();
+            Check(groupButtons.Length <= 8 && (flat || groupButtons.Length > 0), "at most eight expressions per menu (Back is navigation)");
             var categories = new HashSet<(bool, bool, bool)>();
             foreach (var button in groupButtons)
             {
@@ -77,12 +84,12 @@ internal static class ExpressionMenuGroupChecks
                 categories.Add((leftOnly.Contains(target), rightOnly.Contains(target), mapped.Contains(target)));
                 buttons.Add(button);
             }
-            Check(categories.Count == 1, "shared, left, right, combined and other expressions never mix within a group");
+            if (!flat) Check(categories.Count == 1, "shared, left, right, combined and other expressions never mix within a group");
         }
-        Check(targets.SetEquals(root.FindChild("Clips").Children), "numbered groups cover the entire selectable catalog");
+        Check(targets.SetEquals(root.FindChild("Clips").Children), "direct or grouped buttons cover the entire selectable catalog");
         Check(items.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithReference<Slot>>().Count == buttons.Count,
             "no duplicate expression buttons outside the numbered groups");
-        Console.WriteLine($"PASS: direct selection has {buttons.Count} unique expressions in {groups.Length} groups (max 8)");
+        Console.WriteLine($"PASS: direct selection has {buttons.Count} unique expressions, {(flat ? "without subgroups" : $"in {groups.Length} groups (max 8)")}");
         return buttons.ToArray();
     }
 

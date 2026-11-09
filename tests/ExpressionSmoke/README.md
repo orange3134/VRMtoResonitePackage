@@ -23,7 +23,8 @@ Use the same installation for both.
 - Public API tags and argument types, unrestricted integer inputs and extra table
   rows, invalid/foreign selection Slots, null release, and same-Slot no-op behavior.
 - Menu selection hold, permission settings, reset and wear lifecycle, numbered
-  groups of at most eight expressions, label/color bindings, and direct-child menus.
+  flat selection for up to eight expressions, groups for larger catalogs,
+  label/color bindings, and direct-child menus.
 - Keyboard rising-edge behavior, controller sensor tables and Index neutral bands,
   timeout/drop semantics, delayed snapshots, disconnect/VR-exit sentinels, and permissions.
 - Static output writes, sparse named pose values, readable binding keys and collisions,
