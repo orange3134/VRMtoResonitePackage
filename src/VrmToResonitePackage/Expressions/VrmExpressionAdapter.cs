@@ -22,7 +22,7 @@ internal static class VrmExpressionAdapter
                     ? "surprised" : null;
             var clip = new ExpressionClip { Id = "vrm:" + model.Clips.Count + ":" + expression.Preset,
                 Name = expression.Name ?? expression.Preset ?? "Expression", Duration = 1, Source = "VRM",
-                MenuIconUrl = ExpressionMenuSetup.PresetIconUrl(preset) };
+                MenuIconUrl = ExpressionMenuIcons.PresetIconUrl(preset) };
             var weights = new Dictionary<IField<float>, float>();
             foreach (var bind in expression.Binds)
             {

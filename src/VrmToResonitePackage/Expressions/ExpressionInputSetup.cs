@@ -98,10 +98,10 @@ internal sealed partial class ExpressionSystemSetup
         }
         foreach (var clip in _model.Clips)
             if (clip.MenuIconUrl != null && _clips.TryGetValue(clip.Id, out var expression))
-                ExpressionMenuSetup.SetupIcon(expression, expression.GetComponent<ContextMenuItemSource>(), clip.MenuIconUrl);
+                ExpressionMenuIcons.Apply(expression, expression.GetComponent<ContextMenuItemSource>(), clip.MenuIconUrl);
         var rootItem = menu.AttachComponent<RootContextMenuItem>();
         rootItem.Item.Target = MenuItem(menu, "Expressions");
-        ExpressionMenuSetup.SetupIcon(menu, rootItem.Item.Target, ExpressionMenuSetup.NeutralIconUrl);
+        ExpressionMenuIcons.Apply(menu, rootItem.Item.Target, ExpressionMenuIcons.NeutralIconUrl);
         rootItem.OnlyForSide.Value = null;
         ConfigureSubmenu(menu, menu);
         // Keep editable clip templates in Clips; expose each once through this entrance.
@@ -134,7 +134,7 @@ internal sealed partial class ExpressionSystemSetup
         BuildGesturePermissionMenu(menu);
         var reset = menu.AddSlot("Reset State");
         var resetSource = MenuItem(reset, "Reset");
-        ExpressionMenuSetup.SetupIcon(reset, resetSource, ExpressionMenuSetup.ResetIconUrl);
+        ExpressionMenuIcons.Apply(reset, resetSource, ExpressionMenuIcons.ResetIconUrl);
         var resetButton = reset.AttachComponent<ButtonDynamicImpulseTrigger>();
         resetButton.Target.Target = _api;
         resetButton.ExcludeDisabled.Value = true;

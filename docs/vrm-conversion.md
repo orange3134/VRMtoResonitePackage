@@ -7,7 +7,7 @@
 1. `VrmParser` がVRM 0.x / 1.0を共通の `VrmModel` へ読み込む。
 2. `GlbPreprocessor` がResonite `ModelImporter` 向けの互換修正をGLBへ適用する。
 3. 一時的に `.glb` としてResoniteへインポートする。
-4. `AvatarSetup` がBipedRig、VRIK、視点、表情、FirstPersonを構築する。
+4. `AvatarSetup` がBipedRig、VRIK、視点、口パク・瞬き・視線の追跡、FirstPersonを構築する。
 5. `MaterialTuner` と `SpringBoneSetup` がマテリアルと揺れものを設定する。
 
 ## GLB前処理
@@ -56,6 +56,8 @@ Resoniteのモデルインポータは `JoinIdenticalVertices` を適用する�
   `--no-protection` で無効にする。
 
 感情表情は `VrmExpressionAdapter` から共通の[表情システム](expression-system.md)へ渡す。
+`AvatarSetup` は感情表情のメニューや駆動を生成せず、`Converter` が共通システムを一度だけ構築する。
+メニュー生成の有無は共通の `NoExpressionMenu` オプションで制御する。
 左右各0〜7の64通りの対応表に標準プリセットを固定番号で割り当て、ハンドジェスチャー・キーボード・
 メニュー・外部APIから選択できる。番号と両手の優先順位は
 [VRMの標準割り当て](expression-system.md#vrmの標準割り当て)を参照。
@@ -70,7 +72,7 @@ VRM 0.xの別名はパーサーでVRM 1.0名へ正規化する。`VrmExpression.
 後者は左右とも3〜7に遷移する。0〜2はEmptyクリップのIdleで、Left Handの後にRight Handを
 weight=1のOverrideで適用する。生成済みFXの感情クリップは他の顔シェイプのリセット値も持つ。
 ResoPonでは同じ優先順位を固定Clip参照として表し、空の右手は左手へフォールバックする。
-8と欠落プリセットには空モーション相当の挙動を採用し、Animatorの履歴依存の状態保持は持ち込まない。
+欠落プリセットには空モーション相当の挙動を採用し、Animatorの履歴依存の状態保持は持ち込まない。
 
 ## VRM FirstPerson
 
