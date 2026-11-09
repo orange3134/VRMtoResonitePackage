@@ -32,7 +32,7 @@ Resoniteのコンテキストメニュー、外部Dynamic Impulseから選択す
 |---|---|
 | Select expression → Group 1, Group 2, … | 表情を選択して保持。同じ表情をもう一度押すと解除 |
 | Hand gestures: Both / LeftOnly / RightOnly / None | 左右のハンドジェスチャーの許可状態を表示・変更 |
-| Reset settings | メニュー保持を解除し、左右ジェスチャーを0、選択表情をnullへ戻す。許可設定は維持 |
+| Reset State | メニュー保持を解除し、左右ジェスチャーを0、選択表情をnullへ戻す。許可設定は維持 |
 
 表情グループは各8個までと `Back` で構成する。生成時の対応表から、左右共通、左のみ、右のみ、
 両手の組合せのみ、未割当の順に分類し、分類内はClips順で並べる。分類をまたいで詰め合わせない。

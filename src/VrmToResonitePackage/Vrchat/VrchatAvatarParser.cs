@@ -30,14 +30,8 @@ public static class VrchatAvatarParser
     // These are the required humanoid bones shared by Unity Humanoid and VRM. Requiring the
     // complete core prevents a generic-rig accessory containing only names such as Head or Hips
     // from being treated as the avatar body.
-    private static readonly HashSet<string> RequiredInferredHumanoidBones = new(StringComparer.Ordinal)
-    {
-        "hips", "spine", "head",
-        "leftUpperArm", "leftLowerArm", "leftHand",
-        "rightUpperArm", "rightLowerArm", "rightHand",
-        "leftUpperLeg", "leftLowerLeg", "leftFoot",
-        "rightUpperLeg", "rightLowerLeg", "rightFoot",
-    };
+    private static readonly HashSet<string> RequiredInferredHumanoidBones =
+        new(HumanoidSkeletonMapper.RequiredBones, StringComparer.Ordinal);
 
     private static readonly System.Text.RegularExpressions.Regex BlendShapeWeightPath =
         new(@"^m_BlendShapeWeights\.Array\.data\[(\d+)\]$",
@@ -138,7 +132,6 @@ public static class VrchatAvatarParser
                 : UnityPrefabInstances.CreateView(package, selected.Source.Guid, selected.Root != null ? selected.Subtree : null);
             return Parse(view, selected.Name, true);
         }
-        YamlDocument effectiveDescriptor = selected.Descriptor;
         foreach (Candidate c in OrderByPrimary(candidates))
         {
             string mark = c == selected ? "=> 選択" : "   スキップ";
@@ -149,8 +142,17 @@ public static class VrchatAvatarParser
         var descriptorScenes = package.PrefabGraph.Scenes;
         string descriptorGuid = descriptorScenes.FirstOrDefault(entry =>
             ReferenceEquals(entry.Scene.Doc(selected.Descriptor.FileId), selected.Descriptor))?.Guid;
+        // A scene may serialize only a stripped alias of the descriptor. Read its
+        // canonical document after prefab overrides, and resolve local references
+        // in that document's occurrence rather than in the alias's scene.
+        var descriptorIdentity = package.PrefabGraph.Identity(descriptorGuid, selected.Descriptor.FileId);
+        descriptorGuid = descriptorIdentity.Occurrence;
+        var descriptorScene = package.PrefabGraph.Scene(descriptorGuid);
+        var effectiveDescriptor = descriptorScene?.Doc(descriptorIdentity.FileId);
+        if (effectiveDescriptor == null || effectiveDescriptor.Stripped || !IsAvatarDescriptor(effectiveDescriptor))
+            throw new InvalidDataException("The selected avatar descriptor could not be resolved to its prefab settings.");
         var descriptorRoot = ResolveObjectIdentity(package, descriptorGuid,
-            selected.Descriptor.Root?["m_GameObject"]?.FileID ?? 0);
+            effectiveDescriptor.Root?["m_GameObject"]?.FileID ?? 0);
         var avatar = new VrchatAvatar
         {
             Name = selected.Name ?? Path.GetFileNameWithoutExtension(selected.Source.LogicalPath),
@@ -201,7 +203,7 @@ public static class VrchatAvatarParser
         }
         ParseFbxBlendShapeNames(package, avatar);
         ParseHumanoid(package, avatar);
-        ParseDescriptor(package, selected.Scene, effectiveDescriptor, avatar, descriptorGuid);
+        ParseDescriptor(package, descriptorScene, effectiveDescriptor, avatar, descriptorGuid);
         ParseRenderers(package, selected.Source.Guid, avatar);
         avatar.RendererMaterials.RemoveAll(renderer => avatar.EditorOnlyFbxGuids.Contains(renderer.FbxGuid ?? ""));
         foreach (string excluded in avatar.EditorOnlyFbxGuids)
@@ -218,6 +220,20 @@ public static class VrchatAvatarParser
         var expressionDescriptor = VrchatModularExpressionInputs.Create(effectiveDescriptor.Root, expressionComponents);
         VrchatAnimatorFaceParser.Apply(package, expressionDescriptor, avatar);
         avatar.Expressions = VrchatExpressionParser.Parse(package, expressionDescriptor, expressionComponents);
+        var faceReference = ExpressionFaceReference(effectiveDescriptor.Root);
+        var faceIdentity = ResolveObjectIdentity(package, faceReference?.Guid ?? descriptorGuid, faceReference?.FileID ?? 0);
+        if (descriptorRoot.Guid == faceIdentity.Guid && package.ByGuid(descriptorRoot.Guid)?.Extension == ".fbx")
+        {
+            var resolver = package.ModelFileIds(descriptorRoot.Guid);
+            var roots = avatar.Expressions.Clips.SelectMany(c => c.Curves).Select(c => c.Binding.Path).Distinct()
+                .Select(path => resolver.ResolveAnimationRootPath(descriptorRoot.Id, faceIdentity.Id, path))
+                .Where(path => path != null).Distinct(StringComparer.Ordinal).ToArray();
+            if (roots.Length == 1)
+            {
+                avatar.ExpressionRootTarget = new(descriptorRoot.Guid, roots[0].Split('/')[^1], roots[0]);
+                UniLog.Log($"Expression animation root resolved from Unity renderer fileID: {roots[0]}");
+            }
+        }
         ParsePhysics(package, selected.Source.Guid, avatar);
         ParseModularAvatarComponents(package, selected.Source.Guid, avatar);
         return avatar;
@@ -1505,24 +1521,15 @@ public static class VrchatAvatarParser
 
     private static void ParseHumanoidFromSkeleton(YamlNode meta, VrchatAvatar avatar)
     {
-        YamlNode skeleton = meta["ModelImporter"]?["humanDescription"]?["skeleton"];
-        if (skeleton?.Seq == null)
-        {
-            return;
-        }
-
-        foreach (YamlNode entry in skeleton.Seq)
-        {
-            string boneName = entry?["name"]?.AsString();
-            string vrmName = VrchatConstants.InferHumanNameFromSkeletonName(boneName);
-            if (!string.IsNullOrEmpty(boneName) && vrmName != null)
-            {
-                avatar.HumanBones.TryAdd(vrmName, boneName);
-            }
-        }
+        foreach (var (role, bone) in HumanoidSkeletonMapper.Infer(meta))
+            avatar.HumanBones.Add(role, bone);
         if (avatar.HumanBones.Count > 0)
         {
-            UniLog.Warning($"FBXのhumanDescription.humanが空のため、skeleton名から {avatar.HumanBones.Count} 個のヒューマノイドボーンを推定しました。");
+            UniLog.Warning($"FBXのhumanDescription.humanが空のため、skeletonの階層・位置・名前から {avatar.HumanBones.Count} 個のヒューマノイドボーンを推定しました。");
+        }
+        else
+        {
+            UniLog.Warning("FBXのhumanDescription.humanが空で、skeletonから必須15部位を一意に推定できませんでした。");
         }
     }
 
@@ -1575,19 +1582,7 @@ public static class VrchatAvatarParser
             return HumanoidFbxKind.Explicit;
         }
 
-        var inferredBones = new HashSet<string>(StringComparer.Ordinal);
-        if (humanDescription?["skeleton"]?.Seq != null)
-        {
-            foreach (YamlNode entry in humanDescription["skeleton"].Seq)
-            {
-                string humanName = VrchatConstants.InferHumanNameFromSkeletonName(
-                    entry?["name"]?.AsString());
-                if (humanName != null)
-                {
-                    inferredBones.Add(humanName);
-                }
-            }
-        }
+        var inferredBones = HumanoidSkeletonMapper.Infer(meta).Keys.ToHashSet(StringComparer.Ordinal);
         return inferredBones.IsSupersetOf(RequiredInferredHumanoidBones)
             ? HumanoidFbxKind.Inferred
             : HumanoidFbxKind.None;
@@ -1794,11 +1789,7 @@ public static class VrchatAvatarParser
         string visemeMesh = ResolveReferenceGameObjectName(package, scene, d?["VisemeSkinnedMesh"], modelResolvers);
         var visemeTarget = ResolveDescriptorMeshTarget(package, descriptorGuid, d?["VisemeSkinnedMesh"], avatar.FbxGuid);
         // FaceEmo selects one face mesh: visemes, eyelids, then the direct Body child.
-        var faceReference = lipSync == 3 && (d?["VisemeSkinnedMesh"]?.FileID ?? 0) != 0
-            ? d["VisemeSkinnedMesh"]
-            : d?["customEyeLookSettings"]?["eyelidType"]?.AsInt() == 2 &&
-              (d["customEyeLookSettings"]["eyelidsSkinnedMesh"]?.FileID ?? 0) != 0
-                ? d["customEyeLookSettings"]["eyelidsSkinnedMesh"] : null;
+        var faceReference = ExpressionFaceReference(d);
         avatar.ExpressionFaceTarget = faceReference == null ? null :
             ResolveDescriptorMeshTarget(package, descriptorGuid, faceReference, avatar.FbxGuid);
         avatar.ExpressionFacePath = faceReference == null ? "Body" : null;
@@ -1862,6 +1853,13 @@ public static class VrchatAvatarParser
             }
         }
     }
+
+    private static YamlNode ExpressionFaceReference(YamlNode descriptor)
+        => descriptor?["lipSync"]?.AsInt() == 3 && (descriptor["VisemeSkinnedMesh"]?.FileID ?? 0) != 0
+            ? descriptor["VisemeSkinnedMesh"]
+            : descriptor?["customEyeLookSettings"]?["eyelidType"]?.AsInt() == 2 &&
+              (descriptor["customEyeLookSettings"]["eyelidsSkinnedMesh"]?.FileID ?? 0) != 0
+                ? descriptor["customEyeLookSettings"]["eyelidsSkinnedMesh"] : null;
 
     private static VrchatBoneTarget ResolveDescriptorMeshTarget(UnityPackage package, string descriptorGuid,
         YamlNode reference, string primaryFbxGuid)
@@ -2105,10 +2103,7 @@ public static class VrchatAvatarParser
         var document = scene.Doc(fileId);
         if (document?.ClassId == 4)
         {
-            var localModels = scene.MeshRenderers.Select(r => scene.RendererMesh(r)?.Guid)
-                .Where(g => package.ByGuid(g)?.Extension == ".fbx").Distinct().ToArray();
-            primaryFbxGuid = localModels.Length == 0 || localModels.Contains(primaryFbxGuid) ? primaryFbxGuid :
-                localModels.Length == 1 ? localModels[0] : null;
+            primaryFbxGuid = SelectLocalSkeletonModel(package, scene, primaryFbxGuid);
             string name = scene.ResolveGameObjectName(fileId);
             if (name == null) return null;
             long parentId = document.Root["m_Father"]?.FileID ?? 0;
@@ -3068,14 +3063,11 @@ public static class VrchatAvatarParser
             if (entry == null) continue;
             var included = IncludedPrefabObjects(package, entry.Guid, entry.Scene, avatar, modelResolvers, prefabScenes);
             if (entry.Guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
-            var localModels = entry.Scene.MeshRenderers.Select(r => entry.Scene.RendererMesh(r)?.Guid)
-                .Where(g => package.ByGuid(g)?.Extension == ".fbx").Distinct().ToArray();
             // A local accessory model must not make the primary skeleton become an
             // authored duplicate: humanoid setup still controls the imported body bones.
             // CaptureLocalPlacementParents verifies bone membership and the full path,
             // and explicit source ancestors retain their own model identity.
-            string skeletonModel = localModels.Length == 0 || localModels.Contains(avatar.FbxGuid) ? avatar.FbxGuid :
-                localModels.Length == 1 ? localModels[0] : null;
+            string skeletonModel = SelectLocalSkeletonModel(package, entry.Scene, avatar.FbxGuid);
             var subtree = entry.Scene.SubtreeGameObjectIds(
                 entry.Scene.Doc(target.TransformFileId)?.Root?["m_GameObject"]?.FileID ?? 0);
             if (includeSkeletonAncestors)
@@ -3133,6 +3125,28 @@ public static class VrchatAvatarParser
         }
     }
 
+    private static string SelectLocalSkeletonModel(UnityPackage package, UnityScene scene, string primaryGuid,
+        bool requireUnique = false)
+    {
+        // Baked Mesh assets no longer reference their source FBX. The root Animator's
+        // Avatar still identifies that skeleton, even when accessory FBXs
+        // are the only models referenced directly by the prefab's renderers.
+        var animatorModels = scene.RootGameObjects().SelectMany(scene.ComponentsOf)
+            .Where(component => component.ClassId == 95)
+            .Select(component => component.Root?["m_Avatar"]?.Guid)
+            .Where(g => package.ByGuid(g)?.Extension == ".fbx").ToArray();
+        var models = scene.MeshRenderers.Select(r => scene.RendererMesh(r)?.Guid)
+            .Where(g => package.ByGuid(g)?.Extension == ".fbx")
+            .Concat(animatorModels)
+            .Distinct().ToArray();
+        // A physics/eye reference by itself does not prove which of several skins
+        // owns it. Only an explicit Animator permits retaining the preferred model.
+        if (requireUnique && !animatorModels.Contains(primaryGuid))
+            return models.Length == 1 ? models[0] : null;
+        return models.Length == 0 || models.Contains(primaryGuid) ? primaryGuid :
+            models.Length == 1 ? models[0] : null;
+    }
+
     private static VrchatBoneTarget ResolvePhysicsTarget(UnityPackage package, string guid, long id, string primaryGuid)
     {
         if (package == null || guid == null || id == 0) return null;
@@ -3148,9 +3162,7 @@ public static class VrchatAvatarParser
         {
             var scene = package.ReadScene(asset);
             if (scene.Doc(id)?.ClassId == 1) id = scene.TransformOfGameObject(id)?.FileId ?? 0;
-            var models = scene.MeshRenderers.Select(r => scene.RendererMesh(r)?.Guid)
-                .Where(g => package.ByGuid(g)?.Extension == ".fbx").Distinct().ToArray();
-            primaryGuid = models.Length == 1 ? models[0] : null;
+            primaryGuid = SelectLocalSkeletonModel(package, scene, primaryGuid, requireUnique: true);
         }
         var target = ResolveCopiedBoneTarget(package, guid, id, primaryGuid, new(), new());
         if (target?.Name != null) return target;

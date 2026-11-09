@@ -97,6 +97,29 @@ public sealed class UnityModelFileIdResolver
     /// <summary>Owner path for a renderer or MeshFilter component; never a whole subtree.</summary>
     public string ResolveRendererComponentPath(long fileId)
         => _rendererComponentIds.Contains(fileId) ? ResolveNodePath(fileId) : null;
+
+    /// <summary>Recovers a folded model's animation root from an actual root/renderer reference pair.</summary>
+    internal string ResolveAnimationRootPath(long rootFileId, long rendererFileId, string animationPath)
+    {
+        if (animationPath == null || (animationPath.Length > 0 &&
+            animationPath.Split('/').Any(p => p.Length == 0 || p is "." or ".."))) return null;
+        string rendererPath = ResolveRendererComponentPath(rendererFileId);
+        if (rendererPath == null) return null;
+        foreach (string unityRoot in new[] { "//RootNode", "//RootNode/root" })
+        {
+            if (rootFileId != Compute("GameObject", unityRoot, 0) &&
+                rootFileId != Compute("Transform", unityRoot + "/Transform", 0)) continue;
+            string relative = animationPath.Length == 0 ? "" : "/" + animationPath;
+            // Matching a real component ID proves the complete Unity path. A matching leaf
+            // name alone must never authorize bypassing an authored parent or sibling.
+            if (rendererFileId != Compute("SkinnedMeshRenderer", unityRoot + relative + "/SkinnedMeshRenderer", 0)) continue;
+            if (relative.Length == 0) return rendererPath;
+            if (!rendererPath.EndsWith(relative, StringComparison.Ordinal)) return null;
+            string root = rendererPath[..^relative.Length];
+            return _subtreeNodes.ContainsKey(root) ? root : null;
+        }
+        return null;
+    }
     private string UniquePath(string name)
         => name != null && _pathsByName.TryGetValue(name, out var paths) && paths.Count == 1 ? paths.Single() : null;
     private static string NodeName(string path) => path[(path.LastIndexOf('/') + 1)..];

@@ -1,5 +1,23 @@
 # VRChat表情の検出と割り当て
 
+シーンの `VRCAvatarDescriptor` が `stripped` の場合、スクリプト参照だけが保存され、
+顔メッシュ・Viseme・FXなどの設定は参照先Prefabにある。選択した配置の
+`UnityPrefabGraph.Identity` から上書き反映済みDescriptorを解決し、その所属シーンで
+ローカル参照を読む。アバタールートも解決先Descriptorの所有GameObjectから取得する。
+Yuzuki 2.1.1はこの形式で、省略データを直接読むと顔メッシュが `Body` のフォールバックに
+なり、MA由来の表情クリップを検出しても顔との照合で全件除外される。
+
+アイザラ1.1.1の `AGS_01` では、Unityが省略するモデルルートをFBXインポータが保持する。
+顔は `RootNode/AGS/mesh_Face`、アニメーションのbindingは `mesh_Face` で、
+旧処理は基点を `RootNode` として全候補を除外していた。Humanoidの推定成否とは別問題。
+現在はDescriptorルートと顔Rendererが同じFBXを参照する場合に、Unityのgeneration 2形式の
+ルートfileIDと、bindingの全パスから計算したSkinnedMeshRendererのfileIDを実参照と照合する。
+一意な参照が一致した場合だけ、FBX内の実パスからアニメーションの基点を求める。
+アイザラでは `//RootNode/root/mesh_Face/SkinnedMeshRenderer` の参照から `RootNode/AGS` を得る。
+この基点を欠落シェイプの修復と表情bindingの照合で共有し、Descriptorの配置やリグは移動しない。
+同名・曖昧な参照、異なるモデル、名前だけの一致からは補正しない。対応しないID形式では既存処理を使う。
+`mesh_FaceEmo_ADD` の汗などは追加顔メッシュであり、下記の単一顔メッシュ制限も別途適用される。
+
 VRChatの表情読み込みは `VrchatFaceEmoExpressionImporter` に一本化している。
 `VrchatExpressionParser` は顔カーブとFX入力を読み、候補検出を統一Importerへ渡す。
 Expression Menu、Expression Parameters、MA Parametersから表情セットを選ぶ処理もない。
@@ -94,12 +112,20 @@ FaceEmo候補の保持と既存の直接割り当てへのフォールバック�
 
 ## CAC形式の最初の表情セット
 
-FaceEmoの `GetCacLayer` と同じく、子StateMachineのEntry条件が `SYNC_EM_EMOTE` を参照する
+FaceEmoの `GetCacLayer` を基準に、子StateMachineのEntry条件が `SYNC_EM_EMOTE` を参照する
 最初のレイヤーを見つけたら通常形式の収集を置き換える。
-単一条件・直接State・未muteの遷移を番号順に並べ、`(番号 - 1) / 14` ごとにセットを作る。
+ResoPonではレイヤー直下のEntryに番号分岐を置くCACも対象にする。
+条件は `SYNC_EM_EMOTE` のEquals単独、またはそれと `AFK` のIfNotの組だけを許可する。
+条件の並び順には依存せず、他のトグル、AFK中だけの表情、余分な条件を無視して採用しない。
+直接State・未muteの遷移を番号順に並べ、`(番号 - 1) / 14` ごとにセットを作る。
 入力の健全性確認としてEqualsと正の整数番号を要求する。顔Motionを含む最初のセットだけを使い、
 1〜7を右手、8〜14を左手のFist〜ThumbsUpへ割り当てる。右手が優先で、欠番は後続セットで補わない。
 CACではFaceEmo同様、顔Motionがあるが初期値との差分がない分岐も初期姿勢として有効にする。
+
+Lina v2.00はルートEntryで番号と `!AFK` を組み合わせる形式。子StateMachineの単一条件だけを
+対象にすると通常形式に誤分類され、顔クリップは残ってもGestureTableが空になる。
+この拡張はAFKではないときの固定表情セットを取り出すためのもので、汎用Animator解析へ
+非ハンドパラメーターの既定値を渡す変更ではない。AFK動作・表情ロック・接触ギミックは再現しない。
 
 両形式とも、後続セットと無関係なFX・メニュー由来のクリップはClipsに混ぜない。
 採用したセット・ジェスチャー分岐数・手動候補数は `FaceEmo normal:` / `FaceEmo CAC:` に残す。

@@ -126,7 +126,7 @@ internal sealed partial class ExpressionSystemSetup
             }
         }
         BuildGesturePermissionMenu(menu);
-        var reset = menu.AddSlot("Reset settings"); MenuItem(reset, reset.Name);
+        var reset = menu.AddSlot("Reset State"); MenuItem(reset, reset.Name);
         var resetButton = reset.AttachComponent<ButtonDynamicImpulseTrigger>();
         resetButton.Target.Target = _api;
         resetButton.ExcludeDisabled.Value = true;

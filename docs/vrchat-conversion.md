@@ -140,9 +140,10 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   including when nested humanoid clothing is discovered before the unpacked body.
   Select the primary model from visible identities after collecting EditorOnly exclusions.
   Local copied skin bones infer their model within the owning prefab occurrence:
-  prefer the primary model if referenced locally, otherwise the sole local model.
-  With no local mesh source, retain the caller's skeleton context; explicit source
-  ancestors still take precedence. Repeated unpacked skins keep separate skeletons.
+  prefer the primary model if referenced by a local mesh or the root Animator's
+  `m_Avatar`, otherwise the sole local model. With neither source, retain the caller's
+  skeleton context; explicit source ancestors still take precedence.
+  Repeated unpacked skins keep separate skeletons.
   同じモデルがPrefabInstanceとしても配置されている場合は、そのrendererを残す。
   コピーの親がローカル skeleton の骨で、FBX の skin bone と完全な path が一致するときは、
   prefab Transform identity と imported bone target を保持して既存の骨 Slot を使う。
@@ -244,7 +245,47 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。
 - `humanDescription.human` がない場合は、必須human boneが揃うskeletonからhumanoidを推定する。
-  少数の名前一致だけでは推定しない。
+  モデル選択と実際の割り当ては同じ `HumanoidSkeletonMapper` を使い、必須15部位が
+  揃わない推定は採用しない。明示的な対応表は部分的でも優先し、自動補完で変更しない。
+  左右の識別は `.L` / `.R` / `_L` / `_R` 接尾辞に加え、`L_` / `R_` と
+  `Left` / `Right` 接頭辞に対応する。namespace、Bip接頭辞、番号付き指などを正規化し、
+  名前の手掛かりを親子関係とrest poseの位置で検証する。髪・胸などの枝は除外し、
+  twistなどの補助骨は階層を辿る際に通過できるが、人体ボーンには割り当てない。
+  アイザラ 1.1.1 は `human: []` で、四肢・指が `L_UpperArm` / `R_Index_Proximal`、
+  目が `LeftEye` / `RightEye` という混在形式。接尾辞だけの推定では体幹6本しか得られず、
+  メッシュ読込後にアバターセットアップが省略される。旧接頭辞対応は54本、階層推定は
+  `J_Jaw` を含む55本を解決する。
+  ただし `.meta` の `human: []` は、Unityインポート後の `Avatar` にも対応表がないことを
+  意味しない。アイザラのPrefabはFBXからAnimatorを継承し、その `m_Avatar` はFBX内の
+  `AGS_01Avatar`（fileID `9000000`）を参照する。Unity 2022.3.22f1の生成済みデータでは
+  このAvatarの `m_HumanDescription.m_Human` に55本の対応がある。ただしUnity側は
+  `Jaw` が `J_F_D_Hair_2` に割り当てられており、本変換器の `J_Jaw` とは異なる。
+  同じ本数でもUnityと同一の結果とは扱わない。
+  現在の変換器はAnimatorのAvatar参照をモデル選択に使うが、生成済みAvatarの対応表は読まない。
+  調査ではUnityの `Library/Artifacts` にある生成済みFBXを付属の `binary2text` で読み、
+  Animatorの参照先fileIDとAvatarの対応表を照合できる。これはUnityプロジェクト側の
+  インポート結果であり、元の `.unitypackage` 内の `.meta` と区別する。
+  UnityなしでAvatar参照から対応表を取得できる割合を調べる場合は、参照の有無だけを数えない。
+  元データ内のAvatarオブジェクト（Unity classID `90`）とその対応表の実体を確認する。
+  全収録アセットにAvatar実体がなければ、選択Prefabや継承経路によらず取得不可と判定できる。
+  FBX内の生成サブアセットへの参照は、FBX `.meta` の明示対応表と区別して集計する。
+  バイナリ形式の未解析アセットは取得不可と断定せず未判定にし、Prefab入力の
+  `Library/Artifacts` は「Unity生成物を使用しない」集計から除外する。
+- Unityの公開実装を調べる際は、2022.3の
+  [AvatarSetupTool](https://github.com/Unity-Technologies/UnityCsReference/blob/2022.3/Editor/Mono/Inspector/Avatar/AvatarSetupTool.cs) と
+  [AvatarAutoMapper](https://github.com/Unity-Technologies/UnityCsReference/blob/2022.3/Editor/Mono/Inspector/Avatar/AvatarAutoMapper.cs) を参照する。
+  インポート時はbind poseとスキン対象の骨を取得し、Biped専用または一般の自動割り当てへ進む。
+  一般の割り当ては階層・名前・左右・方向・長さを評価し、体と手指を分けて処理する。
+  Unityの参照用ソースは製品コードへ移植せず、上記の判断材料に基づく独立実装とする。
+- 本変換器のフォールバックは `.meta` の `skeleton` にある `parentName` とlocal TRSから
+  全体座標を再構成する。名前で一意に識別できるHipsとHeadを基準に中心の鎖を取り、
+  腕・脚は祖先関係を満たす3関節の組み合わせを比較する。名前が不足する関節では、
+  体に対する左右・伸びる方向・隣接する長さの比を使う。ルートの回転とスケールも反映する。
+  顔・指は追加の名前と階層の証拠を必要とし、指は同じ手に属する3関節が揃う場合だけ採用する。
+  同名・同点候補、矛盾する左右名、循環、欠落した親、非有限の変換は推測で解消しない。
+  親の位置が欠ける場合は幾何判定を使わず、親名のない旧形式では一意の名前対応に限定する。
+  Unityのbind pose再標本化、スキン重みの候補選別、T-pose補正は再現していない。
+  中心の骨を名前で特定できないモデルや曖昧な姿勢は未対応として扱い、完全互換を保証しない。
 - nested animatorはprimary選択に使わず、選択アバタールート直下のAnimatorだけを権威とする。
 - 参照される追加FBXを再帰収集し、各FBXのmaterial mapを混ぜずに保持する。
 - `PrefabInstance.m_TransformParent` とsource objectを辿り、追加FBXを対応する親boneへ配置する。
@@ -316,9 +357,16 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   未解決GUIDを `.asset` と同一視してscopeを外してはいけない。
   Descriptor face targets for baked standalone meshes use a unique matching renderer
   path in the selected FBX. Missing or ambiguous matches retain strict prefab identity.
-  With no local FBX mesh references, physics placement retains the selected Animator
-  skeleton context, reusing bones only after skeleton membership and full-path checks;
-  helpers absent from that skeleton remain authored objects.
+  Physics / eye targets and placement capture include the prefab root Animator's
+  `m_Avatar` FBX in their local skeleton candidates, even when only accessories
+  reference FBX meshes directly. Reuse bones only after skeleton membership and
+  full-path checks; helpers absent from that skeleton remain authored objects.
+  Without an explicit Animator, ambiguous physics / eye references retain prefab
+  identity rather than guessing one of several models.
+  Omaneko v1.1 は本体が standalone mesh、小物が複数FBXの構成。小物だけから骨格を
+  推定すると目とPhysBone用にPrefab側の骨が重複生成され、頭は高さ約1.52mなのに
+  目は約1.12m、HeadProxyは約1.13mになる。Animatorの参照先を候補に保持すると目が本体の頭の
+  子になり、目は約1.60m、視点は約1.62mに揃う。視点オフセットだけで補正しない。
 - authored FBX meshのコピーはprefab GUIDとGameObject fileIDから実Slotを保持し、同名でも
   materialと初期blendshapeを個別に適用する。識別子を持たない従来のrendererは、空のoverrideも
   含めて出現順に1対1で消費する。
@@ -349,6 +397,57 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - outer variant自身の変更を読むときは、descriptorの親sceneではなく選択候補のsourceを再読込する。
 
 ## ブレンドシェイプ
+
+### 同位置の頂点で異なる変形を保持する
+
+Resoniteの `ModelImporter` はAssimpの `JoinIdenticalVertices` を常に有効にする。
+この統合では通常時の頂点属性が比較され、blendshapeの変形先は比較されない。
+そのため、通常時は同位置でも表情で別々に動くcontrol pointが統合されると、
+別の頂点の変形を参照してポリゴンが引き伸ばされる。
+
+`UnityFbxMorphSeams` は、主FBX・追加FBXをインポートする前にバイナリFBXの
+`Shape → BlendShapeChannel → BlendShape → Geometry` 接続と疎な頂点差分を調べる。
+同位置のcontrol point間で位置または法線の差分が異なるgeometryだけに、
+control point IDを持つ一時的な頂点カラー層を追加し、誤った統合を防ぐ。
+既存のカラー層は保持し、空きチャンネルを使う。元FBXは変更せず、作業ディレクトリ内の
+コピーだけを書き換える。元のproperty bytesを保持してnode offsetを再計算するため、
+圧縮配列やモデル・ボーン・マテリアル等の定義は変更しない。
+
+この一時カラーは統合の識別用であり、VRChat経路では主・追加FBXの両方で
+`ImportVertexColors = false` を維持する。ASCII FBXはこの前処理の対象外。
+`PrefabInputSmoke` は7400/7500形式、圧縮配列、既存カラー層の有無を使い、
+通常の頂点統合での破損再現と、対策後の全ポリゴン頂点の変形一致を検証する。
+
+回帰事例: Shipilka 1.02のL5R0 (`RockNRoll`) で有効になる「汗」。
+対策前は210個のポリゴン頂点で最大約0.171mの変形誤差が発生した。
+GestureTableのweightではなく、FBXインポート時のメッシュ統合に原因がある。
+形状の検証では変換完了ログだけでなく、元FBXの未統合ポリゴン頂点との比較と、
+保存パッケージを再読込した後のblendshape差分の比較を行う。
+
+### 変形後の法線
+
+FBXの `ModelImporter.tangentSpace.blendShapeNormalImportMode: 1` はUnityの
+Calculate指定。Assimpから取得したshapeの頂点位置が正しくても、折り畳まれた補助面の
+通常時の法線がゼロや不適切な向きなら、展開後に黒い面として見える。
+Shipilka 1.02のL0R5 (`Cry` motion、出力クリップ名 `RockNRoll`) は、
+「照れ」で展開する `Facial` の補助面がこのケースに該当する。
+
+`VrchatBlendShapeNormals` はshape復元後、UnityのCalculate指定があるFBXに対して
+変形後の三角形から法線差分を再生成する。面積・角度の重みは `normalCalculationMode`
+に従う。移動した頂点に接する面とその頂点を対象にし、通常時の位置・法線・
+全shapeの位置差分は保持する。同じ通常時位置・通常時法線・変形先を持つ頂点間では
+UV境界を平滑化する。Unityの全smoothing group処理を再現するものではない。
+
+無関係な面まで再計算すると、複数shapeを同時適用したときに通常時の法線補正が
+重複して加算されるため、非影響部分と空shapeの法線は保持する。
+Import / None / 指定なしにはこの再計算を適用しない。共有mesh/providerは直接変更せず、
+補正済みproviderを生成して同じ設定のrendererだけに割り当てる。
+検証では保存後の表情を合成し、展開した面にゼロ法線や逆向きの法線がないことも確認する。
+
+参考: [Unity ModelImporterNormals](https://docs.unity.com/en-us/engine/7000.0/script-reference/unityeditor/modelimporternormals)、
+[normalCalculationMode](https://docs.unity3d.com/jp/current/ScriptReference/ModelImporter-normalCalculationMode.html)。
+
+### 名前・初期値・表情への接続
 
 Resoniteは空または微小なshapeを除去するため、Unityのindex参照がずれる場合がある。
 
@@ -485,6 +584,29 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
 - emission fallbackは `_EmissionMap`、`_EmissionBlendMask`、main texture、白の順に選ぶ。
 - outline shader variantとoutline property overrideを認識し、`_OutlineWidth` をXiexeToonへ割り当てる。
 - lilToon Rimは表現差が大きいため変換せず、`RimIntensity=0` とする。
+
+### 幅0の輪郭線と目の裏面
+
+lilToonの `_OutlineDeleteMesh=1` は、マスク適用後の幅がほぼ0の頂点を含む輪郭線の面を
+描画しない。XiexeToonは幅0でも反転した面を描画するため、目の裏面などが暗い面として
+表に出ることがある。幅を0にするだけでは防げない。
+
+`VrchatOutlineExclusions` は明示されたこの設定をmaterial variantから継承し、
+main UVのscale/offsetと、lilToonのlinear-repeat・LOD 0サンプリングで判定する。
+メッシュのUVは左下原点なので、上から並ぶデコード画像の行を読む際にVを反転する。
+`abs(_OutlineWidth * 0.01 * mask.r) < 0.000001` となる頂点を含む三角形を、
+同じ表面設定で輪郭線だけを無効にした材質のsubmeshへ移す。面自体は削除しない。
+元の頂点、UV、法線、skin、blendshape、既存material indexは保持し、共有mesh/providerや
+元材質を変更しない。全三角形が対象なら材質だけを差し替える。
+FirstPersonメッシュ生成前に実行し、追加submeshもFirstPersonの材質設定へ引き継ぐ。
+
+設定なし・明示0は対象外。VRChat経路では頂点カラーを取り込まないため、
+`_OutlineVertexR2Width` が非0の場合は警告してこの補正を省略する。
+材質数とsubmesh数が異なるrendererも、追加submeshへの誤割り当てを避けて省略する。
+
+回帰事例: NoraMiaree 1.0.0の `EyesBackSideSurface_off` が動かす目の裏側の66三角形は
+すべてマスク0だった。修正前の保存パッケージでは輪郭線付き材質で描画されていた。
+検証では保存後の材質割り当てだけでなく、全頂点と表情差分、面の集合が維持されることも確認する。
 
 ## 代表的な回帰ケース
 

@@ -495,7 +495,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         // Saved/manual state may still contain a pose while the avatar is unworn.
         Set(core, "State.CurrentExpression", catalog.FindChild("Angry"));
         Set(table, "L0R0", catalog.FindChild("Angry"));
-        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Reset settings")
+        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Reset State")
             .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
         await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);

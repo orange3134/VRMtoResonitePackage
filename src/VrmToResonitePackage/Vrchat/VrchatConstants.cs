@@ -126,6 +126,26 @@ internal static class VrchatConstants
             side = "right";
             name = name[..^2];
         }
+        else if (name.StartsWith("L_", StringComparison.OrdinalIgnoreCase))
+        {
+            side = "left";
+            name = name[2..];
+        }
+        else if (name.StartsWith("R_", StringComparison.OrdinalIgnoreCase))
+        {
+            side = "right";
+            name = name[2..];
+        }
+        else if (name.StartsWith("Left", StringComparison.OrdinalIgnoreCase))
+        {
+            side = "left";
+            name = name[4..];
+        }
+        else if (name.StartsWith("Right", StringComparison.OrdinalIgnoreCase))
+        {
+            side = "right";
+            name = name[5..];
+        }
 
         name = name.Replace(" ", "", StringComparison.Ordinal)
             .Replace("_", "", StringComparison.Ordinal)
