@@ -66,10 +66,10 @@ internal sealed partial class ExpressionSystemSetup
         AvatarSetup.EnsureAvatarRootIdentification(avatar);
         var setup = new ExpressionSystemSetup(avatar, model);
         setup.BuildClips(resolve, initialWeight);
-        for (int left = 0; left < 8; left++)
-        for (int right = 0; right < 8; right++)
+        for (int left = 0; left < setup._compiled.GestureCount; left++)
+        for (int right = 0; right < setup._compiled.GestureCount; right++)
         {
-            string id = setup._compiled.Pairs[left * 8 + right];
+            string id = setup._compiled.Pairs[left * setup._compiled.GestureCount + right];
             string key = $"L{left}R{right}";
             var row = setup._table.AddSlot(key).AttachComponent<DynamicReferenceVariable<Slot>>();
             row.VariableName.Value = Path(SystemSpace, "GestureTable." + key);
@@ -86,7 +86,7 @@ internal sealed partial class ExpressionSystemSetup
         setup.ArrangeSlots();
         setup.LogDiagnostics();
         int assigned = setup._compiled.Pairs.Count(id => id != null && setup._clips.ContainsKey(id));
-        Console.WriteLine($"Expression system: {setup._clips.Count} clips, {setup._outputSlots.Count} outputs, {assigned}/64 gesture pairs assigned, " +
+        Console.WriteLine($"Expression system: {setup._clips.Count} clips, {setup._outputSlots.Count} outputs, {assigned}/{setup._compiled.Pairs.Length} gesture pairs assigned, " +
             $"{setup._root.GetComponentsInChildren<ProtoFluxNode>().Count} Flux nodes");
         return Task.FromResult(setup._root);
     }

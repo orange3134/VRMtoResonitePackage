@@ -31,6 +31,11 @@ internal static class ExpressionMenuGroupChecks
         for (int i = 0; i < 8; i++) pairs[i * 8] = pairs[i] = "same" + i;
         var identical = ExpressionMenuGroups.Build(Enumerable.Range(0, 8).Select(i => "same" + i), pairs);
         Check(identical.Count == 1 && identical[0].Length == 8, "identical left/right selections share one group");
+        var expanded = new string[81];
+        expanded[8 * 9] = "left8"; expanded[8] = "right8"; expanded[80] = "both8";
+        var extended = ExpressionMenuGroups.Build(new[] { "both8", "right8", "left8" }, expanded, 9);
+        Check(extended.Select(g => string.Join(",", g)).SequenceEqual(new[] { "left8", "right8", "both8" }),
+            "expanded tables classify the last row/column using their own width");
     }
 
     public static ButtonDynamicImpulseTriggerWithReference<Slot>[] CheckMenu(Slot root)
@@ -49,8 +54,9 @@ internal static class ExpressionMenuGroupChecks
             .GetComponentsInChildren<DynamicReferenceVariable<Slot>>();
         Slot Pair(int left, int right) => table.Single(v =>
             v.VariableName.Value == $"ExpressionSystem/GestureTable.L{left}R{right}").Reference.Target;
-        var leftOnly = Enumerable.Range(0, 8).Select(i => Pair(i, 0)).ToHashSet();
-        var rightOnly = Enumerable.Range(0, 8).Select(i => Pair(0, i)).ToHashSet();
+        int gestureCount = (int)Math.Sqrt(table.Count);
+        var leftOnly = Enumerable.Range(0, gestureCount).Select(i => Pair(i, 0)).ToHashSet();
+        var rightOnly = Enumerable.Range(0, gestureCount).Select(i => Pair(0, i)).ToHashSet();
         var mapped = table.Select(v => v.Reference.Target).ToHashSet();
         var targets = new HashSet<Slot>();
         var buttons = new List<ButtonDynamicImpulseTriggerWithReference<Slot>>();

@@ -116,6 +116,9 @@ public sealed class VrmFirstPersonMeshAnnotation
 
 public sealed class VrmExpression
 {
+    /// <summary>Custom names must not acquire the gesture mapping of a namesake preset.</summary>
+    public bool IsCustom { get; set; }
+
     /// <summary>Normalized preset name (VRM1 style): aa, ih, ou, ee, oh, blink, blinkLeft, blinkRight,
     /// happy, angry, sad, relaxed, surprised, neutral, lookUp, lookDown, lookLeft, lookRight — or custom name.</summary>
     public string Preset { get; set; }

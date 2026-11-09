@@ -3,7 +3,8 @@ namespace VrmToResonitePackage.Expressions;
 /// <summary>Reduces Animator selection to data before exporting. No Animator runs in the avatar.</summary>
 internal sealed class GesturePairCompiler
 {
-    public string[] Pairs { get; } = new string[64];
+    public int GestureCount { get; }
+    public string[] Pairs { get; }
     public Dictionary<ExpressionMenuControl, string> Menu { get; } = new();
     public List<ExpressionClip> Generated { get; } = new();
     private readonly ExpressionModel _model;
@@ -14,6 +15,18 @@ internal sealed class GesturePairCompiler
     public GesturePairCompiler(ExpressionModel model, IEnumerable<ExpressionClip> available, Func<ExpressionBinding, float> baseline)
     {
         _model = model; _clips = available.ToDictionary(c => c.Id); _baseline = baseline;
+        GestureCount = model.GestureTable?.GetLength(0) ?? 8;
+        Pairs = new string[GestureCount * GestureCount];
+        if (model.GestureTable is { } table)
+        {
+            if (GestureCount == 0 || table.GetLength(1) != GestureCount)
+                throw new ArgumentException("Gesture table must be a nonempty square.", nameof(model));
+            for (int left = 0; left < GestureCount; left++)
+            for (int right = 0; right < GestureCount; right++)
+                if (table[left, right] is { } id && _clips.ContainsKey(id))
+                    Pairs[left * GestureCount + right] = id;
+            return;
+        }
         string[] gestures = { "GestureLeft", "GestureRight" };
         // Hand selectors use authored defaults for every declared additional condition.
         // Standalone accessory/menu layers are not turned into gesture layers.

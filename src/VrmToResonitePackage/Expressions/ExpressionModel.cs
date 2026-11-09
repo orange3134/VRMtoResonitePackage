@@ -12,6 +12,9 @@ public sealed class ExpressionModel
     // from complete face curves needed to compile fixed poses and their baseline resets.
     public List<ExpressionClip> DetectedExpressions { get; set; }
     public List<ExpressionLayer> Layers { get; } = new();
+    // Optional fixed-pose mapping for sources without an Animator (VRM).
+    // Indexed by [left, right]; null cells release to the authored baseline.
+    internal string[,] GestureTable { get; set; }
     // Deferred until the selected face renderer and its authored weights are resolved.
     internal Vrchat.FaceEmoPatterns ImportedPatterns { get; set; }
     public List<ExpressionMenuControl> Menu { get; } = new();

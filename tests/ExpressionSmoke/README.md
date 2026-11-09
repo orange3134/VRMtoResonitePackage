@@ -17,6 +17,9 @@ Use the same installation for both.
 
 - FaceEmo normal/CAC detection, first-pattern selection, gesture graph resolution,
   mixed clips, curve validation, and all 64 compiled gesture combinations.
+- VRM0/1 parser-to-adapter fixtures: preset aliases and weights, all 81 default
+  mappings, missing/unresolved presets, custom namesakes, neutral release, real
+  mesh outputs, blink mixing, grouped menus and saved-package reload.
 - Public API tags and argument types, unrestricted integer inputs and extra table
   rows, invalid/foreign selection Slots, null release, and same-Slot no-op behavior.
 - Menu selection hold, permission settings, reset and wear lifecycle, numbered
@@ -48,7 +51,8 @@ with the current expression layout and a generated context menu:
 dotnet run --project tests/ExpressionSmoke -c Release -- .tmp_verify/imported-gestures path/to/avatar.resonitepackage
 ```
 
-The check sends both hand APIs for all 64 table cells, including null/release cells,
+The check sends both hand APIs for every table cell (64 for VRChat, 81 for VRM),
+including null/release cells,
 then compares actual outputs against fixed pose values and Base after smoothing
 settles. External tracking sources are frozen for this comparison; separate blink
 fixtures exercise live tracking. It also presses the saved grouped menu buttons and
@@ -56,7 +60,8 @@ checks selection hold and permission behavior.
 
 At least eight distinct visible poses are required by default. For an avatar with
 fewer poses, set `RESOPON_TEST_EXPECTED_DISTINCT_POSES` to an independently verified
-count from 2 through 64; the test then requires exactly that count. Do not change
+count from 2 through the number of table cells; the test then requires exactly that
+count. Do not change
 the expected count merely to accept unexpected output.
 
 An optional third argument compares a previous package's semantic snapshot:
@@ -65,7 +70,7 @@ An optional third argument compares a previous package's semantic snapshot:
 dotnet run --project tests/ExpressionSmoke -c Release -- .tmp_verify/imported-gestures path/to/new.resonitepackage path/to/baseline.resonitepackage
 ```
 
-Comparison covers catalog entries, final pose values, output bindings and all 64
+Comparison covers catalog entries, final pose values, output bindings and all
 mappings. Snapshot readers support legacy layouts, but intentional semantic changes
 can still fail comparison. Inspect `current-expressions/expressions.json` and
 `baseline-expressions/expressions.json`; legacy compatibility does not imply that

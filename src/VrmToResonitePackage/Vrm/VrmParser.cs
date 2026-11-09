@@ -341,6 +341,7 @@ public static class VrmParser
                 {
                     Name = GetString(group, "name"),
                     Preset = NormalizeVrm0Preset(GetString(group, "presetName"), GetString(group, "name")),
+                    IsCustom = GetString(group, "presetName") is null or "" or "unknown",
                     IsBinary = group.TryGetProperty("isBinary", out JsonElement binary) && binary.GetBoolean(),
                 };
                 if (group.TryGetProperty("binds", out JsonElement binds))
@@ -706,7 +707,7 @@ public static class VrmParser
             {
                 foreach (JsonProperty entry in custom.EnumerateObject())
                 {
-                    ParseVrm1Expression(entry.Name, entry.Name, entry.Value, model);
+                    ParseVrm1Expression(entry.Name, entry.Name, entry.Value, model, isCustom: true);
                 }
             }
         }
@@ -717,11 +718,12 @@ public static class VrmParser
         }
     }
 
-    private static void ParseVrm1Expression(string preset, string name, JsonElement expression, VrmModel model)
+    private static void ParseVrm1Expression(string preset, string name, JsonElement expression, VrmModel model, bool isCustom = false)
     {
         var result = new VrmExpression
         {
             Preset = preset,
+            IsCustom = isCustom,
             Name = name,
             IsBinary = expression.TryGetProperty("isBinary", out JsonElement binary) && binary.GetBoolean(),
         };

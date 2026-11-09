@@ -31,10 +31,11 @@ internal static class ExpressionPackageSnapshot
         var table = tableSlot.ExpressionVariables<DynamicReferenceVariable<Slot>>()
             .Where(v => v.VariableName.Value.StartsWith(pairPrefix, StringComparison.Ordinal))
             .ToDictionary(v => NormalizePairKey(v.VariableName.Value[pairPrefix.Length..]), v => v.Reference.Target);
-        var keys = (from left in Enumerable.Range(0, 8) from right in Enumerable.Range(0, 8)
+        int gestureCount = (int)Math.Sqrt(table.Count);
+        var keys = (from left in Enumerable.Range(0, gestureCount) from right in Enumerable.Range(0, gestureCount)
                     select $"L{left}R{right}").ToArray();
-        if (table.Count != 64 || keys.Any(key => !table.ContainsKey(key)))
-            throw new InvalidOperationException("Baseline comparison needs exactly 64 gesture table rows");
+        if (gestureCount < 8 || table.Count != gestureCount * gestureCount || keys.Any(key => !table.ContainsKey(key)))
+            throw new InvalidOperationException("Baseline comparison needs a complete square gesture table");
         string json = JsonSerializer.Serialize(new
         {
             Outputs = new SortedDictionary<string, object>(outputs.ToDictionary(p => p.Key, p => (object)p.Value), StringComparer.Ordinal),

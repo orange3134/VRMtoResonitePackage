@@ -56,7 +56,21 @@ Resoniteのモデルインポータは `JoinIdenticalVertices` を適用する�
   `--no-protection` で無効にする。
 
 感情表情は `VrmExpressionAdapter` から共通の[表情システム](expression-system.md)へ渡す。
-ジェスチャー条件を持たないため、対応表は未割当から始まり、メニューで直接選択できる。
+左右各0〜8の対応表に標準プリセットを固定番号で割り当て、ハンドジェスチャー・キーボード・
+メニュー・外部APIから選択できる。番号と両手の優先順位は
+[VRMの標準割り当て](expression-system.md#vrmの標準割り当て)を参照。
+`ExpressionModel.GestureTable` はAnimatorを介さない固定Clip IDの表で、
+`GesturePairCompiler` は解決済みClipだけを採用し、表の幅をシーン生成とメニュー分類へ渡す。
+VRM 0.xの別名はパーサーでVRM 1.0名へ正規化する。`VrmExpression.IsCustom` を保持し、
+標準プリセットと同名のカスタム表情が欠落プリセットの代わりに割り当たらないようにする。
+
+標準番号の根拠はXWear Packager 0.3.4の
+`IO/Runtime/Extension/ForVrc/VrcAssetTemplate/Resources/VrcAssetTemplate.asset` と
+`VRC_FaceLayer_Template.asset`。前者は各感情をPoint・Peace・RockNRoll・Gun・Thumbs upへ対応させ、
+後者は左右とも3〜7に遷移する。0〜2はEmptyクリップのIdleで、Left Handの後にRight Handを
+weight=1のOverrideで適用する。生成済みFXの感情クリップは他の顔シェイプのリセット値も持つ。
+ResoPonでは同じ優先順位を固定Clip参照として表し、空の右手は左手へフォールバックする。
+8と欠落プリセットには空モーション相当の挙動を採用し、Animatorの履歴依存の状態保持は持ち込まない。
 
 ## VRM FirstPerson
 

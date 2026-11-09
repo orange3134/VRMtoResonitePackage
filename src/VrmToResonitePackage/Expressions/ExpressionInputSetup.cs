@@ -110,7 +110,7 @@ internal sealed partial class ExpressionSystemSetup
         heldSelection.ReferenceValue.Value = true;
         heldSelection.Color.Value = SelectedMenuColor;
         selectionColor.Color.Target = selection.GetComponent<ContextMenuItemSource>().Color;
-        var groups = ExpressionMenuGroups.Build(_clips.Keys, _compiled.Pairs);
+        var groups = ExpressionMenuGroups.Build(_clips.Keys, _compiled.Pairs, _compiled.GestureCount);
         for (int index = 0; index < groups.Count; index++)
         {
             var children = AddSubmenu(selection, "Group " + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
