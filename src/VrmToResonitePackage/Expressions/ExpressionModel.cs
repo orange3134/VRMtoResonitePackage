@@ -57,6 +57,8 @@ public sealed class ExpressionClip
     public string Id { get; init; }
     public string Name { get; init; }
     public string Source { get; init; }
+    // Optional importer metadata; only VRM standard presets currently supply icons.
+    internal string MenuIconUrl { get; init; }
     public float Duration { get; set; }
     public bool Loop { get; init; }
     public List<ExpressionCurve> Curves { get; } = new();

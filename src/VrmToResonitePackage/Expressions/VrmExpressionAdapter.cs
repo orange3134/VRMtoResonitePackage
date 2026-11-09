@@ -16,7 +16,8 @@ internal static class VrmExpressionAdapter
             if (expression.Preset is "aa" or "ih" or "ou" or "ee" or "oh" or "blink" or "blinkLeft" or "blinkRight"
                 or "lookUp" or "lookDown" or "lookLeft" or "lookRight") continue;
             var clip = new ExpressionClip { Id = "vrm:" + model.Clips.Count + ":" + expression.Preset,
-                Name = expression.Name ?? expression.Preset ?? "Expression", Duration = 1, Source = "VRM" };
+                Name = expression.Name ?? expression.Preset ?? "Expression", Duration = 1, Source = "VRM",
+                MenuIconUrl = expression.IsCustom ? null : ExpressionMenuSetup.PresetIconUrl(expression.Preset) };
             var weights = new Dictionary<IField<float>, float>();
             foreach (var bind in expression.Binds)
             {

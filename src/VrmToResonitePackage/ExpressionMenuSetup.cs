@@ -47,6 +47,9 @@ internal static class ExpressionMenuSetup
     internal const string ResetIconUrl =
         "resdb:///391de2844bdd33eb12ccdeb7162edb9b5033f01946672cac59dc541440ba7f0d.webp";
 
+    internal static string PresetIconUrl(string preset) =>
+        EmotionPresets.FirstOrDefault(entry => entry.preset == preset).iconUrl;
+
     // メニュー項目の色: 通常=白、使用中=ピンク。いずれも Linear プロファイルで生成
     // （colorX の既定は sRGB なので明示指定）。
     private static readonly colorX NormalColor = new(1f, 1f, 1f, 1f, ColorProfile.Linear);

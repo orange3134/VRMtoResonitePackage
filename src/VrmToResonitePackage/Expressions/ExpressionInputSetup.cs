@@ -96,6 +96,9 @@ internal sealed partial class ExpressionSystemSetup
             MenuItem(expression, expression.Name);
             SelectMenuTrigger(expression, expression);
         }
+        foreach (var clip in _model.Clips)
+            if (clip.MenuIconUrl != null && _clips.TryGetValue(clip.Id, out var expression))
+                ExpressionMenuSetup.SetupIcon(expression, expression.GetComponent<ContextMenuItemSource>(), clip.MenuIconUrl);
         var rootItem = menu.AttachComponent<RootContextMenuItem>();
         rootItem.Item.Target = MenuItem(menu, "Expressions");
         ExpressionMenuSetup.SetupIcon(menu, rootItem.Item.Target, ExpressionMenuSetup.NeutralIconUrl);
@@ -121,6 +124,7 @@ internal sealed partial class ExpressionSystemSetup
                 var expression = _clips[id];
                 var item = children.AddSlot(expression.Name);
                 var source = MenuItem(item, expression.Name);
+                source.Sprite.Target = expression.GetComponent<ContextMenuItemSource>().Sprite.Target;
                 var labelCopy = item.AttachComponent<ValueCopy<string>>();
                 labelCopy.Source.Target = expression.GetComponent<ContextMenuItemSource>().Label;
                 labelCopy.Target.Target = source.Label;
