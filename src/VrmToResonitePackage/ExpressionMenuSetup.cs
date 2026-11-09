@@ -41,10 +41,10 @@ internal static class ExpressionMenuSetup
     };
 
     /// <summary>Also used for the root "Expression" submenu button.</summary>
-    private const string NeutralIconUrl =
+    internal const string NeutralIconUrl =
         "resdb:///5e825a7a76c784575d4a17d87eb406793ad5c0bfb26d3e9d48c6e07d284d0038.webp";
 
-    private const string ResetIconUrl =
+    internal const string ResetIconUrl =
         "resdb:///391de2844bdd33eb12ccdeb7162edb9b5033f01946672cac59dc541440ba7f0d.webp";
 
     // メニュー項目の色: 通常=白、使用中=ピンク。いずれも Linear プロファイルで生成
@@ -208,7 +208,7 @@ internal static class ExpressionMenuSetup
     }
 
     /// <summary>Attaches an icon (StaticTexture2D + SpriteProvider) and points the item's Sprite at it.</summary>
-    private static void SetupIcon(Slot itemSlot, ContextMenuItemSource itemSource, string iconUrl)
+    internal static void SetupIcon(Slot itemSlot, ContextMenuItemSource itemSource, string iconUrl)
     {
         StaticTexture2D texture = itemSlot.AttachComponent<StaticTexture2D>();
         texture.URL.Value = new Uri(iconUrl);

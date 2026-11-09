@@ -98,6 +98,7 @@ internal sealed partial class ExpressionSystemSetup
         }
         var rootItem = menu.AttachComponent<RootContextMenuItem>();
         rootItem.Item.Target = MenuItem(menu, "Expressions");
+        ExpressionMenuSetup.SetupIcon(menu, rootItem.Item.Target, ExpressionMenuSetup.NeutralIconUrl);
         rootItem.OnlyForSide.Value = null;
         ConfigureSubmenu(menu, menu);
         // Keep editable clip templates in Clips; expose each once through this entrance.
@@ -126,7 +127,9 @@ internal sealed partial class ExpressionSystemSetup
             }
         }
         BuildGesturePermissionMenu(menu);
-        var reset = menu.AddSlot("Reset State"); MenuItem(reset, reset.Name);
+        var reset = menu.AddSlot("Reset State");
+        var resetSource = MenuItem(reset, "Reset");
+        ExpressionMenuSetup.SetupIcon(reset, resetSource, ExpressionMenuSetup.ResetIconUrl);
         var resetButton = reset.AttachComponent<ButtonDynamicImpulseTrigger>();
         resetButton.Target.Target = _api;
         resetButton.ExcludeDisabled.Value = true;
