@@ -3,7 +3,7 @@ using FrooxEngine.ProtoFlux;
 using VrmToResonitePackage.Expressions;
 using static ExpressionTestFields;
 
-// Optional integration check for all 64 gesture cells, including neutral/release cells.
+// Optional integration check for every gesture cell, including neutral/release cells.
 // Input packages and their paths are supplied locally and are never part of the fixture.
 internal static class ImportedGestureAvatarChecks
 {
@@ -50,7 +50,7 @@ internal static class ImportedGestureAvatarChecks
             string previous = ExpressionPackageSnapshot.Capture(baselineRoot, Path.Combine(artifacts, "baseline-expressions"));
             Check(current == previous, "Expression semantics differ from baseline; compare current-expressions/expressions.json and baseline-expressions/expressions.json");
             baseline.Destroy();
-            Console.WriteLine("PASS: baseline catalog, final pose values, output bindings and all 64 gesture mappings are unchanged");
+            Console.WriteLine("PASS: baseline catalog, final pose values, output bindings and all gesture mappings are unchanged");
         }
         await KeyboardShortcutChecks.Run(root);
         var core = root.FindChild("API").FindChild("Internal"); var table = root.FindChild("DV").FindChild("GestureTable");
@@ -59,8 +59,9 @@ internal static class ImportedGestureAvatarChecks
         var receiverRoot = root.FindChild("API");
         SetHandGesturesAllowed(core, true);
         var distinctPoses = new HashSet<string>();
-        for (int l = 0; l < 8; l++)
-            for (int r = 0; r < 8; r++)
+        int gestureCount = (int)Math.Sqrt(table.GetComponentsInChildren<DynamicReferenceVariable<Slot>>().Count);
+        for (int l = 0; l < gestureCount; l++)
+            for (int r = 0; r < gestureCount; r++)
             {
                 // Both gesture events run in the same update and resolve the pair immediately.
                 int previousRight = Get<int>(core, "State.Gesture.Right");
@@ -105,8 +106,8 @@ internal static class ImportedGestureAvatarChecks
         string expectedCount = Environment.GetEnvironmentVariable("RESOPON_TEST_EXPECTED_DISTINCT_POSES");
         if (expectedCount != null)
         {
-            Check(int.TryParse(expectedCount, out int expected) && expected is >= 2 and <= 64,
-                "Expected distinct pose count must be between 2 and 64");
+            Check(int.TryParse(expectedCount, out int expected) && expected >= 2 && expected <= gestureCount * gestureCount,
+                "Expected distinct pose count must be between 2 and the gesture table size");
             Check(distinctPoses.Count == expected, $"Expected {expected} distinct visible poses, got {distinctPoses.Count}");
         }
         else Check(distinctPoses.Count >= 8, "Gesture inputs did not produce eight distinct visible poses");
@@ -133,9 +134,9 @@ internal static class ImportedGestureAvatarChecks
             "Saved direct menu exposes every distinct mapped clip; release needs no button");
         int heldLeft = Get<int>(core, "State.Gesture.Left"), heldRight = Get<int>(core, "State.Gesture.Right");
         var heldExpression = Reference<Slot>(core, "State.CurrentExpression");
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureLeftTag, true, (heldLeft + 1) % 8);
-        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureRightTag, true, (heldRight + 1) % 8);
-        heldLeft = (heldLeft + 1) % 8; heldRight = (heldRight + 1) % 8;
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureLeftTag, true, (heldLeft + 1) % gestureCount);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureRightTag, true, (heldRight + 1) % gestureCount);
+        heldLeft = (heldLeft + 1) % gestureCount; heldRight = (heldRight + 1) % gestureCount;
         Check(Get<int>(core, "State.Gesture.Left") == heldLeft && Get<int>(core, "State.Gesture.Right") == heldRight &&
             Reference<Slot>(core, "State.CurrentExpression") == heldExpression && ContextMenuSelected(core),
             "Saved menu hold permits hand updates while blocking pose application");
@@ -188,7 +189,7 @@ internal static class ImportedGestureAvatarChecks
         }
         Check(root.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "Invalid imported Flux group");
         await ExpressionResetChecks.Run(root);
-        Console.WriteLine($"PASS: imported package gesture API drives all 64 pairs and {distinctPoses.Count} distinct poses");
+        Console.WriteLine($"PASS: imported package gesture API drives all {gestureCount * gestureCount} pairs and {distinctPoses.Count} distinct poses");
     }
 
     private static T Get<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;

@@ -16,9 +16,6 @@ internal sealed class AvatarSetupOptions
     public bool FaceTracking { get; set; }
     public bool Protect { get; set; } = true;
 
-    /// <summary>Generate the wearer-facing preset-expression context menu.</summary>
-    public bool ExpressionMenu { get; set; } = true;
-
     /// <summary>View offset forward from the eye midpoint, in meters. Null = auto (eye-distance scaled).</summary>
     public float? ViewForward { get; set; }
 
@@ -232,10 +229,6 @@ internal static class AvatarSetup
         if (options.FaceTracking)
         {
             AvatarCreator.TrySetupFaceTracking(root);
-        }
-        if (options.ExpressionMenu)
-        {
-            ExpressionMenuSetup.Setup(root, vrm);
         }
         SetupAwayIndicator(root);
         SetupFirstPersonVisibility(root, vrm);

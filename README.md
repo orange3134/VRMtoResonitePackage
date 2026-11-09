@@ -136,6 +136,9 @@ Resonite（FrooxEngine）のインポーターには特定のVRMでクラッシ�
 [表情システム](docs/expression-system.md)を参照してください。対応する VRChat Animator の範囲と、
 自動変換できない設定の手動割り当て方法も記載しています。
 
+「表情メニューを生成しない」（CLI: `--no-expression-menu`）は、VRM・unitypackage共通で
+表情メニューだけを省略します。ハンドサイン・キーボード・外部APIによる表情操作や、口パク・瞬きは引き続き利用できます。
+
 - MToon/liltoonの完全再現はできません（ResoniteのXiexeToonへの近似マッピング）
 - VRMの表情（happy/angry等）のフェイストラッキング連動は`--face-tracking`指定時のみ、
   かつ名前ヒューリスティクスによる割り当てです

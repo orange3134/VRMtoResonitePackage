@@ -85,7 +85,7 @@ internal static class ExpressionGraphChecks
             groups = groups.FindChild("Select expression");
             Check(groups.FindChild("Back").GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == rootItems,
                 "group selection Back references local Expressions items after cloning and reload");
-            foreach (var group in groups.Children.Where(group => group.Name != "Back"))
+            foreach (var group in groups.Children.Where(group => group.Name != "Back" && group.GetComponent<ContextMenuSubmenu>() != null))
             {
                 var entries = group.GetComponent<ContextMenuSubmenu>().ItemsRoot.Target;
                 Check(entries == group && entries.Children.Count > 1,

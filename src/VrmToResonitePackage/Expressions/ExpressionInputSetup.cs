@@ -96,8 +96,12 @@ internal sealed partial class ExpressionSystemSetup
             MenuItem(expression, expression.Name);
             SelectMenuTrigger(expression, expression);
         }
+        foreach (var clip in _model.Clips)
+            if (clip.MenuIconUrl != null && _clips.TryGetValue(clip.Id, out var expression))
+                ExpressionMenuIcons.Apply(expression, expression.GetComponent<ContextMenuItemSource>(), clip.MenuIconUrl);
         var rootItem = menu.AttachComponent<RootContextMenuItem>();
         rootItem.Item.Target = MenuItem(menu, "Expressions");
+        ExpressionMenuIcons.Apply(menu, rootItem.Item.Target, ExpressionMenuIcons.NeutralIconUrl);
         rootItem.OnlyForSide.Value = null;
         ConfigureSubmenu(menu, menu);
         // Keep editable clip templates in Clips; expose each once through this entrance.
@@ -110,15 +114,17 @@ internal sealed partial class ExpressionSystemSetup
         heldSelection.ReferenceValue.Value = true;
         heldSelection.Color.Value = SelectedMenuColor;
         selectionColor.Color.Target = selection.GetComponent<ContextMenuItemSource>().Color;
-        var groups = ExpressionMenuGroups.Build(_clips.Keys, _compiled.Pairs);
+        var groups = ExpressionMenuGroups.Build(_clips.Keys, _compiled.Pairs, _compiled.GestureCount);
         for (int index = 0; index < groups.Count; index++)
         {
-            var children = AddSubmenu(selection, "Group " + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            var children = _clips.Count <= 8 ? selection :
+                AddSubmenu(selection, "Group " + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
             foreach (string id in groups[index])
             {
                 var expression = _clips[id];
                 var item = children.AddSlot(expression.Name);
                 var source = MenuItem(item, expression.Name);
+                source.Sprite.Target = expression.GetComponent<ContextMenuItemSource>().Sprite.Target;
                 var labelCopy = item.AttachComponent<ValueCopy<string>>();
                 labelCopy.Source.Target = expression.GetComponent<ContextMenuItemSource>().Label;
                 labelCopy.Target.Target = source.Label;
@@ -126,7 +132,9 @@ internal sealed partial class ExpressionSystemSetup
             }
         }
         BuildGesturePermissionMenu(menu);
-        var reset = menu.AddSlot("Reset State"); MenuItem(reset, reset.Name);
+        var reset = menu.AddSlot("Reset State");
+        var resetSource = MenuItem(reset, "Reset");
+        ExpressionMenuIcons.Apply(reset, resetSource, ExpressionMenuIcons.ResetIconUrl);
         var resetButton = reset.AttachComponent<ButtonDynamicImpulseTrigger>();
         resetButton.Target.Target = _api;
         resetButton.ExcludeDisabled.Value = true;

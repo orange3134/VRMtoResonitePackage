@@ -7,7 +7,7 @@
 1. `VrmParser` がVRM 0.x / 1.0を共通の `VrmModel` へ読み込む。
 2. `GlbPreprocessor` がResonite `ModelImporter` 向けの互換修正をGLBへ適用する。
 3. 一時的に `.glb` としてResoniteへインポートする。
-4. `AvatarSetup` がBipedRig、VRIK、視点、表情、FirstPersonを構築する。
+4. `AvatarSetup` がBipedRig、VRIK、視点、口パク・瞬き・視線の追跡、FirstPersonを構築する。
 5. `MaterialTuner` と `SpringBoneSetup` がマテリアルと揺れものを設定する。
 
 ## GLB前処理
@@ -56,7 +56,25 @@ Resoniteのモデルインポータは `JoinIdenticalVertices` を適用する�
   `--no-protection` で無効にする。
 
 感情表情は `VrmExpressionAdapter` から共通の[表情システム](expression-system.md)へ渡す。
-ジェスチャー条件を持たないため、対応表は未割当から始まり、メニューで直接選択できる。
+`AvatarSetup` は感情表情のメニューや駆動を生成せず、`Converter` が共通システムを一度だけ構築する。
+メニュー生成の有無は共通の `NoExpressionMenu` オプション（CLI: `--no-expression-menu`）で制御する。
+無効にするのはメニュー生成だけで、表情クリップ・対応表・ハンドサイン・キーボード・外部APIは生成する。
+左右各0〜7の64通りの対応表に標準プリセットを固定番号で割り当て、ハンドジェスチャー・キーボード・
+メニュー・外部APIから選択できる。番号と両手の優先順位は
+[VRMの標準割り当て](expression-system.md#vrmの標準割り当て)を参照。
+`ExpressionModel.GestureTable` はAnimatorを介さない固定Clip IDの表で、
+`GesturePairCompiler` は解決済みClipだけを採用し、表の幅をシーン生成とメニュー分類へ渡す。
+VRM 0.xの別名はパーサーでVRM 1.0名へ正規化する。`VrmExpression.IsCustom` を保持し、
+標準プリセットと同名のカスタム表情が欠落プリセットの代わりに割り当たらないようにする。
+VRM0のカスタム表情 `Surprised` は例外として、名前の大文字小文字を区別せず番号6と驚きアイコンに対応させる。
+
+標準番号の根拠はXWear Packager 0.3.4の
+`IO/Runtime/Extension/ForVrc/VrcAssetTemplate/Resources/VrcAssetTemplate.asset` と
+`VRC_FaceLayer_Template.asset`。前者は各感情をPoint・Peace・RockNRoll・Gun・Thumbs upへ対応させ、
+後者は左右とも3〜7に遷移する。0〜2はEmptyクリップのIdleで、Left Handの後にRight Handを
+weight=1のOverrideで適用する。生成済みFXの感情クリップは他の顔シェイプのリセット値も持つ。
+ResoPonでは同じ優先順位を固定Clip参照として表し、空の右手は左手へフォールバックする。
+欠落プリセットには空モーション相当の挙動を採用し、Animatorの履歴依存の状態保持は持ち込まない。
 
 ## VRM FirstPerson
 

@@ -3,10 +3,10 @@ namespace VrmToResonitePackage.Expressions;
 /// <summary>Partitions the selectable catalog without duplicating gesture or menu aliases.</summary>
 internal static class ExpressionMenuGroups
 {
-    internal static IReadOnlyList<string[]> Build(IEnumerable<string> clips, IReadOnlyList<string> pairs)
+    internal static IReadOnlyList<string[]> Build(IEnumerable<string> clips, IReadOnlyList<string> pairs, int gestureCount = 8)
     {
-        var left = Enumerable.Range(0, 8).Select(i => pairs[i * 8]).ToHashSet();
-        var right = Enumerable.Range(0, 8).Select(i => pairs[i]).ToHashSet();
+        var left = Enumerable.Range(0, gestureCount).Select(i => pairs[i * gestureCount]).ToHashSet();
+        var right = Enumerable.Range(0, gestureCount).Select(i => pairs[i]).ToHashSet();
         var mapped = pairs.ToHashSet();
         int Category(string id) => (left.Contains(id), right.Contains(id)) switch
         {

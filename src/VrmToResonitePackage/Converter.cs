@@ -257,7 +257,6 @@ internal static class Converter
                     {
                         FaceTracking = options.FaceTracking,
                         Protect = !options.NoProtection,
-                        ExpressionMenu = false,
                         DefaultUserScale = options.DefaultUserScale,
                         ViewForward = options.ViewForward,
                         ViewUp = options.ViewUp,
@@ -515,8 +514,6 @@ internal static class Converter
                     {
                         FaceTracking = options.FaceTracking,
                         Protect = !options.NoProtection,
-                        // The imported expression system is installed after authored baselines are restored.
-                        ExpressionMenu = false,
                         DefaultUserScale = options.DefaultUserScale,
                         ViewForward = options.ViewForward,
                         ViewUp = options.ViewUp,
