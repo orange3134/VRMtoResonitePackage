@@ -14,8 +14,6 @@
 - GitHub PR のレビュー指摘に対応した場合は、修正を commit・push して PR の head へ反映した後、
   対応済みのスレッドだけを resolve する。未対応・未検証・未 push の指摘は resolve しない。
 - PR は Draft ではなく通常の PR として作成する。
-- レビュー修正後は [ローカルレビュー手順](docs/local-review.md) に従い、GitHub bot を待たずに
-  レビュー・修正・検証・コミットを繰り返す。全差分のレビューが正常終了し、指摘がなくなってから push する。
 - GitHub CLI (`gh`) はサンドボックス内では認証やAPIアクセスが失敗するため、常にサンドボックス外の
   通常環境で実行する。
 - リポジトリ内の一時ビルド、展開物、変換結果は `.tmp_verify/` に置く。
@@ -106,7 +104,9 @@ Resonite DLLを `ResonitePath` に指定して再ビルドする。配布版も�
   [docs/expression-system.md](docs/expression-system.md)
 - FrooxEngine起動、DLL互換性、LocalDB、終了処理:
   [docs/headless-engine.md](docs/headless-engine.md)
-- VRM解析、GLB前処理、座標系、アバター設定、FirstPerson、MToon:
+- 共通アバター設定、装着者判定、FirstPerson描画、読み込み表示、手のコライダー、揺れもの出力:
+  [docs/avatar-conversion.md](docs/avatar-conversion.md)
+- VRM解析、GLB前処理、座標系、humanoid・表情取り込み、FirstPerson annotation、MToon:
   [docs/vrm-conversion.md](docs/vrm-conversion.md)
 - Unity YAML、prefab/FBX合成、VRChat設定、lilToon、回帰ケース:
   [docs/vrchat-conversion.md](docs/vrchat-conversion.md)
