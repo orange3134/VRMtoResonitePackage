@@ -32,7 +32,6 @@
 | [PrefabInputSmoke](../tests/PrefabInputSmoke/README.md) | Unity入力・Prefab解析の回帰検証 |
 | [PrefabSceneSmoke](../tests/PrefabSceneSmoke/README.md) | 実FBXを用いたシーン生成検証 |
 | [外部ソース・素材のライセンス](third-party-licenses.md) | 使用範囲、ソース・配布物の通知、配布検証 |
-| [ローカルレビュー](local-review.md) | レビュー修正時の全差分レビュー・検証・コミット手順 |
 
 表情機能のリリースでは、Releaseビルド、ExpressionSmoke、関連する実アバターの変換とinspect、
 Resoniteクライアントでの入力・メニュー・同期・再装着を確認する。
