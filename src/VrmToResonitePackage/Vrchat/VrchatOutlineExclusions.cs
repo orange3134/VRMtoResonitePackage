@@ -79,7 +79,7 @@ internal static partial class VrchatMaterialBuilder
             }
             meshProfile?.Mark("split-triangles");
             Uri uri = changes.Any(c => c.index >= assigned.Length)
-                ? await engine.LocalDB.SaveAssetAsync(mesh).ConfigureAwait(false) : null;
+                ? await MeshAssetWriter.SaveAsync(engine.LocalDB, mesh).ConfigureAwait(false) : null;
             meshProfile?.Mark("save-asset");
             await default(ToWorld);
             if (changes.Count == 0) continue;

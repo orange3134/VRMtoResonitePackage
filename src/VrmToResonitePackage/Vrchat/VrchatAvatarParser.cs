@@ -972,7 +972,7 @@ public static class VrchatAvatarParser
             if (bone?.FbxGuid != null && bone.Path?.Length > 0)
             {
                 if (!resolvers.TryGetValue(bone.FbxGuid, out var resolver))
-                    resolvers[bone.FbxGuid] = resolver = new UnityModelFileIdResolver(package.ByGuid(bone.FbxGuid));
+                    resolvers[bone.FbxGuid] = resolver = package.ModelFileIds(bone.FbxGuid);
                 static string Normalize(string path) => path.TrimStart('/').StartsWith("RootNode/", StringComparison.Ordinal)
                     ? path.TrimStart('/')[9..] : path.TrimStart('/');
                 var boneNames = resolver.MeshBoneNames.Values.SelectMany(names => names).ToHashSet();
@@ -1073,7 +1073,7 @@ public static class VrchatAvatarParser
             {
                 if (!modelResolvers.TryGetValue(key.Guid, out UnityModelFileIdResolver resolver))
                 {
-                    resolver = new UnityModelFileIdResolver(asset);
+                    resolver = package.ModelFileIds(asset.Guid);
                     modelResolvers.Add(key.Guid, resolver);
                 }
                 name = resolver.ResolveName(key.FileId);
@@ -1148,7 +1148,7 @@ public static class VrchatAvatarParser
         UnityAsset asset = package.ByGuid(guid);
         if (asset?.Extension == ".fbx")
         {
-            return (guid, ResolveFbxNodeName(asset, fileId));
+            return (guid, ResolveFbxNodeName(package, asset, fileId));
         }
         if (asset?.Extension is ".prefab" or ".unity")
         {
@@ -1181,7 +1181,7 @@ public static class VrchatAvatarParser
             UnityAsset asset = package.ByGuid(sourceGuid);
             if (asset?.Extension == ".fbx")
             {
-                return (sourceGuid, ResolveFbxNodeName(asset, sourceId));
+                return (sourceGuid, ResolveFbxNodeName(package, asset, sourceId));
             }
             if (asset?.Extension is ".prefab" or ".unity")
             {
@@ -1195,9 +1195,9 @@ public static class VrchatAvatarParser
         return (null, scene.ResolveGameObjectName(fileId));
     }
 
-    private static string ResolveFbxNodeName(UnityAsset fbx, long fileId)
+    private static string ResolveFbxNodeName(UnityPackage package, UnityAsset fbx, long fileId)
     {
-        string resolved = new UnityModelFileIdResolver(fbx).ResolveName(fileId);
+        string resolved = package.ModelFileIds(fbx?.Guid).ResolveName(fileId);
         if (!string.IsNullOrEmpty(resolved))
         {
             return resolved;
@@ -1732,7 +1732,7 @@ public static class VrchatAvatarParser
             .Where(group => group.Count() == 1)
             .ToDictionary(group => group.Key, group => group.Single().Guid,
                 StringComparer.OrdinalIgnoreCase);
-        var resolver = new UnityModelFileIdResolver(fbx);
+        var resolver = package.ModelFileIds(fbx?.Guid);
         foreach (UnityModelFileIdResolver.ModelMaterial material in resolver.Materials)
         {
             string name = NormalizeFbxMaterialName(material.Name);
@@ -1888,7 +1888,7 @@ public static class VrchatAvatarParser
             var mesh = scene.Doc(identity.Id)?.Root?["m_Mesh"];
             if (package.ByGuid(mesh?.Guid)?.Extension == ".asset" && primaryFbxGuid != null)
             {
-                var resolver = new UnityModelFileIdResolver(package.ByGuid(primaryFbxGuid));
+                var resolver = package.ModelFileIds(primaryFbxGuid);
                 string name = scene.GameObjectName(go);
                 var paths = resolver.RendererPathsUnder(0)
                     .Where(path => path.Split('/')[^1] == name).ToArray();
@@ -1912,7 +1912,7 @@ public static class VrchatAvatarParser
             if (asset?.Extension == ".fbx")
             {
                 if (!resolvers.TryGetValue(reference.Guid, out var resolver))
-                    resolvers[reference.Guid] = resolver = new UnityModelFileIdResolver(asset);
+                    resolvers[reference.Guid] = resolver = package.ModelFileIds(asset.Guid);
                 string name = resolver.ResolveName(id);
                 string path = resolver.ResolveNodePath(id);
                 var names = path != null ? resolver.BlendShapeNamesByPath.GetValueOrDefault(path) :
@@ -1959,7 +1959,7 @@ public static class VrchatAvatarParser
         {
             if (!modelResolvers.TryGetValue(guid, out UnityModelFileIdResolver resolver))
             {
-                resolver = new UnityModelFileIdResolver(asset);
+                resolver = package.ModelFileIds(asset.Guid);
                 modelResolvers.Add(guid, resolver);
             }
             return resolver.ResolveName(fileId);
@@ -2103,7 +2103,7 @@ public static class VrchatAvatarParser
         if (asset?.Extension == ".fbx")
         {
             if (!resolvers.TryGetValue(guid, out var resolver))
-                resolvers[guid] = resolver = new UnityModelFileIdResolver(asset);
+                resolvers[guid] = resolver = package.ModelFileIds(asset.Guid);
             return new VrchatBoneTarget(guid, resolver.ResolveName(fileId),
                 resolver.IsRootFileId(fileId) ? "" : resolver.ResolveNodePath(fileId));
         }
@@ -2471,7 +2471,7 @@ public static class VrchatAvatarParser
         {
             if (!modelResolvers.TryGetValue(guid, out UnityModelFileIdResolver resolver))
             {
-                resolver = new UnityModelFileIdResolver(asset);
+                resolver = package.ModelFileIds(asset.Guid);
                 modelResolvers.Add(guid, resolver);
             }
             foreach (string name in resolver.RendererNames)
@@ -2559,7 +2559,7 @@ public static class VrchatAvatarParser
         if (asset?.Extension == ".fbx")
         {
             if (!modelResolvers.TryGetValue(guid, out var resolver))
-                modelResolvers[guid] = resolver = new UnityModelFileIdResolver(asset);
+                modelResolvers[guid] = resolver = package.ModelFileIds(asset.Guid);
             string name = resolver.ResolveName(fileId);
             IEnumerable<string> names = resolver.RendererNamesUnder(fileId);
             foreach (string rendererName in names.Where(resolver.IsUniqueNodeName))
@@ -2580,7 +2580,7 @@ public static class VrchatAvatarParser
         YamlDocument target = scene.Doc(fileId);
         YamlNode targetSource = target?.Root?["m_CorrespondingSourceObject"];
         if (fileId != 0 && targetSource?.FileID is long modelRootId &&
-            new UnityModelFileIdResolver(package.ByGuid(targetSource.Guid)).IsRootFileId(modelRootId) &&
+            package.ModelFileIds(targetSource.Guid).IsRootFileId(modelRootId) &&
             package.ByGuid(targetSource.Guid)?.Extension == ".fbx" && !scene.RootGameObjects().Any())
         {
             var rootInstances = scene.Documents.Values.Where(d => d.ClassId == ClassPrefabInstance &&
@@ -2863,7 +2863,7 @@ public static class VrchatAvatarParser
                 string bone = UnityHumanBodyBoneToVrmName(boneReference);
                 string boneName = bone != null ? avatar.HumanBones.GetValueOrDefault(bone) : null;
                 if (!modelResolvers.TryGetValue(avatar.FbxGuid ?? "", out var resolver))
-                    modelResolvers[avatar.FbxGuid ?? ""] = resolver = new UnityModelFileIdResolver(package.ByGuid(avatar.FbxGuid));
+                    modelResolvers[avatar.FbxGuid ?? ""] = resolver = package.ModelFileIds(avatar.FbxGuid);
                 var paths = resolver.NodePathsUnder(0).Where(p => p.Split('/')[^1] == boneName).ToArray();
                 if (paths.Length != 1)
                 {

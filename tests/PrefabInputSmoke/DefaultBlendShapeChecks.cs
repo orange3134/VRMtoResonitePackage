@@ -39,8 +39,9 @@ internal static class DefaultBlendShapeChecks
 
             string prefab = asset("Assets/DefaultWeights.prefab", "adef0000000000000000000000000002", "%YAML 1.1\n");
             using var package = UnityPackage.Open(prefab);
-            ((Dictionary<string, UnityModelFileIdResolver>)typeof(UnityPackage).GetField("_modelIds",
-                BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(package)!)[modelGuid] = resolver;
+            ((Dictionary<(string, string), UnityModelFileIdResolver>)typeof(UnityPackage).GetField("_modelIds",
+                BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(package)!)[
+                    (Path.GetFullPath(model).ToUpperInvariant(), Path.GetFullPath(model + ".meta").ToUpperInvariant())] = resolver;
             var avatar = new VrchatAvatar { FbxGuid = modelGuid };
             Call("ParseFbxBlendShapeNames", package, avatar);
             Require(avatar.FbxBlendShapeDefaultWeights[new(modelGuid, "Left/Body")].Single() == 25 &&

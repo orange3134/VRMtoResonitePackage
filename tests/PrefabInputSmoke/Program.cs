@@ -78,6 +78,7 @@ MonoBehaviour:
         Check(VrchatAvatarParser.ListAvatars(package).Single().Name == "DescriptorWithAudio",
             "SDK DLL GUID shared by avatar and audio components must identify only the descriptor type");
     PrefabGraphChecks.Run(Asset);
+    ConversionPerformanceChecks.Run(Asset);
     HumanoidSkeletonMappingChecks.CheckParser(Asset);
     ExpressionAnimationRootChecks.Run(Asset);
     Asset("Assets/Other.prefab", otherGuid, Avatar("Other"));
