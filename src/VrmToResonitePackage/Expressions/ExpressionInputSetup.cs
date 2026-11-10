@@ -182,12 +182,12 @@ internal sealed partial class ExpressionSystemSetup
             GesturePermissionMenuColor(item, left, right);
         }
 
-        BuildGesturePermissionLabel(menu, groupSource);
+        BuildGesturePermissionLabel(groupSource);
     }
 
-    private void BuildGesturePermissionLabel(Slot menu, ContextMenuItemSource source)
+    private void BuildGesturePermissionLabel(ContextMenuItemSource source)
     {
-        var board = menu.AddSlot("Gesture menu label");
+        var board = source.Slot.AddSlot("Gesture menu label");
         var state = board.AttachComponent<ValueField<bool2>>();
         var g = new ExpressionFlux(board);
         var left = g.Read<bool>(g.Ref(_api), SystemSpace, HandGesturePermission("Left"));

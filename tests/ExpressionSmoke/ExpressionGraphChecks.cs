@@ -186,7 +186,7 @@ internal static class ExpressionGraphChecks
         Check(nodes.Where(n => n.GetType().Name == "ValueFieldDrive`1").All(n =>
             Board(n).Name == "Tracking" && Board(n).Parent.Parent == expressions.FindChild("Outputs") ||
             Board(n).Name == "Gesture menu label" &&
-                Board(n).Parent == Descendant(expressions, "Inputs/ContextMenu")),
+                Board(n).Parent == Descendant(expressions, "Inputs/ContextMenu/Hand gesture options")),
             "continuous drives are limited to live tracking and gesture menu labels");
         Check(nodes.Any(n => n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "state transitions use local change detectors");

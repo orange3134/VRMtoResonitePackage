@@ -25,7 +25,7 @@ internal static class HandGesturePermissionChecks
         bool left = HandGesturesAllowed(core, "Left"), right = HandGesturesAllowed(core, "Right");
         string expected = "Hand gestures: " + (left ? (right ? "Both" : "LeftOnly") : (right ? "RightOnly" : "None"));
         var menu = expressions.FindChild("Inputs").FindChild("ContextMenu");
-        var state = menu.FindChild("Gesture menu label").GetComponent<ValueField<bool2>>();
+        var state = menu.FindChild("Hand gesture options").FindChild("Gesture menu label").GetComponent<ValueField<bool2>>();
         Check(state != null && state.Value.Value.Equals(new bool2(left, right)),
             "gesture label bool2 stores left permission in X and right permission in Y");
         foreach (string name in new[] { "Hand gesture options" })
@@ -61,7 +61,8 @@ internal static class HandGesturePermissionChecks
         var group = items.FindChild("Hand gesture options");
         var options = group;
         Check(group.GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == options &&
-            options.Children.Count == 5 && options.FindChild("Back").GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == items,
+            options.Children.Count(child => child.GetComponent<ContextMenuItemSource>() != null) == 5 &&
+            options.FindChild("Back").GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == items,
             "gesture submenu contains four choices and a Back entry");
         foreach (var (label, left, right) in Options)
         {
