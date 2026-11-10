@@ -136,6 +136,10 @@ VRMとVRChatで共通の処理で、揺れもの用 `DynamicBoneSphereCollider` 
 
 VRM SpringBoneは `DynamicBoneChain` へ変換し、テンプレート設定を `modular_avatar` の動的変数として公開する。
 コライダーはnodeと形状から共有し、VRM世代とorientationに応じてoffsetを変換する。
+`generic` グループは袖などの揺れものが通常のGrabを妨げないよう `IsGrabbable=false` とする。
+他グループはtrueを維持する。テンプレートと各チェーンの `IsGrabbable` は他の設定と同様に
+`modular_avatar/dynamic_bone_template.<group>.IsGrabbable` で連動する。VRChatのPhysBoneも同じ処理を使う。
+シピルカの袖 `HandTops_L/R` は `generic` に分類されるため、この設定で通常のGrabとの干渉を防ぐ。
 
 ## MToonからXiexeToon
 
