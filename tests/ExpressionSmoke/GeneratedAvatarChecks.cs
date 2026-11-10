@@ -27,6 +27,21 @@ internal static class GeneratedAvatarChecks
                 BodyNode.LeftUpperLeg, BodyNode.LeftLowerLeg, BodyNode.LeftFoot,
                 BodyNode.RightUpperLeg, BodyNode.RightLowerLeg, BodyNode.RightFoot })
                 rig[bone] = avatar.AddSlot(bone.ToString());
+            foreach (BodyNode node in new[] { BodyNode.LeftHand, BodyNode.RightHand })
+            {
+                var hand = rig[node];
+                var box = hand.AddSlot("Collider").AttachComponent<BoxCollider>();
+                box.Size.Value = new float3(.04f, .08f, .226f);
+                box.Offset.Value = new float3(0, 0, .113f);
+                var tool = hand.AddSlot("Tool Anchor");
+                tool.LocalPosition = new float3(0, 0, .078f);
+                tool.AttachComponent<AvatarToolAnchor>().AnchorPoint.Value = AvatarToolAnchor.Point.Tool;
+                AvatarSetup.SetupHandColliderRaycasts(hand);
+                AvatarSetup.SetupHandColliderRaycasts(hand);
+                Check(box.Slot.GetComponents<DynamicValueVariableDriver<bool>>().Count() == 1,
+                    "hand raycast setup does not duplicate drivers");
+            }
+            avatar.AddSlot("Unrelated Collider").AttachComponent<BoxCollider>();
             rig[BodyNode.Head].GlobalPosition = new float3(0, 1.6f, 0);
             var head = avatar.AddSlot("Head pose");
             head.LocalPosition = new float3(0, 1.6f, 0);
@@ -99,18 +114,32 @@ internal static class GeneratedAvatarChecks
         assigner.OnDequip(null); await Frames(20);
         Check(!Value(avatar, "AvatarWorn") && !Value(avatar, "AvatarWornLocal") && transform.ScaleOverride.Value == null,
             "unassigned avatar stays unworn even beneath UserRoot");
+        CheckHandRaycasts(avatar, false);
         var equipSlot = avatar.AttachComponent<AvatarObjectSlot>();
         assigner.OnEquip(equipSlot); await Frames(30);
         Check(Value(avatar, "AvatarWorn") && Value(avatar, "AvatarWornLocal") && transform.ScaleOverride.Value == float3.Zero,
             "local equip publishes worn flags and hides thumbnail only in UserView");
+        CheckHandRaycasts(avatar, true);
+        var handDrivers = avatar.GetComponent<BipedRig>()[BodyNode.LeftHand]
+            .GetComponentsInChildren<DynamicValueVariableDriver<bool>>().ToArray();
+        foreach (var driver in handDrivers) driver.VariableName.Value = "modular_avatar/MissingWornFlag";
+        await Frames(20);
+        Check(!avatar.GetComponent<BipedRig>()[BodyNode.LeftHand].GetComponentInChildren<BoxCollider>().IgnoreRaycasts.Value,
+            "unresolved wear flag restores hand raycasts");
+        foreach (var driver in handDrivers) driver.VariableName.Value = "modular_avatar/AvatarWornLocal";
+        await Frames(20);
+        CheckHandRaycasts(avatar, true);
         Check(transform.Context.Value == RenderingContext.UserView, "mirror and third-person rendering remain visible");
         avatar.SetParent(avatar.World.RootSlot, false); await Frames(30);
         Check(!Value(avatar, "AvatarWorn") && !Value(avatar, "AvatarWornLocal"),
             "stale assigned user does not mark a detached avatar as worn");
+        CheckHandRaycasts(avatar, false);
         avatar.SetParent(parent, false); await Frames(30);
         Check(Value(avatar, "AvatarWornLocal"), "reattachment restores wearer detection");
+        CheckHandRaycasts(avatar, true);
         assigner.OnDequip(equipSlot); await Frames(30);
         Check(!Value(avatar, "AvatarWorn") && transform.ScaleOverride.Value == null, "dequip clears flags and first-person override");
+        CheckHandRaycasts(avatar, false);
         equipSlot.Destroy();
         float3 previousHeadPosition = head.LocalPosition;
         head.LocalPosition += new float3(0.2f, 0.1f, 0);
@@ -118,6 +147,25 @@ internal static class GeneratedAvatarChecks
         Check((standIn.GlobalPosition - head.LocalPointToGlobal(virtualParent.LocalPosition.Value)).Magnitude < 0.001f,
             "thumbnail follows head motion");
         head.LocalPosition = previousHeadPosition;
+    }
+
+    private static void CheckHandRaycasts(Slot avatar, bool ignored)
+    {
+        var rig = avatar.GetComponent<BipedRig>();
+        foreach (BodyNode node in new[] { BodyNode.LeftHand, BodyNode.RightHand })
+        {
+            var hand = rig[node];
+            var box = hand.GetComponentInChildren<BoxCollider>();
+            var driver = box.Slot.GetComponent<DynamicValueVariableDriver<bool>>();
+            Check(driver.VariableName.Value == "modular_avatar/AvatarWornLocal" &&
+                driver.Target.Target == box.IgnoreRaycasts && !driver.DefaultValue.Value &&
+                box.IgnoreRaycasts.Value == ignored, $"{node} raycasts follow local wear state: {ignored}");
+            Check(hand.FindChild("Tool Anchor").LocalPosition == new float3(0, 0, .078f) &&
+                box.Size.Value == new float3(.04f, .08f, .226f) &&
+                box.Offset.Value == new float3(0, 0, .113f), "tool position and hand collider geometry are unchanged");
+        }
+        Check(!avatar.FindChild("Unrelated Collider").GetComponent<BoxCollider>().IgnoreRaycasts.Value,
+            "unrelated colliders retain raycasts");
     }
 
     private static bool Value(Slot root, string name)

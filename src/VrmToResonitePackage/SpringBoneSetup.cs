@@ -87,7 +87,6 @@ internal static class SpringBoneSetup
 
                     // Individual (non-templated) settings derived from the VRM chain itself.
                     dynamicChain.BaseBoneRadius.Value = MathX.Max(0.001f, chain.HitRadius);
-                    dynamicChain.IsGrabbable.Value = true;
 
                     foreach (int colliderIndex in chain.ColliderIndices.Distinct())
                     {
@@ -194,6 +193,7 @@ internal static class SpringBoneSetup
             BindField(chain => chain.GravitySpace.Default);
             BindField(chain => chain.UseUserGravityDirection);
             BindField(chain => chain.LocalForce);
+            BindField(chain => chain.IsGrabbable);
             BindField(chain => chain.GrabSlipping);
             BindField(chain => chain.GrabRadiusTolerance);
             BindField(chain => chain.GrabTerminalBones);
@@ -243,8 +243,8 @@ internal static class SpringBoneSetup
         }
 
         /// <summary>
-        /// Opinionated per-template defaults, identical to modular-avatar-resonite's
-        /// SetTemplateDefaultConfig. "generic" keeps Resonite's built-in defaults.
+        /// Opinionated per-template defaults adapted from modular-avatar-resonite's
+        /// SetTemplateDefaultConfig. Generic chains do not intercept ordinary grabs.
         /// All templates explicitly set DynamicPlayerCollision/CollideWithOwnBody to this
         /// project's verified avatar conventions.
         /// </summary>
@@ -299,6 +299,7 @@ internal static class SpringBoneSetup
             }
 
             // This project's verified convention; set explicitly even when matching Resonite defaults.
+            db.IsGrabbable.Value = templateName != "generic";
             db.DynamicPlayerCollision.Value = true;
             db.CollideWithOwnBody.Value = false;
         }

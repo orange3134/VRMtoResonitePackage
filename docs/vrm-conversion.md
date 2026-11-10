@@ -117,10 +117,29 @@ VRM・VRChat 共通で `MeshLoadingSetup` が対象 renderer の読み込みを�
 - `tests/ExpressionSmoke/GeneratedAvatarChecks.cs` で装着・解除・親階層の変更、頭追従、
   mesh 読み込み前後、パッケージ保存・inspect・再インポート後の動作を検証する。
 
+## 手のコライダーとレーザー原点
+
+`VRIKAvatar.Setup` はインポートした `Rig` の末端ボーンから手の `BoxCollider` を生成する。
+この範囲はヒューマノイドの中指先端だけから求めたツール位置より長くなる場合がある。
+シピルカでは手の box が約22.6cmに達し、従来の通常レーザー原点が内部に入っていた。
+
+`AvatarSetup.SetupHandColliderRaycasts` は `avatar.Setup` の後に、手直下の box の
+`IgnoreRaycasts` を `DynamicValueVariableDriver<bool>` で
+`modular_avatar/AvatarWornLocal` に連動させる。装着者本人のクライアントだけでtrueとなり、
+非装着時・他ユーザー・変数未解決時はfalse。ツール位置、コライダー形状、物理衝突は変更しない。
+VRMとVRChatで共通の処理で、揺れもの用 `DynamicBoneSphereCollider` は対象外。
+
+`tests/ExpressionSmoke/GeneratedAvatarChecks.cs` で装着・解除・親階層の変更と保存・再読込後の
+切り替えを確認する。実アバターでも再変換・inspect後に両手のドライバーと動作を検証する。
+
 ## SpringBone
 
 VRM SpringBoneは `DynamicBoneChain` へ変換し、テンプレート設定を `modular_avatar` の動的変数として公開する。
 コライダーはnodeと形状から共有し、VRM世代とorientationに応じてoffsetを変換する。
+`generic` グループは袖などの揺れものが通常のGrabを妨げないよう `IsGrabbable=false` とする。
+他グループはtrueを維持する。テンプレートと各チェーンの `IsGrabbable` は他の設定と同様に
+`modular_avatar/dynamic_bone_template.<group>.IsGrabbable` で連動する。VRChatのPhysBoneも同じ処理を使う。
+シピルカの袖 `HandTops_L/R` は `generic` に分類されるため、この設定で通常のGrabとの干渉を防ぐ。
 
 ## MToonからXiexeToon
 

@@ -151,6 +151,8 @@ internal static class AvatarSetup
 
             VRIKAvatar avatar = root.AttachComponent<VRIKAvatar>();
             avatar.Setup(ik, rig, headsetRef, leftRef, rightRef, null, null, null);
+            SetupHandColliderRaycasts(leftHand);
+            SetupHandColliderRaycasts(rightHand);
 
             // VRIKAvatarの初期値はVRM向けに適していないため上書きする。
             avatar.FeetHoverHeight.Value = 0f;
@@ -493,6 +495,23 @@ internal static class AvatarSetup
         Slot slot = anchorRoot.AddSlot(point + " Anchor");
         slot.CopyTransform(anchorReference);
         slot.AttachComponent<AvatarToolAnchor>().AnchorPoint.Value = point;
+    }
+
+    internal static void SetupHandColliderRaycasts(Slot hand)
+    {
+        // VRIKAvatar.Setup creates hand boxes that can enclose the laser origin.
+        // Ignore them only on the wearer's client, without moving tool anchors or
+        // removing hand interactions for other users and unequipped avatars.
+        foreach (BoxCollider collider in hand.GetComponentsInChildren<BoxCollider>()
+            .Where(c => c.Slot.Parent == hand))
+        {
+            var driver = collider.Slot.GetComponents<DynamicValueVariableDriver<bool>>()
+                .FirstOrDefault(d => d.Target.Target == collider.IgnoreRaycasts)
+                ?? collider.Slot.AttachComponent<DynamicValueVariableDriver<bool>>();
+            driver.VariableName.Value = AvatarWornLocalVariable;
+            driver.DefaultValue.Value = false;
+            driver.Target.Target = collider.IgnoreRaycasts;
+        }
     }
 
     // ---------------------------------------------------------------- eyes & blink
