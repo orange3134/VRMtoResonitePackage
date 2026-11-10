@@ -10,12 +10,11 @@ internal static class ExpressionMenuGroups
         var mapped = pairs.ToHashSet();
         int Category(string id) => (left.Contains(id), right.Contains(id)) switch
         {
-            (true, true) => 0,
-            (true, false) => 1,
-            (false, true) => 2,
-            _ => mapped.Contains(id) ? 3 : 4
+            (true, _) => 0,
+            (false, true) => 1,
+            _ => mapped.Contains(id) ? 2 : 3
         };
-        // Keep shared, left-only, right-only, combined and unmapped poses separate.
+        // Include shared poses with the left hand; keep right-only, combined and unmapped separate.
         // Preserve catalog order within each category, including duplicate display names.
         return clips.Distinct().GroupBy(Category).OrderBy(group => group.Key)
             .SelectMany(group => group.Chunk(8)).ToArray();

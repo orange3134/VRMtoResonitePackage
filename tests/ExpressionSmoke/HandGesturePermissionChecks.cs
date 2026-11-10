@@ -13,7 +13,7 @@ internal static class HandGesturePermissionChecks
         ("Right hand only", false, true), ("Both hands disabled", false, false)
     };
 
-    private static void PressOption(Slot items, string label)
+    internal static void PressOption(Slot items, string label)
     {
         foreach (var set in items.FindChild("Hand gesture options").FindChild(label)
             .GetComponents<ButtonValueSet<bool>>()) set.Pressed(null, default);
@@ -25,10 +25,10 @@ internal static class HandGesturePermissionChecks
         bool left = HandGesturesAllowed(core, "Left"), right = HandGesturesAllowed(core, "Right");
         string expected = "Hand gestures: " + (left ? (right ? "Both" : "LeftOnly") : (right ? "RightOnly" : "None"));
         var menu = expressions.FindChild("Inputs").FindChild("ContextMenu");
-        var state = menu.FindChild("Gesture menu label").GetComponent<ValueField<bool2>>();
+        var state = menu.FindChild("Hand gesture options").FindChild("Gesture menu label").GetComponent<ValueField<bool2>>();
         Check(state != null && state.Value.Value.Equals(new bool2(left, right)),
             "gesture label bool2 stores left permission in X and right permission in Y");
-        foreach (string name in new[] { "Hand gesture options", "Hand gestures" })
+        foreach (string name in new[] { "Hand gesture options" })
         {
             var item = menu.FindChild(name).GetComponent<ContextMenuItemSource>();
             var driver = item.Slot.GetComponent<ValueOptionDescriptionDriver<bool2>>();
@@ -61,7 +61,8 @@ internal static class HandGesturePermissionChecks
         var group = items.FindChild("Hand gesture options");
         var options = group;
         Check(group.GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == options &&
-            options.Children.Count == 5 && options.FindChild("Back").GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == items,
+            options.Children.Count(child => child.GetComponent<ContextMenuItemSource>() != null) == 5 &&
+            options.FindChild("Back").GetComponent<ContextMenuSubmenu>().ItemsRoot.Target == items,
             "gesture submenu contains four choices and a Back entry");
         foreach (var (label, left, right) in Options)
         {
@@ -75,7 +76,7 @@ internal static class HandGesturePermissionChecks
                     label + " sets the local avatar's " + targetHand + " permission");
             }
         }
-        var bothToggle = items.FindChild("Hand gestures").GetComponent<ButtonDynamicImpulseTrigger>();
+        void Toggle() => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ToggleHandGesturesTag, true);
         await CheckVisibility(menu);
         void Allow(string hand, bool enabled) => SetHandGesturesAllowed(core, enabled, hand);
         void Keyboard(string hand, int value) => ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(
@@ -95,9 +96,9 @@ internal static class HandGesturePermissionChecks
             void Preserved() => Check(Gesture("Left") == 6 && Gesture("Right") == 7 && Reference<Slot>(core, "State.CurrentExpression") == selected,
                 "permission toggles retain both hand values and the selected expression");
             bool enabled = !(left && right);
-            bothToggle.Pressed(null, default); State(enabled, enabled); Preserved(); await Frames();
-            bothToggle.Pressed(null, default); State(!enabled, !enabled); Preserved();
-            bothToggle.Pressed(null, default); State(enabled, enabled); Preserved(); await Frames();
+            Toggle(); State(enabled, enabled); Preserved(); await Frames();
+            Toggle(); State(!enabled, !enabled); Preserved();
+            Toggle(); State(enabled, enabled); Preserved(); await Frames();
             foreach (var (label, expectedLeft, expectedRight) in Options)
             {
                 Allow("Left", left); Allow("Right", right);
@@ -121,54 +122,31 @@ internal static class HandGesturePermissionChecks
         State(true, true);
         SetHandGesturesAllowed(core, false);
         State(false, false);
-        bothToggle.Pressed(null, default);
+        Toggle();
         State(true, true);
         Check(Reference<Slot>(core, "State.CurrentExpression") == expression, "global toggle resumes both hands without replacing the selected expression");
         await CheckApiBeforeInitialization(expressions);
         SetHandGesturesAllowed(core, true);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
         State(true, true); await Frames();
-        Console.WriteLine("PASS: shared menu for both hands, four gesture permission choices, desktop toggle, VR visibility and keyboard bypass");
+        Console.WriteLine("PASS: shared menu for both hands and display modes, four gesture permission choices, toggle API and keyboard bypass");
     }
 
     private static async Task CheckVisibility(Slot menu)
     {
-        var fixture = menu.Parent.AddSlot("Temporary menu VR sensor");
-        var sensor = fixture.AttachComponent<Nodes.ValueInput<bool>>();
-        var restore = new List<(ISyncRef Port, IWorldElement Target)>();
-        try
-        {
-            var board = menu.FindChild("Gesture menu visibility");
-            var vrNode = board.GetComponentsInChildren<Nodes.FrooxEngine.Users.UserVR_Active>().Single();
-            foreach (var port in board.GetComponentsInChildren<ProtoFluxNode>().SelectMany(node => node.AllInputs))
-            if (port.Target == vrNode)
-            {
-                restore.Add((port, port.Target)); port.Target = sensor;
-            }
-            Check(restore.Count == 2, "one visibility board drives the submenu and inverse toggle");
-            foreach (bool vr in new[] { false, true, false, true })
-            {
-                sensor.Value.Value = vr;
-                for (int i = 0; i < 5; i++) await default(NextUpdate);
-                var items = menu;
-                var group = items.FindChild("Hand gesture options");
-                var toggle = items.FindChild("Hand gestures");
-                Check((group.GetComponent<ContextMenuItemSource>(excludeDisabled: true) != null) == vr &&
-                    (toggle.GetComponent<ContextMenuItemSource>(excludeDisabled: true) != null) == !vr,
-                    "menu collection shows only the VR submenu or desktop toggle");
-                var visible = items.Children.Select(slot => slot.GetComponent<ContextMenuItemSource>(excludeDisabled: true))
-                    .Where(source => source != null).Select(source => source.Slot).ToHashSet();
-                Check(visible.SetEquals(new[] { items.FindChild("Select expression"), items.FindChild("Reset State"), vr ? group : toggle }),
-                    "direct-child collection retains expression/reset, omits the entrance and logic board, and selects the mode entry");
-                CheckLabels(menu.Parent.Parent);
-            }
-        }
-        finally
-        {
-            foreach (var (port, target) in restore) port.Target = target;
-            fixture.Destroy();
-        }
         for (int i = 0; i < 5; i++) await default(NextUpdate);
+        Check(menu.FindChild("Hand gestures") == null && menu.FindChild("Gesture menu visibility") == null &&
+            menu.GetComponentsInChildren<Nodes.FrooxEngine.Users.UserVR_Active>().Count == 0,
+            "context menu has no desktop toggle or VR-dependent visibility");
+        var group = menu.FindChild("Hand gesture options");
+        Check(group.GetComponent<ContextMenuItemSource>(excludeDisabled: true) != null &&
+            group.GetComponent<ContextMenuItemSource>().EnabledField.ActiveLink == null,
+            "gesture submenu remains enabled without a display-mode driver");
+        var visible = menu.Children.Select(slot => slot.GetComponent<ContextMenuItemSource>(excludeDisabled: true))
+            .Where(source => source != null).Select(source => source.Slot).ToHashSet();
+        Check(visible.SetEquals(new[] { menu.FindChild("Select expression"), menu.FindChild("Reset State"), group }),
+            "direct-child collection always exposes expression selection, reset and gesture options");
+        CheckLabels(menu.Parent.Parent);
     }
 
     private static async Task CheckApiBeforeInitialization(Slot expressions)

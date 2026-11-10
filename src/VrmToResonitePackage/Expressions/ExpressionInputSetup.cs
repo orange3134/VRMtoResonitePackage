@@ -49,7 +49,7 @@ internal sealed partial class ExpressionSystemSetup
         _root.FindChild("DV").GetComponentsInChildren<DynamicValueVariable<bool>>()
             .Single(v => v.VariableName.Value == Path(SystemSpace, HandGesturePermission(hand))).Value;
 
-    private void GesturePermissionMenuColor(Slot item, bool left = true, bool right = true, bool option = false)
+    private void GesturePermissionMenuColor(Slot item, bool left, bool right)
     {
         var driver = item.AttachComponent<ValueOptionDescriptionDriver<bool>>();
         var selectedState = item.AttachComponent<ValueField<bool>>();
@@ -63,7 +63,7 @@ internal sealed partial class ExpressionSystemSetup
         }
         condition.Target.Target = selectedState.Value;
         driver.Value.Target = selectedState.Value;
-        driver.DefaultOption.Color.Value = option ? colorX.White : new colorX(1f, 0f, 0f, 1f, ColorProfile.Linear);
+        driver.DefaultOption.Color.Value = colorX.White;
         var selected = driver.Options.Add();
         selected.ReferenceValue.Value = true;
         selected.Color.Value = SelectedMenuColor;
@@ -179,34 +179,15 @@ internal sealed partial class ExpressionSystemSetup
                 set.TargetValue.Target = HandGesturePermissionField(hand);
                 set.SetValue.Value = enabled;
             }
-            GesturePermissionMenuColor(item, left, right, option: true);
+            GesturePermissionMenuColor(item, left, right);
         }
 
-        var mode = menu.AddSlot("Hand gestures");
-        var toggleSource = MenuItem(mode, mode.Name);
-        var toggleButton = mode.AttachComponent<ButtonDynamicImpulseTrigger>();
-        toggleButton.Target.Target = _api;
-        toggleButton.ExcludeDisabled.Value = true;
-        toggleButton.PressedTag.Value = ToggleHandGesturesTag;
-        GesturePermissionMenuColor(mode);
-        BuildGesturePermissionLabels(menu, groupSource, toggleSource);
-
-        // Keep the board outside the filtered entries so it runs in both modes.
-        // Disabled item sources are omitted when ContextMenuSubmenu collects entries.
-        var g = new ExpressionFlux(menu.AddSlot("Gesture menu visibility"));
-        var vr = g.Node("UserVR_Active", null, ("User", g.Owner(_root)));
-        foreach (var (source, visible) in new[] { (groupSource, (IWorldElement)vr), (toggleSource, g.Not(vr)) })
-        {
-            var driver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<bool>)
-                g.Node("ValueFieldDrive", typeof(bool), ("Value", visible));
-            driver.GetRootProxy(addIfMissing: true).Drive.Target = source.EnabledField;
-        }
+        BuildGesturePermissionLabel(groupSource);
     }
 
-    private void BuildGesturePermissionLabels(Slot menu, params ContextMenuItemSource[] sources)
+    private void BuildGesturePermissionLabel(ContextMenuItemSource source)
     {
-        // Keep the permission state live even when one of the menu entries is hidden.
-        var board = menu.AddSlot("Gesture menu label");
+        var board = source.Slot.AddSlot("Gesture menu label");
         var state = board.AttachComponent<ValueField<bool2>>();
         var g = new ExpressionFlux(board);
         var left = g.Read<bool>(g.Ref(_api), SystemSpace, HandGesturePermission("Left"));
@@ -215,23 +196,20 @@ internal sealed partial class ExpressionSystemSetup
         var stateDriver = (global::FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<bool2>)
             g.Node("ValueFieldDrive", typeof(bool2), ("Value", value));
         stateDriver.GetRootProxy(addIfMissing: true).Drive.Target = state.Value;
-        foreach (var source in sources)
+        var driver = source.Slot.AttachComponent<ValueOptionDescriptionDriver<bool2>>();
+        driver.Value.Target = state.Value;
+        driver.DefaultOption.Label.Value = "Hand gestures: None";
+        foreach (var (permissions, label) in new[]
         {
-            var driver = source.Slot.AttachComponent<ValueOptionDescriptionDriver<bool2>>();
-            driver.Value.Target = state.Value;
-            driver.DefaultOption.Label.Value = "Hand gestures: None";
-            foreach (var (permissions, label) in new[]
-            {
-                (new bool2(false, false), "None"), (new bool2(true, false), "LeftOnly"),
-                (new bool2(false, true), "RightOnly"), (new bool2(true, true), "Both")
-            })
-            {
-                var option = driver.Options.Add();
-                option.ReferenceValue.Value = permissions;
-                option.Label.Value = "Hand gestures: " + label;
-            }
-            driver.Label.Target = source.Label;
+            (new bool2(false, false), "None"), (new bool2(true, false), "LeftOnly"),
+            (new bool2(false, true), "RightOnly"), (new bool2(true, true), "Both")
+        })
+        {
+            var option = driver.Options.Add();
+            option.ReferenceValue.Value = permissions;
+            option.Label.Value = "Hand gestures: " + label;
         }
+        driver.Label.Target = source.Label;
     }
 
     private void BuildKeyboard()
