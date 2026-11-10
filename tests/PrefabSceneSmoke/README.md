@@ -1,5 +1,10 @@
 # Prefab scene regression checks
 
+`ViewpointChecks` uses the SDK's `transform.position + ViewPosition` as its oracle:
+prefab rotation/scale and FBX units must not transform the meter offset, while the
+converter's whole-import alignment must. It also checks precedence over eye pivots,
+explicit meter offsets, and fallback for missing or invalid viewpoint data.
+
 `OutlineExclusionSceneChecks` verifies lilToon zero-width outline removal using a
 vertically asymmetric mask, main UV transforms and repeat sampling. Shared mesh
 users remain isolated, surface material properties and blendshapes survive reload,
@@ -68,6 +73,8 @@ name, using the captured path even after reparenting.
 
 Copied-bone checks distinguish same-named bones in two branches of the primary
 model and in an additional model, including targets moved after path capture.
+The shared imported-skeleton check applies a 1.1 authored root scale to both the
+copied renderer and its reused bones, so descriptor viewpoints and the face agree.
 Index-based overrides also distinguish identical source bone names and restore a
 binding whose imported source entry is null.
 Renamed unpacked bones retain the original binding when unresolved, or use their

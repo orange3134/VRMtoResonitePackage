@@ -10,6 +10,40 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static class VrchatSceneSetup
 {
+    internal static Slot ExpressionBindingRoot(VrchatAvatar avatar, Slot root)
+    {
+        if (!avatar.HasUnpackedRootPlacement || avatar.ExpressionRootTarget != null) return root;
+        // Preserve the animation basis from before skeleton root placement. If authored
+        // copies/physics already reproduce the descriptor, paths are strict. Otherwise
+        // the descriptor exists only for this new placement and imported FBX ancestors
+        // still require the existing unique-suffix matching (also for copies on bones).
+        bool IsDescriptor(VrchatPrefabTransform transform) => avatar.DescriptorRootKey != null &&
+            transform.GameObjectKey == avatar.DescriptorRootKey ||
+            avatar.DescriptorRootTarget is { PrefabGuid: not null } target &&
+            transform.Key == $"{target.PrefabGuid}:{target.TransformFileId}";
+        bool authoredDescriptor = avatar.MeshCopies.Any(copy =>
+            copy.Transform != null && IsDescriptor(copy.Transform) || copy.ParentTransforms.Any(IsDescriptor)) ||
+            avatar.PhysicsPlacements.Any(placement => placement.Transforms.Any(IsDescriptor));
+        return authoredDescriptor ? root : null;
+    }
+
+    internal static float3? ResolveViewPosition(VrchatAvatar avatar, Slot descriptorRoot,
+        Slot importRoot)
+    {
+        if (avatar.ViewPosition is not { } view || descriptorRoot == null || descriptorRoot.IsDestroyed)
+            return null;
+
+        // VRC_AvatarDescriptor.OnDrawGizmosSelected uses transform.position + ViewPosition,
+        // not TransformPoint: this is an unscaled Unity-world-axis offset in meters.
+        // Apply only our whole-import alignment, never the descriptor's rotation/scale
+        // or the model's FBX unit correction. Its origin still follows authored placement.
+        float3 origin = importRoot.GlobalPointToLocal(descriptorRoot.GlobalPosition);
+        float3 position = importRoot.LocalPointToGlobal(origin + new float3(view.X, view.Y, view.Z));
+        if (!float.IsFinite(position.x) || !float.IsFinite(position.y) || !float.IsFinite(position.z)) return null;
+        UniLog.Log($"VRChat authored viewpoint: position={position}, descriptor={descriptorRoot.Name}, worldOffset={view}");
+        return position;
+    }
+
     internal sealed class MeshCopyBuild
     {
         private Action _bind;

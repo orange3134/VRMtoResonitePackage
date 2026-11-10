@@ -1449,6 +1449,11 @@ MonoBehaviour:
         InvokeParser("ResolveFbx", bakedPackage, bakedScene, bakedScene.Doc(100),
             bakedScene.GameObjects.Select(go => go.FileId).ToHashSet(), bakedAvatar);
         Check(bakedAvatar.FbxGuid == guid, "Baked mesh prefab selects its root Animator humanoid FBX");
+        InvokeParser("ApplyUnpackedRootPlacement", bakedPackage, bakedPackage.InputPrefab.Guid,
+            bakedScene, bakedScene.Doc(100), bakedAvatar);
+        Check(bakedAvatar.HasUnpackedRootPlacement &&
+              bakedAvatar.FbxParentTransforms.Any(t => t.Key == $"{bakedPackage.InputPrefab.Guid}:101"),
+            "Unpacked Animator skeleton retains the authored avatar root as a placement parent");
         InvokeParser("ParsePhysics", bakedPackage, bakedPackage.InputPrefab.Guid, bakedAvatar, null);
         bool importedSkeleton = bakedAvatar.PhysicsPlacements.SelectMany(p => p.Transforms)
             .Any(t => t.ImportedBone is { } bone && bone.FbxGuid == guid && bone.Path == "Left/Shared");
@@ -1476,6 +1481,27 @@ MonoBehaviour:
             "Missing baked face renderers retain strict identity instead of selecting another renderer");
     }
     asset("Assets/PhysicsAccessory.fbx", extraModelGuid, File.ReadAllText(model));
+    foreach (var (units, scale, nested, expectedScale) in new[]
+             { (100, 0.01f, false, 0.01f), (100, 1.1f, false, 1.1f),
+               (1, 0.01f, false, 0.01f), (100, 0.01f, true, 0.01f) })
+    {
+        const string unitGuid = "9b9c55d64d59402d91f4853612c7b782";
+        asset("Assets/UnitRoot.fbx", unitGuid, File.ReadAllText(model).Replace("Objects: {",
+            "GlobalSettings: {\n Properties70: {\n P: \"UnitScaleFactor\", \"double\", \"Number\", \"\", " + units + "\n }\n}\nObjects: {"));
+        string rootFixture = local.Replace("m_GameObject: {fileID: 100}\n",
+            "m_GameObject: {fileID: 100}\n  m_LocalScale: {x: " + scale.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+            ", y: " + scale.ToString(System.Globalization.CultureInfo.InvariantCulture) + ", z: " + scale.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}\n");
+        if (nested) rootFixture = rootFixture.Replace("m_Father: {fileID: 0}", "m_Father: {fileID: 901}") +
+            "\n--- !u!1 &900\nGameObject:\n  m_Name: Outer\n--- !u!4 &901\nTransform:\n  m_GameObject: {fileID: 900}\n  m_Father: {fileID: 0}\n";
+        string unitPrefab = asset("Assets/UnitRoot.prefab", "74747474747474747474747474747486", rootFixture);
+        using var unitPackage = UnityPackage.Open(unitPrefab);
+        var unitScene = unitPackage.ReadScene(unitPackage.InputPrefab);
+        var unitAvatar = new VrchatAvatar { FbxGuid = unitGuid };
+        typeof(VrchatAvatarParser).GetMethod("ApplyUnpackedRootPlacement", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { unitPackage, unitPackage.InputPrefab.Guid, unitScene, unitScene.Doc(100), unitAvatar });
+        Check(Math.Abs(unitAvatar.FbxParentTransforms.Last().LocalScale.X - expectedScale) < 0.000001f,
+            $"Unpacked authored root scale is independent of FBX units (units={units}, scale={scale}, nested={nested})");
+    }
     string mergeFixture = local
         .Replace("m_GameObject: {fileID: 110}\n", "m_GameObject: {fileID: 110}\n  m_Children:\n  - {fileID: 121}\n")
         .Replace("m_GameObject: {fileID: 130}\n", "m_GameObject: {fileID: 130}\n  m_Children:\n  - {fileID: 141}\n") + $$"""
@@ -1503,6 +1529,16 @@ MonoBehaviour:
     using (var mergePackage = UnityPackage.Open(mergeFile))
     {
         var mergeAvatar = new VrchatAvatar { FbxGuid = guid };
+        var mergeScene = mergePackage.ReadScene(mergePackage.InputPrefab);
+        typeof(VrchatAvatarParser).GetMethod("ResolveFbx", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { mergePackage, mergeScene, mergeScene.Doc(100),
+                mergeScene.GameObjects.Select(go => go.FileId).ToHashSet(), mergeAvatar });
+        typeof(VrchatAvatarParser).GetMethod("ApplyUnpackedRootPlacement", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { mergePackage, mergePackage.InputPrefab.Guid, mergeScene, mergeScene.Doc(100), mergeAvatar });
+        Check(mergeAvatar.AdditionalFbxs.Single().ParentTransforms.Select(t => t.Key)
+                .SequenceEqual(mergeAvatar.FbxParentTransforms.Select(t => t.Key)) &&
+              mergeAvatar.FbxParentTransforms.Single().Key == $"{mergePackage.InputPrefab.Guid}:101",
+            "Unpacked body and clothing skeletons share their authored avatar root placement");
         typeof(VrchatAvatarParser).GetMethod("ParseModularAvatarComponents", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
             .Invoke(null, new object[] { mergePackage, mergePackage.InputPrefab.Guid, mergeAvatar, null });
         var merge = mergeAvatar.ModularMergeArmatures.Single();

@@ -13,6 +13,8 @@ public sealed class VrchatAvatar
     public Expressions.ExpressionModel Expressions { get; set; } = new();
     public VrchatBoneTarget ExpressionFaceTarget { get; set; }
     public VrchatBoneTarget ExpressionRootTarget { get; set; }
+    // A regular prefab's retained FBX can have synthetic ancestors absent from Unity paths.
+    public bool HasUnpackedRootPlacement { get; set; }
     public string ExpressionFacePath { get; set; }
     public HashSet<string> ExpressionVisemeNames { get; } = new(StringComparer.Ordinal);
     public List<VrchatPhysicsPlacement> PhysicsPlacements { get; } = new();
@@ -52,7 +54,7 @@ public sealed class VrchatAvatar
     /// <summary>Humanoid references scoped to the selected body model and its original node paths.</summary>
     public Dictionary<string, VrchatBoneTarget> HumanBoneTargets { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>VRChat ViewPosition, avatar-root-local, Unity coordinates (meters).</summary>
+    /// <summary>VRChat ViewPosition: unscaled Unity-world-axis offset from the descriptor origin, in meters.</summary>
     public Vec3? ViewPosition { get; set; }
 
     public string LeftEyeBoneName { get; set; }

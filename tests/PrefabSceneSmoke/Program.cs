@@ -57,6 +57,7 @@ static async Task Run(string fbxPath, string rendererName)
     {
         await default(ToWorld);
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
+        ViewpointChecks.Run(root);
         await MaterialLayerChecks.Run(assets, temp);
         await OutlineExclusionSceneChecks.Run(root, temp);
         await MixedScaleSkinChecks.Run(root);
@@ -66,13 +67,16 @@ static async Task Run(string fbxPath, string rendererName)
             var body = exportRoot.AddSlot("Body");
             var placementBodyArmature = body.AddSlot("Armature");
             var bodyBone = placementBodyArmature.AddSlot("Hips");
+            bodyBone.LocalPosition = new float3(0, .6f, 0);
             var clothing = exportRoot.AddSlot("Clothing");
             var clothingArmature = clothing.AddSlot("Armature");
             var clothingBone = clothingArmature.AddSlot("Hips");
+            clothingBone.LocalPosition = bodyBone.LocalPosition;
             var skin = clothing.AddSlot("Skin").AttachComponent<SkinnedMeshRenderer>();
             skin.Bones.Add(clothingBone);
             var descriptor = new VrchatPrefabTransform
-                { Key = "wrapper:2", GameObjectKey = "wrapper:1", Name = "Descriptor" };
+                { Key = "wrapper:2", GameObjectKey = "wrapper:1", Name = "Descriptor",
+                  LocalPosition = new System.Numerics.Vector3(0, 2, 0), LocalScale = new System.Numerics.Vector3(1.1f) };
             var placementAvatar = new VrchatAvatar { FbxGuid = "body", DescriptorRootKey = descriptor.GameObjectKey,
                 DescriptorRootTarget = new VrchatBoneTarget(null, "Descriptor", "", "wrapper", 2) };
             placementAvatar.FbxParentTransforms.Add(descriptor);
@@ -91,6 +95,10 @@ static async Task Run(string fbxPath, string rendererName)
             var descriptorRoot = (Slot)typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
                 .GetMethod("ApplyVrchatPrefabHierarchy", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, placementHierarchyArgs);
             var slots = (Dictionary<string, Slot>)placementHierarchyArgs[6];
+            Check(Math.Abs(bodyBone.GlobalPosition.y - 2.66f) < .00001f &&
+                  Math.Abs(clothingBone.GlobalPosition.y - bodyBone.GlobalPosition.y) < .00001f &&
+                  body.Parent == descriptorRoot && clothing.Parent == descriptorRoot,
+                "Body and additional clothing skeletons inherit authored root translation and scale before merging");
             Func<VrchatBoneTarget, Slot> resolve = target => (Slot)Call(
                 "VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget", target, placementSources, paths, slots);
             await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", exportRoot, placementAvatar,
@@ -105,16 +113,21 @@ static async Task Run(string fbxPath, string rendererName)
             Slot rigRoot = root.AddSlot("Shared rig regression");
             Slot importedRig = rigRoot.AddSlot("Imported");
             Slot rigHips = importedRig.AddSlot("Hips");
+            rigHips.LocalPosition = new float3(0, .6f, 0);
             Slot rigBody = importedRig.AddSlot("Body");
             rigBody.AttachComponent<SkinnedMeshRenderer>().Bones.Add(rigHips);
             var rigRoots = new Dictionary<string, Slot> { ["rig"] = importedRig };
             var rigSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", rigRoots);
             var rigPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", rigRoots);
             var rigAvatar = new VrchatAvatar { FbxGuid = "rig" };
+            var rigDescriptor = new VrchatPrefabTransform { Key = "rigPrefab:root", Name = "Descriptor",
+                LocalScale = new System.Numerics.Vector3(1.1f) };
+            rigAvatar.FbxParentTransforms.Add(rigDescriptor);
             var rigCopy = new VrchatMeshCopy("rig", "Body", "AuthoredBody", true, true)
             { Transform = new VrchatPrefabTransform { Key = "rigPrefab:body", GameObjectKey = "rigPrefab:body-go" } };
             var rigTarget = new VrchatBoneTarget("rig", "Hips", "Hips", "rigPrefab", 2);
             rigCopy.BoneTargets[0] = rigTarget;
+            rigCopy.ParentTransforms.Add(rigDescriptor);
             rigAvatar.MeshCopies.Add(rigCopy);
             var rigPlacement = new VrchatPhysicsPlacement();
             rigPlacement.Transforms.Add(new VrchatPrefabTransform { Key = "rigPrefab:2", Name = "Hips", ImportedBone = rigTarget });
@@ -127,6 +140,10 @@ static async Task Run(string fbxPath, string rendererName)
             Check(rigSlots["rigPrefab:body"].GetComponent<SkinnedMeshRenderer>().Bones[0] == rigHips &&
                   rigSlots["rigPrefab:2"] == rigHips && rigNames["Hips"] == rigHips,
                 "Copied skin, physics and humanoid lookup share the primary imported skeleton");
+            Check(rigHips.Parent.Parent == rigSlots[rigDescriptor.Key] &&
+                  Math.Abs(rigHips.GlobalPosition.y - .66f) < .00001f &&
+                  Math.Abs(rigSlots["rigPrefab:body"].GlobalScale.y - 1.1f) < .00001f,
+                "Unpacked authored root scales the reused skeleton and copied renderer together, exactly once");
             rigRoot.Destroy();
         }
         Slot alignment = root.AddSlot("Alignment"), wrapper = alignment.AddSlot("Model wrapper");
@@ -818,6 +835,45 @@ static async Task Run(string fbxPath, string rendererName)
             MeshGameObjectPath = "Copy parent B/" + rendererName, BlendShapeName = sameB.BlendShapeName(0) });
         var faceModel = VrchatModelAdapter.ToVrmModel(faceAvatar);
         var resolverType = typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.BlendshapeResolver")!;
+        {
+            var bakedDescriptor = root.AddSlot("Baked descriptor");
+            var retainedRoot = bakedDescriptor.AddSlot("Model").AddSlot("RootNode");
+            parentB.Parent = retainedRoot;
+            var baked = new VrchatAvatar { HasUnpackedRootPlacement = true, DescriptorRootKey = "regular:root" };
+            Slot BindingRoot() => (Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup",
+                "ExpressionBindingRoot", baked, bakedDescriptor);
+            Check(BindingRoot() == null,
+                "Baked standalone meshes retain imported-path expression matching after root placement");
+            var bakedModel = new VrmToResonitePackage.Vrm.VrmModel();
+            var bakedResolver = Activator.CreateInstance(resolverType, root, bakedModel)!;
+            object ResolveBaked(string path) => resolverType.GetMethod("ResolveExpression")!.Invoke(bakedResolver,
+                new object[] { new VrmToResonitePackage.Expressions.ExpressionBinding(path, sameB.BlendShapeName(0)) });
+            Check(ReferenceEquals(ResolveBaked("Copy parent B/" + rendererName), sameB.BlendShapeWeights.GetElement(0)) &&
+                  ResolveBaked(rendererName) == null && ResolveBaked("Missing/" + rendererName) == null,
+                "Baked FaceEmo binding crosses retained FBX ancestors without accepting ambiguous or missing paths");
+            baked.ExpressionRootTarget = new VrchatBoneTarget("body", "RootNode", "RootNode");
+            Check(BindingRoot() == bakedDescriptor, "Explicit animation roots retain strict expression paths");
+            baked.ExpressionRootTarget = null;
+            var boneCopy = new VrchatMeshCopy("body", rendererName, rendererName, true, true);
+            boneCopy.ParentTransforms.Add(new VrchatPrefabTransform { Key = "regular:head",
+                ImportedBone = new VrchatBoneTarget("body", "Head", "Armature/Head") });
+            baked.MeshCopies.Add(boneCopy);
+            baked.ExpressionFaceTarget = new VrchatBoneTarget("body", rendererName, "RootNode/" + rendererName);
+            Check(BindingRoot() == null,
+                "A copied accessory does not disable retained baked-face expression binding");
+            baked.ExpressionFaceTarget = new VrchatBoneTarget(null, rendererName, null, "regular", 1);
+            Check(BindingRoot() == null,
+                "Copied faces on imported bones retain expression matching across synthetic FBX ancestors");
+            boneCopy.ParentTransforms.Insert(0, new VrchatPrefabTransform { GameObjectKey = baked.DescriptorRootKey });
+            Check(BindingRoot() == bakedDescriptor, "Authored copied renderer hierarchies retain strict expression paths");
+            baked.MeshCopies.Clear();
+            var expressionPhysics = new VrchatPhysicsPlacement();
+            expressionPhysics.Transforms.Add(new VrchatPrefabTransform { GameObjectKey = baked.DescriptorRootKey });
+            baked.PhysicsPlacements.Add(expressionPhysics);
+            Check(BindingRoot() == bakedDescriptor, "Existing physics-created descriptor roots retain strict expression paths");
+            parentB.Parent = primary;
+            bakedDescriptor.Destroy();
+        }
         var descriptorAvatar = new VrchatAvatar();
         var descriptorTarget = new VrchatBoneTarget(null, rendererName, null, "descriptor-copy", 21);
         descriptorAvatar.Visemes.Add(new VrchatViseme { ResonitePreset = "aa", MeshGameObjectName = rendererName,

@@ -497,6 +497,40 @@ ResoPonはAvatarCreatorのBlendShape名ヒューリスティクスによる補�
 表情構築後の最終ウェイトへEyeLinearDriverを追加すると既存Driveと競合する。
 合成・接続は[表情の出力変数](expression-variables.md#出力)を参照。
 
+## 視点
+
+- Descriptor の `ViewPosition` がある場合は、目ボーンからの推定より優先する。
+  目ボーンは回転用の支点であり、見えている眼球の中心とは限らない。
+- `ViewPosition` は Descriptor 原点からの、Unityワールド軸に沿ったメートル単位のオフセット。
+  SDK 3.10.6 の `VRC_AvatarDescriptor.OnDrawGizmosSelected` は
+  `transform.position + ViewPosition` で表示し、`TransformPoint` を使わない。
+  Descriptorやその親の回転・拡縮、FBXの単位補正をオフセットに掛けない。
+  原点の配置は保持し、ResoPonがシーン全体に加えた `AlignVrchatImportUp` の変換だけを反映する。
+- インポートの向きを揃えた後、Descriptorを含むラッパーを畳む前にワールド座標を保存する。
+  `AvatarSetup` はこれをHeadProxyの配置に使い、標準のVRIKAvatarセットアップでTargetを生成する。
+- 明示した `--view-forward` / `--view-up` は元の視点へのメートル単位の加算になる。
+  元の視点がある場合は目の間隔による自動オフセットを加えない。
+  設定またはDescriptorの参照先がない場合、非有限値の場合は従来の推定へ戻る。VRM経路も従来どおり。
+- 回帰例: NoraMiaree 1.0.0の目ボーン間隔は約6.5mmで、支点は顔の後方にある。
+  元の視点は `(0, 0.734906, 0.0715642)`、Prefabルートのscaleは1.1。
+  このscaleを視点にも掛けると約7.3cm上がり額の位置になる。ルートローカル座標と解釈しない。
+  また、通常のunpacked prefabでは主FBXと追加の衣装FBXの再利用骨格を、コピーしたrendererと同じ
+  authored root配下へ配置する。骨格をimport root直下に残すとscale=1.1がskinへ反映されず、
+  SDK視点だけ直しても目の高さと約6.6cmずれる。FBXインスタンスの配置処理とは分ける。
+  rendererコピーやphysicsの祖先階層がDescriptorを再現していない場合、新たな骨格配置で
+  作ったDescriptorを表情の厳密なpath接頭辞にしない。FBXにはUnityにない祖先が残るため、
+  明示的なanimation rootがなければ従来の一意なpath末尾照合を維持する。
+  standalone Mesh、別FBXのアクセサリー併用、import済み骨格配下の顔コピーもこの対象。
+  既存のコピー・physicsがDescriptorを再現している場合は従来の厳密なpath照合を保つ。
+  消された名前付きshapeの復元も同じ一意なpath末尾照合を使い、あいまいな候補は復元しない。
+  通常のprefab Transformはscale=0.01でも作者の設定として保持する。FBXの単位情報だけでは
+  別のprefab Transformが生成された単位補正かは判別できない。既存の生成wrapper用の
+  `NormalizeImportedModelRootScale` をこの階層へ広げない。scale=1.1やネストした祖先も保持する。
+  目から推定すると視点が下・後方へずれるため、モデル名による補正ではなくDescriptorを使う。
+  保存パッケージを再読込し、HeadProxyがSDKの規約から独立に求めた視点と一致し、
+  そのTargetが頭ボーンと一致することまで確認する。
+  目ボーンや変換関数自身を正解値にせず、顔メッシュの目の領域とも比較する。
+
 ## PhysBone
 
 - unpack済みprefabが複数のFBXを参照しても、物理用の親骨は主モデルを候補にして所属とフルパスを照合する。
