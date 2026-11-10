@@ -473,6 +473,9 @@ internal static class Converter
                     .ToDictionary(index => index, index => Vrchat.VrchatSceneSetup.ResolveImportedTarget(
                         model.NodeTargets[index], importedMeshSources, importedNodePaths, prefabSlots));
                 AlignVrchatImportUp(importRoot, model, alignmentNodes);
+                // Capture before collapsing wrappers: the descriptor can be an imported root
+                // whose unit scale is removed when its children are reparented.
+                float3? viewPosition = Vrchat.VrchatSceneSetup.ResolveViewPosition(avatar, descriptorRoot, importedMeshSources);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
                 RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
                 CollapseAssimpFbxTransformBones(root);
@@ -540,6 +543,7 @@ internal static class Converter
                     {
                         setupOptions.NearClip = options.NearClip.Value;
                     }
+                    setupOptions.ViewPosition = viewPosition;
                     AvatarSetup.Build(root, model, setupOptions, faceResolver, physicsNodes);
                     profile?.Mark("avatar-setup");
                     await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths);

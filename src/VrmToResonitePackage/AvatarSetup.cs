@@ -16,11 +16,14 @@ internal sealed class AvatarSetupOptions
     public bool FaceTracking { get; set; }
     public bool Protect { get; set; } = true;
 
-    /// <summary>View offset forward from the eye midpoint, in meters. Null = auto (eye-distance scaled).</summary>
+    /// <summary>Forward offset in meters. Null = zero for an authored view, otherwise eye-distance scaled.</summary>
     public float? ViewForward { get; set; }
 
-    /// <summary>View offset upward from the eye midpoint, in meters. Null = auto (eye-distance scaled).</summary>
+    /// <summary>Upward offset in meters. Null = zero for an authored view, otherwise eye-distance scaled.</summary>
     public float? ViewUp { get; set; }
+
+    /// <summary>Authored viewpoint in world space. Explicit offsets are added without automatic eye offsets.</summary>
+    public float3? ViewPosition { get; set; }
 
     /// <summary>AvatarRenderSettings near clip distance. Zero or negative disables the override.</summary>
     public float NearClip { get; set; } = 0.075f;
@@ -324,6 +327,11 @@ internal static class AvatarSetup
     private static float3 ComputeEyePosition(BipedRig rig, VrmModel vrm, float3 up, float3 forward,
         AvatarSetupOptions options)
     {
+        if (options.ViewPosition is float3 authoredPosition)
+        {
+            return authoredPosition + forward * (options.ViewForward ?? 0f) + up * (options.ViewUp ?? 0f);
+        }
+
         Slot leftEye = rig.TryGetBone(BodyNode.LeftEye);
         Slot rightEye = rig.TryGetBone(BodyNode.RightEye);
         if (leftEye != null && rightEye != null)

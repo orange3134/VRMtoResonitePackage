@@ -10,6 +10,25 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static class VrchatSceneSetup
 {
+    internal static float3? ResolveViewPosition(VrchatAvatar avatar, Slot descriptorRoot,
+        IReadOnlyDictionary<Slot, string> importedSources)
+    {
+        if (avatar.ViewPosition is not { } view || descriptorRoot == null || descriptorRoot.IsDestroyed)
+            return null;
+
+        // Descriptor coordinates are Unity meters. Imported slots still use FBX units;
+        // authored prefab slots already use meters. Retain authored placement and scale.
+        float units = 1f;
+        if (importedSources.TryGetValue(descriptorRoot, out string source))
+            units = source == avatar.FbxGuid ? avatar.FbxImportScale :
+                avatar.AdditionalFbxs.FirstOrDefault(model => model.Guid == source)?.ImportScale ?? 1f;
+        if (!float.IsFinite(units) || units <= 0f) return null;
+        float3 position = descriptorRoot.LocalPointToGlobal(new float3(view.X, view.Y, view.Z) / units);
+        if (!float.IsFinite(position.x) || !float.IsFinite(position.y) || !float.IsFinite(position.z)) return null;
+        UniLog.Log($"VRChat authored viewpoint: position={position}, descriptor={descriptorRoot.Name}, units={units}");
+        return position;
+    }
+
     internal sealed class MeshCopyBuild
     {
         private Action _bind;

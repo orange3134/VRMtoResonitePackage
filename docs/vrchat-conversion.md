@@ -497,6 +497,24 @@ ResoPonはAvatarCreatorのBlendShape名ヒューリスティクスによる補�
 表情構築後の最終ウェイトへEyeLinearDriverを追加すると既存Driveと競合する。
 合成・接続は[表情の出力変数](expression-variables.md#出力)を参照。
 
+## 視点
+
+- Descriptor の `ViewPosition` がある場合は、目ボーンからの推定より優先する。
+  目ボーンは回転用の支点であり、見えている眼球の中心とは限らない。
+- `ViewPosition` は Descriptor ローカルの Unity メートル座標。
+  Descriptor の回転・拡縮・配置を反映し、インポート済みFBXのSlotならインポート単位だけを除く。
+  Prefab側で作成したSlotにはFBXの単位補正を適用しない。
+- インポートの向きを揃えた後、Descriptorを含むラッパーを畳む前にワールド座標を保存する。
+  `AvatarSetup` はこれをHeadProxyの配置に使い、標準のVRIKAvatarセットアップでTargetを生成する。
+- 明示した `--view-forward` / `--view-up` は元の視点へのメートル単位の加算になる。
+  元の視点がある場合は目の間隔による自動オフセットを加えない。
+  設定またはDescriptorの参照先がない場合、非有限値の場合は従来の推定へ戻る。VRM経路も従来どおり。
+- 回帰例: NoraMiaree 1.0.0の目ボーン間隔は約6.5mmで、支点は顔の後方にある。
+  元の視点は `(0, 0.734906, 0.0715642)`、Prefabルートのscaleは1.1。
+  目から推定すると視点が下・後方へずれるため、モデル名による補正ではなくDescriptorを使う。
+  保存パッケージを再読込し、HeadProxyが変換済みDescriptorの視点と一致し、
+  そのTargetが頭ボーンと一致することまで確認する。
+
 ## PhysBone
 
 - unpack済みprefabが複数のFBXを参照しても、物理用の親骨は主モデルを候補にして所属とフルパスを照合する。

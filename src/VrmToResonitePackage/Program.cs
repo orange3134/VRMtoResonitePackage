@@ -314,8 +314,8 @@ internal sealed class CliOptions
         Console.WriteLine("  --no-protection          SimpleAvatarProtection（アバター保護）を付けない");
         Console.WriteLine("  --no-expression-menu     表情メニューを生成しない（ハンドサイン・キーボード・APIは有効）");
         Console.WriteLine("  --default-user-scale     DefaultUserScaleを付与し着用者を原寸サイズに縮小（低等身アバターの巨大化を防ぐ）");
-        Console.WriteLine("  --view-forward <m>       視点の前方オフセット（既定: 目間距離から自動）");
-        Console.WriteLine("  --view-up <m>            視点の上方オフセット（既定: 目間距離から自動)");
+        Console.WriteLine("  --view-forward <m>       視点の前方オフセット（元の視点設定があれば加算、既定0）");
+        Console.WriteLine("  --view-up <m>            視点の上方オフセット（元の視点設定がなければ既定は自動）");
         Console.WriteLine("  --near-clip <m>          AvatarRenderSettingsのNearClip（既定: 0.075、0で無効）");
         Console.WriteLine("  --import-timeout <sec>   モデルインポートのタイムアウト秒数（既定: 300）");
         Console.WriteLine("  --mtoon-transparent-cutout <name>  指定したMToon Transparent材質をCutoutに変換");

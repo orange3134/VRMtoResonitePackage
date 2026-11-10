@@ -1,5 +1,9 @@
 # Prefab scene regression checks
 
+`ViewpointChecks` verifies authored Descriptor viewpoints through rotated/scaled
+prefab wrappers and imported model unit boundaries, precedence over eye pivots,
+explicit meter offsets, and fallback for missing or invalid viewpoint data.
+
 `OutlineExclusionSceneChecks` verifies lilToon zero-width outline removal using a
 vertically asymmetric mask, main UV transforms and repeat sampling. Shared mesh
 users remain isolated, surface material properties and blendshapes survive reload,

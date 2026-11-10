@@ -57,6 +57,7 @@ static async Task Run(string fbxPath, string rendererName)
     {
         await default(ToWorld);
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
+        ViewpointChecks.Run(root);
         await MaterialLayerChecks.Run(assets, temp);
         await OutlineExclusionSceneChecks.Run(root, temp);
         await MixedScaleSkinChecks.Run(root);
