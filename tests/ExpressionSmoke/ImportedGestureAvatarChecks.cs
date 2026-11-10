@@ -136,12 +136,9 @@ internal static class ImportedGestureAvatarChecks
         Check(Get<int>(core, "State.Gesture.Left") == heldLeft && Get<int>(core, "State.Gesture.Right") == heldRight &&
             Reference<Slot>(core, "State.CurrentExpression") == heldExpression && ContextMenuSelected(core),
             "Saved menu hold permits hand updates while blocking pose application");
-        var toggle = menu.FindChild("Hand gestures").GetComponent<ButtonDynamicImpulseTrigger>();
-        Check(toggle.PressedTag.Value == ExpressionSystemSetup.ToggleHandGesturesTag,
-            "Saved hand gesture button sends a toggle impulse");
-        toggle.Pressed(null, default);
-        Check(NoHandsAllowed(core) && ContextMenuSelected(core), "permission toggle preserves the menu hold");
-        toggle.Pressed(null, default);
+        HandGesturePermissionChecks.PressOption(menu, "Both hands disabled");
+        Check(NoHandsAllowed(core) && ContextMenuSelected(core), "permission option preserves the menu hold");
+        HandGesturePermissionChecks.PressOption(menu, "Both hands enabled");
         Check(BothHandsAllowed(core) && Get<int>(core, "State.Gesture.Left") == heldLeft && Get<int>(core, "State.Gesture.Right") == heldRight,
             "Enabling ordinary input retains the saved menu pair");
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(receiverRoot, ExpressionSystemSetup.ResetTag, true);
@@ -149,7 +146,7 @@ internal static class ImportedGestureAvatarChecks
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureLeftTag, true, 0);
         ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(receiverRoot, ExpressionSystemSetup.TrySetGestureRightTag, true, 0);
         Check(Gestures(core) == (0, 0), "Saved normal input works after enabling");
-        toggle.Pressed(null, default);
+        HandGesturePermissionChecks.PressOption(menu, "Both hands disabled");
         Check(NoHandsAllowed(core), "Saved menu-only button disables ordinary input");
         for (int i = 0; i < 2; i++) await default(NextUpdate);
         ExpressionGraphChecks.CheckMenuColors(root);

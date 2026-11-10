@@ -47,30 +47,20 @@ internal static class ExpressionGraphChecks
             else if (item.Slot.GetComponents<ButtonValueSet<bool>>() is { Count: > 0 } setters)
             {
                 bool selected = setters.All(set => set.TargetValue.Target.Value == set.SetValue.Value);
-                CheckPermissionColor(item, selected, option: true);
-                continue;
-            }
-            else if (item.Slot.GetComponent<ButtonDynamicImpulseTrigger>() is { } toggle &&
-                toggle.PressedTag.Value.StartsWith("ExpressionSystem/Method.ToggleHandGestures", StringComparison.Ordinal))
-            {
-                bool allow = toggle.PressedTag.Value == "ExpressionSystem/Method.ToggleHandGestures"
-                    ? ExpressionTestFields.BothHandsAllowed(expressions)
-                    : ExpressionTestFields.HandGesturesAllowed(expressions, toggle.PressedTag.Value.Split('/').Last());
-                CheckPermissionColor(item, allow);
+                CheckPermissionColor(item, selected);
                 continue;
             }
             else continue;
             Check(item.Color.Value.Equals(active ? green : colorX.White),
                 "only the currently selected menu option is green: " + item.Slot.Name);
         }
-        void CheckPermissionColor(ContextMenuItemSource item, bool allow, bool option = false)
+        void CheckPermissionColor(ContextMenuItemSource item, bool allow)
         {
             var driver = item.Slot.GetComponent<ValueOptionDescriptionDriver<bool>>();
             Check(driver != null && driver.Color.IsLinkValid && driver.Color.Target == item.Color,
                 "permission menu Color uses ValueOptionDescriptionDriver: " + item.Slot.Name);
-            var red = new colorX(1f, 0f, 0f, 1f, Renderite.Shared.ColorProfile.Linear);
-            Check(item.Color.Value.Equals(allow ? green : option ? colorX.White : red),
-                "gesture choices highlight the exact permission pair; desktop toggle is green when both hands are on");
+            Check(item.Color.Value.Equals(allow ? green : colorX.White),
+                "gesture choices highlight the exact permission pair");
         }
     }
 
@@ -115,12 +105,9 @@ internal static class ExpressionGraphChecks
         Check(!expressions.GetComponentsInChildren<DynamicValueVariable<bool>>().Any(v =>
             v.VariableName.Value == "ExpressionSystem.Clip/MenuAvailable"),
             "menu availability state is absent");
-        var modeEntries = new[] { "Hand gesture options", "Hand gestures" }.Select(name =>
-                Descendant(expressions, $"Inputs/ContextMenu/{name}")?.GetComponent<ContextMenuItemSource>())
-            .Where(item => item != null).ToHashSet();
         Check(expressions.GetComponentsInChildren<ContextMenuItemSource>().All(item =>
-            (item.EnabledField.ActiveLink != null) == modeEntries.Contains(item)),
-            "only the VR gesture submenu and desktop toggle have automatic visibility drivers");
+            item.EnabledField.ActiveLink == null && item.Enabled),
+            "all context menu entries stay enabled without automatic visibility drivers");
         Check(expressions.FindChild("Inputs").GetComponentsInChildren<ProtoFluxNode>().All(n => n.GetType().Name != "OnStart"),
             "input modules run on changes without OnStart impulses");
         ExpressionDynamicInputChecks.CheckBindings(expressions);
@@ -198,9 +185,9 @@ internal static class ExpressionGraphChecks
         Check(nodes.All(n => n.GetType().Name != "ReferenceDrive`1"), "no playback reference drives");
         Check(nodes.Where(n => n.GetType().Name == "ValueFieldDrive`1").All(n =>
             Board(n).Name == "Tracking" && Board(n).Parent.Parent == expressions.FindChild("Outputs") ||
-            Board(n).Name is "Gesture menu visibility" or "Gesture menu label" &&
+            Board(n).Name == "Gesture menu label" &&
                 Board(n).Parent == Descendant(expressions, "Inputs/ContextMenu")),
-            "continuous drives are limited to live tracking and gesture menu visibility/labels");
+            "continuous drives are limited to live tracking and gesture menu labels");
         Check(nodes.Any(n => n.GetType().Name.StartsWith("FireOnLocal", StringComparison.Ordinal)),
             "state transitions use local change detectors");
         Check(expressions.GetComponentsInChildren<DynamicValueVariable<bool>>()
@@ -451,11 +438,9 @@ internal static class ExpressionGraphChecks
             "hand gesture toggle receives an impulse without a payload");
         if (Descendant(expressions, "Inputs/ContextMenu") is { } menuItems)
         {
-            var toggle = menuItems.FindChild("Hand gestures")?.GetComponent<ButtonDynamicImpulseTrigger>();
-            Check(toggle?.Target.Target == Descendant(expressions, "API") &&
-                toggle.PressedTag.Value == "ExpressionSystem/Method.ToggleHandGestures" &&
-                menuItems.GetComponentsInChildren<ButtonDynamicImpulseTrigger>().Count(b => b.PressedTag.Value == toggle.PressedTag.Value) == 1,
-                "one toggle menu targets this avatar's gesture permission API");
+            Check(menuItems.FindChild("Hand gestures") == null && menuItems.FindChild("Gesture menu visibility") == null &&
+                menuItems.GetComponentsInChildren<Nodes.FrooxEngine.Users.UserVR_Active>().Count == 0,
+                "desktop toggle and VR-dependent visibility remain absent after generation, cloning and reload");
             var resetButton = menuItems.FindChild("Reset State")?.GetComponent<ButtonDynamicImpulseTrigger>();
             Check(resetButton?.Target.Target == Descendant(expressions, "API") &&
                 resetButton.PressedTag.Value == "ExpressionSystem/Method.Reset", "reset menu targets this avatar's reset API");

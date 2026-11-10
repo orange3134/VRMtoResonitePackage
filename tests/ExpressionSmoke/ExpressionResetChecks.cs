@@ -36,19 +36,18 @@ internal static class ExpressionResetChecks
             Check(Get<int>(core, "State.Gesture.Left") == 5 && Get<int>(core, "State.Gesture.Right") == 6 &&
                 NoHandsAllowed(core) && Reference<Slot>(core, "State.CurrentExpression") == expression,
                 "reset starts with both hands non-neutral, a selected expression and gestures disabled");
-            var toggle = expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Hand gestures")
-                .GetComponent<ButtonDynamicImpulseTrigger>();
             void Toggle(bool expected)
             {
-                toggle.Pressed(null, default);
+                HandGesturePermissionChecks.PressOption(expressions.FindChild("Inputs").FindChild("ContextMenu"),
+                    expected ? "Both hands enabled" : "Both hands disabled");
                 Check(BothHandsAllowed(core) == expected && Get<int>(core, "State.Gesture.Left") == 5 &&
                     Get<int>(core, "State.Gesture.Right") == 6 && Reference<Slot>(core, "State.CurrentExpression") == expression,
-                    "gesture toggle changes only permission and preserves the selected expression and hands");
+                    "gesture option changes only permission and preserves the selected expression and hands");
             }
             await Frames(2); ExpressionGraphChecks.CheckMenuColors(expressions);
             Toggle(true);
             await Frames(2); ExpressionGraphChecks.CheckMenuColors(expressions);
-            Toggle(false); Toggle(true); Toggle(false); // Each press reads current state, even in one frame.
+            Toggle(false); Toggle(true); Toggle(false); // Repeated choices apply even in one frame.
             await Frames(2); ExpressionGraphChecks.CheckMenuColors(expressions);
             button.Pressed(null, default);
             void CheckReset(bool left = false, bool right = false)

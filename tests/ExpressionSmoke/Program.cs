@@ -487,12 +487,10 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         Request(ExpressionSystemSetup.SetGestureLeftTag, 3); Request(ExpressionSystemSetup.SetGestureRightTag, 4);
         Check(Get<int>(core, "State.Gesture.Left") == 3 && Get<int>(core, "State.Gesture.Right") == 4 && NoHandsAllowed(core),
             "unworn SetGesture updates both hands independently of permission");
-        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Hand gestures")
-            .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
-        Check(BothHandsAllowed(core), "unworn combined toggle enables both hands");
-        expressions.FindChild("Inputs").FindChild("ContextMenu").FindChild("Hand gestures")
-            .GetComponent<ButtonDynamicImpulseTrigger>().Pressed(null, default);
-        Check(NoHandsAllowed(core), "unworn combined toggle disables both hands");
+        HandGesturePermissionChecks.PressOption(expressions.FindChild("Inputs").FindChild("ContextMenu"), "Both hands enabled");
+        Check(BothHandsAllowed(core), "unworn menu option enables both hands");
+        HandGesturePermissionChecks.PressOption(expressions.FindChild("Inputs").FindChild("ContextMenu"), "Both hands disabled");
+        Check(NoHandsAllowed(core), "unworn menu option disables both hands");
         // Saved/manual state may still contain a pose while the avatar is unworn.
         Set(core, "State.CurrentExpression", catalog.FindChild("Angry"));
         Set(table, "L0R0", catalog.FindChild("Angry"));

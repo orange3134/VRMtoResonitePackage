@@ -24,7 +24,7 @@ Use the same installation for both.
   rows, invalid/foreign selection Slots, null release, and same-Slot no-op behavior.
 - Menu selection hold, permission settings, reset and wear lifecycle, numbered
   flat selection for up to eight expressions, groups for larger catalogs,
-  label/color bindings, and direct-child menus.
+  label/color bindings, and direct-child menus shared by VR and desktop modes.
 - Keyboard rising-edge behavior, controller sensor tables and Index neutral bands,
   timeout/drop semantics, delayed snapshots, disconnect/VR-exit sentinels, and permissions.
 - Static output writes, sparse named pose values, readable binding keys and collisions,
