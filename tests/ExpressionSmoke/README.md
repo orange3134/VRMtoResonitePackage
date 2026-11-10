@@ -34,6 +34,8 @@ Use the same installation for both.
   cloning, package inspection and reload.
 - Generated Avatar Root Identification and loading stand-in behavior, including
   wear state, head tracking, mesh visibility, and collected fallback texture assets.
+- Hand collider raycasts follow local wear state through equip, dequip, reparenting
+  and package reload, with an unresolved-variable fallback and unchanged tool positions.
 
 Current behavior and editing instructions are documented in the
 [expression system](../../docs/expression-system.md),
