@@ -26,8 +26,26 @@ internal static class ExpressionMenuGroupChecks
         pairs[9] = "both";
         pairs[63] = "left";
         var partition = ExpressionMenuGroups.Build(new[] { "other", "right", "left", "both", "shared", "left" }, pairs);
-        Check(partition.Select(g => string.Join(",", g)).SequenceEqual(new[] { "shared", "left", "right", "both", "other" }),
-            "partially shared hands, combined poses and unmapped clips have distinct groups without aliases");
+        Check(partition.Select(g => string.Join(",", g)).SequenceEqual(new[] { "left,shared", "right", "both", "other" }),
+            "shared poses join the left group in catalog order without duplicate right-hand entries");
+        var overflowPairs = new string[64];
+        for (int i = 1; i < 8; i++) overflowPairs[i * 8] = "left" + i;
+        overflowPairs[0] = "shared0";
+        overflowPairs[1] = overflowPairs[8] = "shared1";
+        overflowPairs[2] = "right";
+        var overflowClips = new[] { "shared0", "shared1" }
+            .Concat(Enumerable.Range(2, 6).Select(i => "left" + i)).Append("right").ToArray();
+        var fullLeft = ExpressionMenuGroups.Build(overflowClips, overflowPairs);
+        Check(fullLeft.Count == 2 && fullLeft[0].SequenceEqual(overflowClips.Take(8)) &&
+            fullLeft[1].SequenceEqual(new[] { "right" }), "shared and left poses fill one eight-entry group");
+        // Nine left-column entries require an expanded gesture table.
+        var ninePairs = new string[81];
+        for (int i = 0; i < 9; i++) ninePairs[i * 9] = "left" + i;
+        ninePairs[1] = "left1";
+        var nineClips = Enumerable.Range(0, 9).Select(i => "left" + i).ToArray();
+        var splitLeft = ExpressionMenuGroups.Build(nineClips, ninePairs, 9);
+        Check(splitLeft.Select(g => g.Length).SequenceEqual(new[] { 8, 1 }) &&
+            splitLeft.SelectMany(g => g).SequenceEqual(nineClips), "merged left category still splits at eight");
         for (int i = 0; i < 8; i++) pairs[i * 8] = pairs[i] = "same" + i;
         var identical = ExpressionMenuGroups.Build(Enumerable.Range(0, 8).Select(i => "same" + i), pairs);
         Check(identical.Count == 1 && identical[0].Length == 8, "identical left/right selections share one group");
@@ -76,15 +94,15 @@ internal static class ExpressionMenuGroupChecks
             }
             var groupButtons = entries.Children.SelectMany(s => s.GetComponents<ButtonDynamicImpulseTriggerWithReference<Slot>>()).ToArray();
             Check(groupButtons.Length <= 8 && (flat || groupButtons.Length > 0), "at most eight expressions per menu (Back is navigation)");
-            var categories = new HashSet<(bool, bool, bool)>();
+            var categories = new HashSet<int>();
             foreach (var button in groupButtons)
             {
                 var target = button.Slot.GetComponent<BooleanReferenceDriver<Slot>>().FalseTarget.Target;
                 Check(target != null && targets.Add(target), "each expression has exactly one reachable button");
-                categories.Add((leftOnly.Contains(target), rightOnly.Contains(target), mapped.Contains(target)));
+                categories.Add(leftOnly.Contains(target) ? 0 : rightOnly.Contains(target) ? 1 : mapped.Contains(target) ? 2 : 3);
                 buttons.Add(button);
             }
-            if (!flat) Check(categories.Count == 1, "shared, left, right, combined and other expressions never mix within a group");
+            if (!flat) Check(categories.Count == 1, "left including shared, right-only, combined and other categories never mix");
         }
         Check(targets.SetEquals(root.FindChild("Clips").Children), "direct or grouped buttons cover the entire selectable catalog");
         Check(items.GetComponentsInChildren<ButtonDynamicImpulseTriggerWithReference<Slot>>().Count == buttons.Count,
