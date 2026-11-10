@@ -10,22 +10,37 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static class VrchatSceneSetup
 {
+    internal static Slot ExpressionBindingRoot(VrchatAvatar avatar, Slot root)
+    {
+        if (!avatar.HasUnpackedRootPlacement || avatar.ExpressionRootTarget != null) return root;
+        // Preserve the animation basis from before skeleton root placement. If authored
+        // copies/physics already reproduce the descriptor, paths are strict. Otherwise
+        // the descriptor exists only for this new placement and imported FBX ancestors
+        // still require the existing unique-suffix matching (also for copies on bones).
+        bool IsDescriptor(VrchatPrefabTransform transform) => avatar.DescriptorRootKey != null &&
+            transform.GameObjectKey == avatar.DescriptorRootKey ||
+            avatar.DescriptorRootTarget is { PrefabGuid: not null } target &&
+            transform.Key == $"{target.PrefabGuid}:{target.TransformFileId}";
+        bool authoredDescriptor = avatar.MeshCopies.Any(copy =>
+            copy.Transform != null && IsDescriptor(copy.Transform) || copy.ParentTransforms.Any(IsDescriptor)) ||
+            avatar.PhysicsPlacements.Any(placement => placement.Transforms.Any(IsDescriptor));
+        return authoredDescriptor ? root : null;
+    }
+
     internal static float3? ResolveViewPosition(VrchatAvatar avatar, Slot descriptorRoot,
-        IReadOnlyDictionary<Slot, string> importedSources)
+        Slot importRoot)
     {
         if (avatar.ViewPosition is not { } view || descriptorRoot == null || descriptorRoot.IsDestroyed)
             return null;
 
-        // Descriptor coordinates are Unity meters. Imported slots still use FBX units;
-        // authored prefab slots already use meters. Retain authored placement and scale.
-        float units = 1f;
-        if (importedSources.TryGetValue(descriptorRoot, out string source))
-            units = source == avatar.FbxGuid ? avatar.FbxImportScale :
-                avatar.AdditionalFbxs.FirstOrDefault(model => model.Guid == source)?.ImportScale ?? 1f;
-        if (!float.IsFinite(units) || units <= 0f) return null;
-        float3 position = descriptorRoot.LocalPointToGlobal(new float3(view.X, view.Y, view.Z) / units);
+        // VRC_AvatarDescriptor.OnDrawGizmosSelected uses transform.position + ViewPosition,
+        // not TransformPoint: this is an unscaled Unity-world-axis offset in meters.
+        // Apply only our whole-import alignment, never the descriptor's rotation/scale
+        // or the model's FBX unit correction. Its origin still follows authored placement.
+        float3 origin = importRoot.GlobalPointToLocal(descriptorRoot.GlobalPosition);
+        float3 position = importRoot.LocalPointToGlobal(origin + new float3(view.X, view.Y, view.Z));
         if (!float.IsFinite(position.x) || !float.IsFinite(position.y) || !float.IsFinite(position.z)) return null;
-        UniLog.Log($"VRChat authored viewpoint: position={position}, descriptor={descriptorRoot.Name}, units={units}");
+        UniLog.Log($"VRChat authored viewpoint: position={position}, descriptor={descriptorRoot.Name}, worldOffset={view}");
         return position;
     }
 

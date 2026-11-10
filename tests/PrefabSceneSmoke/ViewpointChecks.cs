@@ -12,9 +12,9 @@ internal static class ViewpointChecks
             .GetMethod("ResolveViewPosition", BindingFlags.Static | BindingFlags.NonPublic)!;
         var avatar = new VrchatAvatar { FbxGuid = "body", FbxImportScale = .01f,
             ViewPosition = new System.Numerics.Vector3(.02f, .735f, .072f) };
-        var sources = new Dictionary<Slot, string>();
-        float3? Resolve(Slot descriptor) => (float3?)resolve.Invoke(null, new object[] { avatar, descriptor, sources });
-        var parent = root.AddSlot("Viewpoint placement");
+        var alignment = root.AddSlot("Import alignment");
+        float3? Resolve(Slot descriptor) => (float3?)resolve.Invoke(null, new object[] { avatar, descriptor, alignment });
+        var parent = alignment.AddSlot("Viewpoint placement");
         parent.LocalPosition = new float3(1, 2, 3);
         parent.LocalRotation = floatQ.Euler(12, 73, 5);
         parent.LocalScale = new float3(2, 3, 4);
@@ -22,15 +22,20 @@ internal static class ViewpointChecks
         descriptor.LocalPosition = new float3(.1f, .2f, .3f);
         descriptor.LocalRotation = floatQ.Euler(5, 15, 25);
         descriptor.LocalScale = new float3(.8f, 1.2f, 1.1f);
-        float3 expected = descriptor.LocalPointToGlobal(new float3(.02f, .735f, .072f));
-        Near(Resolve(descriptor), expected, "Authored descriptor viewpoint retains translation, rotation and nonuniform scale");
-        sources[descriptor] = "body";
+        // Independent SDK oracle: transform.position + ViewPosition. Rotations/scales of
+        // the descriptor and its prefab parents affect only that origin, not the offset.
+        var offset = new float3(.02f, .735f, .072f);
+        float3 expected = descriptor.GlobalPosition + offset;
+        Near(Resolve(descriptor), expected, "SDK viewpoint ignores authored rotation and nonuniform scale but retains the origin");
         descriptor.LocalScale *= .01f;
-        Near(Resolve(descriptor), expected, "Imported descriptor viewpoint crosses the centimeter boundary once");
+        Near(Resolve(descriptor), expected, "FBX centimeter units do not rescale the SDK world offset");
         avatar.AdditionalFbxs.Add(new VrchatFbxAsset { Guid = "other", ImportScale = .1f });
         descriptor.LocalScale *= 10f;
-        sources[descriptor] = "other";
-        Near(Resolve(descriptor), expected, "Additional model descriptor uses its own import units");
+        Near(Resolve(descriptor), expected, "Additional model import units do not rescale the SDK world offset");
+        alignment.LocalRotation = floatQ.Euler(23, 90, 0);
+        alignment.LocalPosition = new float3(-2, 1, 4);
+        expected = descriptor.GlobalPosition + alignment.GlobalRotation * offset;
+        Near(Resolve(descriptor), expected, "Only the converter's import alignment rotates the SDK world offset");
         var actual = Resolve(descriptor);
         descriptor.Destroy();
         Check(Resolve(descriptor) == null && Resolve(null) == null,
@@ -58,7 +63,7 @@ internal static class ViewpointChecks
         Check(Resolve(parent) == null, "Missing ViewPosition retains fallback");
         avatar.ViewPosition = new System.Numerics.Vector3(float.NaN, 1, 0);
         Check(Resolve(parent) == null, "Nonfinite authored viewpoints retain fallback");
-        parent.Destroy();
+        alignment.Destroy();
     }
 
     private static void Near(float3? actual, float3 expected, string label) =>

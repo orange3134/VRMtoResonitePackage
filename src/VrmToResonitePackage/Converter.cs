@@ -473,9 +473,9 @@ internal static class Converter
                     .ToDictionary(index => index, index => Vrchat.VrchatSceneSetup.ResolveImportedTarget(
                         model.NodeTargets[index], importedMeshSources, importedNodePaths, prefabSlots));
                 AlignVrchatImportUp(importRoot, model, alignmentNodes);
-                // Capture before collapsing wrappers: the descriptor can be an imported root
-                // whose unit scale is removed when its children are reparented.
-                float3? viewPosition = Vrchat.VrchatSceneSetup.ResolveViewPosition(avatar, descriptorRoot, importedMeshSources);
+                // Capture the SDK's unscaled world-axis offset through our import alignment
+                // before either the descriptor wrapper or the alignment root is collapsed.
+                float3? viewPosition = Vrchat.VrchatSceneSetup.ResolveViewPosition(avatar, descriptorRoot, importRoot);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
                 RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
                 CollapseAssimpFbxTransformBones(root);
@@ -490,6 +490,7 @@ internal static class Converter
                 Slot expressionRoot = avatar.ExpressionRootTarget == null ? descriptorRoot :
                     Vrchat.VrchatSceneSetup.ResolveImportedTarget(avatar.ExpressionRootTarget,
                         importedMeshSources, importedNodePaths, prefabSlots) ?? descriptorRoot;
+                expressionRoot = Vrchat.VrchatSceneSetup.ExpressionBindingRoot(avatar, expressionRoot);
                 int repairedBlendshapeMeshes = await Vrchat.VrchatBlendShapeRepair.Apply(root, avatar,
                     importedMeshSources, authoredObjects, importedNodePaths, expressionRoot);
                 profile?.Mark("blendshape-repair");

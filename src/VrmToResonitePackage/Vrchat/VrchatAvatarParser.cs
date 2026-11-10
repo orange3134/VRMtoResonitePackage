@@ -203,6 +203,7 @@ public static class VrchatAvatarParser
             if (!includedSubtree.Contains(selected.Root.FileId))
                 throw new InvalidDataException("アバター本体のルートがEditorOnlyのため変換対象がありません。");
             ResolveFbx(package, selected.Scene, selected.Root, includedSubtree, avatar);
+            ApplyUnpackedRootPlacement(package, selected.Source.Guid, selected.Scene, selected.Root, avatar);
         }
         ParseFbxBlendShapeNames(package, avatar);
         profile?.Mark("models-and-shape-names");
@@ -1487,6 +1488,27 @@ public static class VrchatAvatarParser
                                     package.ByGuid(guid)?.Extension == ".fbx")
                      .Distinct(StringComparer.OrdinalIgnoreCase))
             AddAdditionalFbx(package, avatar, guid, null);
+    }
+
+    private static void ApplyUnpackedRootPlacement(UnityPackage package, string sceneGuid,
+        UnityScene scene, YamlDocument avatarRoot, VrchatAvatar avatar)
+    {
+        // Regular prefabs copy their renderers under the authored root but reuse the
+        // imported skeletons. Place all of them under the same root so its transforms
+        // affect both skins and bones. Instantiated FBX variants have their own placement.
+        var placement = new FbxPlacement();
+        long rootTransform = scene.TransformOfGameObject(avatarRoot.FileId)?.FileId ?? 0;
+        CaptureLocalPlacementParents(package, scene, sceneGuid, rootTransform, placement);
+        // This is an authored prefab Transform, not an imported model wrapper. Even
+        // uniform 0.01 is meaningful here; FBX units alone cannot establish its origin.
+        ApplyPrimaryFbxPlacement(avatar, package.ByGuid(avatar.FbxGuid), placement);
+        avatar.HasUnpackedRootPlacement = true;
+        foreach (var additional in avatar.AdditionalFbxs)
+        {
+            additional.ParentFbxGuid = placement.ParentFbxGuid;
+            additional.ParentNodeName = placement.ParentNodeName;
+            additional.ParentTransforms.AddRange(placement.ParentTransforms);
+        }
     }
 
     private static void ParseHumanoid(UnityPackage package, VrchatAvatar avatar)

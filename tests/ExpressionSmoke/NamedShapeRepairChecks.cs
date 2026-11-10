@@ -79,6 +79,15 @@ internal static class NamedShapeRepairChecks
             Check(face.Mesh.Asset.Data.GetBlendShape(0).Frames.Single().RawPositions[0] == new float3(0, 0.1f, 0),
                 "channel rename preserves actual vertex deltas instead of inserting an empty frame");
             Check(renderers.Skip(1).All(r => r.BlendShapeName(0) == "Existing"), "same-named other meshes remain unchanged");
+            var retained = Mesh(descriptor.AddSlot("Model").AddSlot("RootNode").AddSlot("BakedFace"));
+            for (int i = 0; i < 7200 && retained.MeshBlendshapeCount != 1; i++) await default(NextUpdate);
+            avatar.FbxBlendShapeNames["BakedFace"] = expected;
+            clip.Curves.Add(new ExpressionCurve { Binding = new("BakedFace", "Stripped") });
+            Check(await VrchatBlendShapeRepair.Apply(root, avatar, new Dictionary<Slot, string>(),
+                new Dictionary<string, Slot>()) == 1, "unscoped repair uses the same unique suffix as expression binding");
+            for (int i = 0; i < 7200 && retained.MeshBlendshapeCount != 2; i++) await default(NextUpdate);
+            Check(retained.TryGetBlendShape("Stripped") != null && renderers.Skip(1).All(r => r.MeshBlendshapeCount == 1),
+                "retained imported face restores named shapes while ambiguous suffixes remain untouched");
             var conflict = new MeshX(source); conflict.AddBlendShape("eye.Existing").AddFrame(1);
             Check(VrchatBlendShapeRepair.RestoreChannelNames(conflict, avatar.ModelBlendShapeAliasesByPath[new(null, "Face")]) == -1 &&
                 conflict.GetBlendShape(0).Name == "Existing", "ambiguous rename is atomic and leaves original geometry intact");

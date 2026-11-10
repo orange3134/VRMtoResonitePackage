@@ -33,6 +33,7 @@ internal static class VrchatBlendShapeRepair
         // Resolve authored animation paths before later hierarchy changes; ambiguous paths stay unresolved.
         var expressionShapes = avatar.Expressions.Clips.SelectMany(c => c.Curves).GroupBy(c => c.Binding.Path)
             .ToDictionary(g => g.Key, g => g.Select(c => c.Binding.Shape).ToHashSet(StringComparer.Ordinal));
+        bool allowSuffix = expressionRoot == null;
         expressionRoot ??= root;
         string RelativePath(Slot slot)
         {
@@ -40,9 +41,18 @@ internal static class VrchatBlendShapeRepair
             for (; slot != null && slot != expressionRoot; slot = slot.Parent) parts.Push(slot.Name);
             return slot == expressionRoot ? string.Join("/", parts) : null;
         }
-        var uniqueRenderers = expressionRoot.GetComponentsInChildren<SkinnedMeshRenderer>()
-            .GroupBy(r => RelativePath(r.Slot)).Where(g => g.Key != null && g.Count() == 1)
-            .ToDictionary(g => g.Single(), g => g.Key);
+        var rendererPaths = expressionRoot.GetComponentsInChildren<SkinnedMeshRenderer>()
+            .ToDictionary(r => r, r => RelativePath(r.Slot));
+        var requestedByRenderer = new Dictionary<SkinnedMeshRenderer, HashSet<string>>();
+        foreach (var (path, names) in expressionShapes)
+        {
+            var matches = rendererPaths.Where(pair => pair.Value == path || allowSuffix && path.Length > 0 &&
+                pair.Value?.EndsWith("/" + path, StringComparison.Ordinal) == true).Select(pair => pair.Key).ToArray();
+            if (matches.Length != 1) continue;
+            if (!requestedByRenderer.TryGetValue(matches[0], out var requested))
+                requestedByRenderer[matches[0]] = requested = new(StringComparer.Ordinal);
+            requested.UnionWith(names);
+        }
         foreach (SkinnedMeshRenderer renderer in root.GetComponentsInChildren<SkinnedMeshRenderer>())
         {
             string objectKey = authoredObjects.FirstOrDefault(entry => entry.Value == renderer.Slot).Key;
@@ -57,8 +67,7 @@ internal static class VrchatBlendShapeRepair
             var sourcePath = copy?.SourcePath ?? importedPaths?.GetValueOrDefault(renderer.Slot);
             var aliases = sourcePath == null ? null : avatar.ModelBlendShapeAliasesByPath.GetValueOrDefault(new(copy?.FbxGuid ?? guid, sourcePath));
             int maxReferencedIndex = MaxReferencedBlendShapeIndex(avatar, renderer.Slot.Name);
-            var requestedNames = uniqueRenderers.TryGetValue(renderer, out string expressionPath) &&
-                expressionShapes.TryGetValue(expressionPath, out var names) ? names : new HashSet<string>();
+            var requestedNames = requestedByRenderer.GetValueOrDefault(renderer) ?? new HashSet<string>();
             int requiredCount = Math.Min(expected.Count, maxReferencedIndex + 1);
             if (requiredCount == 0 && (aliases == null || !aliases.Keys.Any(renderer.Mesh.Asset.Data.HasBlendShape)) && !expected.Any(name => requestedNames.Contains(name) && !renderer.Mesh.Asset.Data.HasBlendShape(name)))
             {
