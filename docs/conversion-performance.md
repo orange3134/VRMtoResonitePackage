@@ -52,7 +52,8 @@ FirstPerson用メッシュ作成が、それぞれメッシュを複製して保
 必要な工程は入力設定によって異なるが、変更が少数のshape名や三角形だけでも、保存対象は全メッシュ。
 頂点数とblendshape frame数が大きいアバターほど、この繰り返しの影響が大きくなる。
 
-VRChatの表情補修・法線再計算・輪郭線補正は `MeshAssetWriter.SaveAsync` を使う。
+VRChatの表情補修・法線再計算・輪郭線補正と、VRM/VRChat共通のFirstPerson用メッシュ保存は
+`MeshAssetWriter.SaveAsync` を使う。
 通常の `LocalDB.SaveAssetAsync(MeshX)` は `MeshX.Encode` の高圧縮LZ4を使うため、
 ここでは `LZ4StreamFlags.None` の外側ストリームへ完全なPlain MeshXを直接Encodeする。
 これは実DLLの `MeshX.Decode` が対応する形式で、ヘッダや頂点・frameのバイナリ構造は
@@ -62,7 +63,7 @@ VRChatの表情補修・法線再計算・輪郭線補正は `MeshAssetWriter.Sa
 出力も圧縮済みのままで、非圧縮メッシュをパッケージへ大量に残さない。
 高圧縮よりファイルが多少大きくなる可能性はあるが、形状や属性の精度は変わらない。
 呼び出し元は背景スレッドで保存し、従来通りproviderの再読み込みを待つ。
-ModelImporter内部の初回保存とFirstPerson生成はエンジン既定の保存経路を維持する。
+ModelImporter内部の初回保存はエンジン既定の保存経路を維持する。
 DLL更新時は `MeshX.Decode` の外側LZ4対応を実DLLと回帰テストで再確認する。
 
 表情名の正規化は名前だけを先に調べ、変更不要なら全メッシュの複製・全frameのsnapshotを省略する。
@@ -127,8 +128,10 @@ IK生成を無効にしているため、これらを削る効果を重ねて見
 次の計測は画像の読み込み、合成、Encode、LocalDB取り込みを分離し、同じ加工条件の
 重複処理とピークメモリを確認する。マテリアル全体の無制限な並列化は避ける。
 
-`AvatarSetup.ApplyFirstPersonAutoAsync` のメッシュ保存には既定の `SaveAssetAsync` が残る。
-高速保存の適用候補だが、VRMとVRChatの共通経路なので両方で一人称用メッシュと表示設定を検証する。
+`AvatarSetup.ApplyFirstPersonAutoAsync` の一人称用メッシュにも高速保存を適用する。
+頭部の三角形除去、blendshape・bone・表示設定・元rendererへの追従は維持する。
+VRMとVRChatの共通経路なので、両方の保存パッケージを再読込し、一人称用メッシュを含む
+全メッシュのPlainデータが変更前と一致することを確認する。
 複数入力の一括処理ではエンジン初期化とワールド作成の繰り返しも合計する。
 起動共有の効果は入力数に依存し、単体変換のモデル読み込み短縮とは分けて評価する。
 
