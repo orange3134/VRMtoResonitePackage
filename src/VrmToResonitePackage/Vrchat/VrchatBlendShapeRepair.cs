@@ -14,7 +14,9 @@ internal static class VrchatBlendShapeRepair
         IReadOnlyDictionary<Slot, string> sources, IReadOnlyDictionary<string, Slot> authoredObjects,
         IReadOnlyDictionary<Slot, string> importedPaths = null, Slot expressionRoot = null)
     {
+        using var profile = ConversionProfile.Start("blendshape-repair");
         int repaired = await NormalizeRepeatedBlendShapeNames(root);
+        profile?.Mark("normalize-names");
         if (repaired > 0)
         {
             // Changing StaticMesh.URL starts an asynchronous asset reload. Indexed-shape repair
@@ -66,6 +68,8 @@ internal static class VrchatBlendShapeRepair
                        $"required through {requiredCount - 1}, FBX={expected.Count}, " +
                        $"imported={renderer.MeshBlendshapeCount}.");
 
+            using var meshProfile = ConversionProfile.Start($"repair-mesh:{renderer.Slot.Name}");
+
             MeshX mesh;
             var oldWeights = new Dictionary<string, Queue<float>>(StringComparer.Ordinal);
             for (int i = 0; i < renderer.MeshBlendshapeCount; i++)
@@ -91,6 +95,7 @@ internal static class VrchatBlendShapeRepair
             {
                 renderer.Mesh.Asset.ReleaseReadLock(readLock);
             }
+            meshProfile?.Mark("clone");
 
             int renamed = RestoreChannelNames(mesh, aliases);
             if (renamed < 0)
@@ -113,8 +118,10 @@ internal static class VrchatBlendShapeRepair
                 continue;
             }
             List<string> repairedNames = mesh.BlendShapes.Select(shape => shape.Name).ToList();
+            meshProfile?.Mark("edit-shapes");
 
             Uri uri = await renderer.Engine.LocalDB.SaveAssetAsync(mesh).ConfigureAwait(false);
+            meshProfile?.Mark("save-asset");
             await default(ToWorld);
             if (uri == null || renderer.Mesh.Target is not StaticMesh staticMesh)
             {

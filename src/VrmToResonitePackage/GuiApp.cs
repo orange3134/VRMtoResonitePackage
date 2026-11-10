@@ -540,9 +540,11 @@ internal sealed class MainWindow : Window
 
     private static IReadOnlyList<VrchatAvatarChoice> ListPackageAvatars(string path)
     {
+        using var profile = ConversionProfile.Start("avatar-list");
         try
         {
             using Unity.UnityPackage package = Unity.UnityPackage.Open(path);
+            profile?.Mark("package-open");
             return Vrchat.VrchatAvatarParser.ListAvatars(package);
         }
         catch

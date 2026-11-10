@@ -2,6 +2,8 @@
 
 この資料は `Unity/`、`Vrchat/`、および `Converter.ConvertVrchat` を変更するときに読む。
 
+処理時間を調べる場合は[変換性能の診断](conversion-performance.md)を参照する。
+
 ## 全体設計
 
 VRChatパーサはUnityアセットを解析し、共通の `VrmModel` とVRChat固有情報を生成する。

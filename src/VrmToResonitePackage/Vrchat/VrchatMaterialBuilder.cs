@@ -24,6 +24,7 @@ internal static partial class VrchatMaterialBuilder
         IReadOnlyDictionary<Slot, string> sources, IReadOnlyDictionary<string, Slot> authoredObjects = null,
         IReadOnlyDictionary<Slot, string> importedPaths = null)
     {
+        using var profile = ConversionProfile.Start("materials");
         var textureCache = new Dictionary<string, StaticTexture2D>(StringComparer.OrdinalIgnoreCase);
         var metallicGlossCache = new Dictionary<string, MetallicGlossResult>(
             StringComparer.OrdinalIgnoreCase);
@@ -60,6 +61,7 @@ internal static partial class VrchatMaterialBuilder
             }
         }
 
+        profile?.Mark("build-materials");
         // FBX prefab variants keep their renderer hierarchy as stripped objects, so the prefab
         // doesn't contain normal SkinnedMeshRenderer documents to read. ModelImporter mappings
         // associate embedded FBX material names with Unity .mat assets; replace the imported

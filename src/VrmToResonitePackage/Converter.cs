@@ -39,6 +39,8 @@ internal static class Converter
         try
         {
 
+        using var runProfile = ConversionProfile.Start("run");
+
         // Written straight to the log file (not the console) so every log starts with the build
         // version for bug reports, without duplicating the console header printed by Program.Main.
         logWriter.WriteLine($"ResoPonバージョン: {AppVersion.Display}");
@@ -64,6 +66,7 @@ internal static class Converter
         };
 
         await runner.Initialize(launchOptions).ConfigureAwait(false);
+        runProfile?.Mark("engine-initialize");
         Console.WriteLine("エンジン起動完了。変換を開始します。");
 
         // One shared world for all conversions. Userspace.ExitWorld is intentionally
@@ -80,6 +83,8 @@ internal static class Converter
         {
             throw new InvalidOperationException("変換用ワールドの作成に失敗しました。");
         }
+
+        runProfile?.Mark("world-open");
 
         int failures = 0;
         var outputs = new List<string>();
@@ -324,12 +329,15 @@ internal static class Converter
     /// </summary>
     private static async Task<string> ConvertVrchat(World world, string packagePath, CliOptions options)
     {
+        using var profile = ConversionProfile.Start("vrchat");
         using Unity.UnityPackage package = Unity.UnityPackage.Open(packagePath);
+        profile?.Mark("package-open");
         Vrchat.VrchatDiagnostics.LogPackageSummary(package, packagePath);
         Vrchat.VrchatAvatar avatar = null;
         try
         {
             avatar = Vrchat.VrchatAvatarParser.Parse(package, options.AvatarName);
+            profile?.Mark("avatar-parse");
             Vrchat.VrchatDiagnostics.LogAvatarSummary(package, avatar, "parsed");
         }
         catch (Exception ex)
@@ -383,6 +391,7 @@ internal static class Converter
                 var (path, asset) = additionalFbxPaths[i];
                 additionalFbxPaths[i] = (Unity.UnityFbxMorphSeams.Prepare(path), asset);
             }
+            profile?.Mark("prepare-fbx");
             await world.Coroutines.StartTask(async () =>
             {
                 await default(ToWorld);
@@ -419,6 +428,7 @@ internal static class Converter
                         $"FBXのインポートが {options.ImportTimeoutSeconds} 秒以内に完了しませんでした。");
                 }
                 await importTask;
+                profile?.Mark("import-primary-fbx");
 
                 for (int i = 0; i < additionalFbxPaths.Count; i++)
                 {
@@ -447,6 +457,7 @@ internal static class Converter
                             $"追加FBXのインポートが {options.ImportTimeoutSeconds} 秒以内に完了しませんでした。");
                     }
                     await additionalImport;
+                    profile?.Mark($"import-additional-fbx-{i + 1}");
                 }
 
                 // Capture model identity before wrappers are collapsed or moved. Instance names
@@ -465,9 +476,11 @@ internal static class Converter
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
                 RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
                 CollapseAssimpFbxTransformBones(root);
+                profile?.Mark("prefab-hierarchy");
 
                 Console.WriteLine("アセットの読み込みを待機中...");
                 await WaitForAssets(assetsSlot);
+                profile?.Mark("import-assets-ready");
 
                 // Unity may fold the model root while Assimp retains an extra node. Keep this
                 // animation basis separate from descriptor placement and physical transforms.
@@ -476,12 +489,15 @@ internal static class Converter
                         importedMeshSources, importedNodePaths, prefabSlots) ?? descriptorRoot;
                 int repairedBlendshapeMeshes = await Vrchat.VrchatBlendShapeRepair.Apply(root, avatar,
                     importedMeshSources, authoredObjects, importedNodePaths, expressionRoot);
+                profile?.Mark("blendshape-repair");
                 if (repairedBlendshapeMeshes > 0)
                 {
                     await WaitForAssets(assetsSlot);
                 }
+                profile?.Mark("repaired-assets-ready");
                 await Vrchat.VrchatBlendShapeNormals.Apply(root, assetsSlot, avatar, package,
                     importedMeshSources, authoredObjects);
+                profile?.Mark("blendshape-normals");
                 Vrchat.VrchatSceneSetup.ApplyInitialBlendShapes(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
 
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
@@ -501,10 +517,12 @@ internal static class Converter
                 await Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes,
                     target => Vrchat.VrchatSceneSetup.ResolveImportedTarget(target, importedMeshSources,
                         importedNodePaths, prefabSlots), descriptorRoot is { IsDestroyed: false } ? descriptorRoot : root);
+                profile?.Mark("scene-and-modular-avatar");
 
                 if (options.NoAvatar)
                 {
                     await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths);
+                    profile?.Mark("materials");
                     SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
                 else
@@ -523,13 +541,17 @@ internal static class Converter
                         setupOptions.NearClip = options.NearClip.Value;
                     }
                     AvatarSetup.Build(root, model, setupOptions, faceResolver, physicsNodes);
+                    profile?.Mark("avatar-setup");
                     await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths);
+                    profile?.Mark("materials");
                     await AvatarSetup.ApplyFirstPersonAutoAsync(root, model, physicsNodes);
+                    profile?.Mark("first-person");
                     SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
 
                 // Reflect prefab-authored scene state (inactive GameObjects, initial blendshape weights).
                 Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
+                profile?.Mark("physics-and-scene-state");
 
                 if (!options.NoAvatar)
                 {
@@ -538,6 +560,7 @@ internal static class Converter
                     await Expressions.ExpressionSystemSetup.BuildAsync(root, avatar.Expressions, faceResolver.ResolveExpression,
                         !options.NoExpressionMenu, faceResolver.InitialWeight);
                 }
+                profile?.Mark("expressions");
 
                 Vrchat.VrchatSceneSetup.RemoveEmptyMeshTemplates(root, replacedTemplateSlots,
                     prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values)
@@ -550,6 +573,7 @@ internal static class Converter
                     prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values).Append(descriptorRoot));
 
                 await MeshLoadingSetup.Apply(root);
+                profile?.Mark("cleanup-and-loading-setup");
 
                 for (int i = 0; i < 30; i++)
                 {
@@ -558,7 +582,9 @@ internal static class Converter
 
                 root.Name = displayName;
                 Console.WriteLine("パッケージを書き出し中...");
+                profile?.Mark("settle-updates");
                 await ExportPackage(world, root, outputPath);
+                profile?.Mark("export-package");
             }).ConfigureAwait(false);
         }
         catch (Exception ex)

@@ -15,6 +15,7 @@ internal static partial class VrchatMaterialBuilder
     internal static async Task ApplyOutlineExclusions(Slot root, Slot assets, UnityPackage package,
         Dictionary<XiexeToonMaterial, LilToonInfo> settings)
     {
+        using var profile = ConversionProfile.Start("outline-exclusions");
         if (settings.Count == 0) return;
         var masks = new Dictionary<XiexeToonMaterial, BakeTexture>();
         foreach (var (material, info) in settings)
@@ -53,12 +54,14 @@ internal static partial class VrchatMaterialBuilder
                 continue;
             }
             var engine = renderer.Engine;
+            using var meshProfile = ConversionProfile.Start($"outline-mesh:{renderer.Slot.Name}");
             await default(ToBackground);
             var readLock = new object();
             await asset.RequestReadLock(readLock).ConfigureAwait(false);
             MeshX mesh;
             try { mesh = new MeshX(asset.Data); }
             finally { asset.ReleaseReadLock(readLock); }
+            meshProfile?.Mark("clone");
             var changes = new List<(int index, XiexeToonMaterial material, int triangles)>();
             for (int i = 0; i < assigned.Length; i++)
             {
@@ -74,8 +77,10 @@ internal static partial class VrchatMaterialBuilder
                 });
                 if (split.triangles > 0) changes.Add((split.index, material, split.triangles));
             }
+            meshProfile?.Mark("split-triangles");
             Uri uri = changes.Any(c => c.index >= assigned.Length)
                 ? await engine.LocalDB.SaveAssetAsync(mesh).ConfigureAwait(false) : null;
+            meshProfile?.Mark("save-asset");
             await default(ToWorld);
             if (changes.Count == 0) continue;
             if (uri != null)
@@ -99,6 +104,7 @@ internal static partial class VrchatMaterialBuilder
             }
             UniLog.Log($"Excluded zero-width outlines on {renderer.Slot.Name}: {changes.Sum(c => c.triangles)} triangle(s); surface geometry retained.");
         }
+        profile?.Mark("edit-meshes");
         for (int frame = 0; frame < 7200 && providers.Any(p => !p.IsAssetAvailable); frame++)
             await default(NextUpdate);
         if (providers.Any(p => !p.IsAssetAvailable))

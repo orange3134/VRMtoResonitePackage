@@ -108,7 +108,9 @@ public static class VrchatAvatarParser
 
     private static VrchatAvatar Parse(UnityPackage package, string avatarOverride, bool instanceView)
     {
+        using var profile = ConversionProfile.Start(instanceView ? "parse-view" : "parse-input");
         List<Candidate> candidates = FindCandidates(package);
+        profile?.Mark("find-candidates");
         if (package.InputPrefab != null && candidates.Count == 0)
         {
             Candidate composed = TryCreateComposedCandidate(package, package.InputPrefab);
@@ -130,6 +132,7 @@ public static class VrchatAvatarParser
             using var view = selected.SceneInstanceId != 0
                 ? UnityPrefabInstances.CreateSceneInstanceView(package, selected.Source.Guid, selected.SceneInstanceId)
                 : UnityPrefabInstances.CreateView(package, selected.Source.Guid, selected.Root != null ? selected.Subtree : null);
+            profile?.Mark("create-view");
             return Parse(view, selected.Name, true);
         }
         foreach (Candidate c in OrderByPrimary(candidates))
@@ -202,13 +205,16 @@ public static class VrchatAvatarParser
             ResolveFbx(package, selected.Scene, selected.Root, includedSubtree, avatar);
         }
         ParseFbxBlendShapeNames(package, avatar);
+        profile?.Mark("models-and-shape-names");
         ParseHumanoid(package, avatar);
+        profile?.Mark("humanoid");
         ParseDescriptor(package, descriptorScene, effectiveDescriptor, avatar, descriptorGuid);
         ParseRenderers(package, selected.Source.Guid, avatar);
         avatar.RendererMaterials.RemoveAll(renderer => avatar.EditorOnlyFbxGuids.Contains(renderer.FbxGuid ?? ""));
         foreach (string excluded in avatar.EditorOnlyFbxGuids)
             UniLog.Log($"Skipping EditorOnly model before import: {package.ByGuid(excluded)?.LogicalPath} (fbx={excluded})");
         ApplyFbxDefaultBlendShapeWeights(avatar);
+        profile?.Mark("renderers");
         var expressionComponents = new List<YamlNode>();
         foreach (var entry in package.PrefabGraph.Scenes)
         {
@@ -234,8 +240,11 @@ public static class VrchatAvatarParser
                 UniLog.Log($"Expression animation root resolved from Unity renderer fileID: {roots[0]}");
             }
         }
+        profile?.Mark("expressions");
         ParsePhysics(package, selected.Source.Guid, avatar);
+        profile?.Mark("physics");
         ParseModularAvatarComponents(package, selected.Source.Guid, avatar);
+        profile?.Mark("modular-avatar");
         return avatar;
     }
 
