@@ -13,6 +13,11 @@ branches indexed by file ID/path, and exclusion of whole model/object hierarchie
 without starting the engine. Fixtures remain in the printed temp directory for
 inspection. This does not verify an end-to-end avatar conversion.
 
+`ConversionPerformanceChecks` verifies source-model cache reuse across occurrences
+and views, isolation for different metadata and newly opened packages, and recovery
+after missing-source lookups. Fast LZ4 mesh roundtrips compare complete Plain MeshX
+bytes, including attributes, skin, submeshes and multiple morph frames across blocks.
+
 `DefaultBlendShapeChecks` reads a binary FBX fixture with same-named channels on
 different models and shared geometry. Reversing object/connection order must keep
 the same defaults. It checks the model resolver, avatar metadata, renamed copies,

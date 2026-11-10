@@ -46,7 +46,7 @@ internal static class VrchatBlendShapeNormals
             try { mesh = new MeshX(asset.Data); }
             finally { asset.ReleaseReadLock(readLock); }
             int frames = Recalculate(mesh, mode.Value);
-            Uri uri = frames > 0 ? await engine.LocalDB.SaveAssetAsync(mesh).ConfigureAwait(false) : null;
+            Uri uri = frames > 0 ? await MeshAssetWriter.SaveAsync(engine.LocalDB, mesh).ConfigureAwait(false) : null;
             await default(ToWorld);
             if (uri == null)
             {

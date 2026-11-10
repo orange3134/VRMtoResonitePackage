@@ -14,7 +14,9 @@ internal static class VrchatBlendShapeRepair
         IReadOnlyDictionary<Slot, string> sources, IReadOnlyDictionary<string, Slot> authoredObjects,
         IReadOnlyDictionary<Slot, string> importedPaths = null, Slot expressionRoot = null)
     {
+        using var profile = ConversionProfile.Start("blendshape-repair");
         int repaired = await NormalizeRepeatedBlendShapeNames(root);
+        profile?.Mark("normalize-names");
         if (repaired > 0)
         {
             // Changing StaticMesh.URL starts an asynchronous asset reload. Indexed-shape repair
@@ -66,6 +68,8 @@ internal static class VrchatBlendShapeRepair
                        $"required through {requiredCount - 1}, FBX={expected.Count}, " +
                        $"imported={renderer.MeshBlendshapeCount}.");
 
+            using var meshProfile = ConversionProfile.Start($"repair-mesh:{renderer.Slot.Name}");
+
             MeshX mesh;
             var oldWeights = new Dictionary<string, Queue<float>>(StringComparer.Ordinal);
             for (int i = 0; i < renderer.MeshBlendshapeCount; i++)
@@ -91,6 +95,7 @@ internal static class VrchatBlendShapeRepair
             {
                 renderer.Mesh.Asset.ReleaseReadLock(readLock);
             }
+            meshProfile?.Mark("clone");
 
             int renamed = RestoreChannelNames(mesh, aliases);
             if (renamed < 0)
@@ -113,8 +118,10 @@ internal static class VrchatBlendShapeRepair
                 continue;
             }
             List<string> repairedNames = mesh.BlendShapes.Select(shape => shape.Name).ToList();
+            meshProfile?.Mark("edit-shapes");
 
-            Uri uri = await renderer.Engine.LocalDB.SaveAssetAsync(mesh).ConfigureAwait(false);
+            Uri uri = await MeshAssetWriter.SaveAsync(renderer.Engine.LocalDB, mesh).ConfigureAwait(false);
+            meshProfile?.Mark("save-asset");
             await default(ToWorld);
             if (uri == null || renderer.Mesh.Target is not StaticMesh staticMesh)
             {
@@ -177,21 +184,24 @@ internal static class VrchatBlendShapeRepair
             await renderer.Mesh.Asset.RequestReadLock(readLock).ConfigureAwait(false);
             try
             {
-                mesh = new MeshX(renderer.Mesh.Asset.Data);
+                var source = renderer.Mesh.Asset.Data;
+                var names = NormalizedNames(source);
+                mesh = source.BlendShapes.Select(s => s.Name).SequenceEqual(names)
+                    ? null : new MeshX(source);
             }
             finally
             {
                 renderer.Mesh.Asset.ReleaseReadLock(readLock);
             }
 
-            int renamed = NormalizeRepeatedBlendShapeNames(mesh);
+            int renamed = mesh == null ? 0 : NormalizeRepeatedBlendShapeNames(mesh);
             if (renamed == 0)
             {
                 await default(ToWorld);
                 continue;
             }
 
-            Uri uri = await renderer.Engine.LocalDB.SaveAssetAsync(mesh).ConfigureAwait(false);
+            Uri uri = await MeshAssetWriter.SaveAsync(renderer.Engine.LocalDB, mesh).ConfigureAwait(false);
             await default(ToWorld);
             if (uri == null || renderer.Mesh.Target is not StaticMesh staticMesh)
             {
@@ -207,9 +217,21 @@ internal static class VrchatBlendShapeRepair
 
     private static int NormalizeRepeatedBlendShapeNames(MeshX mesh)
     {
-        var snapshots = new List<BlendShapeSnapshot>(mesh.BlendShapeCount);
+        var names = NormalizedNames(mesh);
+        int renamed = mesh.BlendShapes.Where((shape, index) => shape.Name != names[index]).Count();
+        if (renamed == 0) return 0;
+        var snapshots = mesh.BlendShapes.Select((shape, index) =>
+            BlendShapeSnapshot.Capture(shape, names[index])).ToList();
+        while (mesh.BlendShapeCount > 0)
+            mesh.RemoveBlendShape(mesh.BlendShapeCount - 1);
+        foreach (BlendShapeSnapshot snapshot in snapshots) snapshot.Restore(mesh);
+        return renamed;
+    }
+
+    private static List<string> NormalizedNames(MeshX mesh)
+    {
+        var names = new List<string>(mesh.BlendShapeCount);
         var used = new HashSet<string>(StringComparer.Ordinal);
-        int renamed = 0;
         for (int i = 0; i < mesh.BlendShapeCount; i++)
         {
             BlendShape shape = mesh.GetBlendShape(i);
@@ -218,27 +240,10 @@ internal static class VrchatBlendShapeRepair
             {
                 normalized += "_";
             }
-            if (!string.Equals(shape.Name, normalized, StringComparison.Ordinal))
-            {
-                renamed++;
-            }
-            snapshots.Add(BlendShapeSnapshot.Capture(shape, normalized));
+            names.Add(normalized);
         }
 
-        if (renamed == 0)
-        {
-            return 0;
-        }
-
-        while (mesh.BlendShapeCount > 0)
-        {
-            mesh.RemoveBlendShape(mesh.BlendShapeCount - 1);
-        }
-        foreach (BlendShapeSnapshot snapshot in snapshots)
-        {
-            snapshot.Restore(mesh);
-        }
-        return renamed;
+        return names;
     }
 
     private static int MaxReferencedBlendShapeIndex(VrchatAvatar avatar, string rendererName)

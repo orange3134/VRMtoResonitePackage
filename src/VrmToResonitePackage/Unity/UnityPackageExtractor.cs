@@ -39,7 +39,8 @@ public sealed class UnityPackage : IDisposable
     private readonly Dictionary<string, UnityAsset> _byGuid;
     private readonly Dictionary<string, string> _textByGuid = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UnityScene> _sceneByGuid = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, UnityModelFileIdResolver> _modelIds = new(StringComparer.OrdinalIgnoreCase);
+    // Only source model data is shared across views; composed scenes and occurrence IDs stay local.
+    private readonly Dictionary<(string Path, string Meta), UnityModelFileIdResolver> _modelIds;
 
     internal UnityPrefabGraph PrefabGraph { get; private set; }
     private UnityObjectResolver _objectIds;
@@ -49,10 +50,12 @@ public sealed class UnityPackage : IDisposable
     internal void ResolvePrefabGraph(string rootGuid)
         => PrefabGraph = UnityPrefabGraph.Resolve(this, rootGuid);
 
-    private UnityPackage(string root, Dictionary<string, UnityAsset> byGuid)
+    private UnityPackage(string root, Dictionary<string, UnityAsset> byGuid,
+        Dictionary<(string Path, string Meta), UnityModelFileIdResolver> modelIds = null)
     {
         _root = root;
         _byGuid = byGuid;
+        _modelIds = modelIds ?? new();
     }
 
     public IReadOnlyDictionary<string, UnityAsset> Assets => _byGuid;
@@ -129,14 +132,19 @@ public sealed class UnityPackage : IDisposable
 
     internal UnityModelFileIdResolver ModelFileIds(string guid)
     {
-        if (!_modelIds.TryGetValue(guid, out var resolver))
-            _modelIds.Add(guid, resolver = new UnityModelFileIdResolver(ByGuid(guid)));
+        UnityAsset asset = ByGuid(guid);
+        // Do not cache absence: a view may install an occurrence after an unsuccessful lookup.
+        if (asset?.HasContent != true) return new UnityModelFileIdResolver(asset);
+        var key = (Path.GetFullPath(asset.DiskPath).ToUpperInvariant(),
+            asset.MetaPath == null ? null : Path.GetFullPath(asset.MetaPath).ToUpperInvariant());
+        if (!_modelIds.TryGetValue(key, out var resolver))
+            _modelIds.Add(key, resolver = new UnityModelFileIdResolver(asset));
         return resolver;
     }
 
     // A non-owning parsing view. Source files and the caller's cached scenes stay unchanged.
     internal UnityPackage CreateView(string sourceGuid)
-        => new(null, new Dictionary<string, UnityAsset>(_byGuid, StringComparer.OrdinalIgnoreCase))
+        => new(null, new Dictionary<string, UnityAsset>(_byGuid, StringComparer.OrdinalIgnoreCase), _modelIds)
         { InputPrefab = ByGuid(sourceGuid) };
 
     internal void SetViewAsset(UnityAsset asset, UnityScene scene = null)

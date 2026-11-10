@@ -946,7 +946,7 @@ internal static class AvatarSetup
         // Triangle removal preserves vertex indices, so retain morph data and follow the
         // source weights instead of reverting the first-person body to its undeformed mesh.
 
-        Uri uri = await renderer.Engine.LocalDB.SaveAssetAsync(source).ConfigureAwait(false);
+        Uri uri = await MeshAssetWriter.SaveAsync(renderer.Engine.LocalDB, source).ConfigureAwait(false);
         await default(ToWorld);
         if (uri == null)
         {

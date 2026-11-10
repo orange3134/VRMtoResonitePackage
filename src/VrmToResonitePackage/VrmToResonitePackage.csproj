@@ -47,6 +47,10 @@
       <HintPath>$(ResonitePath)\FrooxEngine.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="LZ4">
+      <HintPath>$(ResonitePath)\LZ4.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="FrooxEngine.Store">
       <HintPath>$(ResonitePath)\FrooxEngine.Store.dll</HintPath>
       <Private>false</Private>

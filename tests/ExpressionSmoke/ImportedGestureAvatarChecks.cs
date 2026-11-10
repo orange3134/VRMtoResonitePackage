@@ -15,12 +15,7 @@ internal static class ImportedGestureAvatarChecks
         ExpressionTestFields.EquipAvatar(avatar);
         for (int i = 0; i < 180; i++) await default(NextUpdate);
         var root = avatar.FindChild("Expressions") ?? throw new InvalidOperationException("Missing expression system");
-        // Package import restores fields before the mesh assets finish loading.
-        var renderers = root.GetComponentsInChildren<DynamicBlendShapeDriver>()
-            .Select(driver => driver.Renderer.Target).Distinct().ToArray();
-        for (int i = 0; i < 7200 && renderers.Any(renderer => renderer.MeshBlendshapeCount == 0); i++)
-            await default(NextUpdate);
-        Check(renderers.All(renderer => renderer.MeshBlendshapeCount > 0), "Expression driver meshes finished loading");
+        await WaitForExpressionMeshes(root);
         // Keep the exported mixer enabled, but freeze external tracking inputs for
         // this fixed-pose oracle. User/eye updates can otherwise race the sampled
         // Base and Result in the headless frame. ExpressionBlinkChecks separately
@@ -45,6 +40,7 @@ internal static class ImportedGestureAvatarChecks
             await default(ToWorld);
             for (int i = 0; i < 180; i++) await default(NextUpdate);
             var baselineRoot = baseline.FindChild("Expressions");
+            await WaitForExpressionMeshes(baselineRoot);
             Console.WriteLine("BASELINE graph (legacy board boundaries are reported, not asserted):");
             ExpressionGraphChecks.Report(baselineRoot);
             string previous = ExpressionPackageSnapshot.Capture(baselineRoot, Path.Combine(artifacts, "baseline-expressions"));
@@ -190,6 +186,17 @@ internal static class ImportedGestureAvatarChecks
         Check(root.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "Invalid imported Flux group");
         await ExpressionResetChecks.Run(root);
         Console.WriteLine($"PASS: imported package gesture API drives all {gestureCount * gestureCount} pairs and {distinctPoses.Count} distinct poses");
+    }
+
+    private static async Task WaitForExpressionMeshes(Slot root)
+    {
+        // Both imported packages restore fields before their mesh assets finish loading.
+        // Without this wait, baseline shape names can still be null in the snapshot.
+        var renderers = root.GetComponentsInChildren<DynamicBlendShapeDriver>()
+            .Select(driver => driver.Renderer.Target).Distinct().ToArray();
+        for (int i = 0; i < 7200 && renderers.Any(renderer => renderer.MeshBlendshapeCount == 0); i++)
+            await default(NextUpdate);
+        Check(renderers.All(renderer => renderer.MeshBlendshapeCount > 0), "Expression driver meshes finished loading");
     }
 
     private static T Get<T>(Slot slot, string name) => slot.ExpressionVariables<DynamicValueVariable<T>>().Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Value.Value;

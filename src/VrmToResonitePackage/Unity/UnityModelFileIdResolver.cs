@@ -35,6 +35,7 @@ public sealed class UnityModelFileIdResolver
 
     public UnityModelFileIdResolver(UnityAsset model)
     {
+        using var profile = ConversionProfile.Start($"fbx-fileids:{model?.LogicalPath}");
         if (model?.HasContent != true)
         {
             return;
