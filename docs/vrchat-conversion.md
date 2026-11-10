@@ -2,12 +2,14 @@
 
 この資料は `Unity/`、`Vrchat/`、および `Converter.ConvertVrchat` を変更するときに読む。
 
+リグ・追跡設定、装着者判定、FirstPersonの描画制御、読み込み中の表示、揺れものの共通出力は
+[アバター変換の共通実装](avatar-conversion.md)を参照する。
 処理時間を調べる場合は[変換性能の診断](conversion-performance.md)を参照する。
 
 ## 全体設計
 
 VRChatパーサはUnityアセットを解析し、共通の `VrmModel` とVRChat固有情報を生成する。
-リグ、視点、表情、揺れものはVRM経路の `AvatarSetup` / `SpringBoneSetup` を再利用し、
+リグ、視点、表情、揺れものは両経路共通の `AvatarSetup` / `SpringBoneSetup` と表情システムを使い、
 prefab合成、初期状態、マテリアルはVRChat専用処理で補う。
 
 ### Prefab解決と変換の責務
@@ -402,10 +404,8 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 
 ### 同位置の頂点で異なる変形を保持する
 
-Resoniteの `ModelImporter` はAssimpの `JoinIdenticalVertices` を常に有効にする。
-この統合では通常時の頂点属性が比較され、blendshapeの変形先は比較されない。
-そのため、通常時は同位置でも表情で別々に動くcontrol pointが統合されると、
-別の頂点の変形を参照してポリゴンが引き伸ばされる。
+[ModelImporterの共通制約](avatar-conversion.md#modelimporterの共通制約)に対し、
+バイナリFBXでは一時的な頂点カラーでcontrol pointを区別する。
 
 `UnityFbxMorphSeams` は、主FBX・追加FBXをインポートする前にバイナリFBXの
 `Shape → BlendShapeChannel → BlendShape → Geometry` 接続と疎な頂点差分を調べる。
@@ -467,10 +467,9 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
 VRChatの15 visemeはResonite enumへ対応させ、Unityの0〜100をResoniteの0〜1へ変換する。
 customEyeLookSettingsの左右の目はprefab配置・Transform fileIDまたはFBXの完全なpathを保持する。
 通常のhumanoid骨も主FBXの配置IDとnode pathを保持し、向き補正・リグ設定で同じ参照解決を使う。
-VRChatのFirstPerson Autoはavatar rootのBipedRigが使うHeadを優先し、リグにHeadがない場合は
-解決済みnode参照だけを使う。衣装の同名Headや子階層の別BipedRigをfallbackにしない。
 ローカルの目Transformも配置を生成し、Merge Armature後の参照表をAvatarSetupのリグ割り当てまで渡す。
 同名の目があっても指定されたobjectを使用し、欠落・破棄された明示参照を名前検索で置き換えない。
+視線には `EyeRotationDriver.MaxSwing=15` を使う。
 瞬きは `eyelidsBlendshapes[0]` だけを使い、LookingUp / LookingDownはblinkとして扱わない。
 Blendshape repair selects original tables by imported model identity or the authored
 copy's GameObject identity. Same-named copies must not replace the primary model's
@@ -491,11 +490,17 @@ Animatorからの補完は、初期状態のループClip、開0・閉100を持�
 BlendShape名が大文字小文字を除いて `blink` と完全一致、他レイヤーとの競合なし、などを満たす場合だけ。
 `eye_blink_1` のような名前はこの条件を満たさない。
 
-ResoPonはAvatarCreatorのBlendShape名ヒューリスティクスによる補完を行わない。
+共通の追跡設定ではAvatarCreatorのBlendShape名ヒューリスティクスによる補完を行わないため、
 瞬きがないアバターを再変換するだけで接続先が増えるとは限らない。
-瞬きの接続は表情システムの構築前に確定し、OpenCloseTargetをOutputs/Baseへ付け替える。
-表情構築後の最終ウェイトへEyeLinearDriverを追加すると既存Driveと競合する。
-合成・接続は[表情の出力変数](expression-variables.md#出力)を参照。
+取り込み後の接続順は[表情システムへの接続](avatar-conversion.md#表情システムへの接続)を参照する。
+
+## VRChat FirstPerson
+
+`AvatarSetup.ApplyFirstPersonAutoAsync` は `Source=ModelSource.VrchatFbx` の場合、
+annotationがなくてもアバタールート配下のMeshRendererを対象にAuto処理を実行する。
+FirstPerson Autoはavatar rootのBipedRigが使うHeadを優先し、リグにHeadがない場合は
+解決済みnode参照だけを使う。衣装の同名Headや子階層の別BipedRigをfallbackにしない。
+headless meshの生成と描画制御は[共通のFirstPerson処理](avatar-conversion.md#firstpersonの描画制御)を参照する。
 
 ## 視点
 
@@ -510,7 +515,8 @@ ResoPonはAvatarCreatorのBlendShape名ヒューリスティクスによる補�
   `AvatarSetup` はこれをHeadProxyの配置に使い、標準のVRIKAvatarセットアップでTargetを生成する。
 - 明示した `--view-forward` / `--view-up` は元の視点へのメートル単位の加算になる。
   元の視点がある場合は目の間隔による自動オフセットを加えない。
-  設定またはDescriptorの参照先がない場合、非有限値の場合は従来の推定へ戻る。VRM経路も従来どおり。
+  設定またはDescriptorの参照先がない場合、非有限値の場合は
+  [共通の視点推定](avatar-conversion.md#アバターセットアップ)へ戻る。
 - 回帰例: NoraMiaree 1.0.0の目ボーン間隔は約6.5mmで、支点は顔の後方にある。
   元の視点は `(0, 0.734906, 0.0715642)`、Prefabルートのscaleは1.1。
   このscaleを視点にも掛けると約7.3cm上がり額の位置になる。ルートローカル座標と解釈しない。
@@ -532,6 +538,9 @@ ResoPonはAvatarCreatorのBlendShape名ヒューリスティクスによる補�
   目ボーンや変換関数自身を正解値にせず、顔メッシュの目の領域とも比較する。
 
 ## PhysBone
+
+取り込み後のチェーン生成・テンプレート・Grabの設定は
+[揺れものの共通出力](avatar-conversion.md#揺れものの共通出力)を参照する。
 
 - unpack済みprefabが複数のFBXを参照しても、物理用の親骨は主モデルを候補にして所属とフルパスを照合する。
   renderer数だけで候補を捨てると、物理とskinが複製した骨へ接続される一方、humanoidの名前解決は

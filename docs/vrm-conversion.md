@@ -1,6 +1,8 @@
 # VRM変換の実装資料
 
-この資料は `Vrm/`、`AvatarSetup.cs`、`SpringBoneSetup.cs`、`MaterialTuner.cs` を変更するときに読む。
+この資料は `Vrm/`、`MaterialTuner.cs` と、アバター設定・揺れもののVRM固有処理を変更するときに読む。
+リグ・追跡設定、装着者判定、FirstPersonの描画制御、読み込み中の表示、揺れものの共通出力は
+[アバター変換の共通実装](avatar-conversion.md)を参照する。
 
 ## 変換パイプライン
 
@@ -10,6 +12,8 @@
 4. `AvatarSetup` がBipedRig、VRIK、視点、口パク・瞬き・視線の追跡、FirstPersonを構築する。
 5. `MaterialTuner` と `SpringBoneSetup` がマテリアルと揺れものを設定する。
 
+共通処理の責務と呼び出し順の制約は[共通モデルと処理の責務](avatar-conversion.md#共通モデルと処理の責務)を参照する。
+
 ## GLB前処理
 
 ### ブレンドシェイプ名と属性
@@ -18,12 +22,10 @@
   補完しないと複数の空名シェイプが `MeshX.AddBlendShape` で衝突する。
 - 同一mesh内のprimitive間でモーフNORMAL/TANGENTの有無が一致しない場合は、先頭primitiveを基準に
   不一致属性を除去する。Resonite側のマージで配列範囲外になるのを防ぐ。
-- インポートコルーチンが例外終了しても完了通知が来ない場合があるため、`--import-timeout` を維持する。
 
 ### JoinIdenticalVertices対策
 
-Resoniteのモデルインポータは `JoinIdenticalVertices` を適用するが、モーフデルタを同一点判定に含めない。
-静止時に重なる頂点が結合されると、ブレンドシェイプの一部が動かなくなる。
+[ModelImporterの共通制約](avatar-conversion.md#modelimporterの共通制約)に対し、GLBでは追加UVで頂点を区別する。
 
 `GlbPreprocessor.AddMorphVertexGuardChannel` はモーフを持つprimitiveへ頂点ごとに一意な追加TEXCOORDを
 付与し、結合を防ぐ。値は頂点index、型はVEC2 floatで、BINチャンクと `buffer[0].byteLength` を更新する。
@@ -31,7 +33,6 @@ Resoniteのモデルインポータは `JoinIdenticalVertices` を適用する�
 
 ## 座標系
 
-- Resonite `ModelImporter.PreprocessScene` はシーン全体へXミラーとwinding反転を適用する。
 - VRM0はUniVRMのReverseZ、一般的なVRM1はReverseXを前提とする。
 - VRM0は条件を満たす階層へY180をベイクし、CenteredRootの不要なY180を防ぐ。
 - Blender VRMアドオン製VRM1は通常のglTF配置になる場合がある。
@@ -41,24 +42,13 @@ Resoniteのモデルインポータは `JoinIdenticalVertices` を適用する�
   VRM0のY180回転と反射を混同しない。
 - コライダーオフセットは `VrmModel.OrientationMirroredX` とVRM世代を考慮して変換する。
 
-## アバターセットアップ
+## VRMのアバター設定と表情取り込み
 
-- BipedRigはインポータの名前推測結果を信用せず、VRM humanoid mapを正とする。
-  既存の分類を消してから割り当て、装飾ボーンの誤分類を残さない。
-- BipedRigとVRIKはモデル子ではなくアバタールートへ作成する。
-- 手の基準方向は両手とも `+Z=手首から中指`、`+Y=手の甲`。指と親指の位置から計算する。
-- 視点は目の中点から眉間側へ補正する。`--view-forward` と `--view-up` で上書きできる。
-- `AvatarRenderSettings` はルート直下へ作り、既定 `NearClip=0.075`、`FarClip=null` とする。
+- リグの対応表はVRM humanoid mapから取得する。
 - `EyeRotationDriver.MaxSwing=4` を使う。
-- ビセームと瞬きはResoniteの名前推測を避け、VRM Expressionだけから構築する。
-- `AvatarExpressionDriver` は既定で作らず、`--face-tracking` 指定時だけ有効にする。
-- `SimpleAvatarProtection` は既定でrootと各SkinnedMeshRendererへ付与し、
-  `--no-protection` で無効にする。
+- ビセームと瞬きはVRM Expressionから構築する。
 
 感情表情は `VrmExpressionAdapter` から共通の[表情システム](expression-system.md)へ渡す。
-`AvatarSetup` は感情表情のメニューや駆動を生成せず、`Converter` が共通システムを一度だけ構築する。
-メニュー生成の有無は共通の `NoExpressionMenu` オプション（CLI: `--no-expression-menu`）で制御する。
-無効にするのはメニュー生成だけで、表情クリップ・対応表・ハンドサイン・キーボード・外部APIは生成する。
 左右各0〜7の64通りの対応表に標準プリセットを固定番号で割り当て、ハンドジェスチャー・キーボード・
 メニュー・外部APIから選択できる。番号と両手の優先順位は
 [VRMの標準割り当て](expression-system.md#vrmの標準割り当て)を参照。
@@ -80,66 +70,13 @@ ResoPonでは同じ優先順位を固定Clip参照として表し、空の右手
 
 - VRM0はmesh index、VRM1はnode indexでannotationを保持する。VRM1はnodeからmeshへ解決する。
 - annotationがないrendererは `Both` ではなくUniVRM準拠の `Auto` として補完する。
-- `Both` は変更しない。
-- `ThirdPersonOnly` / `FirstPersonOnly` はrendererのEnabledではなく `RenderMaterialOverride` で切り替える。
-- Modular Avatar互換の `DynamicVariableSpace("modular_avatar")`、`OnlyDirectBinding=true`、
-  `modular_avatar/AvatarWornLocal` を維持する。
-- 装着者判定は `AvatarSetup.EnsureAvatarRootIdentification` が標準コンポーネントと ProtoFlux を生成する。
-  `AvatarUserReferenceAssigner` の装着者参照が非 null かつ `GetActiveUserSelf` と一致したときだけ
-  `modular_avatar/AvatarWorn` を true にする。`AvatarWornLocal` はさらに `IsLocalUser` を要求する。
-  `AvatarWorn` は `ValueField<bool>` → `ValueCopy<bool>` → 動的変数、`AvatarWornLocal` は
-  `ValueFieldDrive<bool>` からの直接 Drive を維持する。単なる UserRoot 配下への移動では装着扱いにしない。
-  `modular_avatar/AvatarRoot` はアバター自身への駆動参照として公開する。
-- Invisible Materialは `Assets/Invisible Material` の透明な `PBS_RimSpecular` とする。
-- `Auto` は頭ボーン配下の影響頂点を除いたheadless meshを生成する。
-  元rendererを三人称用、headless rendererを一人称用にし、生成meshのblendshapeは除去する。
-- `ApplyFirstPersonAutoAsync` は `MaterialTuner.Apply` の後に実行し、最終マテリアルを参照させる。
 
-## メッシュ読み込み中の表示
-
-VRM・VRChat 共通で `MeshLoadingSetup` が対象 renderer の読み込みを監視し、
-`LoadingStandInSetup.BuildAsync` が標準コンポーネントと ProtoFlux から代替表示を生成する。
-入力用の埋め込み `.resonitepackage`、`LoadObject`、package import callback は不要。
-変換結果の `.resonitepackage` 出力と検査は従来どおり。
-
-- `modular_avatar/MeshNotLoaded=false` の公開中は対象 renderer を無効にし、代替表示を有効にする。
-  全 mesh の読み込み後は変数名を空にし、各 driver の既定値により表示を切り替える。
-  代替表示自身とシステムの音声範囲表示は監視対象に含めない。
-- `VirtualParent` は `modular_avatar/AvatarPoseNode.Head` を参照し、位置と回転だけを Drive する。
-  オフセットは頭から上に約 0.05236、表示は Y180 度の両面・透過 `UnlitMaterial` の Quad。
-  大きさは公開済み `HumanBonePose.head` の原点の Y 座標 × 0.25 を各軸へ設定する。
-- `GetActiveUserSelf` → `UserUserID` → `CloudUserInfo.UserId` からプロフィール画像を取得する。
-  `IconURL` が null なら `Resources/LoadingFallback.png` を使う。通常の画像リソースとしてLocalDBへインポートする。
-  LocalDB は `local:` または `resdb:` URI を返すため、生成時に `resdb:` 固定とは仮定しない。
-  画像 URI は texture と fallback 定数の両方に設定し、出力パッケージへのアセット収集対象にする。
-- `AvatarWorn` かつ `IsLocalUser` の場合だけ `RenderTransformOverride(UserView).ScaleOverride=0`。
-  それ以外は null に戻し、本人以外やミラーでは通常の表示を維持する。
-- `tests/ExpressionSmoke/GeneratedAvatarChecks.cs` で装着・解除・親階層の変更、頭追従、
-  mesh 読み込み前後、パッケージ保存・inspect・再インポート後の動作を検証する。
-
-## 手のコライダーとレーザー原点
-
-`VRIKAvatar.Setup` はインポートした `Rig` の末端ボーンから手の `BoxCollider` を生成する。
-この範囲はヒューマノイドの中指先端だけから求めたツール位置より長くなる場合がある。
-シピルカでは手の box が約22.6cmに達し、従来の通常レーザー原点が内部に入っていた。
-
-`AvatarSetup.SetupHandColliderRaycasts` は `avatar.Setup` の後に、手直下の box の
-`IgnoreRaycasts` を `DynamicValueVariableDriver<bool>` で
-`modular_avatar/AvatarWornLocal` に連動させる。装着者本人のクライアントだけでtrueとなり、
-非装着時・他ユーザー・変数未解決時はfalse。ツール位置、コライダー形状、物理衝突は変更しない。
-VRMとVRChatで共通の処理で、揺れもの用 `DynamicBoneSphereCollider` は対象外。
-
-`tests/ExpressionSmoke/GeneratedAvatarChecks.cs` で装着・解除・親階層の変更と保存・再読込後の
-切り替えを確認する。実アバターでも再変換・inspect後に両手のドライバーと動作を検証する。
+各flagの描画制御とheadless mesh生成は[共通のFirstPerson処理](avatar-conversion.md#firstpersonの描画制御)を参照する。
 
 ## SpringBone
 
-VRM SpringBoneは `DynamicBoneChain` へ変換し、テンプレート設定を `modular_avatar` の動的変数として公開する。
 コライダーはnodeと形状から共有し、VRM世代とorientationに応じてoffsetを変換する。
-`generic` グループは袖などの揺れものが通常のGrabを妨げないよう `IsGrabbable=false` とする。
-他グループはtrueを維持する。テンプレートと各チェーンの `IsGrabbable` は他の設定と同様に
-`modular_avatar/dynamic_bone_template.<group>.IsGrabbable` で連動する。VRChatのPhysBoneも同じ処理を使う。
-シピルカの袖 `HandTops_L/R` は `generic` に分類されるため、この設定で通常のGrabとの干渉を防ぐ。
+チェーン生成・テンプレート・Grabの設定は[揺れものの共通出力](avatar-conversion.md#揺れものの共通出力)を参照する。
 
 ## MToonからXiexeToon
 

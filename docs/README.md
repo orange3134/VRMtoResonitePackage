@@ -18,7 +18,8 @@
 | 資料 | 内容 |
 |---|---|
 | [ヘッドレスエンジン](headless-engine.md) | DLL互換性、LocalDB、ワールド、終了処理、パッケージ出力 |
-| [VRM変換](vrm-conversion.md) | GLB前処理、座標系、アバター設定、FirstPerson、SpringBone、MToon |
+| [アバター変換の共通実装](avatar-conversion.md) | インポータの制約、リグ・追跡設定、装着者判定、FirstPerson描画、読み込み表示、手のコライダー、揺れもの出力 |
+| [VRM変換](vrm-conversion.md) | GLB前処理、VRM座標系、humanoid・表情取り込み、FirstPerson annotation、SpringBone、MToon |
 | [VRChat変換](vrchat-conversion.md) | Unity YAML、Prefab・FBX合成、初期状態、Viseme・Blink推定、PhysBone、lilToon |
 | [変換性能の診断](conversion-performance.md) | 工程別計測、メッシュ圧縮保存・FBX再解析の増幅要因、改善時の検証条件 |
 

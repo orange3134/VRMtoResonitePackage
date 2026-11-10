@@ -106,7 +106,9 @@ Resonite DLLを `ResonitePath` に指定して再ビルドする。配布版も�
   [docs/expression-system.md](docs/expression-system.md)
 - FrooxEngine起動、DLL互換性、LocalDB、終了処理:
   [docs/headless-engine.md](docs/headless-engine.md)
-- VRM解析、GLB前処理、座標系、アバター設定、FirstPerson、MToon:
+- 共通アバター設定、装着者判定、FirstPerson描画、読み込み表示、手のコライダー、揺れもの出力:
+  [docs/avatar-conversion.md](docs/avatar-conversion.md)
+- VRM解析、GLB前処理、座標系、humanoid・表情取り込み、FirstPerson annotation、MToon:
   [docs/vrm-conversion.md](docs/vrm-conversion.md)
 - Unity YAML、prefab/FBX合成、VRChat設定、lilToon、回帰ケース:
   [docs/vrchat-conversion.md](docs/vrchat-conversion.md)
