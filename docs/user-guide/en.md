@@ -12,8 +12,6 @@ This guide describes the current workflow. The expression screenshots show Tolas
 
 ## ✨️Setup
 
-You need Windows x64 and **.NET 10 Desktop Runtime (x64)**.
-
 Install [Resonite](https://store.steampowered.com/app/2519830/Resonite/?l=japanese) and launch it at least once.
 
 Please download ResoPon from [Booth](https://orange3134.booth.pm/items/8515694) or the [GitHub releases](https://github.com/orange3134/VRMtoResonitePackage/releases).
@@ -51,11 +49,9 @@ Click the avatar and choose "Equip Avatar."
 
 ![image.png](assets/equip-avatar.png)
 
-It's on!
+It's on! Open your inventory and use "Save Current Avatar" to keep it.
 
 ![Tolass equipped in Resonite](assets/equipped-avatar.png)
-
-Open your inventory and use "Save Current Avatar" to keep it.
 
 ![image.png](assets/save-avatar.png)
 
@@ -76,12 +72,9 @@ The example below shows Tolass's `Group 1`. Expression names and counts depend o
 
 ![Expressions in Tolass's Group 1](assets/select-expression.png)
 
-### Hand gestures and keyboard controls
+### Keyboard controls
 
-Under `Expressions`, use `Hand gestures` to choose `Both hands enabled`, `Left hand only`, `Right hand only`, or `Both hands disabled`.
-The current state is shown as `Hand gestures: Both / LeftOnly / RightOnly / None`.
-
-On the keyboard, `Shift + numpad 0–7` controls the left hand, `Ctrl + numpad 0–7` controls the right, and `Ctrl + Shift + numpad 0–7` controls both.
+Use `Shift + numpad 0–7` to change the expression assigned to the left hand, and `Ctrl + numpad 0–7` to change the expression assigned to the right hand.
 
 The numpad numbers correspond to these hand gestures:
 
@@ -89,17 +82,14 @@ The numpad numbers correspond to these hand gestures:
 |---|---|
 | 0 | Neutral |
 | 1 | Fist |
-| 2 | Open hand (HandOpen) |
-| 3 | Point (FingerPoint) |
-| 4 | Peace sign (Victory) |
-| 5 | Rock and roll (RockNRoll) |
-| 6 | Finger gun (HandGun) |
-| 7 | Thumbs up (ThumbsUp) |
+| 2 | HandOpen |
+| 3 | FingerPoint |
+| 4 | Victory |
+| 5 | RockNRoll |
+| 6 | HandGun |
+| 7 | ThumbsUp |
 
-The standard VRM assignments are 3 for sadness, 4 for joy, 5 for anger, 6 for surprise, and 7 for relaxation. Missing expressions are left unassigned.
-VRChat avatars use the original assignments that ResoPon can import.
-
-Hand gestures and keyboard controls won't override a selection held by the menu. Use `Reset` first if the expression won't change.
+The standard VRM assignments are 3 for sadness, 4 for joy, 5 for anger, 6 for surprise, and 7 for relaxation.
 
 ## ⚠Notes
 
@@ -112,8 +102,7 @@ Resonite policies
 
 ### Is the uploaded avatar private to me? (Can other people save it?)
 
-Avatar protection is enabled by default. Ownership is assigned to the user who imports the package into Resonite.
-Protection restricts normal saving and use by other users.
+By default, the avatar is private to you and other people cannot save it.
 
 You can also make it usable by anyone by choosing "Do not add avatar protection" from the gear icon in the app.
 
@@ -129,9 +118,9 @@ Because of how XiexeToon works, it's hard to have both semi-transparency and sha
 
 You can choose how this is handled during conversion by turning on the following setting from the gear icon in the app.
 
-The setting is "Choose how to convert transparent materials." If the VRM has applicable materials, you can select `Alpha` or `Cutout` for each before conversion. This dialog is not shown for unitypackage / prefab files.
+The setting is "Choose how to convert transparent materials." If the VRM has applicable materials, you can select `Alpha` or `Cutout` for each before conversion.
 
-Cutout blends more naturally with lighting. (In exchange, transparency becomes binary — fully transparent or fully opaque.)
+Choose Cutout to stop those parts from glowing. (In exchange, transparency becomes binary — fully transparent or fully opaque.)
 
 ![image.png](assets/transparency-setting-en.png)
 
@@ -141,13 +130,11 @@ Cutout blends more naturally with lighting. (In exchange, transparency becomes b
 
 Please post the following in the [ResoPon thread](https://discord.com/channels/1155744905604366489/1514226522813239346) on the [Resonite Japan Discord](https://discord.gg/pvjt2BDMRG).
 
-- The avatar's name, file format, and steps to reproduce the problem
+- The avatar you tried to convert
 - What isn't working
-- Your ResoPon and Resonite versions
-- The log file (`Logs/convert_*.log`, next to ResoPon.exe)
+- The log file (in the log folder next to ResoPon)
 
 Use "Open log folder" at the bottom of Settings or on the conversion failure screen to find the log.
-If conversion stopped working after a Resonite update, check for a compatible ResoPon release.
 
 ### How do I upload a face-tracking-compatible avatar?
 
@@ -155,24 +142,12 @@ Turn on "Generate face-tracking drivers" from the gear icon in the app.
 
 The avatar needs shape keys that meet Resonite's face-tracking requirements.
 
-### Do you support custom Expressions?
-
-Yes. VRM custom expressions with importable facial blendshapes are also kept in the menu. You can select them even if they have no standard hand gesture assignment.
-The VRM0.x custom expression `Surprised` also receives the standard surprise assignment.
-
-For VRChat avatars, ResoPon imports facial expressions from the first expression set it can detect. It doesn't reproduce the entire original Expression Menu or arbitrary features such as outfit switching.
-
 ### There's no Expressions button in the context menu
 
 Check that "Do not generate an expression menu" and "Skip avatar setup" are off in the gear settings, then convert and import the avatar again.
 The menu is also omitted if there are no importable facial expressions.
 
-"Do not generate an expression menu" only omits the menu. Hand gestures, keyboard expression controls, lip sync, and blinking remain available.
-
-### How do I change the language or update checks?
-
-Use "Language" and "Check for updates when the app starts" in the gear settings.
-When an update is found, a confirmation dialog appears. Accepting it downloads the update, replaces the executable, and restarts the app.
+"Do not generate an expression menu" only omits the menu. Hand gestures and keyboard expression controls remain available.
 
 ## License
 
@@ -182,7 +157,7 @@ MIT license
 
 Contributors
 
-yoshi1123_
+yoshi1123\_
 
 Claude Fable 5
 
