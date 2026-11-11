@@ -6,7 +6,7 @@ Supports VRChat avatar Unitypackages and Prefabs, as well as VRM files. You don'
 
 [日本語のドキュメントはこちらです。](ja.md)
 
-This guide describes the current workflow. The equipped avatar photo and expression screenshots show Shipilka. The other screenshots are from the initial version, so labels and layouts may differ from the current app.
+This guide describes the current workflow. The expression screenshots show Tolass. The other screenshots are from the initial version, so labels and layouts may differ from the current app.
 
 ![BoothImageResoPon.png](assets/hero.png)
 
@@ -53,7 +53,7 @@ Click the avatar and choose "Equip Avatar."
 
 It's on!
 
-![Full-body view of Shipilka equipped in Resonite](assets/equipped-avatar.png)
+![Tolass equipped in Resonite](assets/equipped-avatar.png)
 
 Open your inventory and use "Save Current Avatar" to keep it.
 
@@ -72,9 +72,9 @@ Press `Expressions` → `Select expression`.
 
 Tap the expression you want to switch to. If there are nine or more, choose from `Group 1`, `Group 2`, and so on.
 Your selection stays active. Tap the same expression again or use `Reset` under `Expressions` to release it.
-The example below shows Shipilka's `Group 1`. Expression names and counts depend on the avatar.
+The example below shows Tolass's `Group 1`. Expression names and counts depend on the avatar.
 
-![Expressions in Shipilka's Group 1](assets/select-expression.png)
+![Expressions in Tolass's Group 1](assets/select-expression.png)
 
 ### Hand gestures and keyboard controls
 

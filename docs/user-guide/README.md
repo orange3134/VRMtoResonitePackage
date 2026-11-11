@@ -64,17 +64,18 @@ Notion側で画像やリンクがどう取り込まれるかは、実際のイ�
 
 初期原稿からは、カスタム表情の対応、`Expressions` メニューの階層・解除方法、
 ハンドサイン・キーボード、Prefabの条件、設定名、ログの場所、必要環境・更新手順を更新した。
-装着後の全身写真と表情画面は、現行ソースで再変換したShipilkaをResoniteで着用して撮り直した。
+表情画面は、ユーザーが再変換したトラス（Tolass4.5）をResoniteで着用して撮り直した。
+装着後の写真は、アバターを揃えるため初期版のトラスの画像（`3f0fbc1` 時点）へ戻した。
 その他の初期画像は引き続き使用し、両言語の冒頭にその旨を明記している。
 残るスクリーンショットを撮り直したら、画像と差異の説明を一緒に更新する。
 
-| 差し替え画像 | 内容 | 解像度 |
+| 対象画像 | 内容 | 解像度 |
 |---|---|---|
-| `assets/equipped-avatar.png` | Shipilkaを着用した全身写真 | 1600×1200 |
-| `assets/expression-menu.png` | 現行のExpressionsメニュー | 1600×1000 |
-| `assets/select-expression.png` | ShipilkaのGroup 1の表情一覧 | 1600×1000 |
+| `assets/equipped-avatar.png` | 初期版のトラスの装着写真を復元 | 1876×1689 |
+| `assets/expression-menu.png` | トラスの現行Expressionsメニュー | 1600×1000 |
+| `assets/select-expression.png` | トラスのGroup 1の表情一覧 | 1600×1000 |
 
-これら3枚はResonite 2026.11.11.21でResoLoopの実カメラから撮影し、画像加工せず保存した。
+表情画面の2枚はResonite 2026.11.11.21でResoLoopの実カメラから撮影し、画像加工せず保存した。
 
 ## Resonite内の画面を撮り直す
 
@@ -95,6 +96,8 @@ ResoPon本体のWindows画面は対象外なので、別途スクリーンショ
 
    `CURRENT_CANVAS_SLOT_ID` と `PORT` はその場で観測した値に置き換える。
    `--frame` はCanvasのColliderを基準にするため、外にはみ出すラベルは余白を増やして収める。
+   画面を切り替えるとメニューが閉じる場合は、Resoniteを前面に保ち、ContextMenuの
+   `_state = Opened` と `_lerp = 1` を確認してから撮影する。
 5. 出力画像を開いて、文字の欠け・背景・アバターの状態を確認する。戻り値の `ownership.cleanupCompleted` で一時カメラの後片付けも確認する。
 6. 採用画像だけを `assets/` へコピーし、日英の説明を更新してNotion用ZIPを再生成する。
    試写、ワールドの座標・ID、変換パッケージ、ログはコミットしない。

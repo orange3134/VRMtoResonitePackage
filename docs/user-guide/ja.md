@@ -6,7 +6,7 @@ VRChat向けアバターのUnitypackageとPrefab、またはVRMに対応！（VR
 
 [The English documentation is available here.](en.md)
 
-このガイドは現行の操作に合わせています。装着後の全身写真と表情画面はShipilkaで撮影しています。その他の画像は初期版のため、現在の画面と項目名・配置が異なる場合があります。
+このガイドは現行の操作に合わせています。表情画面はトラスで撮影しています。その他の画像は初期版のため、現在の画面と項目名・配置が異なる場合があります。
 
 ![BoothImageResoPon.png](assets/hero.png)
 
@@ -53,7 +53,7 @@ ResoPonの画面にアップロードしたいアバターファイル（Unitypa
 
 うまく着られました！
 
-![Resoniteで装着したShipilkaの全身](assets/equipped-avatar.png)
+![Resoniteで装着したトラス](assets/equipped-avatar.png)
 
 インベントリを開いて「現在のアバターを保存」しておきましょう。
 
@@ -72,9 +72,9 @@ ResoPonの画面にアップロードしたいアバターファイル（Unitypa
 
 変えたい表情を押してください。表情が9個以上ある場合は `Group 1`、`Group 2` などから選びます。
 選んだ表情は保持されます。同じ表情をもう一度押すか、`Expressions` の `Reset` で解除できます。
-以下はShipilkaの `Group 1` の例です。表情の名前・数はアバターによって異なります。
+以下はトラスの `Group 1` の例です。表情の名前・数はアバターによって異なります。
 
-![ShipilkaのGroup 1に並ぶ表情一覧](assets/select-expression.png)
+![トラスのGroup 1に並ぶ表情一覧](assets/select-expression.png)
 
 ### ハンドサイン・キーボードでも操作する
 
