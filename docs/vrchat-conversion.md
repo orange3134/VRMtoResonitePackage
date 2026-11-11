@@ -490,6 +490,21 @@ Animatorからの補完は、初期状態のループClip、開0・閉100を持�
 BlendShape名が大文字小文字を除いて `blink` と完全一致、他レイヤーとの競合なし、などを満たす場合だけ。
 `eye_blink_1` のような名前はこの条件を満たさない。
 
+Lina 2.00の `AD01_Lina` はDescriptorの `eyelidType=0`、`eyelidsSkinnedMesh.fileID=0`、
+`eyelidsBlendshapes` が空で、FX Animatorの `BLINK` layerが瞬きを担当する。
+`VrchatAnimatorDefaults.Resolve` は初期状態を `ENABLE` まで解決するが、
+`Lina_Blink_Enable` はBodyの `まばたき右` / `まばたき左` を0～100で動かし、
+両目用の `まばたき` を常時0へ戻す3本のカーブを持つ。
+現行の `VrchatAnimatorFaceParser` では単一shape・名前 `blink` の条件を満たさず、
+DEFAULT FACE / FACE EMOTE PLAYER / SNIFF CONTROLの各有効layerにも同じbindingがあるため、
+他layerとの非競合条件も満たさない。初期状態がDISABLEだから検出できないわけではない。
+
+LinaのFBXには両目用 `まばたき` の `DeformPercent=100` がある。
+Animatorの常時0カーブを取り込まない現行変換では、この値が初期weightと表情出力のBaseに残り、
+保存パッケージのBodyもweight=1となる。左右の瞬き接続だけ追加しても、この両目用shapeは解除されない。
+対応する場合は左右の瞬き、両目用shapeの初期リセット、表情layerとの合成を合わせて扱う必要がある。
+単に日本語の名前を候補へ追加したり、ゼロカーブを捨てたりするだけでは元の動作を保持できない。
+
 共通の追跡設定ではAvatarCreatorのBlendShape名ヒューリスティクスによる補完を行わないため、
 瞬きがないアバターを再変換するだけで接続先が増えるとは限らない。
 取り込み後の接続順は[表情システムへの接続](avatar-conversion.md#表情システムへの接続)を参照する。
