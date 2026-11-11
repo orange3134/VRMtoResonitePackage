@@ -32,6 +32,9 @@ VRMアバターを **.resonitepackage** に変換するWindows用ツールです
 
 ## 使い方
 
+画像付きの使い方は[日本語ガイド](docs/user-guide/ja.md) / [English guide](docs/user-guide/en.md)を参照してください。
+原稿はGitHubで管理し、Notionで公開します。[編集・公開の運用](docs/user-guide/README.md)はこちらです。
+
 ### ドラッグ＆ドロップ
 
 `ResoPon.exe` を起動して `.vrm` をドロップしてください。
