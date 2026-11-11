@@ -14,6 +14,8 @@ public static class VrchatAnimatorFaceParser
         var visemes = new Dictionary<int, HashSet<Shape>>();
         var unsupportedVisemes = new HashSet<int>();
         var blinks = new HashSet<Shape>();
+        var blinkLoops = new List<VrchatBlinkLoop>();
+        var neutralBlinks = new List<VrchatBlinkLoop>();
         foreach (YamlNode layer in descriptor?["baseAnimationLayers"]?.Seq ?? new())
         {
             // SDK FX layer. Gesture/Action animations must not become always-on face drivers.
@@ -92,6 +94,37 @@ public static class VrchatAnimatorFaceParser
                 {
                     initialStates.TryGetValue(animatorLayer["m_StateMachine"]?.FileID ?? 0, out YamlNode state);
                     YamlNode clip = Clip(state?["m_Motion"]);
+                    var loop = VrchatBlinkLoop.Read(clip);
+                    bool neutral = loop == null;
+                    loop ??= VrchatBlinkLoop.ReadNeutral(clip);
+                    if (loop != null)
+                    {
+                        // Earlier face layers may share these curves: the active blink layer
+                        // overrides them at startup, and exported expressions use the native mixer.
+                        // A later active layer writing any required curve would override the loop.
+                        bool overwritten = animatorLayers.Skip(layerIndex).Any(l =>
+                        {
+                            if ((l["m_DefaultWeight"]?.AsFloat() ?? 0) == 0) return false;
+                            initialStates.TryGetValue(l["m_StateMachine"]?.FileID ?? 0, out var later);
+                            // Unknown startup motion is not evidence of a non-conflicting layer.
+                            if (later == null) return LayerBindings(l).Any(b =>
+                                loop.InitialValues.Keys.Any(k => k.Path == b.Item1 && k.Shape == b.Item2));
+                            var motion = later["m_Motion"];
+                            if ((motion?.FileID ?? 0) == 0) return false;
+                            var laterClip = Clip(motion);
+                            if (laterClip == null)
+                            {
+                                var bindings = MotionBindings(motion, out bool complete);
+                                return !complete || bindings.Any(b =>
+                                    loop.InitialValues.Keys.Any(k => k.Path == b.Item1 && k.Shape == b.Item2));
+                            }
+                            return (laterClip["m_FloatCurves"]?.Seq ?? new()).Any(c =>
+                                c["classID"]?.AsInt() == 137 && loop.InitialValues.Keys.Any(b =>
+                                    b.Path == c["path"]?.AsString() && "blendShape." + b.Shape == c["attribute"]?.AsString()));
+                        });
+                        if (!overwritten) (neutral ? neutralBlinks : blinkLoops).Add(loop);
+                        else UniLog.Log($"Animator blink loop skipped: {clip["m_Name"]?.AsString()} is overridden or has an unresolved later layer.");
+                    }
                     var shapes = ActiveShapes(clip, requireOpen: true);
                     if (clip?["m_AnimationClipSettings"]?["m_LoopTime"]?.AsBool() == true &&
                         shapes.Count == 1 && MathF.Abs(shapes[0].Peak - 100) < 0.01f &&
@@ -166,22 +199,44 @@ public static class VrchatAnimatorFaceParser
             HashSet<(string, string)> LayerBindings(YamlNode animatorLayer)
             {
                 var bindings = new HashSet<(string, string)>();
-                var visited = new HashSet<long>();
                 foreach (long id in graph.Reachable(animatorLayer["m_StateMachine"]?.FileID ?? 0))
-                    if (controller.Doc(id) is { ClassId: 1102 } state) VisitMotion(state.Root?["m_Motion"]);
+                    if (controller.Doc(id) is { ClassId: 1102 } state)
+                        bindings.UnionWith(MotionBindings(state.Root?["m_Motion"], out _));
                 return bindings;
-                void VisitMotion(YamlNode motion)
+            }
+
+            HashSet<(string, string)> MotionBindings(YamlNode motion, out bool complete)
+            {
+                var bindings = new HashSet<(string, string)>();
+                var active = new HashSet<(string, long)>();
+                complete = VisitMotion(motion, controller, asset.Guid);
+                return bindings;
+                bool VisitMotion(YamlNode reference, UnityScene owner, string ownerGuid)
                 {
-                    foreach (var curve in Clip(motion)?["m_FloatCurves"]?.Seq ?? new())
+                    if ((reference?.FileID ?? 0) == 0) return true;
+                    var clip = Clip(reference);
+                    foreach (var curve in clip?["m_FloatCurves"]?.Seq ?? new())
                     {
                         string attribute = curve["attribute"]?.AsString();
                         if (curve["classID"]?.AsInt() == 137 && curve["path"]?.AsString() is string path &&
                             attribute?.StartsWith("blendShape.", StringComparison.Ordinal) == true)
                             bindings.Add((path, attribute["blendShape.".Length..]));
                     }
-                    if (motion?.Guid == null && motion?.FileID is long id && id != 0 && visited.Add(id))
-                        foreach (var child in controller.Doc(id)?.Root?["m_Children"]?.Seq ?? new())
-                            VisitMotion(child["m_Motion"]);
+                    if (clip != null) return true;
+                    if (reference.Guid != null)
+                    {
+                        var source = package.ByGuid(reference.Guid);
+                        if (source?.HasContent != true || source.Extension is not (".asset" or ".controller")) return false;
+                        owner = package.ReadScene(source); ownerGuid = source.Guid;
+                    }
+                    long id = reference.FileID.Value;
+                    var tree = owner.Doc(id);
+                    if (tree?.ClassId != 206 || !active.Add((ownerGuid, id))) return false;
+                    bool resolved = true;
+                    foreach (var child in tree.Root["m_Childs"]?.Seq ?? tree.Root["m_Children"]?.Seq ?? new())
+                        resolved &= VisitMotion(child["m_Motion"], owner, ownerGuid);
+                    active.Remove((ownerGuid, id));
+                    return resolved;
                 }
             }
         }
@@ -192,7 +247,18 @@ public static class VrchatAnimatorFaceParser
             avatar.Visemes.Add(new VrchatViseme { ResonitePreset = preset, MeshGameObjectPath = shape.Renderer,
                 MeshGameObjectName = shape.Renderer.Split('/').Last(), BlendShapeName = shape.Name });
         }
-        if (avatar.Blink == null && blinks.Count == 1)
+        bool useNeutral = blinkLoops.Count == 0 && blinks.Count == 0 && neutralBlinks.Count == 1;
+        if (avatar.Blink == null && (blinkLoops.Count == 1 || useNeutral))
+        {
+            var loop = useNeutral ? neutralBlinks[0] : blinkLoops[0];
+            avatar.Blink = loop.Bindings[0];
+            avatar.AdditionalBlinks.AddRange(loop.Bindings.Skip(1));
+            foreach (var entry in loop.InitialValues) avatar.BlinkInitialValues.Add(entry.Key, entry.Value);
+            UniLog.Log((useNeutral ? "Animator neutral blink fallback: " : "Animator blink loop: ") + string.Join(", ", loop.Bindings.Select(b =>
+                $"{b.MeshGameObjectPath}/{b.BlendShapeName} -> {b.Preset}")) +
+                $"; {loop.InitialValues.Count} open/reset values. Animator timing and parameter gates are replaced by native blinking.");
+        }
+        else if (avatar.Blink == null && blinkLoops.Count == 0 && blinks.Count == 1)
         {
             Shape shape = blinks.Single();
             avatar.Blink = new VrchatBlink { MeshGameObjectPath = shape.Renderer,
@@ -219,6 +285,12 @@ public static class VrchatAnimatorFaceParser
             if (guid == null) return null;
             if (clips.TryGetValue(guid, out var cached)) return cached;
             UnityAsset asset = package.ByGuid(guid);
+            // SDK proxy_hands_idle contains only humanoid hand-muscle curves. Packages
+            // commonly omit SDK assets. Recognize this exact missing reference, never
+            // an arbitrary missing motion or a packaged asset reusing the same GUID.
+            if (asset?.HasContent != true && motion.FileID == 7400000 &&
+                guid.Equals("14980fc5fe40191418954549174fe63e", StringComparison.OrdinalIgnoreCase))
+                return clips[guid] = UnityYaml.ParseFlatDocument("m_FloatCurves: []");
             YamlNode clip = asset?.Extension == ".anim" && asset.HasContent
                 ? package.ReadScene(asset).Doc(motion.FileID ?? 7400000)?.Root : null;
             clips[guid] = clip;

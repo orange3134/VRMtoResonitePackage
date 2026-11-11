@@ -100,7 +100,7 @@ internal static class ExpressionMeshDriverChecks
         CheckSpeeds(avatar, updated);
     }
 
-    private static async Task<SkinnedMeshRenderer> Mesh(Slot parent, string[] shapes)
+    internal static async Task<SkinnedMeshRenderer> Mesh(Slot parent, string[] shapes)
     {
         var mesh = new MeshX();
         mesh.AddVertex(new float3(0, 0, 0)); mesh.AddVertex(new float3(1, 0, 0)); mesh.AddVertex(new float3(0, 1, 0));
