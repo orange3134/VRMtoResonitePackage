@@ -82,6 +82,20 @@ Under `Expressions`, use `Hand gestures` to choose `Both hands enabled`, `Left h
 The current state is shown as `Hand gestures: Both / LeftOnly / RightOnly / None`.
 
 On the keyboard, `Shift + numpad 0–7` controls the left hand, `Ctrl + numpad 0–7` controls the right, and `Ctrl + Shift + numpad 0–7` controls both.
+
+The numpad numbers correspond to these hand gestures:
+
+| Number | Hand gesture |
+|---|---|
+| 0 | Neutral |
+| 1 | Fist |
+| 2 | Open hand (HandOpen) |
+| 3 | Point (FingerPoint) |
+| 4 | Peace sign (Victory) |
+| 5 | Rock and roll (RockNRoll) |
+| 6 | Finger gun (HandGun) |
+| 7 | Thumbs up (ThumbsUp) |
+
 The standard VRM assignments are 3 for sadness, 4 for joy, 5 for anger, 6 for surprise, and 7 for relaxation. Missing expressions are left unassigned.
 VRChat avatars use the original assignments that ResoPon can import.
 
