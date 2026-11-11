@@ -14,6 +14,7 @@ public static class VrchatAnimatorFaceParser
         var visemes = new Dictionary<int, HashSet<Shape>>();
         var unsupportedVisemes = new HashSet<int>();
         var blinks = new HashSet<Shape>();
+        var blinkLoops = new List<VrchatBlinkLoop>();
         foreach (YamlNode layer in descriptor?["baseAnimationLayers"]?.Seq ?? new())
         {
             // SDK FX layer. Gesture/Action animations must not become always-on face drivers.
@@ -92,6 +93,31 @@ public static class VrchatAnimatorFaceParser
                 {
                     initialStates.TryGetValue(animatorLayer["m_StateMachine"]?.FileID ?? 0, out YamlNode state);
                     YamlNode clip = Clip(state?["m_Motion"]);
+                    var loop = VrchatBlinkLoop.Read(clip);
+                    if (loop != null)
+                    {
+                        // Earlier face layers may share these curves: the active blink layer
+                        // overrides them at startup, and exported expressions use the native mixer.
+                        // A later active layer writing any required curve would override the loop.
+                        bool overwritten = animatorLayers.Skip(layerIndex).Any(l =>
+                        {
+                            if ((l["m_DefaultWeight"]?.AsFloat() ?? 0) == 0) return false;
+                            initialStates.TryGetValue(l["m_StateMachine"]?.FileID ?? 0, out var later);
+                            // Unknown startup motion is not evidence of a non-conflicting layer.
+                            if (later == null) return LayerBindings(l).Any(b =>
+                                loop.InitialValues.Keys.Any(k => k.Path == b.Item1 && k.Shape == b.Item2));
+                            var motion = later["m_Motion"];
+                            if ((motion?.FileID ?? 0) == 0) return false;
+                            var laterClip = Clip(motion);
+                            if (laterClip == null) return LayerBindings(l).Any(b =>
+                                loop.InitialValues.Keys.Any(k => k.Path == b.Item1 && k.Shape == b.Item2));
+                            return (laterClip["m_FloatCurves"]?.Seq ?? new()).Any(c =>
+                                c["classID"]?.AsInt() == 137 && loop.InitialValues.Keys.Any(b =>
+                                    b.Path == c["path"]?.AsString() && "blendShape." + b.Shape == c["attribute"]?.AsString()));
+                        });
+                        if (!overwritten) blinkLoops.Add(loop);
+                        else UniLog.Log($"Animator blink loop skipped: {clip["m_Name"]?.AsString()} is overridden or has an unresolved later layer.");
+                    }
                     var shapes = ActiveShapes(clip, requireOpen: true);
                     if (clip?["m_AnimationClipSettings"]?["m_LoopTime"]?.AsBool() == true &&
                         shapes.Count == 1 && MathF.Abs(shapes[0].Peak - 100) < 0.01f &&
@@ -192,7 +218,17 @@ public static class VrchatAnimatorFaceParser
             avatar.Visemes.Add(new VrchatViseme { ResonitePreset = preset, MeshGameObjectPath = shape.Renderer,
                 MeshGameObjectName = shape.Renderer.Split('/').Last(), BlendShapeName = shape.Name });
         }
-        if (avatar.Blink == null && blinks.Count == 1)
+        if (avatar.Blink == null && blinkLoops.Count == 1)
+        {
+            var loop = blinkLoops[0];
+            avatar.Blink = loop.Bindings[0];
+            avatar.AdditionalBlinks.AddRange(loop.Bindings.Skip(1));
+            foreach (var entry in loop.InitialValues) avatar.BlinkInitialValues.Add(entry.Key, entry.Value);
+            UniLog.Log("Animator blink loop: " + string.Join(", ", loop.Bindings.Select(b =>
+                $"{b.MeshGameObjectPath}/{b.BlendShapeName} -> {b.Preset}")) +
+                $"; {loop.InitialValues.Count} open/reset values. Animator timing and parameter gates are replaced by native blinking.");
+        }
+        else if (avatar.Blink == null && blinkLoops.Count == 0 && blinks.Count == 1)
         {
             Shape shape = blinks.Single();
             avatar.Blink = new VrchatBlink { MeshGameObjectPath = shape.Renderer,

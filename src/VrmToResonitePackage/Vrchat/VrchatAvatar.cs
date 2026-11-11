@@ -66,6 +66,9 @@ public sealed class VrchatAvatar
 
     /// <summary>Blink shape, resolved by blendshape index on a named mesh (VRChat stores an index).</summary>
     public VrchatBlink Blink { get; set; }
+    public List<VrchatBlink> AdditionalBlinks { get; } = new();
+    // Startup-loop resets must survive later prefab state restoration and expression release.
+    public Dictionary<Expressions.ExpressionBinding, float> BlinkInitialValues { get; } = new();
 
     public List<VrchatPhysBone> PhysBones { get; } = new();
 
@@ -264,6 +267,7 @@ public sealed class VrchatViseme
 
 public sealed class VrchatBlink
 {
+    public string Preset { get; set; } = "blink";
     public VrchatBoneTarget MeshTarget { get; set; }
     public string MeshGameObjectPath { get; set; }
     public string BlendShapeName { get; set; }

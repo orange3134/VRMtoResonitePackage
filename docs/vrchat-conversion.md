@@ -236,13 +236,13 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   Viseme motion must also keep each blendshape curve constant: changing key values or
   nonzero interpolation slopes cannot become a permanent full-weight binding. Blink
   inference still uses the peak of its animated curve.
-  Before accepting a viseme or blink, check its renderer path and blendshape against bindings
+  Before accepting a viseme or legacy single-shape blink, check its renderer path and blendshape against bindings
   in reachable states of other nonzero-weight Animator layers, including zero-valued curves and BlendTree
   motions. Reject overlapping bindings conservatively because permanent drivers cannot
   reproduce the combined layer result; unrelated bindings do not block inference.
   Retain zero-valued curves when counting viseme and blink shape requirements. Initial prefab
   and FBX weights are collected before face inference, but a neutral curve cannot be
-  assumed redundant across Animator states. Reject multi-curve face motions conservatively: a single-shape driver
+  assumed redundant across Animator states. Reject multi-curve viseme and legacy blink motions conservatively: a single-shape driver
   cannot also clear another authored shape, even when its required value is zero.
 
 ### 主モデルと骨格の統合
@@ -486,24 +486,42 @@ Descriptorの `eyelidsBlendshapes` はBlink / LookingUp / LookingDownの順。
 例えばPlum v1.0.1は `[-1, 19, 20]` なので、メッシュにvrc.Blinkが存在しても
 Descriptorから瞬きは作られない。
 
-Animatorからの補完は、初期状態のループClip、開0・閉100を持つ単一shape、
-BlendShape名が大文字小文字を除いて `blink` と完全一致、他レイヤーとの競合なし、などを満たす場合だけ。
-`eye_blink_1` のような名前はこの条件を満たさない。
+Animatorからの補完はFX layerの初期状態を `VrchatAnimatorDefaults.Resolve` で解決し、
+そこで再生されるループClipを `VrchatBlinkLoop` で調べる。Descriptorの明示設定を優先する。
+
+- `blink`（大文字小文字不問）、`まばたき`、`瞬き`、`瞬目` を名前に含むshapeが対象。
+  `eye_blink_1` も対象になるが、名前だけでは採用しない。
+- キー値が0～100の範囲で、先頭・末尾が0、途中の最大値が100となるカーブを瞬きとして登録する。
+  途中で閉じない固定ポーズ、半開き、非ループ、無関係な顔shapeが混在するClipは除外する。
+- 同じClip内の瞬きshapeの常時0カーブは初期リセットとして保持し、EyeLinearDriverには登録しない。
+  0カーブでも接線が非ゼロならリセットとは見なさない。
+- 複数shapeを登録できる。左右の名前（左/右、left/right、区切り文字付きL/R）を判別でき、
+  全接続が左右のどちらかに分かれ両側が揃う場合は `blinkLeft` / `blinkRight` に分ける。
+  それ以外は `blink` として両目共通の入力につなぐ。
+- 部分weight、Additive、対象rendererや祖先の表示切り替えを含む候補は除外する。
+  後段の有効layerが初期状態で同じshapeへ書く場合も除外する。
+  後段の状態を確定できない場合やBlendTreeは、到達可能motionのbinding重複を保守的に調べる。
+  前段の表情layerとの重複は許可し、取り込み後は既存の表情・瞬き合成で扱う。
+- 候補ループが一意の場合だけ採用する。従来の単一 `blink`・他layerとの非競合による検出も残す。
+
+元Clipの再生タイミングや、Animatorパラメーターによる瞬きの停止・接触ギミックは再現せず、
+初期状態の接続をResoniteのEyeManager / EyeLinearDriverへ置き換える。
+初期リセットはBlendshapeResolverが初期値を記録する前と、最終prefab状態復元の後に適用する。
+初期値の変更は対象の瞬きshapeだけに限定し、表情選択中の固定ドライブにはしない。
 
 Lina 2.00の `AD01_Lina` はDescriptorの `eyelidType=0`、`eyelidsSkinnedMesh.fileID=0`、
 `eyelidsBlendshapes` が空で、FX Animatorの `BLINK` layerが瞬きを担当する。
 `VrchatAnimatorDefaults.Resolve` は初期状態を `ENABLE` まで解決するが、
 `Lina_Blink_Enable` はBodyの `まばたき右` / `まばたき左` を0～100で動かし、
 両目用の `まばたき` を常時0へ戻す3本のカーブを持つ。
-現行の `VrchatAnimatorFaceParser` では単一shape・名前 `blink` の条件を満たさず、
-DEFAULT FACE / FACE EMOTE PLAYER / SNIFF CONTROLの各有効layerにも同じbindingがあるため、
-他layerとの非競合条件も満たさない。初期状態がDISABLEだから検出できないわけではない。
+従来は単一shape・名前 `blink` の条件を満たさず、他layerとのbinding重複もあり未検出だった。
+新しい検出では左右2本をEyeLinearDriverへ登録し、両目用shapeの0固定を初期リセットとして保存する。
+SNIFF CONTROLの到達可能motionには同じbindingがあるが、初期状態のIDLEは上書きしない。
 
 LinaのFBXには両目用 `まばたき` の `DeformPercent=100` がある。
-Animatorの常時0カーブを取り込まない現行変換では、この値が初期weightと表情出力のBaseに残り、
-保存パッケージのBodyもweight=1となる。左右の瞬き接続だけ追加しても、この両目用shapeは解除されない。
-対応する場合は左右の瞬き、両目用shapeの初期リセット、表情layerとの合成を合わせて扱う必要がある。
-単に日本語の名前を候補へ追加したり、ゼロカーブを捨てたりするだけでは元の動作を保持できない。
+従来はこの値が初期weightと表情出力のBaseに残り、保存パッケージのBodyもweight=1となっていた。
+ループの0指定を初期値と表情解除時のBaseへ反映することで、左右の瞬きを追加した後も残る閉眼を防ぐ。
+衣服の調整shapeなど、瞬きと関係しないFBX既定値は維持する。
 
 共通の追跡設定ではAvatarCreatorのBlendShape名ヒューリスティクスによる補完を行わないため、
 瞬きがないアバターを再変換するだけで接続先が増えるとは限らない。

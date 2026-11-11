@@ -92,18 +92,18 @@ public static class VrchatModelAdapter
         }
 
         // Blink (resolved by blendshape index on the eyelid mesh; VRChat stores an index, not a name).
-        if (avatar.Blink != null)
+        foreach (var sourceBlink in new[] { avatar.Blink }.Concat(avatar.AdditionalBlinks).Where(b => b != null))
         {
-            string shapeName = avatar.Blink.BlendShapeName;
-            if (shapeName == null && avatar.Blink.MeshGameObjectName != null &&
-                avatar.FbxBlendShapeNames.TryGetValue(avatar.Blink.MeshGameObjectName, out var shapes) &&
-                avatar.Blink.BlendShapeIndex >= 0 && avatar.Blink.BlendShapeIndex < shapes.Count)
-                shapeName = shapes[avatar.Blink.BlendShapeIndex];
+            string shapeName = sourceBlink.BlendShapeName;
+            if (shapeName == null && sourceBlink.MeshGameObjectName != null &&
+                avatar.FbxBlendShapeNames.TryGetValue(sourceBlink.MeshGameObjectName, out var shapes) &&
+                sourceBlink.BlendShapeIndex >= 0 && sourceBlink.BlendShapeIndex < shapes.Count)
+                shapeName = shapes[sourceBlink.BlendShapeIndex];
             int meshIndex;
             int morphIndex;
             if (shapeName != null)
             {
-                meshIndex = MeshFor(avatar.Blink.MeshGameObjectName, avatar.Blink.MeshGameObjectPath, avatar.Blink.MeshTarget);
+                meshIndex = MeshFor(sourceBlink.MeshGameObjectName, sourceBlink.MeshGameObjectPath, sourceBlink.MeshTarget);
                 morphIndex = model.MeshTargetNames[meshIndex].Count;
                 model.MeshTargetNames[meshIndex].Add(shapeName);
             }
@@ -112,20 +112,24 @@ public static class VrchatModelAdapter
                 // Raw Unity indices must not index the synthetic viseme-name table on this mesh.
                 meshIndex = model.MeshTargetNames.Count;
                 model.MeshTargetNames.Add(new List<string>());
-                if (avatar.Blink.MeshGameObjectPath != null)
-                    model.MeshBindingPaths[meshIndex] = avatar.Blink.MeshGameObjectPath;
-                int node = NodeFor(avatar.Blink.MeshGameObjectName, avatar.Blink.MeshTarget);
+                if (sourceBlink.MeshGameObjectPath != null)
+                    model.MeshBindingPaths[meshIndex] = sourceBlink.MeshGameObjectPath;
+                int node = NodeFor(sourceBlink.MeshGameObjectName, sourceBlink.MeshTarget);
                 model.MeshToNodes[meshIndex] = node >= 0 ? new List<int> { node } : new List<int>();
-                morphIndex = avatar.Blink.BlendShapeIndex;
+                morphIndex = sourceBlink.BlendShapeIndex;
             }
-            var blink = new VrmExpression { Preset = "blink", Name = "blink" };
+            var blink = model.Expressions.FirstOrDefault(e => e.Preset == sourceBlink.Preset);
+            if (blink == null)
+            {
+                blink = new VrmExpression { Preset = sourceBlink.Preset, Name = sourceBlink.Preset };
+                model.Expressions.Add(blink);
+            }
             blink.Binds.Add(new VrmExpressionBind
             {
                 MeshIndex = meshIndex,
                 MorphIndex = morphIndex,
                 Weight = 1f,
             });
-            model.Expressions.Add(blink);
         }
 
         // Spring bones from PhysBones. Identical colliders shared by several PhysBones are

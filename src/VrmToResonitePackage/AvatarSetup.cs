@@ -1326,12 +1326,14 @@ internal sealed class BlendshapeResolver
 
     public BlendshapeResolver(Slot root, VrmModel vrm) : this(root, vrm, null) { }
 
-    public BlendshapeResolver(Slot root, VrmModel vrm, IReadOnlyDictionary<int, Slot> resolvedNodes)
+    public BlendshapeResolver(Slot root, VrmModel vrm, IReadOnlyDictionary<int, Slot> resolvedNodes,
+        IReadOnlyDictionary<Expressions.ExpressionBinding, float> initialOverrides = null)
     {
         _vrm = vrm;
         _renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>();
         _slotsByName = SlotIndex.Build(root);
         _rendererPaths = _renderers.ToDictionary(skin => skin, skin => RelativePath(skin.Slot));
+        ApplyInitialOverrides(initialOverrides);
         foreach (var skin in _renderers)
             for (int i = 0; i < skin.MeshBlendshapeCount; i++)
             {
@@ -1387,6 +1389,16 @@ internal sealed class BlendshapeResolver
     }
 
     public float? InitialWeight(IField<float> field) => field != null && _initialWeights.TryGetValue(field, out float value) ? value : null;
+
+    internal void ApplyInitialOverrides(IReadOnlyDictionary<Expressions.ExpressionBinding, float> values)
+    {
+        if (values == null) return;
+        foreach (var (binding, value) in values)
+        {
+            var field = ResolveExpression(binding);
+            if (field != null && !field.IsDriven) field.Value = value;
+        }
+    }
 
     public (SkinnedMeshRenderer skin, IField<float> field) ResolveWithRenderer(VrmExpressionBind bind)
     {

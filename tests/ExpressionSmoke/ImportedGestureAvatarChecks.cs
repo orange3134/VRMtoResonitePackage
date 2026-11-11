@@ -16,6 +16,7 @@ internal static class ImportedGestureAvatarChecks
         for (int i = 0; i < 180; i++) await default(NextUpdate);
         var root = avatar.FindChild("Expressions") ?? throw new InvalidOperationException("Missing expression system");
         await WaitForExpressionMeshes(root);
+        await ImportedBlinkChecks.Run(avatar, root);
         // Keep the exported mixer enabled, but freeze external tracking inputs for
         // this fixed-pose oracle. User/eye updates can otherwise race the sampled
         // Base and Result in the headless frame. ExpressionBlinkChecks separately

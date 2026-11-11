@@ -50,6 +50,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await ExpressionBindingNameChecks.Run(world.LocalUser.Root.Slot, artifacts);
         await ExpressionOutputWriteChecks.Run(world.LocalUser.Root.Slot);
         await ExpressionBlinkChecks.Run(world.LocalUser.Root.Slot, artifacts);
+        await StartupBlinkChecks.Run(world.LocalUser.Root.Slot, artifacts);
         await ExpressionMeshDriverChecks.Run(world.LocalUser.Root.Slot, artifacts);
         ExpressionLayoutChecks.CheckFixtures(world.LocalUser.Root.Slot);
         var avatar = world.LocalUser.Root.Slot.AddSlot("Expression smoke avatar");
