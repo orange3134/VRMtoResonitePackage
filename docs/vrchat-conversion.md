@@ -501,8 +501,18 @@ Animatorからの補完はFX layerの初期状態を `VrchatAnimatorDefaults.Res
 - 部分weight、Additive、対象rendererや祖先の表示切り替えを含む候補は除外する。
   後段の有効layerが初期状態で同じshapeへ書く場合も除外する。
   後段の状態を確定できない場合やBlendTreeは、到達可能motionのbinding重複を保守的に調べる。
+  BlendTreeはcontroller内と外部 `.asset` の両方を辿り、`m_Childs` / `m_Children` を読む。
+  入れ子の参照元を保持し、循環や欠落参照を「顔カーブなし」と扱わない。
   前段の表情layerとの重複は許可し、取り込み後は既存の表情・瞬き合成で扱う。
 - 候補ループが一意の場合だけ採用する。従来の単一 `blink`・他layerとの非競合による検出も残す。
+
+動く瞬きループを検出できない場合は、中立表情の初期ループからの補完も行う。
+全blendshapeカーブが定数で、`blink` / `vrc.blink`（大文字小文字不問）または
+`まばたき` / `瞬き` / `瞬目` と完全一致する両目用shapeが一意に0へ設定されている場合だけ、
+そのshapeをResoniteの自動瞬きへ接続する。これは元の瞬きアニメーションの移植ではなく補完である。
+片目用・ウィンク・番号付きshapeから閉眼の意味を推測しない。他の表情shapeの定数値は変更しない。
+複数候補、非ゼロ値、動くカーブや対象の表示切り替えを含む場合は補完しない。
+Descriptorと動く瞬きループを優先し、後段layerの初期上書きも通常のループ検出と同じように確認する。
 
 元Clipの再生タイミングや、Animatorパラメーターによる瞬きの停止・接触ギミックは再現せず、
 初期状態の接続をResoniteのEyeManager / EyeLinearDriverへ置き換える。
@@ -522,6 +532,16 @@ LinaのFBXには両目用 `まばたき` の `DeformPercent=100` がある。
 従来はこの値が初期weightと表情出力のBaseに残り、保存パッケージのBodyもweight=1となっていた。
 ループの0指定を初期値と表情解除時のBaseへ反映することで、左右の瞬きを追加した後も残る閉眼を防ぐ。
 衣服の調整shapeなど、瞬きと関係しないFBX既定値は維持する。
+
+Shipilka 1.02はDescriptorの瞬き設定が空で、初期 `Default Shape / ShapeDefault` のループが
+Bodyの `まばたき` を0に保つ。動く瞬きループではないため、中立表情からの補完で両目1本を登録する。
+`blink.anim` は非ループで `Fist` の `GestureRightWeight` によって時間を制御する握り込み表情なので、
+自動瞬きの再生元として扱わない。初期IdleのSDK `proxy_hands_idle.anim`
+（GUID `14980fc5fe40191418954549174fe63e`、fileID `7400000`）は手のmuscleカーブだけを持つ。
+この参照がunitypackageから欠落している場合だけ、顔カーブを持たない既知のSDK motionとして扱う。
+同じGUIDの実体が同梱されていればそちらを解析し、その他の不明な欠落motionは非競合と決めつけない。
+保存パッケージをExpressionSmokeで再生するときは `RESOPON_TEST_EXPECTED_BLINK_BINDINGS` を
+Shipilkaでは `1`、Linaでは `2` に設定し、瞬き接続が0本でも開閉テストが通ることを防ぐ。
 
 共通の追跡設定ではAvatarCreatorのBlendShape名ヒューリスティクスによる補完を行わないため、
 瞬きがないアバターを再変換するだけで接続先が増えるとは限らない。

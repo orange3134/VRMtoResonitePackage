@@ -41,6 +41,9 @@ internal static class ImportedBlinkChecks
             }
             checkedEyes += targets.Length;
         }
+        string required = Environment.GetEnvironmentVariable("RESOPON_TEST_EXPECTED_BLINK_BINDINGS");
+        if (required != null && (!int.TryParse(required, out int expectedCount) || expectedCount < 0 || checkedEyes != expectedCount))
+            throw new Exception($"Expected {required} saved blink bindings, found {checkedEyes}");
         Console.WriteLine($"PASS: {checkedEyes} saved native blink bindings open, close independently, and reopen through the expression mixer");
     }
 }
