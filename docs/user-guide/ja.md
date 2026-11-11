@@ -87,14 +87,14 @@ ResoPonの画面にアップロードしたいアバターファイル（Unitypa
 
 | 番号 | ハンドサイン |
 |---|---|
-| 0 | ニュートラル（Neutral） |
-| 1 | グー（Fist） |
-| 2 | パー（HandOpen） |
-| 3 | 指差し（FingerPoint） |
-| 4 | ピース（Victory） |
-| 5 | ロックンロール（RockNRoll） |
-| 6 | 指鉄砲（HandGun） |
-| 7 | サムズアップ（ThumbsUp） |
+| 0 | Neutral |
+| 1 | Fist |
+| 2 | HandOpen |
+| 3 | FingerPoint |
+| 4 | Victory |
+| 5 | RockNRoll |
+| 6 | HandGun |
+| 7 | ThumbsUp |
 
 VRMの標準割り当ては、3が悲しみ、4が喜び、5が怒り、6が驚き、7がリラックスです。モデルにない表情は割り当てられません。
 VRChatアバターでは取り込めた元の割り当てを使います。
