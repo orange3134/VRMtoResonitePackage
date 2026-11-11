@@ -24,13 +24,16 @@ VRMアバターを **.resonitepackage** に変換するWindows用ツールです
 
 ## 必要環境
 
-- Windows + .NET 10 ランタイム
+- Windows x64 + .NET 10 Desktop Runtime（x64）
 - **Resonite がインストールされていること**
 
 配布版は起動時に GitHub Releases の最新版を確認します。更新がある場合は確認画面から
 ダウンロード、実行ファイルの差し替え、再起動まで行えます。起動時の確認は設定画面で無効にできます。
 
 ## 使い方
+
+画像付きの使い方は[日本語ガイド](docs/user-guide/ja.md) / [English guide](docs/user-guide/en.md)を参照してください。
+原稿はGitHubで管理し、Notionで公開します。[編集・公開の運用](docs/user-guide/README.md)はこちらです。
 
 ### ドラッグ＆ドロップ
 
@@ -119,11 +122,13 @@ Resonite（FrooxEngine）のインポーターには特定のVRMでクラッシ�
 ## データの保存場所
 
 このツールはエンジン起動時に`-DataPath`/`-CachePath`相当の指定を行い、
-すべてのデータを専用フォルダ `%LOCALAPPDATA%\ResoPon\` 配下に生成します：
+エンジンのデータを専用フォルダ `%LOCALAPPDATA%\ResoPon\` 配下に生成します：
 
 - `Data\` — エンジンのLocalDB（アセットキャッシュ）。破損時は自動でリセットされます
 - `Cache\` — エンジンのキャッシュ
-- `Logs\` — 変換ログ。問題が起きたときはここを確認してください。GUIでは設定画面下部、または変換失敗時の「ログフォルダを開く」ボタンから開けます。
+
+変換ログは `ResoPon.exe` と同じフォルダの `Logs/convert_*.log` に出力します。
+GUIでは設定画面下部、または変換失敗時の「ログフォルダを開く」ボタンから開けます。
 
 **Resonite本体のデータフォルダには一切触れません**（プレイ環境に影響しません）。
 自動リセット処理にも、このフォルダ外では動作しないガードが入っています。

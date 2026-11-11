@@ -1,6 +1,6 @@
 # 実装・検証資料
 
-利用方法は[プロジェクトREADME](../README.md)、配布手順は[RELEASE.md](../RELEASE.md)を参照。
+利用方法は[ユーザーガイド](user-guide/README.md)と[プロジェクトREADME](../README.md)、配布手順は[RELEASE.md](../RELEASE.md)を参照。
 このディレクトリは現行コードの仕様・制約・保守に必要な判断をまとめる。
 開発途中の差分や未採用設計は残さず、変更経緯はGit履歴で確認する。
 
