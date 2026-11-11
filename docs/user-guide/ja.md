@@ -6,7 +6,7 @@ VRChat向けアバターのUnitypackageとPrefab、またはVRMに対応！（VR
 
 [The English documentation is available here.](en.md)
 
-このガイドは現行の操作に合わせています。画像は初期版のため、現在の画面と項目名・配置が異なる場合があります。
+このガイドは現行の操作に合わせています。装着後の全身写真と表情画面はShipilkaで撮影しています。その他の画像は初期版のため、現在の画面と項目名・配置が異なる場合があります。
 
 ![BoothImageResoPon.png](assets/hero.png)
 
@@ -51,9 +51,11 @@ ResoPonの画面にアップロードしたいアバターファイル（Unitypa
 
 ![image.png](assets/equip-avatar.png)
 
-うまく着られました！インベントリを開いて「現在のアバターを保存」しておきましょう。
+うまく着られました！
 
-![image.png](assets/equipped-avatar.png)
+![Resoniteで装着したShipilkaの全身](assets/equipped-avatar.png)
+
+インベントリを開いて「現在のアバターを保存」しておきましょう。
 
 ![image.png](assets/save-avatar.png)
 
@@ -65,15 +67,14 @@ ResoPonの画面にアップロードしたいアバターファイル（Unitypa
 （Quest：B/Yボタン　Index：Bボタン　デスクトップ：マウスホイールボタン）
 
 `Expressions` → `Select expression` を押してください。
-以下の画像は初期版の `Expression` メニューです。現行版では名称と階層が変わっています。
 
-![image.png](assets/expression-menu.png)
+![ExpressionsメニューのSelect expression・Hand gestures・Reset](assets/expression-menu.png)
 
 変えたい表情を押してください。表情が9個以上ある場合は `Group 1`、`Group 2` などから選びます。
 選んだ表情は保持されます。同じ表情をもう一度押すか、`Expressions` の `Reset` で解除できます。
-以下は初期版の表情一覧です。現行版では `neutral` を選ぶ代わりに表情の保持を解除します。
+以下はShipilkaの `Group 1` の例です。表情の名前・数はアバターによって異なります。
 
-![image.png](assets/select-expression.png)
+![ShipilkaのGroup 1に並ぶ表情一覧](assets/select-expression.png)
 
 ### ハンドサイン・キーボードでも操作する
 

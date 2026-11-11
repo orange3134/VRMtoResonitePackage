@@ -6,7 +6,7 @@ Supports VRChat avatar Unitypackages and Prefabs, as well as VRM files. You don'
 
 [日本語のドキュメントはこちらです。](ja.md)
 
-This guide describes the current workflow. Screenshots are from the initial version, so labels and layouts may differ from the current app.
+This guide describes the current workflow. The equipped avatar photo and expression screenshots show Shipilka. The other screenshots are from the initial version, so labels and layouts may differ from the current app.
 
 ![BoothImageResoPon.png](assets/hero.png)
 
@@ -51,9 +51,11 @@ Click the avatar and choose "Equip Avatar."
 
 ![image.png](assets/equip-avatar.png)
 
-It's on! Open your inventory and use "Save Current Avatar" to keep it.
+It's on!
 
-![image.png](assets/equipped-avatar.png)
+![Full-body view of Shipilka equipped in Resonite](assets/equipped-avatar.png)
+
+Open your inventory and use "Save Current Avatar" to keep it.
 
 ![image.png](assets/save-avatar.png)
 
@@ -65,15 +67,14 @@ Equip the avatar and open the context menu.
 (Quest: B/Y button　Index: B button　Desktop: mouse wheel button)
 
 Press `Expressions` → `Select expression`.
-The image below shows the initial version's `Expression` menu. Its name and hierarchy have changed in the current version.
 
-![image.png](assets/expression-menu.png)
+![Expressions menu with Select expression, Hand gestures, and Reset](assets/expression-menu.png)
 
 Tap the expression you want to switch to. If there are nine or more, choose from `Group 1`, `Group 2`, and so on.
 Your selection stays active. Tap the same expression again or use `Reset` under `Expressions` to release it.
-The image below shows the initial expression list. In the current version, release the selection instead of choosing `neutral`.
+The example below shows Shipilka's `Group 1`. Expression names and counts depend on the avatar.
 
-![image.png](assets/select-expression.png)
+![Expressions in Shipilka's Group 1](assets/select-expression.png)
 
 ### Hand gestures and keyboard controls
 

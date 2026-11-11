@@ -18,7 +18,7 @@
 - 英語: `ResoPon — Upload Your Avatar to Resonite in One Shot!`（ページID: `39f6b3a1e27f809381e9d15456e46b00`）
 
 初回取り込みでは本文を保持し、ファイル名・画像の相対パス・日本語版から英語版へのリンクのみ整理した。
-各12枚の画像のうち10枚は同一内容のため共有し、計14枚をバイト単位で変更せず保存している。
+初回は各12枚の画像のうち10枚が同一内容のため共有し、計14枚をバイト単位で変更せず保存した。
 初期原稿はGit履歴から参照する。現行仕様への更新は別コミットで行う。
 
 ## 編集方針
@@ -64,5 +64,37 @@ Notion側で画像やリンクがどう取り込まれるかは、実際のイ�
 
 初期原稿からは、カスタム表情の対応、`Expressions` メニューの階層・解除方法、
 ハンドサイン・キーボード、Prefabの条件、設定名、ログの場所、必要環境・更新手順を更新した。
-初期画像は引き続き使用し、表情画面の名称・階層の違いを両言語の本文に明記している。
-新しいスクリーンショットを用意したら、画像と差異の説明を一緒に更新する。
+装着後の全身写真と表情画面は、現行ソースで再変換したShipilkaをResoniteで着用して撮り直した。
+その他の初期画像は引き続き使用し、両言語の冒頭にその旨を明記している。
+残るスクリーンショットを撮り直したら、画像と差異の説明を一緒に更新する。
+
+| 差し替え画像 | 内容 | 解像度 |
+|---|---|---|
+| `assets/equipped-avatar.png` | Shipilkaを着用した全身写真 | 1600×1200 |
+| `assets/expression-menu.png` | 現行のExpressionsメニュー | 1600×1000 |
+| `assets/select-expression.png` | ShipilkaのGroup 1の表情一覧 | 1600×1000 |
+
+これら3枚はResonite 2026.11.11.21でResoLoopの実カメラから撮影し、画像加工せず保存した。
+
+## Resonite内の画面を撮り直す
+
+ResoLoopの `capture` で、実際のアバターや開いているメニューをPNGで撮影できる。
+ResoPon本体のWindows画面は対象外なので、別途スクリーンショットを用意する。
+
+1. 現行版で変換したパッケージを `--inspect` で確認してから、Resoniteにインポート・着用する。
+   同じアバターでも古い変換物ではメニューの名称・階層・アイコンが異なるため、撮影前に照合する。
+2. ResoLoop側のプロジェクト手順に従い、`doctor` と `discover` で対象ワールドを確認する。
+   以後のコマンドには確認した `--url` を渡す。Slot IDは接続先を観測して取得し、固定値を再利用しない。
+3. 撮影定義と試写画像は `.tmp_verify/` に置く。カメラの `position` / `target` はRoot空間の座標で指定する。
+   撮影定義は `validate`、接続中の `validate --strict` と `plan` で確認する。`capture` のために `apply` する必要はない。
+4. メニューは実際に開き、Visual配下のCanvasを確認する。平面Canvasには以下の自動フレーミングが使える。
+
+   ```powershell
+   resoloop capture .tmp_verify/guide-capture.json --frame CURRENT_CANVAS_SLOT_ID --margin 2.1 --width 1600 --height 1000 --output .tmp_verify/menu.png --url ws://localhost:PORT --json
+   ```
+
+   `CURRENT_CANVAS_SLOT_ID` と `PORT` はその場で観測した値に置き換える。
+   `--frame` はCanvasのColliderを基準にするため、外にはみ出すラベルは余白を増やして収める。
+5. 出力画像を開いて、文字の欠け・背景・アバターの状態を確認する。戻り値の `ownership.cleanupCompleted` で一時カメラの後片付けも確認する。
+6. 採用画像だけを `assets/` へコピーし、日英の説明を更新してNotion用ZIPを再生成する。
+   試写、ワールドの座標・ID、変換パッケージ、ログはコミットしない。
