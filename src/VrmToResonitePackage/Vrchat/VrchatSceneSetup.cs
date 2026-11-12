@@ -370,6 +370,19 @@ internal static class VrchatSceneSetup
         if (renamed > 0) UniLog.Log($"Prefab model names: {renamed} object(s) renamed.");
     }
 
+    public static void ApplyModelObjectScales(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<Slot, string> importedPaths)
+    {
+        foreach (var (target, scale) in avatar.ModelObjectScales)
+        {
+            Slot slot = ResolveImportedTarget(target, sources, importedPaths);
+            if (slot == null) continue;
+            float3 imported = slot.LocalScale;
+            slot.LocalScale = new float3(scale.X ?? imported.x, scale.Y ?? imported.y, scale.Z ?? imported.z);
+            UniLog.Log($"Prefab model scale: {target.Path} = {slot.LocalScale} (fbx={target.FbxGuid})");
+        }
+    }
+
     public static Dictionary<Slot, string> CaptureImportedObjects(IReadOnlyDictionary<string, Slot> roots)
     {
         var sources = new Dictionary<Slot, string>();

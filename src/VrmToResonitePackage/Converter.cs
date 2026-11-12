@@ -479,6 +479,9 @@ internal static class Converter
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
                 RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
                 CollapseAssimpFbxTransformBones(root);
+                // Override the effective local scale after Assimp's helper transforms are
+                // folded, before Merge Armature captures source-to-destination bind poses.
+                Vrchat.VrchatSceneSetup.ApplyModelObjectScales(avatar, importedMeshSources, importedNodePaths);
                 profile?.Mark("prefab-hierarchy");
 
                 Console.WriteLine("アセットの読み込みを待機中...");

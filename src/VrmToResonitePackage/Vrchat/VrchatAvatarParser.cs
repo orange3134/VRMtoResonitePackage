@@ -2310,6 +2310,25 @@ public static class VrchatAvatarParser
                     if (excluded.Contains(targetDocument?.ClassId == 1 ? targetIdentity.Id :
                             targetDocument?.Root?["m_GameObject"]?.FileID ?? 0)) continue;
                 }
+                if (propertyPath is "m_LocalScale.x" or "m_LocalScale.y" or "m_LocalScale.z")
+                {
+                    var resolver = package.ModelFileIds(targetIdentity.Guid);
+                    // Model root placement already applies scale together with import units.
+                    // Internal bone scale is dimensionless and must be set before MA retargeting.
+                    if (resolver == null || resolver.IsRootFileId(targetIdentity.Id)) continue;
+                    string path = resolver.ResolveNodePath(targetIdentity.Id);
+                    float value = modification["value"]?.AsFloat(float.NaN) ?? float.NaN;
+                    if (path == null || !float.IsFinite(value)) continue;
+                    var scaleTarget = new VrchatBoneTarget(targetIdentity.Guid, resolver.ResolveName(targetIdentity.Id), path);
+                    var scale = avatar.ModelObjectScales.GetValueOrDefault(scaleTarget);
+                    avatar.ModelObjectScales[scaleTarget] = propertyPath[^1] switch
+                    {
+                        'x' => scale with { X = value },
+                        'y' => scale with { Y = value },
+                        _ => scale with { Z = value },
+                    };
+                    continue;
+                }
                 if (propertyPath == "m_Name")
                 {
                     // Model objects have no YAML documents for the graph to update. Keep

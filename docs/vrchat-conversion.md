@@ -198,6 +198,16 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   child name after stripping the configured prefix/suffix, recursively under each matched parent.
   Drawers clothing can rename imported `Hips`/leg nodes to `.1` names in its prefab and configure
   suffix `.1`; ignoring those overrides leaves the clothing skin on its own skeleton.
+- Internal FBX Transform `m_LocalScale.x/y/z` overrides are folded per occurrence and
+  original path, independently per axis. Keep unspecified axes from import and honor
+  explicit `1`, zero, and negative values. Model-root scale remains in the existing
+  placement/unit-conversion path and must not be applied a second time.
+  Apply internal scales after Assimp transform helpers are collapsed and before MA
+  captures `destination^-1 * source * bindPose`. The resulting skin retains the authored
+  clothing fit after its bones are replaced by body bones; scaling the body instead would
+  incorrectly change other clothing. A nested HolidayMessenger bone scaled to `1.05`
+  is a regression case. Compare saved skin geometry and bone identities, not just Slot
+  scale: a merged source bone is removed and its deformation lives in corrected bind poses.
 - Capture Animator renderer paths after prefab placement and mesh removal, before Merge Armature.
   Fold variant `m_Name` overrides into authored renderer and ancestor transforms by object
   identity before creating slots; synchronize renderer material records with the final names.

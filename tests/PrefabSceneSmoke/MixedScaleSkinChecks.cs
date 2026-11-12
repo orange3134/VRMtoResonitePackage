@@ -25,6 +25,7 @@ internal static class MixedScaleSkinChecks
             source.LocalRotation = floatQ.Euler(0, 25, 0);
             var sourceHip = source.AddSlot("Hips");
             sourceHip.LocalPosition = new float3(0, 0.5f, 0);
+            sourceHip.LocalScale = new float3(1f, 1.2f, .9f);
             var sourceChest = sourceHip.AddSlot("Chest");
             sourceChest.LocalPosition = new float3(0, 0.2f, 0);
             var helper = sourceChest.AddSlot("Unmatched helper");
@@ -70,6 +71,20 @@ internal static class MixedScaleSkinChecks
             await Wait(provider);
             await default(NextUpdate);
             renderer.BlendShapeWeights[0] = 0.35f;
+            float3[] unscaled = Vertices(renderer);
+            var scaleAvatar = new VrchatAvatar();
+            scaleAvatar.ModelObjectScales[new("clothing", "Hips", "Hips")] = new(X: 1.05f);
+            scaleAvatar.ModelObjectScales[new("clothing", "Chest", "Hips/Chest")] = new(Y: .93f, Z: 1.02f);
+            scaleAvatar.ModelObjectScales[new("clothing", "Hips", "Missing/Hips")] = new(X: 9f);
+            var setup = typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Vrchat.VrchatSceneSetup")!;
+            var roots = new Dictionary<string, Slot> { ["clothing"] = source };
+            var sources = setup.GetMethod("CaptureImportedObjects")!.Invoke(null, new object[] { roots });
+            var paths = setup.GetMethod("CaptureImportedPaths")!.Invoke(null, new object[] { roots });
+            setup.GetMethod("ApplyModelObjectScales")!.Invoke(null, new object[] { scaleAvatar, sources, paths });
+            Check(sourceHip.LocalScale == new float3(1.05f, 1.2f, .9f) &&
+                  sourceChest.LocalScale == new float3(1, .93f, 1.02f) &&
+                  unscaled.Zip(Vertices(renderer)).Any(p => MathX.Distance(p.First, p.Second) > .00001f),
+                "Authored bone scale deforms the skin, retains unspecified axes and rejects missing paths");
             float3[] before = Vertices(renderer);
             float3[] otherBefore = Vertices(untouched);
             float3 helperPosition = helper.GlobalPosition;
