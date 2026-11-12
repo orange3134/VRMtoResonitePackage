@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -1448,6 +1449,8 @@ internal sealed class GuiSettings
     public string ResonitePath { get; set; }
     public bool NoAvatar { get; set; }
     public bool FaceTracking { get; set; }
+    // Disabling protection requires opting in again on each application launch.
+    [JsonIgnore]
     public bool NoProtection { get; set; }
     public bool NoExpressionMenu { get; set; }
     public bool DefaultUserScale { get; set; }

@@ -23,6 +23,13 @@ VRMは `VrmParser`、VRChatはパーサーと `VrchatModelAdapter` が共通の 
 エンジン起動・アセット待機・パッケージ出力は[ヘッドレスエンジン](headless-engine.md)、
 工程別の計測は[変換性能の診断](conversion-performance.md)を参照する。
 
+## アバター保護の設定
+
+GUI の `GuiSettings.NoProtection` は起動中だけ保持し、`JsonIgnore` で設定 JSON の保存・復元から除外する。
+以前の設定ファイルに `NoProtection: true` が残っていても読み込まないため、EXE 起動時は毎回保護が有効になる。
+設定画面の `Clone` / `CopyFrom` と `ToCliOptions` では値を引き継ぎ、同じ起動中の変換には選択を反映する。
+CLI では従来どおり `--no-protection` を指定した実行で保護を外す。
+
 ## ModelImporterの共通制約
 
 - `ModelImporter.PreprocessScene` はシーン全体へXミラーとwinding反転を適用する。
