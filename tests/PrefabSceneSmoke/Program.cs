@@ -413,6 +413,52 @@ static async Task Run(string fbxPath, string rendererName)
             "Merge Armature consumes its scoped source even when another same-name clothing has more matching bones");
         var eyeReviewRoot = root.AddSlot("Custom eye identity");
         {
+            var renamedRoot = root.AddSlot("Renamed clothing bones");
+            var body = renamedRoot.AddSlot("Body model");
+            var bodyArm = body.AddSlot("Armature");
+            var hips = bodyArm.AddSlot("Hips");
+            var leg = hips.AddSlot("UpperLeg.L");
+            var outfit = renamedRoot.AddSlot("Outfit model");
+            var arm = outfit.AddSlot("Armature");
+            var oldHips = arm.AddSlot("Hips.001");
+            var oldLeg = oldHips.AddSlot("UpperLeg.L.001");
+            var helper = oldHips.AddSlot("Cloth helper");
+            var otherBranch = outfit.AddSlot("Other").AddSlot("Hips.001");
+            var otherModel = renamedRoot.AddSlot("Second outfit").AddSlot("Armature").AddSlot("Hips.001");
+            var skin = outfit.AddSlot("Drawers").AttachComponent<SkinnedMeshRenderer>();
+            skin.Bones.Add(oldHips);
+            skin.Bones.Add(oldLeg);
+            var roots = new Dictionary<string, Slot> { ["body"] = body, ["outfit"] = outfit };
+            var renameSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", roots);
+            var paths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", roots);
+            var renamed = new VrchatAvatar();
+            renamed.ModelObjectNames[new("outfit", "Armature", "Armature")] = "Armature.1";
+            renamed.ModelObjectNames[new("outfit", "Hips.001", "Armature/Hips.001")] = "Hips.1";
+            renamed.ModelObjectNames[new("outfit", "UpperLeg.L.001", "Armature/Hips.001/UpperLeg.L.001")] = "UpperLeg.L.1";
+            renamed.ModelObjectNames[new("outfit", "Cloth helper", "Armature/Hips.001/Cloth helper")] = "Hidden helper";
+            renamed.ModelObjectNames[new("outfit", "Hips.001", "Missing/Hips.001")] = "Must not rename";
+            renamed.InactiveGameObjects.Add(new("outfit", "Cloth helper"));
+            arm.SetParent(bodyArm, true);
+            Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModelObjectNames", renamed, renameSources, paths);
+            Check(arm.Name == "Armature.1" && oldHips.Name == "Hips.1" && oldLeg.Name == "UpperLeg.L.1" &&
+                  otherBranch.Name == "Hips.001" && otherModel.Name == "Hips.001",
+                "FBX renames use captured occurrence/full path after reparenting and ancestor renames, with no name fallback");
+            renamed.ModularMergeArmatures.Add(new()
+            {
+                SourceBoneTarget = new("outfit", "Armature", "Armature"),
+                TargetBoneTarget = new("body", "Armature", "Armature"), Suffix = ".1"
+            });
+            var physics = new Dictionary<int, Slot> { [0] = oldLeg };
+            Func<VrchatBoneTarget, Slot> resolve = target => (Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup",
+                "ResolveImportedTarget", target, renameSources, paths);
+            await (Task)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyModularAvatar", renamedRoot,
+                renamed, physics, resolve);
+            Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "Apply", renamedRoot, renamed, renameSources, null, paths);
+            Check(oldHips.IsDestroyed && oldLeg.IsDestroyed && skin.Bones[0] == hips && skin.Bones[1] == leg &&
+                  physics[0] == leg && helper.Parent == hips && !helper.ActiveSelf,
+                "MA suffix mapping uses overridden names for skin and physics while renamed helper retains its inactive state");
+        }
+        {
             var headRoot = root.AddSlot("First-person humanoid identity");
             var clothingRoot = headRoot.AddSlot("Clothing");
             var wrongHips = clothingRoot.AddSlot("Hips");
@@ -882,13 +928,13 @@ static async Task Run(string fbxPath, string rendererName)
             MeshTarget = descriptorTarget, BlendShapeIndex = 0 };
         var descriptorModel = VrchatModelAdapter.ToVrmModel(descriptorAvatar);
         var descriptorNodes = descriptorModel.NodeTargets.ToDictionary(pair => pair.Key, pair => sameB.Slot);
-        var descriptorResolver = Activator.CreateInstance(resolverType, root, descriptorModel, descriptorNodes)!;
+        var descriptorResolver = Activator.CreateInstance(resolverType, root, descriptorModel, descriptorNodes, null)!;
         foreach (var expression in descriptorModel.Expressions)
             Check(ReferenceEquals(resolverType.GetMethod("Resolve")!.Invoke(descriptorResolver,
                     new object[] { expression.Binds.Single() }), sameB.BlendShapeWeights.GetElement(0)),
                 "Descriptor " + expression.Preset + " selects the second namesake by object identity");
         var missingDescriptorResolver = Activator.CreateInstance(resolverType, root, descriptorModel,
-            new Dictionary<int, Slot>())!;
+            new Dictionary<int, Slot>(), null)!;
         Check(descriptorModel.Expressions.All(expression => resolverType.GetMethod("Resolve")!.Invoke(
                 missingDescriptorResolver, new object[] { expression.Binds.Single() }) == null),
             "Missing descriptor identity cannot fall back to another renderer");

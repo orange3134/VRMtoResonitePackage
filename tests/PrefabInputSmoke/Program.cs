@@ -1339,6 +1339,7 @@ PolygonVertexIndex: *6 { a: 0,1,-3,0,1,-3 }
         RendererPrefab(guid, "Untagged") + "\n  m_Bones:\n  - {fileID: 0}\n  - {fileID: 0}\n");
     using var package = UnityPackage.Open(prefab);
     var resolver = new UnityModelFileIdResolver(package.ByGuid(guid));
+    if (!multipleMaterials && !transformHelpers) ModelObjectNameChecks.Run(asset, guid);
     if (transformHelpers)
     {
         long boneId = UnityModelFileIdResolver.Compute("Transform", "//RootNode/Left/Shared/Transform", 0);

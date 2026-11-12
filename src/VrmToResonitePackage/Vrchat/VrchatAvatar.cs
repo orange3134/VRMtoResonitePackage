@@ -115,6 +115,9 @@ public sealed class VrchatAvatar
     /// </summary>
     public List<VrchatGameObjectReference> InactiveGameObjects { get; } = new();
 
+    /// <summary>Effective FBX GameObject names, keyed by occurrence and original model path.</summary>
+    public Dictionary<VrchatBoneTarget, string> ModelObjectNames { get; } = new();
+
     /// <summary>
     /// All GameObject names present in the selected prefab's hierarchy. Used to drop imported FBX
     /// meshes that the prefab deleted (avatars built by removing mesh objects from a shared FBX).

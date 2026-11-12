@@ -188,6 +188,16 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   and alignment collapse. Imports without `RootNode` retain the empty-path fallback.
 - Descriptor roots created by FBX placement must resolve through the prefab Transform slot map,
   even without authored mesh copies, so descriptor-relative Merge Armature paths retain their scope.
+- FBX GameObject `m_Name` overrides need explicit import-time application because model nodes
+  have no YAML documents for `UnityPrefabGraph` to update. Fold them base-to-variant by
+  occurrence and original full model path, including stripped aliases. Apply the final names
+  after source-name mesh/EditorOnly filtering and before capturing expression paths or merging
+  armatures. Retain captured import paths for identity, materials, and initial active states;
+  ancestor renames must not redirect children or another occurrence's namesakes.
+  Modular Avatar's `ModularAvatarMergeArmature.FindCorrespondingBone` matches the effective
+  child name after stripping the configured prefix/suffix, recursively under each matched parent.
+  Drawers clothing can rename imported `Hips`/leg nodes to `.1` names in its prefab and configure
+  suffix `.1`; ignoring those overrides leaves the clothing skin on its own skeleton.
 - Capture Animator renderer paths after prefab placement and mesh removal, before Merge Armature.
   Fold variant `m_Name` overrides into authored renderer and ancestor transforms by object
   identity before creating slots; synchronize renderer material records with the final names.

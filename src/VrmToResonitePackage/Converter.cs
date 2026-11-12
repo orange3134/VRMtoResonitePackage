@@ -508,6 +508,9 @@ internal static class Converter
                 // Finish asset reloads first: deleting their last renderer can unload providers.
                 Vrchat.VrchatSceneSetup.RemoveEditorOnlyObjects(avatar, importedMeshSources, importedNodePaths);
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
+                // Merge Armature matches effective Unity names (including prefix/suffix
+                // overrides), while import filtering and identity resolution use source paths.
+                Vrchat.VrchatSceneSetup.ApplyModelObjectNames(avatar, importedMeshSources, importedNodePaths);
                 var physicsNodes = model.NodeTargets.ToDictionary(entry => entry.Key, entry =>
                     Vrchat.VrchatSceneSetup.ResolveImportedTarget(entry.Value, importedMeshSources, importedNodePaths, prefabSlots));
                 if (expressionRoot is { IsDestroyed: false })
