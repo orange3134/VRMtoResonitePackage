@@ -71,14 +71,21 @@ internal sealed partial class ExpressionSystemSetup
         driver.GetRootProxy(addIfMissing: true).Drive.Target = target;
     }
 
-    private static IWorldElement MixOutput(ExpressionFlux g, IWorldElement output, IWorldElement worn, IWorldElement expression)
+    private IWorldElement MixOutput(ExpressionFlux g, IWorldElement output, IWorldElement worn, IWorldElement expression)
     {
         var baseValue = g.Read<float>(output, OutputSpace, "Base");
+        var fallback = baseValue;
+        if (_hasTrackedNeutral)
+        {
+            var neutral = g.Node("ReadDynamicValueVariable", typeof(float),
+                ("Source", output), ("Path", g.Text(Path(OutputSpace, "Default"))));
+            fallback = g.Choose<float>(Out(neutral, "FoundValue"), Out(neutral, "Value"), baseValue);
+        }
         var path = g.Node("ConcatenateString", null, ("A", g.Text(Path(ClipSpace, ""))),
             ("B", g.Read<string>(output, OutputSpace, "Id")));
         var pose = g.Node("ReadDynamicValueVariable", typeof(float), ("Source", expression), ("Path", path));
         var desired = g.Choose<float>(g.And(worn, Out(pose, "FoundValue")),
-            Out(pose, "Value"), baseValue);
+            Out(pose, "Value"), fallback);
         desired = g.Lerp(desired, baseValue, g.Clamp01(g.Read<float>(output, OutputSpace, "TrackingWeight")));
         var blinkMode = g.Read<int>(output, OutputSpace, "BlinkMode");
         return g.Choose<float>(g.Equal<int>(blinkMode, g.Constant(1)), g.Binary<float>("ValueMax", desired, baseValue),

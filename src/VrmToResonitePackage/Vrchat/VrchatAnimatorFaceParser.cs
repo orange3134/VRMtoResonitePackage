@@ -40,6 +40,17 @@ public static class VrchatAnimatorFaceParser
             var graph = new VrchatAnimatorGraph(controller);
             var owners = graph.Owners;
             var animatorLayers = settings?["m_AnimatorLayers"]?.Seq ?? new();
+            // Unity's first layer has implicit weight 1 even when serialized as 0.
+            // Only its constant startup curves define our neutral expression stream;
+            // later gesture/menu/accessory layers are not flattened into that baseline.
+            var baseLayer = animatorLayers.FirstOrDefault();
+            if (baseLayer != null && (baseLayer["m_AvatarMask"]?.FileID ?? 0) == 0 &&
+                (baseLayer["m_SyncedLayerIndex"]?.AsInt() ?? -1) < 0 &&
+                !graph.Reachable(baseLayer["m_StateMachine"]?.FileID ?? 0).Any(id =>
+                    (controller.Doc(id)?.Root?["m_Conditions"]?.Seq?.Count ?? 0) > 0) &&
+                initialStates.TryGetValue(baseLayer["m_StateMachine"]?.FileID ?? 0, out var baseState))
+                foreach (var entry in VrchatExpressionDefaults.Read(baseState, Clip(baseState?["m_Motion"])))
+                    avatar.BaseExpressionInitialValues[entry.Key] = entry.Value;
             var layerBindings = animatorLayers.Select((item, index) =>
                 index == 0 || (item["m_DefaultWeight"]?.AsFloat() ?? 0) != 0
                     ? LayerBindings(item) : new HashSet<(string, string)>()).ToArray();

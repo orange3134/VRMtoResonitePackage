@@ -1390,13 +1390,34 @@ internal sealed class BlendshapeResolver
 
     public float? InitialWeight(IField<float> field) => field != null && _initialWeights.TryGetValue(field, out float value) ? value : null;
 
-    internal void ApplyInitialOverrides(IReadOnlyDictionary<Expressions.ExpressionBinding, float> values)
+    internal Dictionary<Expressions.ExpressionBinding, float> ApplyBaseExpressionDefaults(
+        IReadOnlyDictionary<Expressions.ExpressionBinding, float> values)
+    {
+        // Use the same exact face identity and viseme exclusions as expression import.
+        // Candidate clips can still contain clothing curves at this stage.
+        var applied = new Dictionary<Expressions.ExpressionBinding, float>();
+        foreach (var binding in ExpressionFaceValues(values.Keys).Keys)
+        {
+            var field = ResolveExpression(binding);
+            if (field.IsDriven) continue;
+            field.Value = values[binding];
+            _initialWeights[field] = values[binding];
+            applied.Add(binding, values[binding]);
+        }
+        return applied;
+    }
+
+    internal void ApplyInitialOverrides(IReadOnlyDictionary<Expressions.ExpressionBinding, float> values, bool updateBaseline = false)
     {
         if (values == null) return;
         foreach (var (binding, value) in values)
         {
             var field = ResolveExpression(binding);
-            if (field != null && !field.IsDriven) field.Value = value;
+            if (field != null && !field.IsDriven)
+            {
+                field.Value = value;
+                if (updateBaseline) _initialWeights[field] = value;
+            }
         }
     }
 

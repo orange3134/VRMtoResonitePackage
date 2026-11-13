@@ -20,6 +20,8 @@ Use the same installation for both.
 - VRM0/1 parser-to-adapter fixtures: preset aliases and weights, all 64 default
   mappings, missing/unresolved presets, custom namesakes, neutral release, real
   mesh outputs, blink mixing, grouped menus and saved-package reload.
+- Both-hands neutral as the load/reset default, with explicit and missing reset
+  curves in sparse menu poses, untouched shapes, native blink mixing and reload.
 - Public API tags and argument types, unrestricted integer inputs and extra table
   rows, invalid/foreign selection Slots, null release, and same-Slot no-op behavior.
 - Menu selection hold, permission settings, reset and wear lifecycle, numbered
@@ -81,5 +83,9 @@ all old package versions must compare equal to current output.
 
 Keep local avatar paths and results outside version control, using the
 [local avatar regression workflow](../../docs/local-avatar-tests.md).
+For an independent neutral-pose oracle, set `RESOPON_TEST_INITIAL_SHAPES` to JSON
+such as `{"Body":{"Mouth.Open":0,"Face.Adjust":0.5}}`. The saved mesh values are
+checked after loading and again after expression/menu playback and reset. Renderer
+names must be unique; obtain expected values from the source avatar, not the output.
 The headless test enables ForceFullUpdateCycle in its world and exits without
 asynchronous engine shutdown callbacks; neither behavior is exported to the avatar.

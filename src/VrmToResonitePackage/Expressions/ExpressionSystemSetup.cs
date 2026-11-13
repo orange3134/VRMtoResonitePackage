@@ -19,6 +19,7 @@ internal sealed partial class ExpressionSystemSetup
     internal const string ToggleHandGesturesTag = "ExpressionSystem/Method.ToggleHandGestures";
     internal static string HandGesturePermission(string hand) => "Config.AllowHandGesture." + hand;
     private readonly ExpressionModel _model;
+    private bool _hasTrackedNeutral;
     private readonly Slot _root, _clipRoot, _outputs, _table, _api, _method, _inputs;
     private readonly Slot _events, _resetState, _selection, _playback;
     private const string PlaybackTickTag = "ExpressionSystem/Internal.ApplyExpression";
@@ -142,17 +143,47 @@ internal sealed partial class ExpressionSystemSetup
         });
         foreach (string message in _model.Diagnostics.Skip(previousDiagnostics)) UniLog.Warning("Expressions: " + message);
         definitions.AddRange(_compiled.Generated);
+        // L0R0 is exported as release, but its authored pose must first become
+        // the release baseline. Otherwise removing its Clip silently loses it.
+        var neutralPose = definitions.FirstOrDefault(c => c.Id == _compiled.Pairs[0]);
+        var defaults = neutralPose?.Curves.ToDictionary(c => c.Binding, c => c.Keys[^1].Value)
+            ?? new Dictionary<ExpressionBinding, float>();
+        var sourceDefaults = neutral.Curves.ToDictionary(c => c.Binding, c => c.Keys[0].Value);
+        float Default(ExpressionBinding binding)
+        {
+            var field = resolve(binding);
+            return defaults.TryGetValue(binding, out float value) ? value : initialWeight?.Invoke(field) ?? field.Value;
+        }
+        // Detected menu poses were made sparse against the source baseline. Rebase
+        // their COMPLETE curves so an explicit zero can cancel the new neutral pose.
+        ExpressionClip Rebase(ExpressionClip candidate)
+        {
+            var source = definitions.First(c => c.Id == candidate.Id);
+            var rebased = new ExpressionClip { Id = source.Id, Name = source.Name, Source = source.Source,
+                Duration = source.Duration, Loop = source.Loop, MenuIconUrl = source.MenuIconUrl };
+            rebased.Curves.AddRange(source.Curves.Where(c => c.Keys.Any(k => k.Value != Default(c.Binding))));
+            // Missing tracks previously released to the source baseline too. Preserve
+            // that complete pose instead of accumulating the neutral mouth/cheek on it.
+            foreach (var (binding, value) in defaults)
+                if (value != sourceDefaults[binding] && !source.Curves.Any(c => c.Binding == binding))
+                {
+                    var reset = new ExpressionCurve { Binding = binding };
+                    reset.Keys.Add(new(0, sourceDefaults[binding], 0, 0));
+                    rebased.Curves.Add(reset);
+                }
+            return rebased;
+        }
         // Retain complete poses required by validated mappings (including reset curves).
-        // Unmapped candidates use FaceEmo-style differences from the authored baseline.
+        // Unmapped candidates use differences from the new neutral default.
         var mapped = _compiled.Pairs.Where(id => id != null).ToHashSet();
         var catalog = _model.DetectedExpressions == null ? definitions : definitions
             .Where(c => mapped.Contains(c.Id) || c.Id == neutral.Id)
-            .Concat(_model.DetectedExpressions.Where(c => definitions.Any(d => d.Id == c.Id)))
+            .Concat(_model.DetectedExpressions.Where(c => definitions.Any(d => d.Id == c.Id)).Select(Rebase))
             .Where(c => c.Curves.Count > 0).DistinctBy(c => c.Id).ToList();
         // Neutral is release, not a selectable clip. Keep the compile-time baseline
         // and its output bindings, but export neither it nor the L0R0 pose.
         var omitted = new HashSet<string> { neutral.Id };
-        if (_compiled.Pairs[0] is { } neutralPose) omitted.Add(neutralPose);
+        if (_compiled.Pairs[0] is { } neutralId) omitted.Add(neutralId);
         for (int pair = 0; pair < _compiled.Pairs.Length; pair++)
             if (_compiled.Pairs[pair] is { } id && omitted.Contains(id)) _compiled.Pairs[pair] = null;
         // Allocate readable keys across all clips before creating any drives. Sorting
@@ -194,8 +225,25 @@ internal sealed partial class ExpressionSystemSetup
                 int blinkMode = eye != null && eye.OpenCloseTarget == field.ActiveLink
                     ? (eye.ClosedState.Value < eye.OpenState.Value ? 2 : 1) : 0;
                 Data(output, "BlinkMode", blinkMode);
-                var baseValue = Data(output, "Base", field.Value);
-                float initialValue = field.Value;
+                bool tracked = field.ActiveLink is ISyncRef;
+                float initialValue = defaults.TryGetValue(curve.Binding, out float defaultValue) ? defaultValue : field.Value;
+                var baseValue = Data(output, "Base", tracked ? field.Value : initialValue);
+                if (tracked && defaults.ContainsKey(curve.Binding) &&
+                    defaultValue != (initialWeight?.Invoke(field) ?? field.Value))
+                {
+                    // Live tracking keeps owning Base; the neutral pose is mixed by
+                    // the same rules as selected expressions, including blinking.
+                    Data(output, "Default", defaultValue);
+                    _hasTrackedNeutral = true;
+                    initialValue = blinkMode switch
+                    {
+                        1 => Math.Max(initialValue, field.Value),
+                        2 => Math.Min(initialValue, field.Value),
+                        _ => initialValue
+                    };
+                }
+                else if (tracked) initialValue = field.Value;
+                if (!tracked) field.Value = initialValue;
                 // Move the existing blink/viseme driver onto its own proxy; never ForceLink it away.
                 if (field.ActiveLink is ISyncRef oldDriver)
                 {

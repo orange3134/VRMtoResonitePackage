@@ -57,7 +57,7 @@ Id、DisplayName、再生時刻、Duration、Versionなどのメタデータ変�
 グループ内のボタンはこのLabelに追従する。Slot名の変更ではLabelは変わらない。
 
 OutputのIdとClip変数のキーを一致させる。明示した0は有効な表情値であり、
-変数が見つからない場合だけBaseへ戻す。Active状態では選択を制限しない。
+変数が見つからない場合だけDefault（なければBase）へ戻す。Active状態では選択を制限しない。
 通常出力の編集を反映するには、別表情またはnullへ切り替えてから選び直す。
 同じSlotの再送やState.CurrentExpressionの直接編集だけでは通常出力は更新されない。
 追跡出力は選択中の変数の変更・追加・削除を継続反映する。
@@ -82,14 +82,16 @@ OutputのIdとClip変数のキーを一致させる。明示した0は有効な�
 | 名前 | 型 | 生成時の値 | 用途 |
 |---|---|---|---|
 | Id | string | 生成した出力キー | Clipのfloat変数を検索する名前 |
-| Base | float | 元フィールド値 | 初期値または既存の瞬き・口パク等からの入力 |
+| Base | float | 両手Neutralの値、未解決なら元フィールド値 | 通常出力のデフォルト。既存ドライバーがある場合は追跡からの入力 |
+| Default | float | 両手Neutralの値 | 追跡入力とNeutralが異なる場合だけ生成。追跡中のBaseを上書きせず解除ポーズを保持 |
 | TrackingWeight | float | 0 | 表情からBaseへ寄せる割合。使用時に0〜1へ制限 |
 | BlinkMode | int | 通常0、瞬き1または2 | 0=通常合成、1=max、2=min。ClosedState < OpenStateなら2 |
 | Result | float（DynamicField） | 元フィールド値 | 実際の書き込み先フィールドへの参照 |
 | OriginalDriver | ISyncRef | 元のActiveLink | 既存ドライバーがある場合だけ生成する参照 |
 
 ```text
-sample  = 装着中かつ選択表情にId名のfloat変数がある ? 表情値 : Base
+fallback = Defaultがある ? Default : Base
+sample  = 装着中かつ選択表情にId名のfloat変数がある ? 表情値 : fallback
 desired = lerp(sample, Base, clamp01(TrackingWeight))
 Result  = BlinkMode == 1 ? max(desired, Base)
         : BlinkMode == 2 ? min(desired, Base) : desired
@@ -97,7 +99,7 @@ Result  = BlinkMode == 1 ? max(desired, Base)
 
 通常出力はローカル装着者の選択変更時にだけ上式を評価し、Resultが変わる場合に書く。
 未装着中は最後の通常出力を保持する。OriginalDriverが非nullの出力は通常Writeから除外する。
-追跡出力は専用のTrackingボードが全クライアントで評価し、未装着中はBaseになる。
+追跡出力は専用のTrackingボードが全クライアントで評価し、未装着中はfallbackとBaseを合成する。
 
 メッシュ出力はRendererごとに `DynamicBlendShapeDriver` を作り、使用するシェイプだけを登録する。
 同名Rendererはコンポーネントの同一性で区別する。登録時は各駆動参照を明示的にリンクする。

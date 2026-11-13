@@ -13,7 +13,8 @@ internal static class ExpressionPackageSnapshot
         var outputs = root.FindChild("Outputs").Children.ToDictionary(
             output => OutputIdentity(output), output => new
             {
-                Baseline = AuthoredBase(output), TrackingWeight = Value<float>(output, "TrackingWeight")
+                Baseline = AuthoredBase(output), Default = ExpressionTestFields.NeutralDefault(output),
+                TrackingWeight = Value<float>(output, "TrackingWeight")
             }, StringComparer.Ordinal);
         var clips = new SortedDictionary<string, object>(StringComparer.Ordinal);
         foreach (var entry in ClipRoot(root).Children)

@@ -227,6 +227,13 @@ public static class VrchatAvatarParser
         var expressionDescriptor = VrchatModularExpressionInputs.Create(effectiveDescriptor.Root, expressionComponents);
         VrchatAnimatorFaceParser.Apply(package, expressionDescriptor, avatar);
         avatar.Expressions = VrchatExpressionParser.Parse(package, expressionDescriptor, expressionComponents);
+        // Restrict neutral resets to imported expression bindings. Clothing and other
+        // Animator properties continue to use the authored prefab/FBX state.
+        var expressionBindings = avatar.Expressions.Clips.SelectMany(c => c.Curves).Select(c => c.Binding).ToHashSet();
+        foreach (var binding in avatar.BaseExpressionInitialValues.Keys.Where(b => !expressionBindings.Contains(b)).ToArray())
+            avatar.BaseExpressionInitialValues.Remove(binding);
+        if (avatar.BaseExpressionInitialValues.Count > 0)
+            UniLog.Log($"Animator base expression defaults: {avatar.BaseExpressionInitialValues.Count} constant binding(s).");
         var faceReference = ExpressionFaceReference(effectiveDescriptor.Root);
         var faceIdentity = ResolveObjectIdentity(package, faceReference?.Guid ?? descriptorGuid, faceReference?.FileID ?? 0);
         if (descriptorRoot.Guid == faceIdentity.Guid && package.ByGuid(descriptorRoot.Guid)?.Extension == ".fbx")
