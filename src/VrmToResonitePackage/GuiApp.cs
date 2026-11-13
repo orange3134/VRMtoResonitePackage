@@ -206,18 +206,13 @@ internal sealed class MainWindow : Window
 
     private async Task OnLoadedAsync(IReadOnlyList<string> initialFiles)
     {
-        // Do not try to enumerate avatars or start a conversion before setup succeeds.
-        // Closing the prompt leaves the main window usable for settings / a later retry.
-        bool resoniteAvailable = EnsureResoniteAvailable();
-
         if (_settings.CheckForUpdates && AutoUpdater.CanSelfUpdate)
         {
             bool installingUpdate;
             _isCheckingForUpdates = true;
             try
             {
-                installingUpdate = await CheckForUpdateAsync(
-                    resoniteAvailable ? initialFiles : Array.Empty<string>());
+                installingUpdate = await CheckForUpdateAsync(initialFiles);
             }
             finally
             {
@@ -229,7 +224,15 @@ internal sealed class MainWindow : Window
             }
         }
 
-        if (resoniteAvailable && initialFiles.Count > 0)
+        // Await the complete update flow before checking Resonite. A successful update
+        // restarts the app above; the new process performs its own setup check.
+        // Closing the setup prompt keeps the main window usable but skips auto-conversion.
+        if (!EnsureResoniteAvailable())
+        {
+            return;
+        }
+
+        if (initialFiles.Count > 0)
         {
             await StartConversion(initialFiles);
         }
