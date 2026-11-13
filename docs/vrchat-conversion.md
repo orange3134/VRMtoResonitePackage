@@ -732,6 +732,15 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
 - ShadowRampMaskがない場合は白を使い、生成rampは縦方向に白から本来のrampへ変化させる。
 - MatCapはAdd modeかつblend maskなしの場合だけ変換し、color alphaとtexture alphaをRGBへ焼き込む。
 - emission fallbackは `_EmissionMap`、`_EmissionBlendMask`、main texture、白の順に選ぶ。
+- `_EmissionMap_UVMode` はmaterial variantから継承し、明示0でUV0へ戻せる。
+  発光mapを使う場合はUV0/UV1を `XiexeToonMaterial.EmissionUV` へ渡し、mapのSTを保持する。
+  mask/main/白へのfallbackでは発光mapのUV設定を引き継がずUV0を使う。
+  実DLLの `EmissionUV` は範囲0〜1で、参照shaderの `XSHelperFunctions.cginc` も
+  0ならUV0、それ以外ならUV1を選ぶ。lilToonのUV2/UV3/Rim（2/3/4）や不正値を
+  そのまま渡さず、実際に発光mapがある場合に警告してUV0へ戻す。
+  UnitySDKの値の単純転送とはここを意図的に変えている。UV2/UV3/Rimの再現は未対応。
+  `EmissionUvChecks` でvariant継承、明示0、共有画像、ST、無効化、画像解除時のfallback、
+  未対応値、パッケージ保存・inspect・再読込後のUV設定を確認する。
 - outline shader variantとoutline property overrideを認識し、`_OutlineWidth` をXiexeToonへ割り当てる。
 - lilToon Rimは表現差が大きいため変換せず、`RimIntensity=0` とする。
 
@@ -750,7 +759,7 @@ SDKの `Assets/ResoniteSDK/MaterialConverters/Custom/lilToon/LilToonXiexeConvert
 | 未実装・部分対応の項目 | UnitySDKの処理 | ResoPonの現状 | Unityなしでの実装可否・方法 |
 |---|---|---|---|
 | 2nd法線マップへの切り替え | `UpdateNormal` は `_UseBumpMap=0` かつ `_UseBump2ndMap!=0` の場合、`_Bump2ndMap`、ST、`_Bump2ndScale`、`_Bump2ndMap_UVMode` を出力 | `LilToonConverter.Parse` は1stの `_BumpMap` とST・強度のみ読む。2ndのプロパティと `NormalUV` の設定がない | 可能。YAMLから2nd設定を読み、既存の法線画像取り込みと出力フィールドへ割り当てる。選択先UVが取り込み後のメッシュに保持されていることを確認する |
-| 発光テクスチャのUV選択 | `GetEmissionMap` / `UpdateEmission` は `_EmissionMap_UVMode` を `EmissionUV` へ渡す。非UV0の画像は合成せず元画像とSTを保持 | UVModeを読まず、`EmissionUV` も設定しない | 可能。YAMLのUVModeを出力へ渡す。通常のメッシュUVは保持を確認する。lilToon固有の特殊UVモードまで同じ意味になるとは限らず、対応関係の確認が必要 |
+| 発光テクスチャのUV選択 | `GetEmissionMap` / `UpdateEmission` は `_EmissionMap_UVMode` を `EmissionUV` へ渡す。非UV0の画像は合成せず元画像とSTを保持 | 調査後にUV0/UV1の転送・variant継承を実装。UV2/UV3/Rim・不正値は警告してUV0へfallback。mapなしの代替画像もUV0 | Unityなしで実装済み（UV0/UV1）。XiexeToonの対応範囲外のUV2/UV3/Rimは未対応 |
 | 発光マップ・マスク・メイン画像の合成 | UV0では `_EmissionMap`、`_EmissionBlendMask`、`_EmissionMainStrength` によるmain画像の乗算をベイク。マスクSTと、メインベイク後の画像・STも渡す | `VrchatMaterialBuilder.BuildMaterial` はmap → mask → main → 白から1枚を選ぶだけ。mapがあるとmask/mainを適用しない。main strengthは `>0` の分岐にしか使わず、mainのベイク結果も使わない。マスクSTも未読 | 可能。既存のCPU画像ベイクを拡張し、UV0でST・色空間・alpha・強度を含めて合成する。SDK同様、非UV0画像はこの単一UV0ベイクから除外する |
 | 2段目・3段目の影 | `GetShadowRamp` はlilToonの `Hidden/ltsother_bakeramp` を使い、`_Shadow2ndColor/Border/Blur` と `_Shadow3rdColor/Border/Blur` を反映 | `GenerateShadowRamp` は1段目の色・境界・ぼかし・強度だけ。2nd/3rdの色alphaによる混合もない | 可能。bakerの境界計算と色混合をC#へ移植し、既存の256×256 ramp生成を拡張する |
 | 影の境界色 | 同bakerで `_ShadowBorderColor` / `_ShadowBorderRange` を反映 | プロパティの読み取りもrampへの合成もない | 可能。同じCPU ramp生成へ境界範囲と色の混合式を追加する |

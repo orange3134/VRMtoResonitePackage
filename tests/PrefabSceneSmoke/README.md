@@ -18,6 +18,11 @@ It also checks alpha-mask modes/scale/offset, all three independent tints,
 HSVG/gradation correction, and production material assignment for no bake,
 alpha-only bake and combined color/alpha bake (no double tint multiplication).
 
+`EmissionUvChecks` verifies lilToon emission UV1 selection, material variant
+inheritance and explicit UV0 overrides, shared texture isolation, retained texture
+transforms, disabled emission, UV0 fallback for cleared maps and unsupported modes,
+and material UV selection after package inspection and reload.
+
 `MixedScaleSkinChecks` builds synthetic skinned meshes and checks actual vertex
 positions (including a blendshape) before and after Merge Armature. It covers
 meter/centimeter units in either direction, equal units, nonuniform scale and
