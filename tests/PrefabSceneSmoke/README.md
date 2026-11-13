@@ -23,6 +23,13 @@ inheritance and explicit UV0 overrides, shared texture isolation, retained textu
 transforms, disabled emission, UV0 fallback for cleared maps and unsupported modes,
 and material UV selection after package inspection and reload.
 
+`EmissionBakeChecks` verifies linear-light emission/map/mask/main compositing,
+layer alpha weights, emission alpha processing, partial/clamped main strength,
+independent texture transforms and density, sRGB metadata, missing textures,
+variant mask inheritance, unsupported UV and failed-bake fallbacks. Saved package
+pixels must use the corrected main bake without applying its transform again;
+emission assignments and identity ST must survive inspection and reload.
+
 `MixedScaleSkinChecks` builds synthetic skinned meshes and checks actual vertex
 positions (including a blendshape) before and after Merge Armature. It covers
 meter/centimeter units in either direction, equal units, nonuniform scale and

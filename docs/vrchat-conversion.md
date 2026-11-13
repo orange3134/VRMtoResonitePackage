@@ -731,7 +731,27 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
 - legacy `VRChat/Mobile/Toon Lit` はvertex colorを使わないため、XiexeToonでも無効にする。
 - ShadowRampMaskがない場合は白を使い、生成rampは縦方向に白から本来のrampへ変化させる。
 - MatCapはAdd modeかつblend maskなしの場合だけ変換し、color alphaとtexture alphaをRGBへ焼き込む。
-- emission fallbackは `_EmissionMap`、`_EmissionBlendMask`、main texture、白の順に選ぶ。
+- lilToon emissionは `_EmissionBlendMask` がある、または `_EmissionMainStrength>0` で
+  main画像がある場合に `VrchatEmissionTextureBaker` でCPU合成する。
+  `_EmissionMap` 単独なら既存画像・ST・UVを保持し、不要な再ベイクをしない。
+  main画像は成功したmainベイクの画素を再利用し、HSVG・2nd/3rd・alpha maskの結果を含める。
+  その場合のmain STはidentity。mainベイクなし／失敗時は元のmain画像とSTを使う。
+  SDK同様、mainの `_Color` はmainベイクに含まれた場合だけ画像側へ反映される。
+- 合成はUnitySDKのmultiply layer方式を使う。linear RGBで、発光画像（欠落時は白）へ
+  `lerp(1, mask.rgb, mask.a)` と `lerp(1, main.rgb, clamp01(_EmissionMainStrength) * main.a)`
+  を乗算する。mask/mainがない場合はその因子を1とし、出力alphaは発光画像のalphaを保持する。
+  sRGBへ戻してから既存のRGB×alpha処理を一度だけ適用する。
+  `_EmissionColor`・blend・fluorescenceの補正は引き続きmaterial側で行い、画像には重ねて適用しない。
+  これはSDKの静的近似であり、lilToon実描画の全発光モードを再現するものではない。
+- 発光画像・mask・元のmain画像はそれぞれのST、TextureImporterのsRGB/wrap/filter設定を読む。
+  `_EmissionBlendMask` のSTはmaterial variantから継承できる。
+  出力解像度は各入力の変換後のtexel密度を満たす大きさにし、8192を超える軸や不正なSTは
+  警告してベイクを中止する。成功した場合だけ出力のSTをidentity、UVを0にする。
+  実在する発光画像が非UV0の場合は、UV0のmask/mainとの合成を警告して省略し、元の発光画像・STを保持する。
+  合成不要／失敗時のfallbackは `_EmissionMap`、`_EmissionBlendMask`、
+  `_EmissionMainStrength>0` のmain texture、白の順で選ぶ。
+  `EmissionBakeChecks` で画素値・独立ST・alpha・色空間・強度・欠落参照・variant・
+  ベイク失敗時のfallbackと、パッケージ保存画像・inspect・再読込を確認する。
 - `_EmissionMap_UVMode` はmaterial variantから継承し、明示0でUV0へ戻せる。
   発光mapを使う場合はUV0/UV1を `XiexeToonMaterial.EmissionUV` へ渡し、mapのSTを保持する。
   mask/main/白へのfallbackでは発光mapのUV設定を引き継がずUV0を使う。
@@ -761,7 +781,6 @@ SDKの `Assets/ResoniteSDK/MaterialConverters/Custom/lilToon/LilToonXiexeConvert
 | 未実装・部分対応の項目 | UnitySDKの処理 | ResoPonの現状 | Unityなしでの実装可否・方法 |
 |---|---|---|---|
 | 2nd法線マップへの切り替え | `UpdateNormal` は `_UseBumpMap=0` かつ `_UseBump2ndMap!=0` の場合、`_Bump2ndMap`、ST、`_Bump2ndScale`、`_Bump2ndMap_UVMode` を出力 | `LilToonConverter.Parse` は1stの `_BumpMap` とST・強度のみ読む。2ndのプロパティと `NormalUV` の設定がない | 可能。YAMLから2nd設定を読み、既存の法線画像取り込みと出力フィールドへ割り当てる。選択先UVが取り込み後のメッシュに保持されていることを確認する |
-| 発光マップ・マスク・メイン画像の合成 | UV0では `_EmissionMap`、`_EmissionBlendMask`、`_EmissionMainStrength` によるmain画像の乗算をベイク。マスクSTと、メインベイク後の画像・STも渡す | `VrchatMaterialBuilder.BuildMaterial` はmap → mask → main → 白から1枚を選ぶだけ。mapがあるとmask/mainを適用しない。main strengthは `>0` の分岐にしか使わず、mainのベイク結果も使わない。マスクSTも未読 | 可能。既存のCPU画像ベイクを拡張し、UV0でST・色空間・alpha・強度を含めて合成する。SDK同様、非UV0画像はこの単一UV0ベイクから除外する |
 | 2段目・3段目の影 | `GetShadowRamp` はlilToonの `Hidden/ltsother_bakeramp` を使い、`_Shadow2ndColor/Border/Blur` と `_Shadow3rdColor/Border/Blur` を反映 | `GenerateShadowRamp` は1段目の色・境界・ぼかし・強度だけ。2nd/3rdの色alphaによる混合もない | 可能。bakerの境界計算と色混合をC#へ移植し、既存の256×256 ramp生成を拡張する |
 | 影の境界色 | 同bakerで `_ShadowBorderColor` / `_ShadowBorderRange` を反映 | プロパティの読み取りもrampへの合成もない | 可能。同じCPU ramp生成へ境界範囲と色の混合式を追加する |
 | 2nd/3rdのデカール系設定とアトラスの静止フレーム | `GetMainTexture` はUV0レイヤーの設定を `Hidden/ltsother_baker` に渡す。`IsDecal`、左右制限、copy/flip、MSDF、`TexDecalAnimation` / `TexDecalSubParam` をベイク処理へ引き渡す | `LilToonConverter.Layer` と `LilToonMainTextureBakePlan` はdecal・左右制限・copy/flip・MSDFを含むレイヤー全体を警告して除外。アトラス設定は未読で、フラグがなければ通常画像として扱う | 条件付きで可能。UV変換、範囲外alpha切り捨て、copy/flip、アトラス時刻0の抽出はCPUで実装できる。MSDFの `fwidth` は出力画素間の差分などで近似する。実メッシュの左右・mirrorを再現する場合はtangent情報が必要で、UVが重なる領域は材質分割等も必要になる |

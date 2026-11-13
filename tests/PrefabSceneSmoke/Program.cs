@@ -60,6 +60,7 @@ static async Task Run(string fbxPath, string rendererName)
         ViewpointChecks.Run(root);
         await MaterialLayerChecks.Run(assets, temp);
         await EmissionUvChecks.Run(assets, temp);
+        await EmissionBakeChecks.Run(assets, temp);
         await OutlineExclusionSceneChecks.Run(root, temp);
         await MixedScaleSkinChecks.Run(root);
         await FbxTransformHelperChecks.Run(root);

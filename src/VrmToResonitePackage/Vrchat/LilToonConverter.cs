@@ -86,6 +86,8 @@ public sealed class LilToonInfo
     public Vec2 EmissionMapScale { get; set; } = Vec2.One;
     public Vec2 EmissionMapOffset { get; set; }
     public string EmissionBlendMaskGuid { get; set; }
+    public Vec2 EmissionBlendMaskScale { get; set; } = Vec2.One;
+    public Vec2 EmissionBlendMaskOffset { get; set; }
     public float EmissionMainStrength { get; set; }
     public float EmissionStrength { get; set; } = 1f;
 
@@ -305,6 +307,8 @@ public static class LilToonConverter
             EmissionMapOffset = TexOffset("_EmissionMap", parent?.EmissionMapOffset ?? Vec2.Zero),
             EmissionMapUVMode = (int)F("_EmissionMap_UVMode", parent?.EmissionMapUVMode ?? 0),
             EmissionBlendMaskGuid = TexOrParent("_EmissionBlendMask", parent?.EmissionBlendMaskGuid),
+            EmissionBlendMaskScale = TexScale("_EmissionBlendMask", parent?.EmissionBlendMaskScale ?? Vec2.One),
+            EmissionBlendMaskOffset = TexOffset("_EmissionBlendMask", parent?.EmissionBlendMaskOffset ?? Vec2.Zero),
             EmissionMainStrength = F("_EmissionMainStrength", parent?.EmissionMainStrength ?? 0f),
 
             UseReflection = B("_UseReflection", parent?.UseReflection ?? false),

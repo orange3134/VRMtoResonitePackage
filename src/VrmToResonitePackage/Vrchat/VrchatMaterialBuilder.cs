@@ -235,7 +235,7 @@ internal static partial class VrchatMaterialBuilder
         material.MainTextureScale.Value = ToFloat2(info.MainTexScale);
         material.MainTextureOffset.Value = ToFloat2(info.MainTexOffset);
         var bakePlan = LilToonMainTextureBakePlan.Create(info, guid => package.ByGuid(guid)?.HasContent == true);
-        StaticTexture2D mainTex = await BakeMainLayers(assetsSlot, package, info, bakePlan);
+        var (mainTex, bakedMain) = await BakeMainLayers(assetsSlot, package, info, bakePlan);
         if (mainTex != null)
         {
             material.Color.Value = ToColor(bakePlan.MaterialColorAfterBake(info.Color), ColorProfile.sRGB);
@@ -368,10 +368,17 @@ internal static partial class VrchatMaterialBuilder
             material.EmissionColor.Value = ToColor(emissionColor,
                 info.IsLilToon ? ColorProfile.Linear : ColorProfile.sRGB);
 
-            StaticTexture2D emission;
+            StaticTexture2D emission = info.IsLilToon
+                ? await BakeEmissionMap(assetsSlot, package, info, bakedMain)
+                : null;
             // Mask/main/white fallbacks use UV0, independently of the emission map's selector.
             material.EmissionUV.Value = 0;
-            if (info.EmissionMapGuid != null)
+            if (emission != null)
+            {
+                material.EmissionMapScale.Value = float2.One;
+                material.EmissionMapOffset.Value = float2.Zero;
+            }
+            else if (info.EmissionMapGuid != null)
             {
                 emission = info.IsLilToon
                     ? await GetRgbTimesAlphaTexture(assetsSlot, package, info.EmissionMapGuid,
