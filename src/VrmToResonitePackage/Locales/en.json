@@ -2,6 +2,13 @@
   "code": "en",
   "name": "English",
   "strings": {
+    "ResoniteSetupTitle": "Resonite setup",
+    "ResoniteSetupNotFound": "Resonite could not be found. ResoPon requires a local Resonite installation. If it is not installed, install it from Steam. If it is already installed, select its folder in Settings.",
+    "ResoniteSetupInvalidPath": "Resonite could not be found at the configured path:\n{0}\nCheck the Resonite folder in Settings, or clear the path to use automatic detection. If Resonite is not installed, install it from Steam.",
+    "ResoniteSetupSteamLink": "Open the Resonite page on Steam",
+    "ResoniteSetupRetry": "Check again",
+    "ResoniteSetupLater": "Later",
+    "ResoniteSetupLinkFailed": "The Steam page could not be opened.\n{0}",
     "Settings": "Settings",
     "Converting": "Converting...",
     "ConversionLogLocation": "Logs are saved in the Logs folder next to the application.",

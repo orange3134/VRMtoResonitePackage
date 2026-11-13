@@ -206,13 +206,18 @@ internal sealed class MainWindow : Window
 
     private async Task OnLoadedAsync(IReadOnlyList<string> initialFiles)
     {
+        // Do not try to enumerate avatars or start a conversion before setup succeeds.
+        // Closing the prompt leaves the main window usable for settings / a later retry.
+        bool resoniteAvailable = EnsureResoniteAvailable();
+
         if (_settings.CheckForUpdates && AutoUpdater.CanSelfUpdate)
         {
             bool installingUpdate;
             _isCheckingForUpdates = true;
             try
             {
-                installingUpdate = await CheckForUpdateAsync(initialFiles);
+                installingUpdate = await CheckForUpdateAsync(
+                    resoniteAvailable ? initialFiles : Array.Empty<string>());
             }
             finally
             {
@@ -224,9 +229,39 @@ internal sealed class MainWindow : Window
             }
         }
 
-        if (initialFiles.Count > 0)
+        if (resoniteAvailable && initialFiles.Count > 0)
         {
             await StartConversion(initialFiles);
+        }
+    }
+
+    private bool EnsureResoniteAvailable()
+    {
+        while (true)
+        {
+            try
+            {
+                ResoniteLocator.Locate(_settings.ResonitePath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                var dialog = new ResoniteSetupWindow(_settings.ResonitePath, ex.Message)
+                {
+                    Owner = this
+                };
+                dialog.ShowDialog();
+                switch (dialog.Action)
+                {
+                    case ResoniteSetupAction.Settings:
+                        OpenSettings();
+                        break;
+                    case ResoniteSetupAction.Retry:
+                        break;
+                    default:
+                        return false;
+                }
+            }
         }
     }
 
