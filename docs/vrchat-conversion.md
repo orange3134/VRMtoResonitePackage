@@ -202,8 +202,13 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   original path, independently per axis. Keep unspecified axes from import and honor
   explicit `1`, zero, and negative values. Model-root scale remains in the existing
   placement/unit-conversion path and must not be applied a second time.
-  Apply internal scales after Assimp transform helpers are collapsed and before MA
-  captures `destination^-1 * source * bindPose`. The resulting skin retains the authored
+  Apply internal scales after prefab placement (including additional single-payload resets)
+  and Assimp helper collapse, before primary wrapper collapse and before MA captures
+  `destination^-1 * source * bindPose`.
+  Top-level internal nodes without a retained `RootNode` inherit the wrapper's unit and
+  prefab-root scale when it is collapsed. A later raw override would discard those factors
+  (for example, explicit `1` would replace `0.01` meter conversion). Keep the factors on
+  separate wrappers until authored scales have been applied. The resulting skin retains the authored
   clothing fit after its bones are replaced by body bones; scaling the body instead would
   incorrectly change other clothing. A nested HolidayMessenger bone scaled to `1.05`
   is a regression case. Compare saved skin geometry and bone identities, not just Slot

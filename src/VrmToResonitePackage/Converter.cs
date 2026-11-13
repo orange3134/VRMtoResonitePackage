@@ -478,10 +478,6 @@ internal static class Converter
                 float3? viewPosition = Vrchat.VrchatSceneSetup.ResolveViewPosition(avatar, descriptorRoot, importRoot);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
                 RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
-                CollapseAssimpFbxTransformBones(root);
-                // Override the effective local scale after Assimp's helper transforms are
-                // folded, before Merge Armature captures source-to-destination bind poses.
-                Vrchat.VrchatSceneSetup.ApplyModelObjectScales(avatar, importedMeshSources, importedNodePaths);
                 profile?.Mark("prefab-hierarchy");
 
                 Console.WriteLine("アセットの読み込みを待機中...");
@@ -714,6 +710,11 @@ internal static class Converter
             ResolvePrefabParent(importRoot, placement.ParentFbxGuid, placement.ParentName, placement.Transforms,
                 importedFbxRoots, slots, importedMeshSources, importedNodePaths);
         meshBuild.Bind();
+        // Placement may reset an additional model's single payload. Override only
+        // afterward, with Assimp helpers folded but primary placement/unit factors
+        // still on its wrapper. A later override would erase those folded factors.
+        CollapseAssimpFbxTransformBones(importRoot);
+        Vrchat.VrchatSceneSetup.ApplyModelObjectScales(avatar, importedMeshSources, importedNodePaths);
         return authoredObjects.GetValueOrDefault(avatar.DescriptorRootKey ?? "") ??
             avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms).Where(t => t.GameObjectKey == avatar.DescriptorRootKey)
                 .Select(t => slots.GetValueOrDefault(t.Key)).FirstOrDefault(slot => slot != null) ??

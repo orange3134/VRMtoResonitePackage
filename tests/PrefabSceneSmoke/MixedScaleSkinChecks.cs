@@ -9,6 +9,8 @@ internal static class MixedScaleSkinChecks
     public static async Task Run(Slot parent)
     {
         CheckModelPlacement(parent);
+        CheckPrimaryScaleOverrides(parent);
+        CheckAdditionalScaleOverride(parent);
         foreach (var (sourceScale, targetScale) in new[]
         {
             (float3.One, float3.One * 0.01f),
@@ -109,6 +111,73 @@ internal static class MixedScaleSkinChecks
                 "Retargeting preserves shared source assets and initial expression weights");
             root.Destroy();
         }
+    }
+
+    private static void CheckPrimaryScaleOverrides(Slot parent)
+    {
+        foreach (bool retainedRoot in new[] { false, true })
+        foreach (bool helpers in new[] { false, true })
+        foreach (float units in new[] { .01f, 1f })
+        {
+            var root = parent.AddSlot("Primary scale override");
+            var alignment = root.AddSlot("Import alignment");
+            var wrapper = alignment.AddSlot("Primary");
+            var modelRoot = retainedRoot ? wrapper.AddSlot("RootNode") : wrapper;
+            var helper = helpers ? modelRoot.AddSlot("Armature_$AssimpFbx$_Scaling") : null;
+            if (helper != null) helper.LocalScale = new float3(5, 6, 7);
+            var armature = (helper ?? modelRoot).AddSlot("Armature");
+            armature.LocalScale = new float3(2, 3, 4);
+            var tip = armature.AddSlot("Tip");
+            tip.LocalPosition = new float3(1, 2, 3);
+            var roots = new Dictionary<string, Slot> { ["body"] = wrapper };
+            var assembly = typeof(VrchatAvatar).Assembly;
+            var converter = assembly.GetType("VrmToResonitePackage.Converter")!;
+            var setup = assembly.GetType("VrmToResonitePackage.Vrchat.VrchatSceneSetup")!;
+            var sources = setup.GetMethod("CaptureImportedObjects")!.Invoke(null, new object[] { roots });
+            var paths = setup.GetMethod("CaptureImportedPaths")!.Invoke(null, new object[] { roots });
+            var avatar = new VrchatAvatar { FbxGuid = "body", FbxImportScale = units,
+                FbxTransformNodeName = retainedRoot ? "RootNode" : null,
+                FbxLocalScale = new System.Numerics.Vector3(2, 3, 4) };
+            avatar.ModelObjectScales[new("body", "Armature", retainedRoot ? "RootNode/Armature" : "Armature")] =
+                new(X: 1f, Z: 1.05f);
+            void Call(string name, params object[] args) => converter.GetMethod(name,
+                BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, args);
+            Call("ApplyVrchatPrefabHierarchy", alignment, avatar, roots, sources, paths, null, null, null);
+            Call("CollapsePrimaryFbxWrapper", alignment, avatar, roots, sources, paths);
+            Call("RemoveImportAlignment", alignment, root, sources, paths);
+            // Oracle: authored node scale times prefab-root scale times FBX units.
+            var expected = new float3(1, helpers ? 18 : 3, 1.05f) * new float3(2, 3, 4) * units;
+            Check(MathX.Distance(armature.GlobalScale, expected) < .0001f &&
+                  MathX.Distance(tip.GlobalPosition, new float3(1, 2, 3) * expected) < .0001f &&
+                  (helper == null || helper.IsDestroyed),
+                $"Primary scale retains units and placement: RootNode={retainedRoot}, helpers={helpers}, units={units}");
+            root.Destroy();
+        }
+    }
+
+    private static void CheckAdditionalScaleOverride(Slot parent)
+    {
+        var root = parent.AddSlot("Additional payload override");
+        var wrapper = root.AddSlot("Accessory wrapper");
+        var modelRoot = wrapper.AddSlot("RootNode");
+        var payload = modelRoot.AddSlot("Payload");
+        payload.LocalScale = new float3(2, 3, 4);
+        var roots = new Dictionary<string, Slot> { ["accessory"] = wrapper };
+        var assembly = typeof(VrchatAvatar).Assembly;
+        var setup = assembly.GetType("VrmToResonitePackage.Vrchat.VrchatSceneSetup")!;
+        var sources = setup.GetMethod("CaptureImportedObjects")!.Invoke(null, new object[] { roots });
+        var paths = setup.GetMethod("CaptureImportedPaths")!.Invoke(null, new object[] { roots });
+        var avatar = new VrchatAvatar { FbxGuid = "absent" };
+        avatar.AdditionalFbxs.Add(new VrchatFbxAsset { Guid = "accessory", TransformNodeName = "RootNode",
+            ImportScale = .01f, LocalScale = new System.Numerics.Vector3(2, 3, 4) });
+        avatar.ModelObjectScales[new("accessory", "Payload", "RootNode/Payload")] = new(X: 1.05f);
+        assembly.GetType("VrmToResonitePackage.Converter")!.GetMethod("ApplyVrchatPrefabHierarchy",
+            BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null,
+                new object[] { root, avatar, roots, sources, paths, null, null, null });
+        Check(wrapper.IsDestroyed && MathX.Distance(payload.LocalScale, new float3(1.05f, 1, 1)) < .00001f &&
+              MathX.Distance(payload.GlobalScale, new float3(.021f, .03f, .04f)) < .00001f,
+            "Additional single-payload reset precedes authored scale overrides and preserves placement units");
+        root.Destroy();
     }
 
     private static void CheckModelPlacement(Slot parent)
