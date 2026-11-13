@@ -19,7 +19,7 @@ internal sealed class ResoniteSetupWindow : Window
 
     public ResoniteSetupAction Action { get; private set; } = ResoniteSetupAction.Later;
 
-    public ResoniteSetupWindow(string configuredPath, string error)
+    public ResoniteSetupWindow(string configuredPath)
     {
         Title = AppLocalization.Get("ResoniteSetupTitle");
         Width = 540;
@@ -36,13 +36,8 @@ internal sealed class ResoniteSetupWindow : Window
             Text = string.IsNullOrWhiteSpace(configuredPath)
                 ? AppLocalization.Get("ResoniteSetupNotFound")
                 : AppLocalization.Format("ResoniteSetupInvalidPath", configuredPath),
-            TextWrapping = TextWrapping.Wrap
-        });
-        panel.Children.Add(new TextBlock
-        {
-            Text = error,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 12, 0, 12)
+            Margin = new Thickness(0, 0, 0, 12)
         });
 
         var link = new Hyperlink(new Run(AppLocalization.Get("ResoniteSetupSteamLink")))

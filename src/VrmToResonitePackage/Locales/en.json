@@ -3,7 +3,7 @@
   "name": "English",
   "strings": {
     "ResoniteSetupTitle": "Resonite setup",
-    "ResoniteSetupNotFound": "Resonite could not be found. ResoPon requires a local Resonite installation. If it is not installed, install it from Steam. If it is already installed, select its folder in Settings.",
+    "ResoniteSetupNotFound": "An installed copy of Resonite could not be found. Please install it from Steam. If it is already installed, select it in Settings.",
     "ResoniteSetupInvalidPath": "Resonite could not be found at the configured path:\n{0}\nCheck the Resonite folder in Settings, or clear the path to use automatic detection. If Resonite is not installed, install it from Steam.",
     "ResoniteSetupSteamLink": "Open the Resonite page on Steam",
     "ResoniteSetupRetry": "Check again",

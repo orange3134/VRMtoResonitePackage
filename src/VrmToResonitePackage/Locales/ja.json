@@ -3,7 +3,7 @@
   "name": "日本語",
   "strings": {
     "ResoniteSetupTitle": "Resoniteのセットアップ",
-    "ResoniteSetupNotFound": "Resoniteが見つかりませんでした。ResoPonにはローカルのResoniteが必要です。未インストールの場合はSteamからインストールしてください。インストール済みの場合は設定でフォルダを指定してください。",
+    "ResoniteSetupNotFound": "インストール済みのResoniteが見つかりませんでした。Steamからインストールしてください。インストール済みの場合は設定で指定してください。",
     "ResoniteSetupInvalidPath": "設定されたパスにResoniteが見つかりませんでした：\n{0}\n設定でResoniteのフォルダを確認するか、パスを空にして自動検出に戻してください。未インストールの場合はSteamからインストールしてください。",
     "ResoniteSetupSteamLink": "SteamのResoniteページを開く",
     "ResoniteSetupRetry": "再確認",

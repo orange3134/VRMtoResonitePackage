@@ -246,9 +246,9 @@ internal sealed class MainWindow : Window
                 resonitePath = ResoniteLocator.Locate(_settings.ResonitePath);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                var dialog = new ResoniteSetupWindow(_settings.ResonitePath, ex.Message)
+                var dialog = new ResoniteSetupWindow(_settings.ResonitePath)
                 {
                     Owner = this
                 };
