@@ -735,6 +735,50 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
 - outline shader variantとoutline property overrideを認識し、`_OutlineWidth` をXiexeToonへ割り当てる。
 - lilToon Rimは表現差が大きいため変換せず、`RimIntensity=0` とする。
 
+### UnitySDKとのlilToon変換差分（2026-11-13調査）
+
+比較基準はResonite.UnitySDKの `5eea4b032d1eb4d42a9d6df522a8888506c93bba` と、
+ResoPonの `c565f7907cdd10217cc84e39e4455375133b75da`。
+SDKの `Assets/ResoniteSDK/MaterialConverters/Custom/lilToon/LilToonXiexeConverter.cs`
+の実行経路を基準とする。SDKの作業メモには現行ソースと異なる記述があるため、
+メモにしかない機能を実装済みと判定しない。
+以下はソース照合結果であり、Unity/Resonite実機での見た目の一致を検証したものではない。
+
+| 未実装・部分対応の項目 | UnitySDKの処理 | ResoPonの現状 |
+|---|---|---|
+| 2nd法線マップへの切り替え | `UpdateNormal` は `_UseBumpMap=0` かつ `_UseBump2ndMap!=0` の場合、`_Bump2ndMap`、ST、`_Bump2ndScale`、`_Bump2ndMap_UVMode` を出力 | `LilToonConverter.Parse` は1stの `_BumpMap` とST・強度のみ読む。2ndのプロパティと `NormalUV` の設定がない |
+| 発光テクスチャのUV選択 | `GetEmissionMap` / `UpdateEmission` は `_EmissionMap_UVMode` を `EmissionUV` へ渡す。非UV0の画像は合成せず元画像とSTを保持 | UVModeを読まず、`EmissionUV` も設定しない |
+| 発光マップ・マスク・メイン画像の合成 | UV0では `_EmissionMap`、`_EmissionBlendMask`、`_EmissionMainStrength` によるmain画像の乗算をベイク。マスクSTと、メインベイク後の画像・STも渡す | `VrchatMaterialBuilder.BuildMaterial` はmap → mask → main → 白から1枚を選ぶだけ。mapがあるとmask/mainを適用しない。main strengthは `>0` の分岐にしか使わず、mainのベイク結果も使わない。マスクSTも未読 |
+| 2段目・3段目の影 | `GetShadowRamp` はlilToonの `Hidden/ltsother_bakeramp` を使い、`_Shadow2ndColor/Border/Blur` と `_Shadow3rdColor/Border/Blur` を反映 | `GenerateShadowRamp` は1段目の色・境界・ぼかし・強度だけ。2nd/3rdの色alphaによる混合もない |
+| 影の境界色 | 同bakerで `_ShadowBorderColor` / `_ShadowBorderRange` を反映 | プロパティの読み取りもrampへの合成もない |
+| 2nd/3rdのデカール系設定とアトラスの静止フレーム | `GetMainTexture` はUV0レイヤーの設定を `Hidden/ltsother_baker` に渡す。`IsDecal`、左右制限、copy/flip、MSDF、`TexDecalAnimation` / `TexDecalSubParam` をベイク処理へ引き渡す | `LilToonConverter.Layer` と `LilToonMainTextureBakePlan` はdecal・左右制限・copy/flip・MSDFを含むレイヤー全体を警告して除外。アトラス設定は未読で、フラグがなければ通常画像として扱う |
+| シェーダー種別・Multi設定からの描画モード判定 | `GetBlendMode` はシェーダー名のCutout/Transparent/Overlay/Refraction/Fur/FurOnly/Gemと、Multiの `_TransparentMode`（0〜6）を判定 | `DetermineAlphaMode` はblend factor、`_AlphaToMask`、custom queue、親の判定結果を使う。シェーダー名と `_TransparentMode` による判定がない。例えばRefractionの `One/Zero` はopaqueになる |
+| シェーダー既定のRenderQueueの解決 | `UpdateRenderSettings` はUnityが解決した `Material.renderQueue` をコピー | `Parse` は `m_CustomRenderQueue` と親の値だけを使う。どちらも未指定なら出力queueを設定せず、元シェーダーの既定queueを解決しない |
+
+デカールと影のbaker内部は、別途lilToonの
+`Assets/lilToon/Shader/ltspass_baker.shader`、`ltspass_bakeramp.shader`、
+`Includes/lil_common_functions.hlsl` / `lil_common_macro.hlsl` で照合した。
+SDKのチェックアウト自体にはbaker shaderがなく、実際のベイク内容はUnityへ導入したlilToonに依存する。
+このlilToonソースではbakerは `lilGetSubTexWithoutAnimation` を呼び、
+アトラスは時刻0で評価する。アニメーションの保持ではない。
+左右・mirror判定もベイク用頂点のtangentに依存し、アバターメッシュの左右を完全再現する保証はない。
+
+追加の挙動差として、ResoPonはlayer lighting、AudioLink、dissolve、distance fade、
+scroll/rotateなどでもレイヤーを除外するが、SDKのレイヤー選別は主にUVModeで行う。
+SDKがこれらの動的効果まで再現するという意味ではなく、静的な画像部分を残すかどうかの差である。
+また、1段目の影の境界補間もSDK側bakerのclamped linearstep相当と
+ResoPonの `SmoothStep` で異なる。影の段数を追加する際はこの式も再確認する。
+
+すでに両方にある処理は、通常のmain色・HSVG・gradation・UV0の2nd/3rd合成・
+alpha mask、1st法線、基本outline、加算かつmaskなしのMatCap、
+発光色のblend/alpha/fluorescence補正、RGB×texture alpha、
+ShadowStrengthMask（欠落時の白を含む）、ShadowBorderMaskによるocclusion、FakeShadowの非表示化。
+これらの存在は全設定で同じ出力になることを意味しない。
+2枚の法線の合成、2nd法線の強度mask、2nd emission、2nd MatCap、
+Rim/RimShade、屈折・背景ぼかしそのもの、stencil、outline textureは現行SDKでも変換しないため、
+SDKからの未移植機能には数えない。
+反射・specularはResoPonにscalar変換があるが、現行SDKのlilToon変換には対応する更新処理がない。
+
 ### 幅0の輪郭線と目の裏面
 
 lilToonの `_OutlineDeleteMesh=1` は、マスク適用後の幅がほぼ0の頂点を含む輪郭線の面を
