@@ -731,9 +731,94 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
 - legacy `VRChat/Mobile/Toon Lit` はvertex colorを使わないため、XiexeToonでも無効にする。
 - ShadowRampMaskがない場合は白を使い、生成rampは縦方向に白から本来のrampへ変化させる。
 - MatCapはAdd modeかつblend maskなしの場合だけ変換し、color alphaとtexture alphaをRGBへ焼き込む。
-- emission fallbackは `_EmissionMap`、`_EmissionBlendMask`、main texture、白の順に選ぶ。
+- lilToon emissionは `_EmissionBlendMask` がある、または `_EmissionMainStrength>0` で
+  main画像がある場合に `VrchatEmissionTextureBaker` でCPU合成する。
+  `_EmissionMap` 単独なら既存画像・ST・UVを保持し、不要な再ベイクをしない。
+  main画像は成功したmainベイクの画素を再利用し、HSVG・2nd/3rd・alpha maskの結果を含める。
+  その場合のmain STはidentity。mainベイクなし／失敗時は元のmain画像とSTを使う。
+  SDK同様、mainの `_Color` はmainベイクに含まれた場合だけ画像側へ反映される。
+- 合成はUnitySDKのmultiply layer方式を使う。linear RGBで、発光画像（欠落時は白）へ
+  `lerp(1, mask.rgb, mask.a)` と `lerp(1, main.rgb, clamp01(_EmissionMainStrength) * main.a)`
+  を乗算する。mask/mainがない場合はその因子を1とし、出力alphaは発光画像のalphaを保持する。
+  sRGBへ戻してから既存のRGB×alpha処理を一度だけ適用する。
+  `_EmissionColor`・blend・fluorescenceの補正は引き続きmaterial側で行い、画像には重ねて適用しない。
+  これはSDKの静的近似であり、lilToon実描画の全発光モードを再現するものではない。
+- 発光画像・mask・元のmain画像はそれぞれのST、TextureImporterのsRGB/wrap/filter設定を読む。
+  `_EmissionBlendMask` のSTはmaterial variantから継承できる。
+  出力解像度は各入力の変換後のtexel密度を満たす大きさにし、8192を超える軸や不正なSTは
+  警告してベイクを中止する。成功した場合だけ出力のSTをidentity、UVを0にする。
+  出力はUV0の1タイルを繰り返すため、発光画像・mask・未ベイクmainの各軸で周期を検証する。
+  Repeatは整数倍率（負も可）、Mirrorは偶数整数倍率だけを許可する。
+  Clamp/MirrorOnceの変化する軸は周期を持たないため除外する。倍率0または画像の該当軸が1画素なら
+  値が変化しないため許可する。小数倍率などで周期を保持できない場合は警告して合成を省略し、
+  下記fallbackに戻す。発光画像があれば元画像・ST・UVを保持する。
+  例えばRepeatのX倍率0.5はメッシュUVで2単位ごとに繰り返すため、1タイルの画像への変換はしない。
+  これは解像度を増やしても解決しない。成功済みmainベイクは既存の1タイル画像・identity STとして扱い、
+  mainベイク自体のタイル外の制約は上記main処理の説明に従う。
+  実在する発光画像が非UV0の場合は、UV0のmask/mainとの合成を警告して省略し、元の発光画像・STを保持する。
+  合成不要／失敗時のfallbackは `_EmissionMap`、`_EmissionBlendMask`、
+  `_EmissionMainStrength>0` のmain texture、白の順で選ぶ。
+  `EmissionBakeChecks` で画素値・独立ST・alpha・色空間・強度・欠落参照・variant・
+  ベイク失敗時のfallback、正負のタイル外UVにおける発光画像の周期、
+  パッケージ保存画像・inspect・再読込を確認する。
+- `_EmissionMap_UVMode` はmaterial variantから継承し、明示0でUV0へ戻せる。
+  発光mapを使う場合はUV0/UV1を `XiexeToonMaterial.EmissionUV` へ渡し、mapのSTを保持する。
+  mask/main/白へのfallbackでは発光mapのUV設定を引き継がずUV0を使う。
+  実DLLの `EmissionUV` は範囲0〜1で、参照shaderの `XSHelperFunctions.cginc` も
+  0ならUV0、それ以外ならUV1を選ぶ。lilToonのUV2/UV3/Rim（2/3/4）や不正値を
+  そのまま渡さず、実際に発光mapがある場合に警告してUV0へ戻す。
+  UnitySDKの値の単純転送とはここを意図的に変えている。UV2/UV3/Rimの再現は未対応。
+  `EmissionUvChecks` でvariant継承、明示0、共有画像、ST、無効化、画像解除時のfallback、
+  未対応値、パッケージ保存・inspect・再読込後のUV設定を確認する。
 - outline shader variantとoutline property overrideを認識し、`_OutlineWidth` をXiexeToonへ割り当てる。
 - lilToon Rimは表現差が大きいため変換せず、`RimIntensity=0` とする。
+
+### UnitySDKとのlilToon変換差分（2026-11-13調査）
+
+比較基準はResonite.UnitySDKの `5eea4b032d1eb4d42a9d6df522a8888506c93bba` と、
+ResoPonの `c565f7907cdd10217cc84e39e4455375133b75da`。
+SDKの `Assets/ResoniteSDK/MaterialConverters/Custom/lilToon/LilToonXiexeConverter.cs`
+の実行経路を基準とする。SDKの作業メモには現行ソースと異なる記述があるため、
+メモにしかない機能を実装済みと判定しない。
+以下はソース照合結果であり、Unity/Resonite実機での見た目の一致を検証したものではない。
+表は残っている変換差分を管理し、実装済みの項目は削除する。
+対応範囲・制約・検証方法は上のlilToon実装説明へ反映する。
+
+「Unityなし」はUnity Editor/Playerを起動せず、既存のC#画像処理とFrooxEngineを使う場合を指す。
+可否はソースから判断した実装方針であり、実装・実機検証済みという意味ではない。
+
+| 未実装・部分対応の項目 | UnitySDKの処理 | ResoPonの現状 | Unityなしでの実装可否・方法 |
+|---|---|---|---|
+| 2nd法線マップへの切り替え | `UpdateNormal` は `_UseBumpMap=0` かつ `_UseBump2ndMap!=0` の場合、`_Bump2ndMap`、ST、`_Bump2ndScale`、`_Bump2ndMap_UVMode` を出力 | `LilToonConverter.Parse` は1stの `_BumpMap` とST・強度のみ読む。2ndのプロパティと `NormalUV` の設定がない | 可能。YAMLから2nd設定を読み、既存の法線画像取り込みと出力フィールドへ割り当てる。選択先UVが取り込み後のメッシュに保持されていることを確認する |
+| 2段目・3段目の影 | `GetShadowRamp` はlilToonの `Hidden/ltsother_bakeramp` を使い、`_Shadow2ndColor/Border/Blur` と `_Shadow3rdColor/Border/Blur` を反映 | `GenerateShadowRamp` は1段目の色・境界・ぼかし・強度だけ。2nd/3rdの色alphaによる混合もない | 可能。bakerの境界計算と色混合をC#へ移植し、既存の256×256 ramp生成を拡張する |
+| 影の境界色 | 同bakerで `_ShadowBorderColor` / `_ShadowBorderRange` を反映 | プロパティの読み取りもrampへの合成もない | 可能。同じCPU ramp生成へ境界範囲と色の混合式を追加する |
+| 2nd/3rdのデカール系設定とアトラスの静止フレーム | `GetMainTexture` はUV0レイヤーの設定を `Hidden/ltsother_baker` に渡す。`IsDecal`、左右制限、copy/flip、MSDF、`TexDecalAnimation` / `TexDecalSubParam` をベイク処理へ引き渡す | `LilToonConverter.Layer` と `LilToonMainTextureBakePlan` はdecal・左右制限・copy/flip・MSDFを含むレイヤー全体を警告して除外。アトラス設定は未読で、フラグがなければ通常画像として扱う | 条件付きで可能。UV変換、範囲外alpha切り捨て、copy/flip、アトラス時刻0の抽出はCPUで実装できる。MSDFの `fwidth` は出力画素間の差分などで近似する。実メッシュの左右・mirrorを再現する場合はtangent情報が必要で、UVが重なる領域は材質分割等も必要になる |
+| シェーダー種別・Multi設定からの描画モード判定 | `GetBlendMode` はシェーダー名のCutout/Transparent/Overlay/Refraction/Fur/FurOnly/Gemと、Multiの `_TransparentMode`（0〜6）を判定 | `DetermineAlphaMode` はblend factor、`_AlphaToMask`、custom queue、親の判定結果を使う。シェーダー名と `_TransparentMode` による判定がない。例えばRefractionの `One/Zero` はopaqueになる | 可能。shader名・GUID対応表とYAMLのMulti設定で判定する。shaderが同梱されない場合は既知GUID等による識別が必要。屈折や毛の描画自体の再現ではない |
+| シェーダー既定のRenderQueueの解決 | `UpdateRenderSettings` はUnityが解決した `Material.renderQueue` をコピー | `Parse` は `m_CustomRenderQueue` と親の値だけを使う。どちらも未指定なら出力queueを設定せず、元シェーダーの既定queueを解決しない | 条件付きで可能。同梱shaderのQueueタグを解析するか、既知shaderの既定値を表に持つ。既存の `ShaderPropertyFallbackConverter.ReadShaderDefaults` にQueue解析がある。shader・識別情報のない未知variantの既定値は確定できない |
+
+デカールと影のbaker内部は、別途lilToonの
+`Assets/lilToon/Shader/ltspass_baker.shader`、`ltspass_bakeramp.shader`、
+`Includes/lil_common_functions.hlsl` / `lil_common_macro.hlsl` で照合した。
+SDKのチェックアウト自体にはbaker shaderがなく、実際のベイク内容はUnityへ導入したlilToonに依存する。
+このlilToonソースではbakerは `lilGetSubTexWithoutAnimation` を呼び、
+アトラスは時刻0で評価する。アニメーションの保持ではない。
+左右・mirror判定もベイク用頂点のtangentに依存し、アバターメッシュの左右を完全再現する保証はない。
+
+追加の挙動差として、ResoPonはlayer lighting、AudioLink、dissolve、distance fade、
+scroll/rotateなどでもレイヤーを除外するが、SDKのレイヤー選別は主にUVModeで行う。
+SDKがこれらの動的効果まで再現するという意味ではなく、静的な画像部分を残すかどうかの差である。
+また、1段目の影の境界補間もSDK側bakerのclamped linearstep相当と
+ResoPonの `SmoothStep` で異なる。影の段数を追加する際はこの式も再確認する。
+
+すでに両方にある処理は、通常のmain色・HSVG・gradation・UV0の2nd/3rd合成・
+alpha mask、1st法線、基本outline、加算かつmaskなしのMatCap、
+発光色のblend/alpha/fluorescence補正、RGB×texture alpha、
+ShadowStrengthMask（欠落時の白を含む）、ShadowBorderMaskによるocclusion、FakeShadowの非表示化。
+これらの存在は全設定で同じ出力になることを意味しない。
+2枚の法線の合成、2nd法線の強度mask、2nd emission、2nd MatCap、
+Rim/RimShade、屈折・背景ぼかしそのもの、stencil、outline textureは現行SDKでも変換しないため、
+SDKからの未移植機能には数えない。
+反射・specularはResoPonにscalar変換があるが、現行SDKのlilToon変換には対応する更新処理がない。
 
 ### 幅0の輪郭線と目の裏面
 

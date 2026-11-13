@@ -235,7 +235,7 @@ internal static partial class VrchatMaterialBuilder
         material.MainTextureScale.Value = ToFloat2(info.MainTexScale);
         material.MainTextureOffset.Value = ToFloat2(info.MainTexOffset);
         var bakePlan = LilToonMainTextureBakePlan.Create(info, guid => package.ByGuid(guid)?.HasContent == true);
-        StaticTexture2D mainTex = await BakeMainLayers(assetsSlot, package, info, bakePlan);
+        var (mainTex, bakedMain) = await BakeMainLayers(assetsSlot, package, info, bakePlan);
         if (mainTex != null)
         {
             material.Color.Value = ToColor(bakePlan.MaterialColorAfterBake(info.Color), ColorProfile.sRGB);
@@ -368,8 +368,17 @@ internal static partial class VrchatMaterialBuilder
             material.EmissionColor.Value = ToColor(emissionColor,
                 info.IsLilToon ? ColorProfile.Linear : ColorProfile.sRGB);
 
-            StaticTexture2D emission;
-            if (info.EmissionMapGuid != null)
+            StaticTexture2D emission = info.IsLilToon
+                ? await BakeEmissionMap(assetsSlot, package, info, bakedMain)
+                : null;
+            // Mask/main/white fallbacks use UV0, independently of the emission map's selector.
+            material.EmissionUV.Value = 0;
+            if (emission != null)
+            {
+                material.EmissionMapScale.Value = float2.One;
+                material.EmissionMapOffset.Value = float2.Zero;
+            }
+            else if (info.EmissionMapGuid != null)
             {
                 emission = info.IsLilToon
                     ? await GetRgbTimesAlphaTexture(assetsSlot, package, info.EmissionMapGuid,
@@ -378,6 +387,16 @@ internal static partial class VrchatMaterialBuilder
                         textureCache, "EmissionMap");
                 material.EmissionMapScale.Value = ToFloat2(info.EmissionMapScale);
                 material.EmissionMapOffset.Value = ToFloat2(info.EmissionMapOffset);
+                if (emission != null)
+                {
+                    // Xiexe supports only UV0/UV1. Passing lilToon's UV2/UV3/Rim modes
+                    // through would silently sample UV1 instead of the requested coordinates.
+                    if (info.EmissionMapUVMode is 0 or 1)
+                        material.EmissionUV.Value = info.EmissionMapUVMode;
+                    else
+                        UniLog.Warning($"Emission map on {info.Name} uses unsupported UV mode " +
+                            $"{info.EmissionMapUVMode}; XiexeToon supports UV0/UV1 only. Using UV0.");
+                }
             }
             else if (info.EmissionBlendMaskGuid != null)
             {

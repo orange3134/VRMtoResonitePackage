@@ -18,6 +18,22 @@ It also checks alpha-mask modes/scale/offset, all three independent tints,
 HSVG/gradation correction, and production material assignment for no bake,
 alpha-only bake and combined color/alpha bake (no double tint multiplication).
 
+`EmissionUvChecks` verifies lilToon emission UV1 selection, material variant
+inheritance and explicit UV0 overrides, shared texture isolation, retained texture
+transforms, disabled emission, UV0 fallback for cleared maps and unsupported modes,
+and material UV selection after package inspection and reload.
+
+`EmissionBakeChecks` verifies linear-light emission/map/mask/main compositing,
+layer alpha weights, emission alpha processing, partial/clamped main strength,
+independent texture transforms and density, sRGB metadata, missing textures,
+variant mask inheritance, unsupported UV and failed-bake fallbacks. Saved package
+pixels must use the corrected main bake without applying its transform again;
+emission assignments and identity ST must survive inspection and reload.
+Fractional emission/mask/main tiling and nonperiodic wrap modes must fall back
+instead of truncating their sampling domain to one UV0 tile. Saved fractional
+emission is sampled outside both positive and negative tiles and checked after
+reload; even mirror tiling and constant clamp sampling remain supported.
+
 `MixedScaleSkinChecks` builds synthetic skinned meshes and checks actual vertex
 positions (including a blendshape) before and after Merge Armature. It covers
 meter/centimeter units in either direction, equal units, nonuniform scale and

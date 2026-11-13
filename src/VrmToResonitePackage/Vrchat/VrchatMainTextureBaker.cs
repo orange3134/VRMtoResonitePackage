@@ -10,17 +10,18 @@ namespace VrmToResonitePackage.Vrchat;
 
 internal static partial class VrchatMaterialBuilder
 {
-    private static async Task<StaticTexture2D> BakeMainLayers(Slot assets, UnityPackage package, LilToonInfo info,
+    private static async Task<(StaticTexture2D Texture, Bitmap2D Pixels)> BakeMainLayers(Slot assets, UnityPackage package, LilToonInfo info,
         LilToonMainTextureBakePlan plan)
     {
         foreach (string warning in plan.Warnings) UniLog.Warning($"Main texture bake on {info.Name}: {warning}");
-        if (!plan.Required) return null;
+        if (!plan.Required) return default;
         var engine = assets.Engine;
         Uri uri = null;
+        Bitmap2D bitmap = null;
         try
         {
             await default(ToBackground);
-            Bitmap2D bitmap = CompositeMainLayers(package, info, plan);
+            bitmap = CompositeMainLayers(package, info, plan);
             uri = await engine.LocalDB.SaveAssetAsync(bitmap);
         }
         catch (Exception ex)
@@ -28,12 +29,13 @@ internal static partial class VrchatMaterialBuilder
             UniLog.Warning($"Failed to bake main texture layers on {info.Name}: {ex.Message}");
         }
         await default(ToWorld);
-        if (uri == null) return null;
+        if (uri == null) return default;
         var texture = assets.AddSlot($"MainTex Baked: {info.Name}").AttachComponent<StaticTexture2D>();
         texture.URL.Value = uri;
         UniLog.Log($"Baked main texture on {info.Name}: main={plan.Main}, 2nd={plan.Main2nd}, " +
             $"3rd={plan.Main3rd}, alpha={plan.Alpha}, colorBaked={plan.Color}.");
-        return texture;
+        // Reuse exactly the successful main bake for emission, without another bake or asset readback.
+        return (texture, bitmap);
     }
 
     // Like lilToon's baker, composite main -> 2nd -> 3rd in linear light. Bake

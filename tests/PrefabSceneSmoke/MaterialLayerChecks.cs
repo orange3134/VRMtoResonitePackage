@@ -95,12 +95,12 @@ internal static class MaterialLayerChecks
             "Material variants inherit layer settings and can clear texture/UV restrictions without mutating parent");
 
         var method = builder.GetMethod("BakeMainLayers", BindingFlags.NonPublic | BindingFlags.Static)!;
-        var rejected = await (Task<StaticTexture2D>)method.Invoke(null,
+        var rejected = await (Task<(StaticTexture2D Texture, Bitmap2D Pixels)>)method.Invoke(null,
             new object[] { root, package, parent, LilToonMainTextureBakePlan.Create(parent) })!;
-        Check(rejected == null, "Unsupported UV sets are diagnosed instead of baked as UV0");
-        var provider = await (Task<StaticTexture2D>)method.Invoke(null,
+        Check(rejected.Texture == null && rejected.Pixels == null, "Unsupported UV sets are diagnosed instead of baked as UV0");
+        var provider = await (Task<(StaticTexture2D Texture, Bitmap2D Pixels)>)method.Invoke(null,
             new object[] { root, package, info, LilToonMainTextureBakePlan.Create(info) })!;
-        Check(provider?.URL.Value != null, "Composited texture is saved to LocalDB and exposed through a texture provider");
+        Check(provider.Texture?.URL.Value != null && provider.Pixels != null, "Composited texture is saved to LocalDB and exposed through a texture provider");
 
         var alphaOnly = new LilToonInfo { MainTexGuid = redGuid, Color = new Vector4(0.2f, 0.3f, 0.4f, 0.5f),
             AlphaMaskGuid = maskGuid, AlphaMaskScale = 0.5f, AlphaMaskValue = 0.1f };
