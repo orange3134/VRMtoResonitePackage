@@ -57,9 +57,9 @@ internal static partial class VrchatMaterialBuilder
         Vector2 mainScale = bakedMain != null ? Vector2.One : info.MainTexScale;
         Vector2 mainOffset = bakedMain != null ? Vector2.Zero : info.MainTexOffset;
         double requiredWidth = 1, requiredHeight = 1;
-        Include(emission, info.EmissionMapScale, info.EmissionMapOffset);
-        Include(mask, info.EmissionBlendMaskScale, info.EmissionBlendMaskOffset);
-        Include(main, mainScale, mainOffset);
+        Include(emission, info.EmissionMapScale, info.EmissionMapOffset, "emission map");
+        Include(mask, info.EmissionBlendMaskScale, info.EmissionBlendMaskOffset, "blend mask");
+        Include(main, mainScale, mainOffset, "main image");
         const int maxDimension = 8192;
         if (!double.IsFinite(requiredWidth) || !double.IsFinite(requiredHeight) ||
             requiredWidth > maxDimension || requiredHeight > maxDimension)
@@ -95,13 +95,27 @@ internal static partial class VrchatMaterialBuilder
         });
         return output;
 
-        void Include(BakeTexture texture, Vector2 scale, Vector2 offset)
+        void Include(BakeTexture texture, Vector2 scale, Vector2 offset, string input)
         {
             if (texture == null) return;
-            if (!float.IsFinite(offset.X) || !float.IsFinite(offset.Y))
-                throw new InvalidOperationException("Emission bake has a nonfinite texture offset");
+            if (!float.IsFinite(scale.X) || !float.IsFinite(scale.Y) ||
+                !float.IsFinite(offset.X) || !float.IsFinite(offset.Y))
+                throw new InvalidOperationException($"Emission bake {input} has a nonfinite texture transform");
+            // The output repeats every mesh-UV unit, including outside [0,1]. Each
+            // input must have that period too; more pixels cannot fix a different domain.
+            if (!RepeatsPerTile(texture.Width, scale.X, texture.Sampler.WrapU) ||
+                !RepeatsPerTile(texture.Height, scale.Y, texture.Sampler.WrapV))
+                throw new InvalidOperationException($"Emission bake {input} is not periodic over one UV0 tile " +
+                    $"(scale={scale}, wrapU={texture.Sampler.WrapU}, wrapV={texture.Sampler.WrapV})");
             requiredWidth = Math.Max(requiredWidth, Math.Abs((double)scale.X) * texture.Width);
             requiredHeight = Math.Max(requiredHeight, Math.Abs((double)scale.Y) * texture.Height);
         }
+
+        static bool RepeatsPerTile(int size, float scale, int wrap) => size == 1 || scale == 0 || wrap switch
+        {
+            1 or 3 => false, // Clamp / MirrorOnce are not periodic for a varying axis.
+            2 => scale % 2 == 0, // Mirror needs a full forward + reverse cycle.
+            _ => scale == MathF.Truncate(scale), // Repeat, including the default sampler.
+        };
     }
 }

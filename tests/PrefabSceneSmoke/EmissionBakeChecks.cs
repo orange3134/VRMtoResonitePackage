@@ -25,6 +25,7 @@ internal static class EmissionBakeChecks
         string halfWhite = Texture(true, new color(1, 1, 1, 0.5f));
         string grayLinear = Texture(false, new color(0.5f, 0.5f, 0.5f, 1));
         string graySrgb = Texture(true, new color(0.5f, 0.5f, 0.5f, 1));
+        string mirrored = WrappedTexture(2), clamped = WrappedTexture(1), mirrorOnce = WrappedTexture(3);
         string baseMaterial = Material("Base", $$"""
               m_Floats:
               - _lilToonVersion: 44
@@ -43,6 +44,20 @@ internal static class EmissionBakeChecks
                   m_Offset: {x: 0.25, y: 0}
             """);
         string inherited = Material("Inherited", "  m_Floats: []", baseMaterial);
+        string fractionalSource = Material("FractionalSource", $$"""
+              m_TexEnvs:
+              - _EmissionMap:
+                  m_Texture: {fileID: 2800000, guid: {{stripes}}}
+                  m_Scale: {x: 0.5, y: 1}
+                  m_Offset: {x: 0, y: 0}
+              - _EmissionBlendMask:
+                  m_Texture: {fileID: 0}
+            """, baseMaterial);
+        string fractional = Material("Fractional", $$"""
+              m_TexEnvs:
+              - _EmissionBlendMask:
+                  m_Texture: {fileID: 2800000, guid: {{white}}}
+            """, fractionalSource);
         string uv1 = Material("UV1", "  m_Floats:\n  - _EmissionMap_UVMode: 1", baseMaterial);
         string oversized = Material("Oversized", $$"""
               m_TexEnvs:
@@ -114,6 +129,30 @@ internal static class EmissionBakeChecks
         var differentUv = await Build(uv1);
         var failed = await Build(oversized);
         var correctedMain = await Build(mainBake);
+        var sourceMaterial = await Build(fractionalSource);
+        var fractionalMaterial = await Build(fractional);
+        Check(fractionalMaterial.EmissionMap.Target == sourceMaterial.EmissionMap.Target &&
+              fractionalMaterial.EmissionMapScale.Value == new float2(0.5f, 1) &&
+              fractionalMaterial.EmissionMapOffset.Value == float2.Zero,
+            "neutral mask does not shorten fractional emission tiling to one UV0 tile");
+        foreach (string input in new[] { "emission", "mask", "main" })
+        {
+            var fractionalInfo = new LilToonInfo { EmissionMapGuid = stripes, EmissionBlendMaskGuid = stripes,
+                MainTexGuid = stripes, EmissionMainStrength = 1 };
+            if (input == "emission") fractionalInfo.EmissionMapScale = new Vector2(-0.5f, 1);
+            if (input == "mask") fractionalInfo.EmissionBlendMaskScale = new Vector2(1.5f, 1);
+            if (input == "main") fractionalInfo.MainTexScale = new Vector2(0.5f, 1);
+            Reject(fractionalInfo, $"fractional {input} period is rejected instead of truncated");
+        }
+        foreach (string wrapped in new[] { mirrored, clamped, mirrorOnce })
+            Reject(new LilToonInfo { EmissionMapGuid = wrapped }, "nonperiodic wrap at scale one is rejected");
+        pixels = Bake(new LilToonInfo { EmissionMapGuid = mirrored, EmissionMapScale = new Vector2(2, 1) });
+        Check(pixels.Size.x == 4 && Near(pixels.GetPixel(0, 0).g, 1) && Near(pixels.GetPixel(1, 0).r, 1) &&
+              Near(pixels.GetPixel(2, 0).r, 1) && Near(pixels.GetPixel(3, 0).g, 1),
+            "even mirror tiling preserves its complete two-image period");
+        pixels = Bake(new LilToonInfo { EmissionMapGuid = clamped,
+            EmissionMapScale = Vector2.Zero, EmissionMapOffset = new Vector2(2, 0) });
+        Check(Near(pixels.GetPixel(0, 0).r, 1), "zero scale is constant even for clamp wrapping");
         Check(original.EmissionUV.Value == 0 && variant.EmissionMapScale.Value == float2.One &&
               variant.EmissionMapOffset.Value == float2.Zero && original.EmissionMap.Target != null,
             "successful production bake resets ST and keeps UV0");
@@ -164,6 +203,17 @@ internal static class EmissionBakeChecks
             Check(first.Size == child.Size && first.Size.x == 4 &&
                   Near(child.GetPixel(0, 0).r, 1) && Near(child.GetPixel(1, 0).g, 1),
                 "variant inherits mask ST and saved pixels include its offset/tiling");
+            var fractionalPixels = Saved(fractionalMaterial);
+            color SampleFractional(float meshU)
+            {
+                float textureU = meshU * fractionalMaterial.EmissionMapScale.Value.x +
+                    fractionalMaterial.EmissionMapOffset.Value.x;
+                textureU -= MathF.Floor(textureU);
+                return fractionalPixels.GetPixel((int)(textureU * fractionalPixels.Size.x), 0);
+            }
+            Check(Near(SampleFractional(0.5f).g, 1) && Near(SampleFractional(1.5f).r, 1) &&
+                  Near(SampleFractional(-0.5f).r, 1) && Near(SampleFractional(2.5f).g, 1),
+                "saved fractional emission samples the correct colors outside positive and negative UV0 tiles");
         }
         var restored = parent.AddSlot("Restored emission bake");
         await PackageImporter.ImportPackage(output, restored);
@@ -172,6 +222,12 @@ internal static class EmissionBakeChecks
         Check(reloaded.EmissionMap.Target != null && reloaded.EmissionMapScale.Value == float2.One &&
               reloaded.EmissionMapOffset.Value == float2.Zero && reloaded.EmissionUV.Value == 0,
             "baked emission texture assignment and identity ST survive package reload");
+        var reloadedFractional = restored.GetComponentsInChildren<XiexeToonMaterial>()
+            .Single(m => m.Slot.Name == "Material: Fractional");
+        Check(reloadedFractional.EmissionMap.Target != null &&
+              reloadedFractional.EmissionMapScale.Value == new float2(0.5f, 1) &&
+              reloadedFractional.EmissionMapOffset.Value == float2.Zero,
+            "fractional emission sampling period survives package reload");
         restored.Destroy(); root.Destroy();
 
         async Task<XiexeToonMaterial> Build(string guid)
@@ -179,6 +235,21 @@ internal static class EmissionBakeChecks
             var task = (Task)build.Invoke(null, new object[] { root, guid, package, textures, cache })!;
             await task;
             return (XiexeToonMaterial)task.GetType().GetProperty("Result")!.GetValue(task)!;
+        }
+        void Reject(LilToonInfo candidate, string message)
+        {
+            bool rejected = false;
+            try { Bake(candidate); }
+            catch (TargetInvocationException ex) when (ex.InnerException is InvalidOperationException error &&
+                error.Message.Contains("periodic")) { rejected = true; }
+            Check(rejected, message);
+        }
+        string WrappedTexture(int wrap)
+        {
+            string guid = Texture(true, new color(0, 1, 0, 1), new color(1, 0, 0, 1));
+            File.AppendAllText(Path.Combine(folder, "Assets", guid + ".png.meta"),
+                $"    wrapU: {wrap}\n    wrapV: {wrap}\n");
+            return guid;
         }
         string Texture(bool srgb, params color[] values)
         {

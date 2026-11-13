@@ -29,6 +29,10 @@ independent texture transforms and density, sRGB metadata, missing textures,
 variant mask inheritance, unsupported UV and failed-bake fallbacks. Saved package
 pixels must use the corrected main bake without applying its transform again;
 emission assignments and identity ST must survive inspection and reload.
+Fractional emission/mask/main tiling and nonperiodic wrap modes must fall back
+instead of truncating their sampling domain to one UV0 tile. Saved fractional
+emission is sampled outside both positive and negative tiles and checked after
+reload; even mirror tiling and constant clamp sampling remain supported.
 
 `MixedScaleSkinChecks` builds synthetic skinned meshes and checks actual vertex
 positions (including a blendshape) before and after Merge Armature. It covers

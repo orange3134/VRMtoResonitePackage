@@ -747,11 +747,20 @@ FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` fil
   `_EmissionBlendMask` のSTはmaterial variantから継承できる。
   出力解像度は各入力の変換後のtexel密度を満たす大きさにし、8192を超える軸や不正なSTは
   警告してベイクを中止する。成功した場合だけ出力のSTをidentity、UVを0にする。
+  出力はUV0の1タイルを繰り返すため、発光画像・mask・未ベイクmainの各軸で周期を検証する。
+  Repeatは整数倍率（負も可）、Mirrorは偶数整数倍率だけを許可する。
+  Clamp/MirrorOnceの変化する軸は周期を持たないため除外する。倍率0または画像の該当軸が1画素なら
+  値が変化しないため許可する。小数倍率などで周期を保持できない場合は警告して合成を省略し、
+  下記fallbackに戻す。発光画像があれば元画像・ST・UVを保持する。
+  例えばRepeatのX倍率0.5はメッシュUVで2単位ごとに繰り返すため、1タイルの画像への変換はしない。
+  これは解像度を増やしても解決しない。成功済みmainベイクは既存の1タイル画像・identity STとして扱い、
+  mainベイク自体のタイル外の制約は上記main処理の説明に従う。
   実在する発光画像が非UV0の場合は、UV0のmask/mainとの合成を警告して省略し、元の発光画像・STを保持する。
   合成不要／失敗時のfallbackは `_EmissionMap`、`_EmissionBlendMask`、
   `_EmissionMainStrength>0` のmain texture、白の順で選ぶ。
   `EmissionBakeChecks` で画素値・独立ST・alpha・色空間・強度・欠落参照・variant・
-  ベイク失敗時のfallbackと、パッケージ保存画像・inspect・再読込を確認する。
+  ベイク失敗時のfallback、正負のタイル外UVにおける発光画像の周期、
+  パッケージ保存画像・inspect・再読込を確認する。
 - `_EmissionMap_UVMode` はmaterial variantから継承し、明示0でUV0へ戻せる。
   発光mapを使う場合はUV0/UV1を `XiexeToonMaterial.EmissionUV` へ渡し、mapのSTを保持する。
   mask/main/白へのfallbackでは発光mapのUV設定を引き継がずUV0を使う。
