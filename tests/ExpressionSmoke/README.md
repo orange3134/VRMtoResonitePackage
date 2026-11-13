@@ -20,6 +20,8 @@ Use the same installation for both.
 - VRM0/1 parser-to-adapter fixtures: preset aliases and weights, all 64 default
   mappings, missing/unresolved presets, custom namesakes, neutral release, real
   mesh outputs, blink mixing, grouped menus and saved-package reload.
+- Both-hands neutral as the load/reset default, with explicit and missing reset
+  curves in sparse menu poses, untouched shapes, native blink mixing and reload.
 - Public API tags and argument types, unrestricted integer inputs and extra table
   rows, invalid/foreign selection Slots, null release, and same-Slot no-op behavior.
 - Menu selection hold, permission settings, reset and wear lifecycle, numbered

@@ -567,8 +567,12 @@ Descriptorのvisemeや別Rendererの同名shapeを除いてから基準値を更
 FXの `DefaultExp / exp_Default` は0にする。Prefab値だけを採用すると、保存された口のweightと
 表情出力のBaseが1になり、解除時にも口が開く。修正後は両方0となり、表情の選択中は引き続き
 口を開ける。無関係な `Adj.Face.Adjust=50`、Body2や衣装の調整値は維持する。
+ただし、これは表情レイヤーの下地であり、両手Neutralの最終表情そのものではない。
+Tolassの `Hands` レイヤーは `Idle L / Idle R` のどちらも `exp_Niko` を参照し、
+両手Neutralでは `Mouth.Niko=100` と `Sp.Cheek=100` に上書きする。表情出力を生成するときは、コンパイル済みL0R0を
+解除用のnullへ変換する前にこのポーズをデフォルトへ保存する。Nikoを名前で決め打ちしない。
 検証では保存パッケージの再生に `RESOPON_TEST_INITIAL_SHAPES` を使い、元データから求めた
-口の0と調整値0.5を、読み込み直後と全表情再生後のResetで確認する。
+`Mouth.KibaSmile=0`、`Mouth.Niko=1`、`Sp.Cheek=1` と調整値0.5を、読み込み直後と全表情再生後のResetで確認する。
 
 ## VRChat FirstPerson
 

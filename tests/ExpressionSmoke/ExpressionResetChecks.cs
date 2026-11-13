@@ -64,8 +64,12 @@ internal static class ExpressionResetChecks
             await Frames(30);
             CheckReset();
             foreach (var output in outputs)
-                Check(Math.Abs(Get<float>(output, "Result") - Get<float>(output, "Base")) < 0.001f,
-                    "reset restores Base: " + output.Name);
+            {
+                float baseline = Get<float>(output, "Base"), expected = FallbackValue(output);
+                expected += (baseline - expected) * Math.Clamp(Get<float>(output, "TrackingWeight"), 0, 1);
+                expected = Get<int>(output, "BlinkMode") switch { 1 => Math.Max(expected, baseline), 2 => Math.Min(expected, baseline), _ => expected };
+                Check(Math.Abs(Get<float>(output, "Result") - expected) < 0.001f, "reset restores neutral default: " + output.Name);
+            }
             Check(neutral.Reference.Target == expression && mappings.All(pair => pair.Key == neutral || pair.Key.Reference.Target == pair.Value),
                 "reset preserves gesture mappings, including the neutral entry");
             ExpressionGraphChecks.CheckMenuColors(expressions);

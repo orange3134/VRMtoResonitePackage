@@ -91,7 +91,7 @@ internal static class FaceExpressionDetectionChecks
                 }
                 model.Clips.Add(clip); if (candidate) model.DetectedExpressions.Add(clip);
             }
-            Clip("Smile", 0.8f, true); Clip("Reset", 0.25f, true); Clip("Unassigned", 0.6f, true); Clip("HiddenToggle", 0.9f, false);
+            Clip("Smile", 0.8f, true); Clip("Reset", 0.45f, true); Clip("Unassigned", 0.6f, true); Clip("HiddenToggle", 0.9f, false);
             var layer = new ExpressionLayer { Id = "Hands", Name = "Hands", DefaultState = 0 };
             layer.States.Add(new("Reset", "Reset", 1, true)); layer.States.Add(new("Smile", "Smile", 1, true));
             var neutral = new ExpressionTransition { Destination = 0 }; neutral.Conditions.Add(new("GestureLeft", 6, 0));
@@ -101,6 +101,7 @@ internal static class FaceExpressionDetectionChecks
             var expressions = await ExpressionSystemSetup.BuildAsync(root, model, b => b == smile ? smileField : restField,
                 initialWeight: field => field == smileField ? 0.25f : 0.3f);
             var catalog = expressions.FindChild("Clips");
+            Check(Math.Abs(smileField.Value - 0.45f) < 0.001f, "both-hands neutral replaces the source default immediately");
             Check(catalog.FindChild("HiddenToggle") == null, "excluded candidate does not leak back into Clips through internal routing clips");
             Check(catalog.FindChild("Unassigned").ExpressionVariables<FrooxEngine.DynamicValueVariable<float>>().Count == 1, "unmapped catalog candidates contain only baseline differences");
             Check(catalog.FindChild("Smile").ExpressionVariables<FrooxEngine.DynamicValueVariable<float>>().Count == 2,
@@ -122,7 +123,7 @@ internal static class FaceExpressionDetectionChecks
             Check(Math.Abs(smileField.Value - 0.8f) < 0.001f, "remaining gesture still applies its pose");
             Left(0);
             Check(ExpressionTestFields.Reference<FrooxEngine.Slot>(core, "State.CurrentExpression") == null &&
-                Math.Abs(smileField.Value - 0.25f) < 0.001f && Math.Abs(restField.Value - 0.3f) < 0.001f,
+                Math.Abs(smileField.Value - 0.45f) < 0.001f && Math.Abs(restField.Value - 0.3f) < 0.001f,
                 "neutral releases to nonzero Base without needing a neutral Clip");
             ExpressionMenuGroupChecks.CheckMenu(expressions);
             Console.WriteLine("PASS: detected Clips removes neutral while preserving other mapped poses and release cells");

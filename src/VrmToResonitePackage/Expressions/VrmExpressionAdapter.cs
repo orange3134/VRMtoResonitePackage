@@ -55,7 +55,7 @@ internal static class VrmExpressionAdapter
         for (int left = 0; left < gestures.Length; left++)
         for (int right = 0; right < gestures.Length; right++)
             model.GestureTable[left, right] = Clip(right) ?? Clip(left);
-        // Mark the neutral preset for the common compiler's baseline-only omission.
+        // Use the neutral preset as the default before omitting its selectable Clip.
         model.GestureTable[0, 0] = presets.GetValueOrDefault("neutral");
         return ExpressionSystemSetup.BuildAsync(avatar, model, binding => fields.GetValueOrDefault(binding), menu, resolver.InitialWeight);
     }

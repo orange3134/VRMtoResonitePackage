@@ -92,9 +92,12 @@ internal static class ExpressionTestFields
         return current.GetComponent<DynamicVariableSpace>().TryReadValue(id, out value);
     }
 
-    public static float SelectedValue(Slot output) => TryReadSelectedValue(output, out float value) ? value :
+    public static float? NeutralDefault(Slot output) => output.ExpressionVariables<DynamicValueVariable<float>>()
+        .SingleOrDefault(v => v.VariableName.Value == VariablePath(output, "Default"))?.Value.Value;
+    public static float FallbackValue(Slot output) => NeutralDefault(output) ??
         output.ExpressionVariables<DynamicValueVariable<float>>()
             .Single(v => v.VariableName.Value == VariablePath(output, "Base")).Value.Value;
+    public static float SelectedValue(Slot output) => TryReadSelectedValue(output, out float value) ? value : FallbackValue(output);
     public static T Reference<T>(Slot slot, string name) where T : class, IWorldElement =>
         slot.ExpressionVariables<DynamicReferenceVariable<T>>()
             .Single(v => v.VariableName.Value == ExpressionTestFields.VariablePath(slot, name)).Reference.Target;

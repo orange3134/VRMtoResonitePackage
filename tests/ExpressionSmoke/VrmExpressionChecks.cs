@@ -109,7 +109,7 @@ internal static class VrmExpressionChecks
             Check(Reference<Slot>(root, "State.CurrentExpression") == target, "VRM gesture selects table target");
             for (int shape = 0; shape < Shapes.Length; shape++)
             {
-                float expected = shape == 0 ? 0.12f : assigned && shape == selected ? 0.2f + selected * 0.1f :
+                float expected = shape == 0 ? 0.45f : assigned && shape == selected ? 0.2f + selected * 0.1f :
                     assigned && selected == 1 && shape == 6 ? 0.3f : 0;
                 Near(face.GetBlendShapeWeight(Shapes[shape]), expected, $"VRM pair {left},{right}: {Shapes[shape]}");
             }
@@ -131,7 +131,7 @@ internal static class VrmExpressionChecks
             ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(api, ExpressionSystemSetup.ResetTag, true);
         }
         await Frames(12);
-        Near(face.GetBlendShapeWeight("Rest"), 0.12f, "reset uses authored Base, not neutral expression weight");
+        Near(face.GetBlendShapeWeight("Rest"), 0.45f, "reset uses both-hands neutral instead of the original mesh weight");
         Check(Reference<Slot>(root, "State.CurrentExpression") == null && !ContextMenuSelected(root), "VRM reset clears menu and expression");
         var custom = clips.Children.Single(c => c.ExpressionVariables<DynamicValueVariable<float>>().Any(v => Math.Abs(v.Value.Value - 0.9f) < 0.0001f));
         Check(table.WriteDynamicVariable("ExpressionSystem/GestureTable.L1R1", custom) == DynamicVariableWriteResult.Success,

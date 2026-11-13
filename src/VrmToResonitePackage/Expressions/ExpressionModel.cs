@@ -13,7 +13,7 @@ public sealed class ExpressionModel
     public List<ExpressionClip> DetectedExpressions { get; set; }
     public List<ExpressionLayer> Layers { get; } = new();
     // Optional fixed-pose mapping for sources without an Animator (VRM).
-    // Indexed by [left, right]; null cells release to the authored baseline.
+    // Indexed by [left, right]; L0R0 defines the default and null cells release to it.
     internal string[,] GestureTable { get; set; }
     // Deferred until the selected face renderer and its authored weights are resolved.
     internal Vrchat.FaceEmoPatterns ImportedPatterns { get; set; }
