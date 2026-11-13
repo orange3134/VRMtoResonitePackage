@@ -17,6 +17,7 @@
 
 | 資料 | 内容 |
 |---|---|
+| [Resoniteの検出とセットアップ](resonite-setup.md) | GUI起動時の案内、検出条件、手動回帰確認 |
 | [ヘッドレスエンジン](headless-engine.md) | DLL互換性、LocalDB、ワールド、終了処理、パッケージ出力 |
 | [アバター変換の共通実装](avatar-conversion.md) | インポータの制約、リグ・追跡設定、装着者判定、FirstPerson描画、読み込み表示、手のコライダー、揺れもの出力 |
 | [VRM変換](vrm-conversion.md) | GLB前処理、VRM座標系、humanoid・表情取り込み、FirstPerson annotation、SpringBone、MToon |

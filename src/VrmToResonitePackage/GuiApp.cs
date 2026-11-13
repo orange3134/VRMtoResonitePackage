@@ -224,9 +224,46 @@ internal sealed class MainWindow : Window
             }
         }
 
+        // Conversion checks setup itself before reading any input; do not prompt twice
+        // for file-associated startup. Without files, still check after the update flow.
         if (initialFiles.Count > 0)
         {
             await StartConversion(initialFiles);
+        }
+        else
+        {
+            EnsureResoniteAvailable(out _);
+        }
+    }
+
+    private bool EnsureResoniteAvailable(out string resonitePath)
+    {
+        resonitePath = null;
+        while (true)
+        {
+            try
+            {
+                resonitePath = ResoniteLocator.Locate(_settings.ResonitePath);
+                return true;
+            }
+            catch (Exception)
+            {
+                var dialog = new ResoniteSetupWindow(_settings.ResonitePath)
+                {
+                    Owner = this
+                };
+                dialog.ShowDialog();
+                switch (dialog.Action)
+                {
+                    case ResoniteSetupAction.Settings:
+                        OpenSettings();
+                        break;
+                    case ResoniteSetupAction.Retry:
+                        break;
+                    default:
+                        return false;
+                }
+            }
         }
     }
 
@@ -365,6 +402,13 @@ internal sealed class MainWindow : Window
             return;
         }
 
+        // Gate every GUI conversion entry path before parsing or inspecting input files.
+        // Reuse the resolved path so setup is not checked again after avatar selection.
+        if (!EnsureResoniteAvailable(out string resonitePath))
+        {
+            return;
+        }
+
         string[] inputFiles = files.Where(GuiApp.IsSupportedInput).ToArray();
         if (inputFiles.Length == 0)
         {
@@ -372,18 +416,16 @@ internal sealed class MainWindow : Window
             return;
         }
 
-        // A .unitypackage may hold several avatars; let the user pick which one (skipped for a
-        // single avatar or a VRM). Done before conversion, engine-independent.
-        List<ConversionJob> jobs = await BuildConversionJobs(inputFiles);
-        if (jobs == null)
-        {
-            ShowIdle(); // user cancelled the avatar selection
-            return;
-        }
-
         try
         {
-            string resonitePath = ResoniteLocator.Locate(_settings.ResonitePath);
+            // Input analysis can also fail; show the same recoverable error UI.
+            List<ConversionJob> jobs = await BuildConversionJobs(inputFiles, resonitePath);
+            if (jobs == null)
+            {
+                ShowIdle(); // user cancelled the avatar selection
+                return;
+            }
+
             var outputs = new List<string>();
             int exitCode = 0;
             int failures = 0;
@@ -436,12 +478,12 @@ internal sealed class MainWindow : Window
     /// job carrying the selected prefab name for the progress display. Returns null if the user
     /// cancels a selection.
     /// </summary>
-    private async Task<List<ConversionJob>> BuildConversionJobs(string[] inputFiles)
+    private async Task<List<ConversionJob>> BuildConversionJobs(string[] inputFiles, string resonitePath)
     {
         // Listing a package's avatars uses Elements.Core (UniLog); the GUI process must resolve
         // Resonite's assemblies for that to JIT. The CLI path installs this; the GUI doesn't, so
         // ensure it before parsing (best-effort — if it fails, listing falls back to no dialog).
-        EnsureAssemblyResolver();
+        EnsureAssemblyResolver(resonitePath);
 
         var batchFiles = new List<string>();
         var avatarJobs = new List<ConversionJob>();
@@ -521,7 +563,7 @@ internal sealed class MainWindow : Window
 
     private bool _resolverInstalled;
 
-    private void EnsureAssemblyResolver()
+    private void EnsureAssemblyResolver(string resonitePath)
     {
         if (_resolverInstalled)
         {
@@ -529,13 +571,12 @@ internal sealed class MainWindow : Window
         }
         try
         {
-            string resonitePath = ResoniteLocator.Locate(_settings.ResonitePath);
             ResoniteLocator.InstallAssemblyResolver(resonitePath);
             _resolverInstalled = true;
         }
         catch
         {
-            // No Resonite found yet; avatar listing will fall back to a single auto-selected avatar.
+            // Resolver setup failed; avatar listing will fall back to a single auto-selected avatar.
         }
     }
 

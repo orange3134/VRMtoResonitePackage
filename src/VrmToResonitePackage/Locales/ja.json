@@ -2,6 +2,13 @@
   "code": "ja",
   "name": "日本語",
   "strings": {
+    "ResoniteSetupTitle": "Resoniteのセットアップ",
+    "ResoniteSetupNotFound": "インストール済みのResoniteが見つかりませんでした。Steamからインストールしてください。インストール済みの場合は設定で指定してください。",
+    "ResoniteSetupInvalidPath": "設定されたパスにResoniteが見つかりませんでした：\n{0}\n設定でResoniteのフォルダを確認するか、パスを空にして自動検出に戻してください。未インストールの場合はSteamからインストールしてください。",
+    "ResoniteSetupSteamLink": "SteamのResoniteページを開く",
+    "ResoniteSetupRetry": "再確認",
+    "ResoniteSetupLater": "後で",
+    "ResoniteSetupLinkFailed": "Steamのページを開けませんでした。\n{0}",
     "Settings": "設定",
     "Converting": "変換中...",
     "ConversionLogLocation": "ログは実行ファイル横の Logs フォルダに出力されます。",
