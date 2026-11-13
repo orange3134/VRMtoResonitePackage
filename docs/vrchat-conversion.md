@@ -752,6 +752,8 @@ SDKの `Assets/ResoniteSDK/MaterialConverters/Custom/lilToon/LilToonXiexeConvert
 の実行経路を基準とする。SDKの作業メモには現行ソースと異なる記述があるため、
 メモにしかない機能を実装済みと判定しない。
 以下はソース照合結果であり、Unity/Resonite実機での見た目の一致を検証したものではない。
+表は残っている変換差分を管理し、実装済みの項目は削除する。
+対応範囲・制約・検証方法は上のlilToon実装説明へ反映する。
 
 「Unityなし」はUnity Editor/Playerを起動せず、既存のC#画像処理とFrooxEngineを使う場合を指す。
 可否はソースから判断した実装方針であり、実装・実機検証済みという意味ではない。
@@ -759,7 +761,6 @@ SDKの `Assets/ResoniteSDK/MaterialConverters/Custom/lilToon/LilToonXiexeConvert
 | 未実装・部分対応の項目 | UnitySDKの処理 | ResoPonの現状 | Unityなしでの実装可否・方法 |
 |---|---|---|---|
 | 2nd法線マップへの切り替え | `UpdateNormal` は `_UseBumpMap=0` かつ `_UseBump2ndMap!=0` の場合、`_Bump2ndMap`、ST、`_Bump2ndScale`、`_Bump2ndMap_UVMode` を出力 | `LilToonConverter.Parse` は1stの `_BumpMap` とST・強度のみ読む。2ndのプロパティと `NormalUV` の設定がない | 可能。YAMLから2nd設定を読み、既存の法線画像取り込みと出力フィールドへ割り当てる。選択先UVが取り込み後のメッシュに保持されていることを確認する |
-| 発光テクスチャのUV選択 | `GetEmissionMap` / `UpdateEmission` は `_EmissionMap_UVMode` を `EmissionUV` へ渡す。非UV0の画像は合成せず元画像とSTを保持 | 調査後にUV0/UV1の転送・variant継承を実装。UV2/UV3/Rim・不正値は警告してUV0へfallback。mapなしの代替画像もUV0 | Unityなしで実装済み（UV0/UV1）。XiexeToonの対応範囲外のUV2/UV3/Rimは未対応 |
 | 発光マップ・マスク・メイン画像の合成 | UV0では `_EmissionMap`、`_EmissionBlendMask`、`_EmissionMainStrength` によるmain画像の乗算をベイク。マスクSTと、メインベイク後の画像・STも渡す | `VrchatMaterialBuilder.BuildMaterial` はmap → mask → main → 白から1枚を選ぶだけ。mapがあるとmask/mainを適用しない。main strengthは `>0` の分岐にしか使わず、mainのベイク結果も使わない。マスクSTも未読 | 可能。既存のCPU画像ベイクを拡張し、UV0でST・色空間・alpha・強度を含めて合成する。SDK同様、非UV0画像はこの単一UV0ベイクから除外する |
 | 2段目・3段目の影 | `GetShadowRamp` はlilToonの `Hidden/ltsother_bakeramp` を使い、`_Shadow2ndColor/Border/Blur` と `_Shadow3rdColor/Border/Blur` を反映 | `GenerateShadowRamp` は1段目の色・境界・ぼかし・強度だけ。2nd/3rdの色alphaによる混合もない | 可能。bakerの境界計算と色混合をC#へ移植し、既存の256×256 ramp生成を拡張する |
 | 影の境界色 | 同bakerで `_ShadowBorderColor` / `_ShadowBorderRange` を反映 | プロパティの読み取りもrampへの合成もない | 可能。同じCPU ramp生成へ境界範囲と色の混合式を追加する |
