@@ -115,6 +115,12 @@ public sealed class VrchatAvatar
     /// </summary>
     public List<VrchatGameObjectReference> InactiveGameObjects { get; } = new();
 
+    /// <summary>Effective FBX GameObject names, keyed by occurrence and original model path.</summary>
+    public Dictionary<VrchatBoneTarget, string> ModelObjectNames { get; } = new();
+
+    /// <summary>Authored local scale axes on internal model nodes; unset axes retain imported values.</summary>
+    public Dictionary<VrchatBoneTarget, VrchatModelScaleOverride> ModelObjectScales { get; } = new();
+
     /// <summary>
     /// All GameObject names present in the selected prefab's hierarchy. Used to drop imported FBX
     /// meshes that the prefab deleted (avatars built by removing mesh objects from a shared FBX).
@@ -187,6 +193,8 @@ public sealed class VrchatPhysicsPlacement
 }
 
 public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
+
+public readonly record struct VrchatModelScaleOverride(float? X = null, float? Y = null, float? Z = null);
 
 /// <summary>A renderer in one imported model occurrence, using its full source path.</summary>
 public sealed record VrchatModelRendererReference

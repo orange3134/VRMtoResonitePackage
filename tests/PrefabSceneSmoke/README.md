@@ -24,6 +24,11 @@ meter/centimeter units in either direction, equal units, nonuniform scale and
 rotation, successive merges, unmatched helper bones, shared mesh isolation and
 initial expression weights. Model placement checks also preserve authored parent
 scale while converting the child model's units and Unity-authored translation.
+Primary-node scale overrides also cover retained/absent RootNode, Assimp scaling
+helpers, meter/centimeter units, nonuniform prefab-root scale and partial-axis
+overrides. After wrapper collapse, world scale and a descendant's world position
+must still include both unit conversion and prefab-root placement.
+An additional FBX's single-payload reset must run before its authored scale override.
 
 The final checks build a temporary Unity project containing the supplied FBX and a
 Prefab Variant, invoke the production converter, and decode the saved package.

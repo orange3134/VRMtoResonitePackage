@@ -188,6 +188,31 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   and alignment collapse. Imports without `RootNode` retain the empty-path fallback.
 - Descriptor roots created by FBX placement must resolve through the prefab Transform slot map,
   even without authored mesh copies, so descriptor-relative Merge Armature paths retain their scope.
+- FBX GameObject `m_Name` overrides need explicit import-time application because model nodes
+  have no YAML documents for `UnityPrefabGraph` to update. Fold them base-to-variant by
+  occurrence and original full model path, including stripped aliases. Apply the final names
+  after source-name mesh/EditorOnly filtering and before capturing expression paths or merging
+  armatures. Retain captured import paths for identity, materials, and initial active states;
+  ancestor renames must not redirect children or another occurrence's namesakes.
+  Modular Avatar's `ModularAvatarMergeArmature.FindCorrespondingBone` matches the effective
+  child name after stripping the configured prefix/suffix, recursively under each matched parent.
+  Drawers clothing can rename imported `Hips`/leg nodes to `.1` names in its prefab and configure
+  suffix `.1`; ignoring those overrides leaves the clothing skin on its own skeleton.
+- Internal FBX Transform `m_LocalScale.x/y/z` overrides are folded per occurrence and
+  original path, independently per axis. Keep unspecified axes from import and honor
+  explicit `1`, zero, and negative values. Model-root scale remains in the existing
+  placement/unit-conversion path and must not be applied a second time.
+  Apply internal scales after prefab placement (including additional single-payload resets)
+  and Assimp helper collapse, before primary wrapper collapse and before MA captures
+  `destination^-1 * source * bindPose`.
+  Top-level internal nodes without a retained `RootNode` inherit the wrapper's unit and
+  prefab-root scale when it is collapsed. A later raw override would discard those factors
+  (for example, explicit `1` would replace `0.01` meter conversion). Keep the factors on
+  separate wrappers until authored scales have been applied. The resulting skin retains the authored
+  clothing fit after its bones are replaced by body bones; scaling the body instead would
+  incorrectly change other clothing. A nested HolidayMessenger bone scaled to `1.05`
+  is a regression case. Compare saved skin geometry and bone identities, not just Slot
+  scale: a merged source bone is removed and its deformation lives in corrected bind poses.
 - Capture Animator renderer paths after prefab placement and mesh removal, before Merge Armature.
   Fold variant `m_Name` overrides into authored renderer and ancestor transforms by object
   identity before creating slots; synchronize renderer material records with the final names.

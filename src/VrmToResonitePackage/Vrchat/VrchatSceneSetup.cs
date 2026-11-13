@@ -356,6 +356,33 @@ internal static class VrchatSceneSetup
     private static bool ImportedPathMatches(string importedPath, string targetPath)
         => Unity.UnityModelPath.Normalize(importedPath) == Unity.UnityModelPath.Normalize(targetPath);
 
+    public static void ApplyModelObjectNames(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<Slot, string> importedPaths)
+    {
+        int renamed = 0;
+        foreach (var (target, name) in avatar.ModelObjectNames)
+        {
+            Slot slot = ResolveImportedTarget(target, sources, importedPaths);
+            if (slot == null) continue;
+            slot.Name = name;
+            renamed++;
+        }
+        if (renamed > 0) UniLog.Log($"Prefab model names: {renamed} object(s) renamed.");
+    }
+
+    public static void ApplyModelObjectScales(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<Slot, string> importedPaths)
+    {
+        foreach (var (target, scale) in avatar.ModelObjectScales)
+        {
+            Slot slot = ResolveImportedTarget(target, sources, importedPaths);
+            if (slot == null) continue;
+            float3 imported = slot.LocalScale;
+            slot.LocalScale = new float3(scale.X ?? imported.x, scale.Y ?? imported.y, scale.Z ?? imported.z);
+            UniLog.Log($"Prefab model scale: {target.Path} = {slot.LocalScale} (fbx={target.FbxGuid})");
+        }
+    }
+
     public static Dictionary<Slot, string> CaptureImportedObjects(IReadOnlyDictionary<string, Slot> roots)
     {
         var sources = new Dictionary<Slot, string>();
@@ -411,7 +438,7 @@ internal static class VrchatSceneSetup
     public static void Apply(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
         IReadOnlyDictionary<string, Slot> authoredObjects = null, IReadOnlyDictionary<Slot, string> importedPaths = null)
     {
-        ApplyInactiveStates(root, avatar, sources);
+        ApplyInactiveStates(root, avatar, sources, importedPaths);
         ApplyInitialBlendShapes(root, avatar, sources, authoredObjects, importedPaths);
     }
 
@@ -777,7 +804,8 @@ internal static class VrchatSceneSetup
     private static bool HasRendererInSubtree(Slot slot)
         => slot.GetComponentsInChildren<MeshRenderer>().Any();
 
-    private static void ApplyInactiveStates(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources)
+    private static void ApplyInactiveStates(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<Slot, string> importedPaths)
     {
         if (avatar.InactiveGameObjects.Count == 0)
         {
@@ -792,8 +820,12 @@ internal static class VrchatSceneSetup
                 continue;
             }
             string fbxGuid = FbxGuidForSlot(root, slot, avatar, sources);
-            if (inactive.Contains(new VrchatGameObjectReference(fbxGuid, slot.Name)) ||
-                inactive.Contains(new VrchatGameObjectReference(null, slot.Name)))
+            // Model active-state records use source names; authored copies use their
+            // effective names and have no captured import path.
+            string sourceName = importedPaths?.TryGetValue(slot, out string path) == true && !string.IsNullOrEmpty(path)
+                ? path.Split('/')[^1] : slot.Name;
+            if (inactive.Contains(new VrchatGameObjectReference(fbxGuid, sourceName)) ||
+                inactive.Contains(new VrchatGameObjectReference(null, sourceName)))
             {
                 slot.ActiveSelf = false;
                 applied++;

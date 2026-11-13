@@ -478,7 +478,6 @@ internal static class Converter
                 float3? viewPosition = Vrchat.VrchatSceneSetup.ResolveViewPosition(avatar, descriptorRoot, importRoot);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
                 RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
-                CollapseAssimpFbxTransformBones(root);
                 profile?.Mark("prefab-hierarchy");
 
                 Console.WriteLine("アセットの読み込みを待機中...");
@@ -508,6 +507,9 @@ internal static class Converter
                 // Finish asset reloads first: deleting their last renderer can unload providers.
                 Vrchat.VrchatSceneSetup.RemoveEditorOnlyObjects(avatar, importedMeshSources, importedNodePaths);
                 Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
+                // Merge Armature matches effective Unity names (including prefix/suffix
+                // overrides), while import filtering and identity resolution use source paths.
+                Vrchat.VrchatSceneSetup.ApplyModelObjectNames(avatar, importedMeshSources, importedNodePaths);
                 var physicsNodes = model.NodeTargets.ToDictionary(entry => entry.Key, entry =>
                     Vrchat.VrchatSceneSetup.ResolveImportedTarget(entry.Value, importedMeshSources, importedNodePaths, prefabSlots));
                 if (expressionRoot is { IsDestroyed: false })
@@ -708,6 +710,11 @@ internal static class Converter
             ResolvePrefabParent(importRoot, placement.ParentFbxGuid, placement.ParentName, placement.Transforms,
                 importedFbxRoots, slots, importedMeshSources, importedNodePaths);
         meshBuild.Bind();
+        // Placement may reset an additional model's single payload. Override only
+        // afterward, with Assimp helpers folded but primary placement/unit factors
+        // still on its wrapper. A later override would erase those folded factors.
+        CollapseAssimpFbxTransformBones(importRoot);
+        Vrchat.VrchatSceneSetup.ApplyModelObjectScales(avatar, importedMeshSources, importedNodePaths);
         return authoredObjects.GetValueOrDefault(avatar.DescriptorRootKey ?? "") ??
             avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms).Where(t => t.GameObjectKey == avatar.DescriptorRootKey)
                 .Select(t => slots.GetValueOrDefault(t.Key)).FirstOrDefault(slot => slot != null) ??
