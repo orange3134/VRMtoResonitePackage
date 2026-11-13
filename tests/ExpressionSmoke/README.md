@@ -81,5 +81,9 @@ all old package versions must compare equal to current output.
 
 Keep local avatar paths and results outside version control, using the
 [local avatar regression workflow](../../docs/local-avatar-tests.md).
+For an independent neutral-pose oracle, set `RESOPON_TEST_INITIAL_SHAPES` to JSON
+such as `{"Body":{"Mouth.Open":0,"Face.Adjust":0.5}}`. The saved mesh values are
+checked after loading and again after expression/menu playback and reset. Renderer
+names must be unique; obtain expected values from the source avatar, not the output.
 The headless test enables ForceFullUpdateCycle in its world and exits without
 asynchronous engine shutdown callbacks; neither behavior is exported to the avatar.

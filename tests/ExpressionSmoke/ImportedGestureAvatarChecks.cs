@@ -17,6 +17,7 @@ internal static class ImportedGestureAvatarChecks
         var root = avatar.FindChild("Expressions") ?? throw new InvalidOperationException("Missing expression system");
         await WaitForExpressionMeshes(root);
         await ImportedBlinkChecks.Run(avatar, root);
+        ImportedInitialShapeChecks.Run(avatar);
         // Keep the exported mixer enabled, but freeze external tracking inputs for
         // this fixed-pose oracle. User/eye updates can otherwise race the sampled
         // Base and Result in the headless frame. ExpressionBlinkChecks separately
@@ -183,6 +184,9 @@ internal static class ImportedGestureAvatarChecks
         }
         Check(root.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "Invalid imported Flux group");
         await ExpressionResetChecks.Run(root);
+        ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulse(receiverRoot, ExpressionSystemSetup.ResetTag, true);
+        for (int i = 0; i < 60; i++) await default(NextUpdate);
+        ImportedInitialShapeChecks.Run(avatar);
         Console.WriteLine($"PASS: imported package gesture API drives all {gestureCount * gestureCount} pairs and {distinctPoses.Count} distinct poses");
     }
 

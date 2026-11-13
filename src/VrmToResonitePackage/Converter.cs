@@ -517,7 +517,10 @@ internal static class Converter
                     model.MeshBindingRootPath = string.Join("/", parts);
                 }
                 // Retain authored paths before Merge Armature or eye pivots move renderers.
-                var faceResolver = new BlendshapeResolver(root, model, physicsNodes, avatar.BlinkInitialValues);
+                var faceResolver = new BlendshapeResolver(root, model, physicsNodes);
+                var faceInitialValues = faceResolver.ApplyBaseExpressionDefaults(avatar.BaseExpressionInitialValues);
+                foreach (var entry in avatar.BlinkInitialValues) faceInitialValues[entry.Key] = entry.Value;
+                faceResolver.ApplyInitialOverrides(avatar.BlinkInitialValues, updateBaseline: true);
                 await Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes,
                     target => Vrchat.VrchatSceneSetup.ResolveImportedTarget(target, importedMeshSources,
                         importedNodePaths, prefabSlots), descriptorRoot is { IsDestroyed: false } ? descriptorRoot : root);
@@ -556,7 +559,7 @@ internal static class Converter
 
                 // Reflect prefab-authored scene state (inactive GameObjects, initial blendshape weights).
                 Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
-                faceResolver.ApplyInitialOverrides(avatar.BlinkInitialValues);
+                faceResolver.ApplyInitialOverrides(faceInitialValues);
                 profile?.Mark("physics-and-scene-state");
 
                 if (!options.NoAvatar)

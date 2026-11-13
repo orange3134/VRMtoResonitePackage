@@ -547,6 +547,29 @@ Shipilkaでは `1`、Linaでは `2` に設定し、瞬き接続が0本でも開�
 瞬きがないアバターを再変換するだけで接続先が増えるとは限らない。
 取り込み後の接続順は[表情システムへの接続](avatar-conversion.md#表情システムへの接続)を参照する。
 
+## FX基底レイヤーの中立表情
+
+PrefabのBlendShape値は、VRChatで実行されるFX基底レイヤーの初期値と異なる場合がある。
+`VrchatAnimatorFaceParser` は解決済み起動stateの定数カーブを `VrchatExpressionDefaults` で読み、
+取り込む表情Clipに含まれるbindingだけを `BaseExpressionInitialValues` に残す。
+先頭レイヤーのweightはUnityの規則に従い、保存値が0でも1として扱う。
+後続のジェスチャー・メニュー・衣装レイヤーを中立表情へ固定する処理ではない。
+一般的なAnimatorの実行やレイヤー全体の合成は再現しない。
+
+未解決の起動state/motion、パラメーター条件分岐、BlendTree、AvatarMask、同期レイヤー、
+motion time parameterは対象外。Expression Parametersや保存値の違いを初期値で推測しない。
+値が動くカーブ、非有限値、同一bindingの重複、等しい端点でも区間の接線が非0のカーブは除外する。
+対象外のbindingはPrefab/FBXの値を保つ。BlendshapeResolverで実際の顔Rendererを一意に確認し、
+Descriptorのvisemeや別Rendererの同名shapeを除いてから基準値を更新する。
+最後のPrefab状態復元後にも適用し、瞬きループのopen/reset値があればそちらを優先する。
+
+回帰例: TolassAndWedge 4.7の `Tolass4.5` はPrefabのBody `Mouth.KibaSmile` が100だが、
+FXの `DefaultExp / exp_Default` は0にする。Prefab値だけを採用すると、保存された口のweightと
+表情出力のBaseが1になり、解除時にも口が開く。修正後は両方0となり、表情の選択中は引き続き
+口を開ける。無関係な `Adj.Face.Adjust=50`、Body2や衣装の調整値は維持する。
+検証では保存パッケージの再生に `RESOPON_TEST_INITIAL_SHAPES` を使い、元データから求めた
+口の0と調整値0.5を、読み込み直後と全表情再生後のResetで確認する。
+
 ## VRChat FirstPerson
 
 `AvatarSetup.ApplyFirstPersonAutoAsync` は `Source=ModelSource.VrchatFbx` の場合、

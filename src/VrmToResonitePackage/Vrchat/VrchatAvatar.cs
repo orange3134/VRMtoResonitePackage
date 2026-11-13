@@ -69,6 +69,8 @@ public sealed class VrchatAvatar
     public List<VrchatBlink> AdditionalBlinks { get; } = new();
     // Startup-loop resets must survive later prefab state restoration and expression release.
     public Dictionary<Expressions.ExpressionBinding, float> BlinkInitialValues { get; } = new();
+    // FX's base layer supplies the neutral stream below gesture expressions.
+    public Dictionary<Expressions.ExpressionBinding, float> BaseExpressionInitialValues { get; } = new();
 
     public List<VrchatPhysBone> PhysBones { get; } = new();
 
