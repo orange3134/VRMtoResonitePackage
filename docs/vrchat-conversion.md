@@ -744,16 +744,19 @@ SDKの `Assets/ResoniteSDK/MaterialConverters/Custom/lilToon/LilToonXiexeConvert
 メモにしかない機能を実装済みと判定しない。
 以下はソース照合結果であり、Unity/Resonite実機での見た目の一致を検証したものではない。
 
-| 未実装・部分対応の項目 | UnitySDKの処理 | ResoPonの現状 |
-|---|---|---|
-| 2nd法線マップへの切り替え | `UpdateNormal` は `_UseBumpMap=0` かつ `_UseBump2ndMap!=0` の場合、`_Bump2ndMap`、ST、`_Bump2ndScale`、`_Bump2ndMap_UVMode` を出力 | `LilToonConverter.Parse` は1stの `_BumpMap` とST・強度のみ読む。2ndのプロパティと `NormalUV` の設定がない |
-| 発光テクスチャのUV選択 | `GetEmissionMap` / `UpdateEmission` は `_EmissionMap_UVMode` を `EmissionUV` へ渡す。非UV0の画像は合成せず元画像とSTを保持 | UVModeを読まず、`EmissionUV` も設定しない |
-| 発光マップ・マスク・メイン画像の合成 | UV0では `_EmissionMap`、`_EmissionBlendMask`、`_EmissionMainStrength` によるmain画像の乗算をベイク。マスクSTと、メインベイク後の画像・STも渡す | `VrchatMaterialBuilder.BuildMaterial` はmap → mask → main → 白から1枚を選ぶだけ。mapがあるとmask/mainを適用しない。main strengthは `>0` の分岐にしか使わず、mainのベイク結果も使わない。マスクSTも未読 |
-| 2段目・3段目の影 | `GetShadowRamp` はlilToonの `Hidden/ltsother_bakeramp` を使い、`_Shadow2ndColor/Border/Blur` と `_Shadow3rdColor/Border/Blur` を反映 | `GenerateShadowRamp` は1段目の色・境界・ぼかし・強度だけ。2nd/3rdの色alphaによる混合もない |
-| 影の境界色 | 同bakerで `_ShadowBorderColor` / `_ShadowBorderRange` を反映 | プロパティの読み取りもrampへの合成もない |
-| 2nd/3rdのデカール系設定とアトラスの静止フレーム | `GetMainTexture` はUV0レイヤーの設定を `Hidden/ltsother_baker` に渡す。`IsDecal`、左右制限、copy/flip、MSDF、`TexDecalAnimation` / `TexDecalSubParam` をベイク処理へ引き渡す | `LilToonConverter.Layer` と `LilToonMainTextureBakePlan` はdecal・左右制限・copy/flip・MSDFを含むレイヤー全体を警告して除外。アトラス設定は未読で、フラグがなければ通常画像として扱う |
-| シェーダー種別・Multi設定からの描画モード判定 | `GetBlendMode` はシェーダー名のCutout/Transparent/Overlay/Refraction/Fur/FurOnly/Gemと、Multiの `_TransparentMode`（0〜6）を判定 | `DetermineAlphaMode` はblend factor、`_AlphaToMask`、custom queue、親の判定結果を使う。シェーダー名と `_TransparentMode` による判定がない。例えばRefractionの `One/Zero` はopaqueになる |
-| シェーダー既定のRenderQueueの解決 | `UpdateRenderSettings` はUnityが解決した `Material.renderQueue` をコピー | `Parse` は `m_CustomRenderQueue` と親の値だけを使う。どちらも未指定なら出力queueを設定せず、元シェーダーの既定queueを解決しない |
+「Unityなし」はUnity Editor/Playerを起動せず、既存のC#画像処理とFrooxEngineを使う場合を指す。
+可否はソースから判断した実装方針であり、実装・実機検証済みという意味ではない。
+
+| 未実装・部分対応の項目 | UnitySDKの処理 | ResoPonの現状 | Unityなしでの実装可否・方法 |
+|---|---|---|---|
+| 2nd法線マップへの切り替え | `UpdateNormal` は `_UseBumpMap=0` かつ `_UseBump2ndMap!=0` の場合、`_Bump2ndMap`、ST、`_Bump2ndScale`、`_Bump2ndMap_UVMode` を出力 | `LilToonConverter.Parse` は1stの `_BumpMap` とST・強度のみ読む。2ndのプロパティと `NormalUV` の設定がない | 可能。YAMLから2nd設定を読み、既存の法線画像取り込みと出力フィールドへ割り当てる。選択先UVが取り込み後のメッシュに保持されていることを確認する |
+| 発光テクスチャのUV選択 | `GetEmissionMap` / `UpdateEmission` は `_EmissionMap_UVMode` を `EmissionUV` へ渡す。非UV0の画像は合成せず元画像とSTを保持 | UVModeを読まず、`EmissionUV` も設定しない | 可能。YAMLのUVModeを出力へ渡す。通常のメッシュUVは保持を確認する。lilToon固有の特殊UVモードまで同じ意味になるとは限らず、対応関係の確認が必要 |
+| 発光マップ・マスク・メイン画像の合成 | UV0では `_EmissionMap`、`_EmissionBlendMask`、`_EmissionMainStrength` によるmain画像の乗算をベイク。マスクSTと、メインベイク後の画像・STも渡す | `VrchatMaterialBuilder.BuildMaterial` はmap → mask → main → 白から1枚を選ぶだけ。mapがあるとmask/mainを適用しない。main strengthは `>0` の分岐にしか使わず、mainのベイク結果も使わない。マスクSTも未読 | 可能。既存のCPU画像ベイクを拡張し、UV0でST・色空間・alpha・強度を含めて合成する。SDK同様、非UV0画像はこの単一UV0ベイクから除外する |
+| 2段目・3段目の影 | `GetShadowRamp` はlilToonの `Hidden/ltsother_bakeramp` を使い、`_Shadow2ndColor/Border/Blur` と `_Shadow3rdColor/Border/Blur` を反映 | `GenerateShadowRamp` は1段目の色・境界・ぼかし・強度だけ。2nd/3rdの色alphaによる混合もない | 可能。bakerの境界計算と色混合をC#へ移植し、既存の256×256 ramp生成を拡張する |
+| 影の境界色 | 同bakerで `_ShadowBorderColor` / `_ShadowBorderRange` を反映 | プロパティの読み取りもrampへの合成もない | 可能。同じCPU ramp生成へ境界範囲と色の混合式を追加する |
+| 2nd/3rdのデカール系設定とアトラスの静止フレーム | `GetMainTexture` はUV0レイヤーの設定を `Hidden/ltsother_baker` に渡す。`IsDecal`、左右制限、copy/flip、MSDF、`TexDecalAnimation` / `TexDecalSubParam` をベイク処理へ引き渡す | `LilToonConverter.Layer` と `LilToonMainTextureBakePlan` はdecal・左右制限・copy/flip・MSDFを含むレイヤー全体を警告して除外。アトラス設定は未読で、フラグがなければ通常画像として扱う | 条件付きで可能。UV変換、範囲外alpha切り捨て、copy/flip、アトラス時刻0の抽出はCPUで実装できる。MSDFの `fwidth` は出力画素間の差分などで近似する。実メッシュの左右・mirrorを再現する場合はtangent情報が必要で、UVが重なる領域は材質分割等も必要になる |
+| シェーダー種別・Multi設定からの描画モード判定 | `GetBlendMode` はシェーダー名のCutout/Transparent/Overlay/Refraction/Fur/FurOnly/Gemと、Multiの `_TransparentMode`（0〜6）を判定 | `DetermineAlphaMode` はblend factor、`_AlphaToMask`、custom queue、親の判定結果を使う。シェーダー名と `_TransparentMode` による判定がない。例えばRefractionの `One/Zero` はopaqueになる | 可能。shader名・GUID対応表とYAMLのMulti設定で判定する。shaderが同梱されない場合は既知GUID等による識別が必要。屈折や毛の描画自体の再現ではない |
+| シェーダー既定のRenderQueueの解決 | `UpdateRenderSettings` はUnityが解決した `Material.renderQueue` をコピー | `Parse` は `m_CustomRenderQueue` と親の値だけを使う。どちらも未指定なら出力queueを設定せず、元シェーダーの既定queueを解決しない | 条件付きで可能。同梱shaderのQueueタグを解析するか、既知shaderの既定値を表に持つ。既存の `ShaderPropertyFallbackConverter.ReadShaderDefaults` にQueue解析がある。shader・識別情報のない未知variantの既定値は確定できない |
 
 デカールと影のbaker内部は、別途lilToonの
 `Assets/lilToon/Shader/ltspass_baker.shader`、`ltspass_bakeramp.shader`、
