@@ -641,6 +641,12 @@ headless meshの生成と描画制御は[共通のFirstPerson処理](avatar-conv
   保存パッケージを再読込し、HeadProxyがSDKの規約から独立に求めた視点と一致し、
   そのTargetが頭ボーンと一致することまで確認する。
   目ボーンや変換関数自身を正解値にせず、顔メッシュの目の領域とも比較する。
+- 回帰例: Ricorine 1.0.1 の Albiflora は、親 Prefab の FBX ルート scale=0.87 を継承し、
+  子 Variant では位置・回転だけを上書きしている。子の変更一覧だけで配置を作ると scale が1へ戻り、
+  視点は約9.5cm目より低くなる。FBX Transformには合成先のYAML文書がないため、
+  `PrefabGraph.Modifications` の正規化済み occurrence/参照先で各軸を基底から順に解決する。
+  明示した0や1も上書きとして保持し、同じFBXの別インスタンスの変更を混ぜない。
+  視点オフセットは従来どおり非拡縮のメートル値を使い、モデル側の縮尺を復元する。
 
 ## PhysBone
 
