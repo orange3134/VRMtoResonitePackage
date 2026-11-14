@@ -52,6 +52,28 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-local-avatar.ps
 `-SkipBuild` で同じDLLを使う複数の変換を同秒に起動すると、DLL横の `Logs/convert_yyyyMMdd_HHmmss.log`
 が衝突する。並行検証には既定の実行別ビルドを使う。また、実行中のDLLへビルド出力を上書きしない。
 
+### 登録アバターをすべてAlphaからCutoutへ変換する
+
+「全材質をCutout」は、既存の不透明・加算などを変更せず、選択オプションの対象となる
+Alpha材質をすべて指定する。対象がないケースも通常どおり変換する。
+
+- `.local/avatar-tests.json` の全ケースを対象にし、登録済みの `arguments`（特に `--avatar`）を保持する。
+- VRMは `VrmParser.Parse` の `IsMToon && AlphaMode == "blend"` の材質名を列挙する。
+  UnityPackage / Prefabは選択したアバターを解析し、
+  `VrchatMaterialBuilder.ListTransparentMaterials` が返す論理アセットパスを列挙する。
+- 各対象を `--transparent-cutout <指定>` として繰り返し渡す。ワイルドカード指定は使わない。
+- 各ケースの出力先は分離し、変換成功後に `--inspect` で再読込する。
+  Unity系は保存データの `XiexeToonMaterial` に `BlendMode=Alpha` が残っていないことも確認する。
+  VRMはMToon以外のAlphaが対象外であるため、対象材質と区別して確認する。
+- 集約先には検証済みパッケージをコピーし、`<caseId>__<元の出力名>.resonitepackage` のように
+  ケースIDを付けて同名Prefabの上書きを防ぐ。ログ・対象材質一覧・検証結果は集約先と分けて保持する。
+- 並行実行する場合、ケースごとに実行DLLのディレクトリと一時ディレクトリを分ける。
+  同じビルドをコピーして使い、実行中のDLLを再ビルドで上書きしない。
+
+生成物・一覧・環境固有パス・実行結果は `.tmp_verify/` と `.local/` に置き、コミットしない。
+構造検査の成功は外観の確認を意味しない。Cutout化では半透明の濃淡が失われるため、
+実際のライティングや輪郭の見え方はResoniteクライアントで確認する。
+
 ### 利用中の EXE まで修正が反映されているか確認する
 
 専用ディレクトリでの回帰テストが成功しても、通常利用する `publish/ResoPon.exe` は更新されない。
