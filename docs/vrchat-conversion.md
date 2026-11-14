@@ -700,12 +700,13 @@ CLIは `--transparent-cutout <name|path|guid>` を繰り返して指定する。
 未指定材質や対象外の材質は通常の変換結果を維持し、`--no-avatar` でも選択を適用する。
 
 Cutoutを選んだ材質は、元の材質・テクスチャの解析とベイクを終えた後に、
-`BlendMode.Cutout`、`AlphaClip=info.Cutoff`、`ZWrite.On`、`RenderQueue=2450` に設定する。
-しきい値は材質variantの継承を含む元の `_Cutoff` を使い、未指定時は0.5。
+`BlendMode.Cutout`、`AlphaClip=0.5`、`ZWrite.On`、`RenderQueue=2450` に設定する。
+このオプションでAlphaからCutoutへ変更する場合のしきい値は、元の `_Cutoff` や材質variantの継承値によらず0.5に固定する。
+元からCutoutの材質は、継承を含む元のしきい値（未指定時0.5）を引き続き使う。
 元のテクスチャやEmissionは変更しない。半透明の濃淡は透明 / 不透明の二値になる。
 
 `PrefabSceneSmoke/TransparentMaterialChecks` は両入力形式で対象一覧、同名材質の個別選択、
-variant継承、未選択・対象外材質の保持、CLI互換・GUI引数の受け渡し、
+variantの継承値より優先する0.5固定、未選択・対象外材質の保持、CLI互換・GUI引数の受け渡し、
 生成パッケージのinspectと再読込後の材質設定を確認する。
 
 ### lilToon

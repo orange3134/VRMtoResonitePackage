@@ -70,7 +70,7 @@ internal static partial class VrchatMaterialBuilder
                     {
                         // Override only the output render mode; keep source texture/alpha baking intact.
                         toon.BlendMode.Value = BlendMode.Cutout;
-                        toon.AlphaClip.Value = info.Cutoff;
+                        toon.AlphaClip.Value = 0.5f;
                         toon.ZWrite.Value = ZWrite.On;
                         toon.RenderQueue.Value = 2450;
                     }

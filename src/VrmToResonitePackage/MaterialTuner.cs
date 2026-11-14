@@ -90,7 +90,7 @@ internal static class MaterialTuner
                 if (useCutoutForTransparent)
                 {
                     material.BlendMode.Value = BlendMode.Cutout;
-                    material.AlphaClip.Value = info.AlphaCutoff;
+                    material.AlphaClip.Value = 0.5f;
                     material.ZWrite.Value = ZWrite.On;
                 }
                 else

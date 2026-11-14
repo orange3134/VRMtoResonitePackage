@@ -102,10 +102,10 @@ ONの場合、VRMごとに対象材質があれば変換前に選択画面を表
 | 選択 | 生成するXiexeToonの設定 | 表示上の意味 |
 |---|---|---|
 | Alpha（既定） | `BlendMode.Alpha`。ZWriteは元の `TransparentWithZWrite` に従う。RenderQueueは元の指定または通常の算出値 | 半透明の濃淡を維持。UIでは特定のライティングで光って見える場合があると案内 |
-| Cutout | `BlendMode.Cutout`、`AlphaClip=AlphaCutoff`、`ZWrite.On`、`RenderQueue=2450` | 透明 / 不透明の二値になり、半透明の濃淡や柔らかい境界は維持しない |
+| Cutout | `BlendMode.Cutout`、`AlphaClip=0.5`、`ZWrite.On`、`RenderQueue=2450` | 透明 / 不透明の二値になり、半透明の濃淡や柔らかい境界は維持しない |
 
-Cutoutのしきい値には、VRMの `alphaCutoff`（VRM 0.xでは `_Cutoff` の値があれば上書き）を使い、
-未指定時は0.5。選択画面にしきい値の調整欄はない。
+この選択でAlphaからCutoutへ変更する場合のしきい値は0.5に固定する。選択画面にしきい値の調整欄はない。
+元からCutoutの材質には、VRMの `alphaCutoff`（VRM 0.xでは `_Cutoff` の値があれば上書き）を使い、未指定時は0.5。
 この選択によって元の画像ファイルを書き換えたり、Emissionを無効化したりはしない。
 
 CLIでは `--transparent-cutout <name>` を材質ごとに繰り返し指定できる。

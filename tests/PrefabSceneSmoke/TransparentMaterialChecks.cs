@@ -11,11 +11,13 @@ using SkyFrost.Base;
 using VrmToResonitePackage;
 using VrmToResonitePackage.Unity;
 using VrmToResonitePackage.Vrchat;
+using VrmToResonitePackage.Vrm;
 
 internal static class TransparentMaterialChecks
 {
     public static async Task Run(Slot parent, string temp)
     {
+        await CheckVrm(parent, temp);
         string folder = Path.Combine(temp, "TransparentFixtures");
         Directory.CreateDirectory(Path.Combine(folder, "Assets"));
         Directory.CreateDirectory(Path.Combine(folder, "ProjectSettings"));
@@ -136,15 +138,64 @@ internal static class TransparentMaterialChecks
     {
         foreach (int index in new[] { 0, 2 })
             Check(materials[index].BlendMode.Value == BlendMode.Cutout &&
-                  MathF.Abs(materials[index].AlphaClip.Value - 0.37f) < 0.0001f &&
+                  MathF.Abs(materials[index].AlphaClip.Value - 0.5f) < 0.0001f &&
                   materials[index].ZWrite.Value == ZWrite.On && materials[index].RenderQueue.Value == 2450 &&
                   MathF.Abs(materials[index].Color.Value.a - 0.65f) < 0.0001f,
-                "selected material keeps inherited cutoff and color alpha, and uses Cutout queue/depth writing");
+                "selected Alpha material uses cutoff 0.5 despite authored/inherited cutoff, keeps color alpha and uses Cutout queue/depth writing");
         Check(materials[1].BlendMode.Value == BlendMode.Alpha && materials[1].RenderQueue.Value == 3010 &&
               materials[1].ZWrite.Value == ZWrite.Off, "path selection isolates an identically named Alpha material");
         Check(materials[3].BlendMode.Value == BlendMode.Opaque && materials[4].BlendMode.Value == BlendMode.Cutout &&
+              MathF.Abs(materials[4].AlphaClip.Value - 0.37f) < 0.0001f &&
               materials[4].ZWrite.Value == ZWrite.Off && materials[5].BlendMode.Value == BlendMode.Additive,
             "non-Alpha materials are unchanged even when explicitly selected");
+    }
+
+    private static async Task CheckVrm(Slot parent, string temp)
+    {
+        var root = parent.AddSlot("VRM transparent cutoff regression");
+        var assets = root.AddSlot("Assets");
+        var model = new VrmModel();
+        foreach (var info in new[]
+        {
+            new VrmMaterialInfo { Name = "Selected", IsMToon = true, AlphaMode = "blend", AlphaCutoff = 0.005f },
+            new VrmMaterialInfo { Name = "Unselected", IsMToon = true, AlphaMode = "blend", AlphaCutoff = 0.23f },
+            new VrmMaterialInfo { Name = "ExistingCutout", IsMToon = true, AlphaMode = "mask", AlphaCutoff = 0.37f },
+            new VrmMaterialInfo { Name = "NonMToon", IsMToon = false, AlphaMode = "blend", AlphaCutoff = 0.12f },
+        })
+        {
+            model.Materials[info.Name] = info;
+            assets.AddSlot("Material: " + info.Name).AttachComponent<XiexeToonMaterial>();
+        }
+        await MaterialTuner.Apply(root, assets, model, "unused.vrm",
+            new HashSet<string>(StringComparer.Ordinal) { "Selected", "ExistingCutout", "NonMToon" });
+        AssertVrm(root);
+        var graph = root.SaveObject(DependencyHandling.CollectAssets);
+        var record = RecordHelper.CreateForObject<SkyFrost.Base.Record>(root.Name, root.World.LocalUser.MachineID, null);
+        var engine = root.Engine;
+        string output = Path.Combine(temp, "VrmTransparentCutoff.resonitepackage");
+        await default(ToBackground);
+        using (var stream = File.Create(output))
+            await PackageCreator.BuildPackage(engine, record, graph, stream, includeVariants: false);
+        await default(ToWorld);
+        Check(PackageInspector.Inspect(output, false) == 0, "VRM cutoff package inspection succeeds");
+        var restored = parent.AddSlot("Restored VRM cutoff");
+        await PackageImporter.ImportPackage(output, restored);
+        await default(ToWorld);
+        AssertVrm(restored);
+        restored.Destroy();
+        root.Destroy();
+
+        static void AssertVrm(Slot slot)
+        {
+            var materials = slot.GetComponentsInChildren<XiexeToonMaterial>().ToDictionary(m => m.Slot.Name);
+            var selected = materials["Material: Selected"];
+            var existing = materials["Material: ExistingCutout"];
+            Check(selected.BlendMode.Value == BlendMode.Cutout && selected.AlphaClip.Value == 0.5f &&
+                  existing.BlendMode.Value == BlendMode.Cutout && MathF.Abs(existing.AlphaClip.Value - 0.37f) < 0.0001f &&
+                  materials["Material: Unselected"].BlendMode.Value == BlendMode.Alpha &&
+                  materials["Material: NonMToon"].BlendMode.Value == BlendMode.Alpha,
+                "VRM Alpha override uses cutoff 0.5; existing Cutout, unselected Alpha and non-MToon retain their conversion");
+        }
     }
 
     private static void Check(bool success, string message)
