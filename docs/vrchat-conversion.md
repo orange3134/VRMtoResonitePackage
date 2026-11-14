@@ -703,6 +703,12 @@ Cutoutを選んだ材質は、元の材質・テクスチャの解析とベイ�
 `BlendMode.Cutout`、`AlphaClip=0.5`、`ZWrite.On`、`RenderQueue=2450` に設定する。
 このオプションでAlphaからCutoutへ変更する場合のしきい値は、元の `_Cutoff` や材質variantの継承値によらず0.5に固定する。
 元からCutoutの材質は、継承を含む元のしきい値（未指定時0.5）を引き続き使う。
+これはlilToon Inspectorの描画モード切替に合わせた値である。
+`Assets/lilToon/Editor/lilInspector/lilPropertyGroupDrawerBaseSetting.cs` の
+`DrawRenderingModeSettings` はCutout / FurCutoutへの変更時に `_Cutoff=0.5`、
+Transparent / Fur / FurTwoPassへの変更時に0.001を設定する。MultiもCutout系のモード1/5で0.5になる。
+毎描画時の固定ではなくモード変更時の代入なので、変更後に手動調整した材質は別の値を持ち得る。
+`lilMaterialUtils.SetupMaterialWithRenderingMode` 自体ではこのしきい値の再設定は行わない。
 元のテクスチャやEmissionは変更しない。半透明の濃淡は透明 / 不透明の二値になる。
 
 `PrefabSceneSmoke/TransparentMaterialChecks` は両入力形式で対象一覧、同名材質の個別選択、
