@@ -23,6 +23,52 @@ VRMは `VrmParser`、VRChatはパーサーと `VrchatModelAdapter` が共通の 
 エンジン起動・アセット待機・パッケージ出力は[ヘッドレスエンジン](headless-engine.md)、
 工程別の計測は[変換性能の診断](conversion-performance.md)を参照する。
 
+## 入力形式別のオプション対応
+
+`Program.CliOptions`、`GuiApp.SettingsWindow` と `Converter` の両変換経路を基準にする。
+○は対応、—は対象外。対応は設定を適用する処理があることを示し、任意のモデルでの完全再現を保証しない。
+UnityPackageとUnityプロジェクト内のPrefabは同じVRChat変換経路を使う。
+Prefabには所属プロジェクトと関連アセットが必要で、単独ファイルでは変換できない。
+
+| 機能 | VRM | UnityPackage / Prefab | 設定方法・適用条件 |
+|---|---|---|---|
+| フェイストラッキング用ドライバー生成 | ○ | ○ | GUI / `--face-tracking`。既定OFF。Resoniteが認識できるシェイプキーが必要 |
+| アバター保護を付けない | ○ | ○ | GUI / `--no-protection`。既定は保護あり。GUIでは起動ごとに再選択 |
+| 表情メニューを生成しない | ○ | ○ | GUI / `--no-expression-menu`。既定は生成。ハンドサイン・キーボード・APIの操作は維持 |
+| アバターの元のサイズを維持 | ○ | ○ | GUI / `--default-user-scale`。既定OFF。DefaultUserScaleを付与 |
+| 視点の前方・上方オフセット | ○ | ○ | GUI / `--view-forward <m>`、`--view-up <m>` |
+| NearClipの指定 | ○ | ○ | GUI / `--near-clip <m>`。既定0.075m、0でAvatarRenderSettingsの生成を省略 |
+| 半透明MToon材質のAlpha / Cutout選択 | ○ | — | GUIの「半透明マテリアルの変換先を手動で選ぶ」（既定OFF）。CLIは `--mtoon-transparent-cutout <name>` で材質ごとに指定 |
+| 作業用一時ファイルを残す | ○ | ○ | GUI / `--keep-working-files`。既定OFF |
+| アバターセットアップを省略してモデルを変換 | ○ | ○ | `--no-avatar`。現在の設定画面には表示しない |
+| モデルインポートのタイムアウト | ○ | ○ | `--import-timeout <sec>`。既定300秒。現在の設定画面には表示しない |
+| 変換対象アバターの選択 | — | ○ | 複数候補がある場合のGUI選択 / `--avatar <name>` |
+| 出力先フォルダ | ○ | ○ | GUI / `-o`、`--output <dir>`。既定は入力と同じフォルダ |
+| Resoniteのインストール先 | ○ | ○ | GUI / `--resonite-path <dir>`。未指定時は自動検出 |
+
+`--no-avatar` ではフェイストラッキング、保護、表情システム、原寸維持、視点・NearClip、
+FirstPersonのセットアップを行わない。マテリアルと揺れものの変換は両形式で引き続き行う。
+フェイストラッキングは両経路とも `AvatarCreator.TrySetupFaceTracking` を呼び、
+VRChat側のAnimatorや独自フェイストラッキング設定をそのまま移植する機能ではない。
+
+視点オフセットは、VRChatのDescriptor視点がある場合は元の視点へ加算する。
+VRMや元の視点がない場合は、自動計算に使うオフセット値を指定値で置き換える。
+CLIヘルプの前方オフセット「既定0」は元の視点に対する加算値であり、
+自動計算時の前方オフセットは目の間隔などから求める。
+
+診断用CLIは変換オプションと分けて扱う。
+
+| 診断 | 対象 |
+|---|---|
+| `--assimp-dump` | VRMのメッシュ・モーフ構造（GLB / FBXも直接入力可能）。UnityPackage / Prefabの直接入力は対象外 |
+| `--vrchat-dump` | UnityPackage / Prefabの解析。`--avatar` で対象を指定可能 |
+| `--inspect` / `--inspect-verbose` | 両形式から生成した `.resonitepackage` の構造検査。変換元ファイルには使用しない |
+| `-h` / `--help` | 入力形式に依存しないCLIヘルプ |
+
+GUIの表示言語・起動時の更新確認も入力形式に依存しない。
+表情操作や自動変換の詳細は[表情システム](expression-system.md)、
+[VRM変換](vrm-conversion.md)、[VRChat変換](vrchat-conversion.md)を参照する。
+
 ## アバター保護の設定
 
 GUI の `GuiSettings.NoProtection` は起動中だけ保持し、`JsonIgnore` で設定 JSON の保存・復元から除外する。
