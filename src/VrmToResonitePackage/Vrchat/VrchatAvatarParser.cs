@@ -913,18 +913,18 @@ public static class VrchatAvatarParser
             ParentNodeName = parentName,
             TransformNodeName = transformNodeName,
             LocalPosition = new Vec3(
-                FindModificationFloat(instance, transformTarget, "m_LocalPosition.x"),
-                FindModificationFloat(instance, transformTarget, "m_LocalPosition.y"),
-                FindModificationFloat(instance, transformTarget, "m_LocalPosition.z")),
+                FindModificationFloat(package, instance, transformTarget, "m_LocalPosition.x"),
+                FindModificationFloat(package, instance, transformTarget, "m_LocalPosition.y"),
+                FindModificationFloat(package, instance, transformTarget, "m_LocalPosition.z")),
             LocalRotation = new Quat(
-                FindModificationFloat(instance, transformTarget, "m_LocalRotation.x"),
-                FindModificationFloat(instance, transformTarget, "m_LocalRotation.y"),
-                FindModificationFloat(instance, transformTarget, "m_LocalRotation.z"),
-                FindModificationFloat(instance, transformTarget, "m_LocalRotation.w", 1f)),
+                FindModificationFloat(package, instance, transformTarget, "m_LocalRotation.x"),
+                FindModificationFloat(package, instance, transformTarget, "m_LocalRotation.y"),
+                FindModificationFloat(package, instance, transformTarget, "m_LocalRotation.z"),
+                FindModificationFloat(package, instance, transformTarget, "m_LocalRotation.w", 1f)),
             LocalScale = new Vec3(
-                FindModificationFloat(instance, transformTarget, "m_LocalScale.x", 1f),
-                FindModificationFloat(instance, transformTarget, "m_LocalScale.y", 1f),
-                FindModificationFloat(instance, transformTarget, "m_LocalScale.z", 1f)),
+                FindModificationFloat(package, instance, transformTarget, "m_LocalScale.x", 1f),
+                FindModificationFloat(package, instance, transformTarget, "m_LocalScale.y", 1f),
+                FindModificationFloat(package, instance, transformTarget, "m_LocalScale.z", 1f)),
         };
         CaptureLocalPlacementParents(package, scene, sceneGuid, parentId, placement);
         return placement;
@@ -1116,7 +1116,7 @@ public static class VrchatAvatarParser
         => string.Equals(name, "RootNode", StringComparison.Ordinal) ||
            string.Equals(name, "//RootNode", StringComparison.Ordinal);
 
-    private static float FindModificationFloat(YamlDocument instance, YamlNode target,
+    private static float FindModificationFloat(UnityPackage package, YamlDocument instance, YamlNode target,
         string propertyPath, float fallback = 0f)
     {
         if (target == null)
@@ -1124,6 +1124,20 @@ public static class VrchatAvatarParser
             return fallback;
         }
         string result = null;
+        // Model transforms have no YAML document for PrefabGraph to fold. Read the
+        // canonical occurrence's overrides base-first, including stripped aliases.
+        // A variant that changes only position must retain the base root's scale.
+        if (package.PrefabGraph is { } graph)
+        {
+            var identity = graph.Identity(target.Guid, target.FileID ?? 0);
+            if (!identity.IsNull)
+                foreach (var modification in graph.Modifications)
+                    if (modification.Target == identity &&
+                        modification.Value["propertyPath"]?.AsString() == propertyPath)
+                        result = modification.Value["value"]?.AsString();
+            if (result != null && float.TryParse(result, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float effective)) return effective;
+        }
         YamlNode modifications = instance.Root?["m_Modification"]?["m_Modifications"];
         if (modifications?.Seq == null)
         {

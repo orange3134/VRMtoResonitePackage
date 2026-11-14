@@ -173,6 +173,13 @@ nonfinite transforms cannot manufacture a complete humanoid. Parser integration 
 verify geometric primary-model classification and preservation of explicit mappings,
 including partial maps. These checks do not invoke Unity or reproduce Unity's exact scores.
 
+# Model root placement
+
+`ModelRootPlacementChecks` verifies inherited FBX root translation, rotation and
+scale through stripped prefab aliases. Position-only variants retain base scale,
+explicit zero/one overrides win per axis, repeated model occurrences remain
+independent, and parsing does not modify the source prefab.
+
 # Expression animation roots
 
 `ExpressionAnimationRootChecks` verifies Unity generation-2 root/renderer IDs against

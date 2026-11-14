@@ -1341,6 +1341,7 @@ PolygonVertexIndex: *6 { a: 0,1,-3,0,1,-3 }
     var resolver = new UnityModelFileIdResolver(package.ByGuid(guid));
     if (!multipleMaterials && !transformHelpers) ModelObjectNameChecks.Run(asset, guid);
     if (!multipleMaterials && !transformHelpers) ModelObjectScaleChecks.Run(asset, guid);
+    if (!multipleMaterials && !transformHelpers) ModelRootPlacementChecks.Run(asset, guid);
     if (transformHelpers)
     {
         long boneId = UnityModelFileIdResolver.Compute("Transform", "//RootNode/Left/Shared/Transform", 0);
