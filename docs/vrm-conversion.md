@@ -90,7 +90,8 @@ ResoPonでは同じ優先順位を固定Clip参照として表し、空の右手
 ### 半透明MToon材質のAlpha / Cutout選択
 
 VRM 0.x / 1.0のうち、解析後の `IsMToon=true` かつ `AlphaMode="blend"` の材質が対象。
-元からOpaque / Cutoutの材質と、MToon以外の材質は対象外。UnityPackage / Prefab経路には適用しない。
+元からOpaque / Cutoutの材質と、MToon以外の材質は対象外。
+UnityPackage / Prefabにも同じ選択機能があり、対象の判定は[VRChat変換](vrchat-conversion.md#半透明材質のalpha--cutout選択)を参照する。
 
 GUI設定「半透明マテリアルの変換先を手動で選ぶ」は既定OFF。
 ONの場合、VRMごとに対象材質があれば変換前に選択画面を表示する。
@@ -107,7 +108,8 @@ Cutoutのしきい値には、VRMの `alphaCutoff`（VRM 0.xでは `_Cutoff` の
 未指定時は0.5。選択画面にしきい値の調整欄はない。
 この選択によって元の画像ファイルを書き換えたり、Emissionを無効化したりはしない。
 
-CLIでは `--mtoon-transparent-cutout <name>` を材質ごとに繰り返し指定できる。
+CLIでは `--transparent-cutout <name>` を材質ごとに繰り返し指定できる。
+従来の `--mtoon-transparent-cutout <name>` も互換エイリアスとして利用できる。
 材質名は大文字・小文字を区別する完全一致で、未指定の対象材質はAlphaになる。
 存在しない名前や対象外の材質名を指定しても、このオプションでは変更されない。
 `--no-avatar` と併用してもマテリアル変換には適用する。

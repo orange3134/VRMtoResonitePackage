@@ -118,7 +118,9 @@ Because of how XiexeToon works, it's hard to have both semi-transparency and sha
 
 You can choose how this is handled during conversion by turning on the following setting from the gear icon in the app.
 
-The setting is "Choose how to convert transparent materials." If the VRM has applicable materials, you can select `Alpha` or `Cutout` for each before conversion.
+The setting is "Choose how to convert transparent materials." If the VRM, UnityPackage, or Prefab has applicable materials, you can select `Alpha` or `Cutout` for each before conversion.
+This applies to transparent MToon materials in VRM files and materials that convert to Alpha in UnityPackage/Prefab files.
+Unity materials are listed by asset path to distinguish identical names. All choices start at Alpha; select them again for each conversion.
 
 Choose Cutout to stop those parts from glowing. (In exchange, transparency becomes binary — fully transparent or fully opaque.)
 

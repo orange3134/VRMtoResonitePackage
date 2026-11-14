@@ -252,7 +252,7 @@ internal static class Converter
                 if (options.NoAvatar)
                 {
                     await MaterialTuner.Apply(root, assetsSlot, vrm, vrmPath,
-                        options.MtoonTransparentCutoutMaterials);
+                        options.TransparentCutoutMaterials);
                     SpringBoneSetup.Apply(root, vrm);
                 }
                 else
@@ -273,7 +273,7 @@ internal static class Converter
                     var expressionResolver = new BlendshapeResolver(root, vrm);
                     AvatarSetup.Build(root, vrm, setupOptions, expressionResolver);
                     await MaterialTuner.Apply(root, assetsSlot, vrm, vrmPath,
-                        options.MtoonTransparentCutoutMaterials);
+                        options.TransparentCutoutMaterials);
                     await AvatarSetup.ApplyFirstPersonAutoAsync(root, vrm);
                     await Expressions.VrmExpressionAdapter.BuildAsync(root, vrm, expressionResolver, !options.NoExpressionMenu);
                     SpringBoneSetup.Apply(root, vrm);
@@ -530,7 +530,8 @@ internal static class Converter
 
                 if (options.NoAvatar)
                 {
-                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths);
+                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths,
+                        options.TransparentCutoutMaterials);
                     profile?.Mark("materials");
                     SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
@@ -552,7 +553,8 @@ internal static class Converter
                     setupOptions.ViewPosition = viewPosition;
                     AvatarSetup.Build(root, model, setupOptions, faceResolver, physicsNodes);
                     profile?.Mark("avatar-setup");
-                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths);
+                    await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths,
+                        options.TransparentCutoutMaterials);
                     profile?.Mark("materials");
                     await AvatarSetup.ApplyFirstPersonAutoAsync(root, model, physicsNodes);
                     profile?.Mark("first-person");

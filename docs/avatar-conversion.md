@@ -38,7 +38,7 @@ Prefabには所属プロジェクトと関連アセットが必要で、単独�
 | アバターの元のサイズを維持 | ○ | ○ | GUI / `--default-user-scale`。既定OFF。DefaultUserScaleを付与 |
 | 視点の前方・上方オフセット | ○ | ○ | GUI / `--view-forward <m>`、`--view-up <m>` |
 | NearClipの指定 | ○ | ○ | GUI / `--near-clip <m>`。既定0.075m、0でAvatarRenderSettingsの生成を省略 |
-| 半透明MToon材質のAlpha / Cutout選択 | ○ | — | GUIの「半透明マテリアルの変換先を手動で選ぶ」（既定OFF）。CLIは `--mtoon-transparent-cutout <name>` で材質ごとに指定 |
+| 半透明材質のAlpha / Cutout選択 | ○ | ○ | GUIの「半透明マテリアルの変換先を手動で選ぶ」（既定OFF）。CLIは `--transparent-cutout` に材質名・パス・GUIDを指定。VRMはMToon材質名、UnityはAlphaに変換する材質が対象 |
 | 作業用一時ファイルを残す | ○ | ○ | GUI / `--keep-working-files`。既定OFF |
 | アバターセットアップを省略してモデルを変換 | ○ | ○ | `--no-avatar`。現在の設定画面には表示しない |
 | モデルインポートのタイムアウト | ○ | ○ | `--import-timeout <sec>`。既定300秒。現在の設定画面には表示しない |

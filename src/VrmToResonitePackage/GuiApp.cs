@@ -497,7 +497,7 @@ internal sealed class MainWindow : Window
                 IReadOnlyList<string> transparentMaterials = await Task.Run(() => ListMtoonTransparentMaterials(file));
                 if (transparentMaterials.Count > 0)
                 {
-                    IReadOnlyList<string> cutoutMaterials = SelectMtoonTransparentModes(transparentMaterials);
+                    IReadOnlyList<string> cutoutMaterials = SelectTransparentModes(transparentMaterials);
                     if (cutoutMaterials == null)
                     {
                         return null;
@@ -506,7 +506,7 @@ internal sealed class MainWindow : Window
                     CliOptions option = _settings.ToCliOptions(new[] { file });
                     foreach (string material in cutoutMaterials)
                     {
-                        option.MtoonTransparentCutoutMaterials.Add(material);
+                        option.TransparentCutoutMaterials.Add(material);
                     }
                     avatarJobs.Add(new ConversionJob(option, Path.GetFileName(file)));
                     continue;
@@ -532,6 +532,20 @@ internal sealed class MainWindow : Window
 
                 CliOptions option = _settings.ToCliOptions(new[] { file });
                 option.AvatarName = selected?.Name;
+                if (_settings.PromptMtoonTransparentBlendMode)
+                {
+                    IReadOnlyList<string> transparentMaterials = await Task.Run(() =>
+                        ListUnityTransparentMaterials(file, option.AvatarName));
+                    if (transparentMaterials.Count > 0)
+                    {
+                        IReadOnlyList<string> cutoutMaterials = SelectTransparentModes(transparentMaterials);
+                        if (cutoutMaterials == null)
+                        {
+                            return null;
+                        }
+                        option.TransparentCutoutMaterials.UnionWith(cutoutMaterials);
+                    }
+                }
                 string prefabName = Path.GetFileName(selected?.SourcePath);
                 string displayName = string.IsNullOrWhiteSpace(prefabName)
                     ? Path.GetFileName(file)
@@ -607,15 +621,22 @@ internal sealed class MainWindow : Window
             .ToArray();
     }
 
+    private static IReadOnlyList<string> ListUnityTransparentMaterials(string path, string avatarName)
+    {
+        using Unity.UnityPackage package = Unity.UnityPackage.Open(path);
+        Vrchat.VrchatAvatar avatar = Vrchat.VrchatAvatarParser.Parse(package, avatarName);
+        return Vrchat.VrchatMaterialBuilder.ListTransparentMaterials(avatar, package);
+    }
+
     private string SelectAvatar(string packageFile, IReadOnlyList<VrchatAvatarChoice> avatars)
     {
         var dialog = new AvatarSelectionWindow(Path.GetFileName(packageFile), avatars) { Owner = this };
         return dialog.ShowDialog() == true ? dialog.SelectedAvatar : null;
     }
 
-    private IReadOnlyList<string> SelectMtoonTransparentModes(IReadOnlyList<string> materials)
+    private IReadOnlyList<string> SelectTransparentModes(IReadOnlyList<string> materials)
     {
-        var dialog = new MtoonTransparentModeWindow(materials) { Owner = this };
+        var dialog = new TransparentModeWindow(materials) { Owner = this };
         return dialog.ShowDialog() == true ? dialog.CutoutMaterials : null;
     }
 
@@ -742,9 +763,9 @@ internal sealed class MainWindow : Window
         AddNullableFloat(arguments, "--near-clip", options.NearClip);
         arguments.Add("--import-timeout");
         arguments.Add(options.ImportTimeoutSeconds.ToString(CultureInfo.InvariantCulture));
-        foreach (string material in options.MtoonTransparentCutoutMaterials)
+        foreach (string material in options.TransparentCutoutMaterials)
         {
-            arguments.Add("--mtoon-transparent-cutout");
+            arguments.Add("--transparent-cutout");
             arguments.Add(material);
         }
         foreach (string file in options.InputFiles)
@@ -1371,14 +1392,14 @@ internal sealed class AvatarSelectionWindow : Window
     }
 }
 
-/// <summary>Modal dialog that lets users override MToon Transparent materials to Cutout.</summary>
-internal sealed class MtoonTransparentModeWindow : Window
+/// <summary>Modal dialog that lets users override Alpha materials to Cutout.</summary>
+internal sealed class TransparentModeWindow : Window
 {
     private readonly Dictionary<string, ComboBox> _modeBoxes = new(StringComparer.Ordinal);
 
     public IReadOnlyList<string> CutoutMaterials { get; private set; } = Array.Empty<string>();
 
-    public MtoonTransparentModeWindow(IReadOnlyList<string> materials)
+    public TransparentModeWindow(IReadOnlyList<string> materials)
     {
         Title = AppLocalization.Get("TransparentModeTitle");
         Width = 560;
@@ -1446,6 +1467,7 @@ internal sealed class MtoonTransparentModeWindow : Window
             row.Children.Add(new TextBlock
             {
                 Text = material,
+                ToolTip = material,
                 VerticalAlignment = VerticalAlignment.Center,
                 Foreground = new SolidColorBrush(Color.FromRgb(0x3e, 0x3e, 0x3e)),
                 TextTrimming = TextTrimming.CharacterEllipsis
@@ -1496,6 +1518,7 @@ internal sealed class GuiSettings
     public bool NoExpressionMenu { get; set; }
     public bool DefaultUserScale { get; set; }
     public bool KeepWorkingFiles { get; set; }
+    // Keep the persisted property name so existing users retain their opt-in setting.
     public bool PromptMtoonTransparentBlendMode { get; set; }
     public bool CheckForUpdates { get; set; } = true;
     public float? ViewForward { get; set; }
