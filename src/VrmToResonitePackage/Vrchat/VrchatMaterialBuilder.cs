@@ -20,9 +20,29 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static partial class VrchatMaterialBuilder
 {
+    private static IEnumerable<string> ReferencedMaterialGuids(VrchatAvatar avatar) =>
+        avatar.RendererMaterials.SelectMany(r => r.MaterialGuids)
+            .Concat(avatar.FbxMaterialGuids.Values)
+            .Concat(avatar.AdditionalFbxs.SelectMany(f => f.MaterialGuids.Values))
+            .Where(g => !string.IsNullOrEmpty(g))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    // Paths distinguish identically named materials and can be forwarded unchanged to the CLI.
+    public static IReadOnlyList<string> ListTransparentMaterials(VrchatAvatar avatar, UnityPackage package) =>
+        ReferencedMaterialGuids(avatar)
+            .Where(guid => IsAlphaMaterial(ResolveMaterialInfo(guid, package,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase))))
+            .Select(guid => package.ByGuid(guid).LogicalPath)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static bool IsAlphaMaterial(LilToonInfo info) =>
+        info is { IsFakeShadow: false, AlphaMode: "transparent" };
+
     public static async Task Apply(Slot root, Slot assetsSlot, VrchatAvatar avatar, UnityPackage package,
         IReadOnlyDictionary<Slot, string> sources, IReadOnlyDictionary<string, Slot> authoredObjects = null,
-        IReadOnlyDictionary<Slot, string> importedPaths = null)
+        IReadOnlyDictionary<Slot, string> importedPaths = null,
+        IReadOnlySet<string> transparentCutoutMaterials = null)
     {
         using var profile = ConversionProfile.Start("materials");
         var textureCache = new Dictionary<string, StaticTexture2D>(StringComparer.OrdinalIgnoreCase);
@@ -33,13 +53,7 @@ internal static partial class VrchatMaterialBuilder
         var outlineSettings = new Dictionary<XiexeToonMaterial, LilToonInfo>();
 
         // Build one XiexeToon material per unique Unity .mat referenced by the avatar.
-        IEnumerable<string> uniqueGuids = avatar.RendererMaterials
-            .SelectMany(r => r.MaterialGuids)
-            .Concat(avatar.FbxMaterialGuids.Values)
-            .Concat(avatar.AdditionalFbxs.SelectMany(f => f.MaterialGuids.Values))
-            .Where(g => !string.IsNullOrEmpty(g))
-            .Distinct(StringComparer.OrdinalIgnoreCase);
-        foreach (string guid in uniqueGuids)
+        foreach (string guid in ReferencedMaterialGuids(avatar))
         {
             IAssetProvider<FrooxEngine.Material> material = await BuildMaterial(
                 assetsSlot, guid, package, textureCache, metallicGlossCache);
@@ -49,6 +63,17 @@ internal static partial class VrchatMaterialBuilder
                 if (material is XiexeToonMaterial toon)
                 {
                     var info = ResolveMaterialInfo(guid, package, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                    if (IsAlphaMaterial(info) && transparentCutoutMaterials != null &&
+                        (transparentCutoutMaterials.Contains(info.Name) ||
+                         transparentCutoutMaterials.Contains(package.ByGuid(guid).LogicalPath) ||
+                         transparentCutoutMaterials.Contains(guid)))
+                    {
+                        // Override only the output render mode; keep source texture/alpha baking intact.
+                        toon.BlendMode.Value = BlendMode.Cutout;
+                        toon.AlphaClip.Value = 0.5f;
+                        toon.ZWrite.Value = ZWrite.On;
+                        toon.RenderQueue.Value = 2450;
+                    }
                     if (info?.IsLilToon == true && info.UseOutline && info.OutlineDeleteMesh)
                         outlineSettings[toon] = info;
                 }

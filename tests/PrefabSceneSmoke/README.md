@@ -18,6 +18,13 @@ It also checks alpha-mask modes/scale/offset, all three independent tints,
 HSVG/gradation correction, and production material assignment for no bake,
 alpha-only bake and combined color/alpha bake (no double tint multiplication).
 
+`TransparentMaterialChecks` exercises both Prefab and UnityPackage inputs: Alpha
+candidate discovery, duplicate material names, path/name/GUID selection, variant
+cutoff overridden to 0.5, unchanged defaults and non-Alpha materials, CLI compatibility,
+GUI child-process arguments, and package inspection and reload.
+The VRM path also checks the 0.5 override while retaining authored Cutout thresholds
+and leaving unselected Alpha and non-MToon materials unchanged, including save/reload.
+
 `EmissionUvChecks` verifies lilToon emission UV1 selection, material variant
 inheritance and explicit UV0 overrides, shared texture isolation, retained texture
 transforms, disabled emission, UV0 fallback for cleared maps and unsupported modes,

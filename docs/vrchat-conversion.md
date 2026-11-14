@@ -682,6 +682,39 @@ material variantは `m_Parent` chainをbaseから継承し、子の差分を上�
 FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` filename、diffuse texture basenameから
 一意な対応を推定する。prefab rendererの明示overrideが最優先である。
 
+### 半透明材質のAlpha / Cutout選択
+
+GUIの「半透明マテリアルの変換先を手動で選ぶ」はUnityPackage / Prefabにも適用する。
+アバター選択後、そのアバターのrenderer、主FBX、追加FBXのマテリアル参照から対象を列挙する。
+材質variantの親を解決した後の `LilToonInfo.AlphaMode="transparent"` が対象で、
+通常変換で `XiexeToonMaterial.BlendMode=Alpha` になる材質を選べる。lilToon以外も同じ判定を使う。
+FakeShadow、Opaque、既存のCutout、premultiply（ResoniteのTransparent）、Additive、Multiplyは対象外。
+
+同名材質を区別するため、GUIでは `Assets/.../Name.mat` などの論理アセットパスを表示する。
+初期選択はすべてAlpha。設定のON / OFFは保存するが、材質の選択は変換ごとに行う。
+既存の設定JSONの `PromptMtoonTransparentBlendMode` 名は互換性のため維持する。
+
+CLIは `--transparent-cutout <name|path|guid>` を繰り返して指定する。
+論理パス・GUIDは個別の材質を指定し、材質名では一致するすべての対象材質を指定する。
+いずれも大文字・小文字を区別する完全一致。従来の `--mtoon-transparent-cutout` は同じ処理の別名。
+未指定材質や対象外の材質は通常の変換結果を維持し、`--no-avatar` でも選択を適用する。
+
+Cutoutを選んだ材質は、元の材質・テクスチャの解析とベイクを終えた後に、
+`BlendMode.Cutout`、`AlphaClip=0.5`、`ZWrite.On`、`RenderQueue=2450` に設定する。
+このオプションでAlphaからCutoutへ変更する場合のしきい値は、元の `_Cutoff` や材質variantの継承値によらず0.5に固定する。
+元からCutoutの材質は、継承を含む元のしきい値（未指定時0.5）を引き続き使う。
+これはlilToon Inspectorの描画モード切替に合わせた値である。
+`Assets/lilToon/Editor/lilInspector/lilPropertyGroupDrawerBaseSetting.cs` の
+`DrawRenderingModeSettings` はCutout / FurCutoutへの変更時に `_Cutoff=0.5`、
+Transparent / Fur / FurTwoPassへの変更時に0.001を設定する。MultiもCutout系のモード1/5で0.5になる。
+毎描画時の固定ではなくモード変更時の代入なので、変更後に手動調整した材質は別の値を持ち得る。
+`lilMaterialUtils.SetupMaterialWithRenderingMode` 自体ではこのしきい値の再設定は行わない。
+元のテクスチャやEmissionは変更しない。半透明の濃淡は透明 / 不透明の二値になる。
+
+`PrefabSceneSmoke/TransparentMaterialChecks` は両入力形式で対象一覧、同名材質の個別選択、
+variantの継承値より優先する0.5固定、未選択・対象外材質の保持、CLI互換・GUI引数の受け渡し、
+生成パッケージのinspectと再読込後の材質設定を確認する。
+
 ### lilToon
 
 - headless変換ではUnity editor bakerを実行できない。直接表現できるpropertyとtexture transformを保持し、

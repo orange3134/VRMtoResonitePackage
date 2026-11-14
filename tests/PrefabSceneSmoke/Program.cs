@@ -59,6 +59,7 @@ static async Task Run(string fbxPath, string rendererName)
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
         ViewpointChecks.Run(root);
         await MaterialLayerChecks.Run(assets, temp);
+        await TransparentMaterialChecks.Run(assets, temp);
         await EmissionUvChecks.Run(assets, temp);
         await EmissionBakeChecks.Run(assets, temp);
         await OutlineExclusionSceneChecks.Run(root, temp);
