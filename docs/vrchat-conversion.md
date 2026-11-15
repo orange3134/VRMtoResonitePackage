@@ -99,6 +99,9 @@ NDMF Manual Bake等で保存した`.asset`は、YAMLだけでなくUnity Seriali
 - 識別子はGUIDと符号付き64bitのfileID。ファイル先頭のMeshやMaterialを代用しない。
   バイナリPPtrの外部参照はexternal tableのGUIDへ、同じファイル内のClip等は元のGUIDとfileIDへ解決する。
   Animatorのstate・transition・BlendTreeは既存グラフが扱うローカルfileIDを保持する。
+  YAMLの`.asset`内でも、同一ファイルのAnimationClip参照には所有アセットのGUIDを補う。
+  fileIDだけのClip参照を残すとAnimator顔解析とFaceEmoがClipを取得できないため、
+  直接のstate motionとBlendTree内のmotionの両方を正規化する。null・外部参照は保持する。
 - 材質・Texture2Dは内部キー`GUID@fileID`で既存のキャッシュへ接続する。material variantの親や
   texture参照も同じ方式で区別する。YAMLサブアセットも同様に扱う。
 - ControllerはDescriptorのfileIDで選び、同一ファイルの別Controllerを混ぜない。

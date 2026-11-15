@@ -4,6 +4,7 @@ using AssetsTools.NET.Extra;
 using Elements.Assets;
 using Elements.Core;
 using VrmToResonitePackage.Unity;
+using VrmToResonitePackage.Vrchat;
 
 internal static class NativeAssetChecks
 {
@@ -119,6 +120,7 @@ internal static class NativeAssetChecks
             Check(second.Root["m_Name"].AsString() == "SecondYaml" && second.Root["m_Parent"].Guid == materials[0].Guid,
                 "YAML subassets select exact fileID and qualify same-file parent references");
         }
+        YamlAnimationChecks(prefab, binaryPath, guid);
 
         AssetTypeValueField Material(string name, float cutoff)
         {
@@ -135,6 +137,74 @@ internal static class NativeAssetChecks
             if (!file.Metadata.TypeTreeTypes.Any(t => t.TypeId == type)) file.Metadata.TypeTreeTypes.Add(TypeTree(field.TemplateField, type));
             var info = AssetFileInfo.Create(file, id, type); info.SetNewData(field); file.Metadata.AssetInfos.Add(info);
         }
+    }
+
+    private static void YamlAnimationChecks(string prefab, string assetPath, string guid)
+    {
+        string yaml = """
+--- !u!91 &91
+AnimatorController:
+  m_AnimatorLayers:
+  - m_Name: Base
+    m_StateMachine: {fileID: 100}
+  - m_Name: Expressions
+    m_DefaultWeight: 1
+    m_StateMachine: {fileID: 200}
+--- !u!1107 &100
+AnimatorStateMachine:
+  m_DefaultState: {fileID: 10}
+  m_ChildStates:
+  - m_State: {fileID: 10}
+--- !u!1107 &200
+AnimatorStateMachine:
+  m_DefaultState: {fileID: 20}
+  m_ChildStates:
+  - m_State: {fileID: 20}
+--- !u!1102 &10
+AnimatorState:
+  m_Motion: {fileID: -74}
+--- !u!1102 &20
+AnimatorState:
+  m_Motion: {fileID: 206}
+  m_Transitions:
+  - {fileID: 30}
+--- !u!1101 &30
+AnimatorStateTransition:
+  m_DstState: {fileID: 20}
+  m_Conditions: []
+--- !u!206 &206
+BlendTree:
+  m_Childs:
+  - m_Motion: {fileID: -74}
+  - m_Motion: {fileID: 74}
+  - m_Motion: {fileID: 0}
+  - m_Motion: {fileID: 74, guid: ffeeddccbbaa99887766554433221100}
+  - m_Motion: {fileID: 74}
+""";
+        foreach (long id in new long[] { -74, 74 })
+            yaml += $"\n--- !u!74 &{id}\nAnimationClip:\n  m_Name: Clip{id}\n  m_FloatCurves:\n  - attribute: blendShape.Smile\n    path: Face/Body\n    classID: 137\n    curve:\n      m_Curve:\n      - time: 0\n        value: {(id < 0 ? 25 : 75)}\n";
+        File.WriteAllText(assetPath, yaml);
+        using (var package = UnityPackage.Open(prefab))
+        {
+            var descriptor = UnityYaml.ParseFlatDocument($"baseAnimationLayers:\n- type: 5\n  animatorController: {{fileID: 91, guid: {guid}}}\n");
+            var avatar = new VrchatAvatar();
+            VrchatAnimatorFaceParser.Apply(package, descriptor, avatar);
+            Check(avatar.BaseExpressionInitialValues.TryGetValue(new("Face/Body", "Smile"), out float value) && value == .25f,
+                "YAML same-file clip reaches Animator base-expression parsing");
+            var expressions = VrchatExpressionParser.Parse(package, descriptor);
+            Check(expressions.Clips.Count == 2 && expressions.Clips.Select(c => c.Curves.Single().Keys.Single().Value).Order().SequenceEqual(new[] { .25f, .75f }),
+                "YAML direct and BlendTree clips reach FaceEmo with distinct subasset identities");
+            var scene = package.ReadController(descriptor["baseAnimationLayers"].Items[0]["animatorController"]);
+            Check(scene.Doc(100).Root["m_DefaultState"].Guid == null && scene.Doc(20).Root["m_Motion"].Guid == null &&
+                scene.Doc(20).Root["m_Transitions"].Items[0].Guid == null && scene.Doc(30).Root["m_DstState"].Guid == null,
+                "YAML states, transitions and BlendTrees keep local identities");
+            var children = scene.Doc(206).Root["m_Childs"].Items;
+            Check(children[0]["m_Motion"].Guid == guid && children[0]["m_Motion"].FileID == -74 &&
+                children[2]["m_Motion"].Guid == null && children[3]["m_Motion"].Guid == "ffeeddccbbaa99887766554433221100",
+                "YAML clip qualification preserves signed IDs, null and external references");
+        }
+        Check(File.ReadAllText(assetPath) == yaml, "source YAML animation asset remains unchanged");
+        Console.WriteLine("PASS: YAML native animation clips, FaceEmo and local graph references");
     }
 
     private static TypeTreeType TypeTree(AssetTypeTemplateField root, int id)

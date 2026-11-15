@@ -66,6 +66,10 @@ public sealed partial class UnityPackage
                         RawDocuments(source).FirstOrDefault(d => d.FileId == id)?.ClassId ?? 0;
                     if (type is 21 or 28)
                         node.Map["guid"] = new() { ScalarValue = $"{source.Guid}@{id}" };
+                    else if (type == 74 && node.Guid == null)
+                        // YAML stores same-file clips as local PPtrs; clip readers need the
+                        // containing asset just like binary references. Graph nodes stay local.
+                        node.Map["guid"] = new() { ScalarValue = source.Guid };
                 }
                 return;
             }
