@@ -193,6 +193,19 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   コピーの親がローカル skeleton の骨で、FBX の skin bone と完全な path が一致するときは、
   prefab Transform identity と imported bone target を保持して既存の骨 Slot を使う。
   骨の下に追加された attachment だけを生成し、別の skeleton chain を作らない。
+  unpack済み骨格の通常のTransform文書に保存された位置・回転・スケールも保持する。
+  PhysBoneやskinから直接参照されないArmatureなどの親を含め、skin骨またはその祖先であることと
+  元モデルの完全なpathが一致することを確認して `AuthoredBoneTransforms` に収集する。
+  合成済みPrefabを読むため、Variantの上書きも反映し、省略フィールドはimport値を残す。
+  Assimp補助ノードの折り畳みと配置の完了後、primary wrapperの折り畳み・MA統合・IK設定の前に適用する。
+  FBXのmesh・bindposeを元の単位で保持するため、位置だけをそのモデルのimport scaleで割り、
+  wrapperによるメートル補正を維持する。回転・スケールには単位倍率を掛けない。
+  主骨格の最上位ノードまで保存されたunpacked姿勢では、hips→headからの上方向推定を行わない。
+  推定補正を重ねるとUnityで設定した胴体の傾きまで変わってしまう。
+  MANUKAのNDMFベイク済みPrefabは、Headの1.15倍拡縮や脚・胴体のTRSがFBXから変更された回帰例。
+  `PrefabInputSmoke` / `AuthoredBoneTransformChecks` に加え、`PrefabSceneSmoke --native-package` は
+  元YAMLから独立に階層行列を組み、保存パッケージの使用骨のrenderer相対基底と比較する。
+  生成meshの頂点・shape・bindposeと、FBX由来meshの骨index対応も確認する。
   imported bone を親として再利用するときも model GUID と authored active state を保持し、
   static attachment の import scale を親モデル分で補正して、既存の骨 Slot へ active state を適用する。
   コピーの skin bone は全 renderer と親 Slot の生成後に prefab Transform identity を優先して解決する。

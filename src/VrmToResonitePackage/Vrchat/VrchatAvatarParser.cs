@@ -3136,6 +3136,28 @@ public static class VrchatAvatarParser
             var included = IncludedPrefabObjects(package, guid, scene, avatar, modelResolvers, prefabScenes);
             if (guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
             ParsePhysBones(scene, included, avatar, guid, package);
+            // A saved unpacked rig carries its pose in ordinary Transform documents,
+            // not FBX property modifications. Collect all verified skeleton nodes,
+            // even when no renderer, PhysBone or eye directly references them.
+            foreach (var transform in scene.Documents.Values.Where(d => d.ClassId == 4 && !d.Stripped &&
+                         included.Contains(d.Root?["m_GameObject"]?.FileID ?? 0)))
+            {
+                var root = transform.Root;
+                var position = root["m_LocalPosition"];
+                var rotation = root["m_LocalRotation"];
+                var scale = root["m_LocalScale"];
+                if (position == null && rotation == null && scale == null) continue;
+                var placement = new FbxPlacement();
+                CaptureLocalPlacementParents(package, scene, guid, transform.FileId, placement,
+                    SelectLocalSkeletonModel(package, scene, avatar.FbxGuid), modelResolvers,
+                    includeSkeletonAncestors: true);
+                var imported = placement.ParentTransforms.FirstOrDefault();
+                if (imported?.ImportedBone == null || imported.Key != $"{guid}:{transform.FileId}") continue;
+                avatar.AuthoredBoneTransforms[imported.ImportedBone] = new(
+                    position == null ? null : new Vec3(position.Vec("x"), position.Vec("y"), position.Vec("z")),
+                    rotation == null ? null : new Quat(rotation.Vec("x"), rotation.Vec("y"), rotation.Vec("z"), rotation.Vec("w", 1)),
+                    scale == null ? null : new Vec3(scale.Vec("x", 1), scale.Vec("y", 1), scale.Vec("z", 1)));
+            }
         }
         CaptureTargetPlacements(package, sourceGuid, avatar, sourceSubtree, scenes,
             avatar.PhysBones.SelectMany(b => b.IgnoreBoneTargets

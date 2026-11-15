@@ -383,6 +383,31 @@ internal static class VrchatSceneSetup
         }
     }
 
+    public static void ApplyAuthoredBoneTransforms(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<Slot, string> importedPaths)
+    {
+        int applied = 0;
+        foreach (var (target, transform) in avatar.AuthoredBoneTransforms)
+        {
+            Slot slot = ResolveImportedTarget(target, sources, importedPaths);
+            if (slot == null) throw new InvalidDataException($"Cannot resolve authored skeleton pose: {target.Path}");
+            // FBX mesh/bind poses and node translations remain in source units. The
+            // wrapper applies the meter conversion; keep that basis when replacing
+            // Unity's meter-valued translation. Rotation and scale are dimensionless.
+            float units = target.FbxGuid == avatar.FbxGuid ? avatar.FbxImportScale :
+                avatar.AdditionalFbxs.FirstOrDefault(model => model.Guid == target.FbxGuid)?.ImportScale ?? 1;
+            if (!float.IsFinite(units) || units <= 0) throw new InvalidDataException("Invalid skeleton import scale.");
+            if (transform.Position is { } position)
+                slot.LocalPosition = new float3(position.X, position.Y, position.Z) / units;
+            if (transform.Rotation is { } rotation)
+                slot.LocalRotation = new floatQ(rotation.X, rotation.Y, rotation.Z, rotation.W);
+            if (transform.Scale is { } scale)
+                slot.LocalScale = new float3(scale.X, scale.Y, scale.Z);
+            applied++;
+        }
+        if (applied > 0) UniLog.Log($"Prefab authored bone transforms: {applied} node(s) applied.");
+    }
+
     public static Dictionary<Slot, string> CaptureImportedObjects(IReadOnlyDictionary<string, Slot> roots)
     {
         var sources = new Dictionary<Slot, string>();

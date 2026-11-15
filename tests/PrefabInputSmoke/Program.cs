@@ -1367,6 +1367,8 @@ PolygonVertexIndex: *6 { a: 0,1,-3,0,1,-3 }
                  (130, "Right", 101), (140, "Shared", 131), (150, "Attachment", 121) })
         local += $"--- !u!1 &{id}\nGameObject:\n  m_Name: {name}\n--- !u!4 &{id + 1}\nTransform:\n  m_GameObject: {{fileID: {id}}}\n  m_Father: {{fileID: {parent}}}\n";
     local = local.Replace("m_Name: Shared\n", "m_Name: Shared\n  m_IsActive: 0\n");
+    local = local.Replace("m_GameObject: {fileID: 110}\n", "m_GameObject: {fileID: 110}\n  m_LocalRotation: {x: 0, y: 0, z: 0.6, w: 0.8}\n")
+        .Replace("m_GameObject: {fileID: 120}\n", "m_GameObject: {fileID: 120}\n  m_LocalPosition: {x: 0.12, y: 0.34, z: -0.56}\n  m_LocalScale: {x: 1.15, y: 0.9, z: -1}\n");
     string accessory = RendererPrefab(guid, "Untagged") + "\n  m_Bones:\n  - {fileID: 121}\n  - {fileID: 141}\n" + local;
     accessory += $$"""
 
@@ -1400,6 +1402,16 @@ MeshRenderer:
     Check((string)placementType.GetField("ParentFbxGuid")!.GetValue(placement)! == guid,
         "Imported bone parent carries its model identity for static import scale correction");
     Check(!parents[0].Active, "Imported bone parent preserves authored inactive state");
+    var authoredAvatar = new VrchatAvatar { FbxGuid = guid };
+    typeof(VrchatAvatarParser).GetMethod("ParsePhysics", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+        .Invoke(null, new object[] { accessoryPackage, accessoryPackage.InputPrefab.Guid, authoredAvatar, null });
+    var authoredBone = authoredAvatar.AuthoredBoneTransforms.Single(pair => pair.Key.Path == "Left/Shared");
+    Check(authoredBone.Value.Position == new System.Numerics.Vector3(.12f, .34f, -.56f) &&
+          authoredBone.Value.Scale == new System.Numerics.Vector3(1.15f, .9f, -1) && authoredBone.Value.Rotation == null &&
+          authoredAvatar.AuthoredBoneTransforms.Single(pair => pair.Key.Path == "Left").Value.Rotation ==
+              new System.Numerics.Quaternion(0, 0, .6f, .8f) &&
+          authoredAvatar.AuthoredBoneTransforms.Count == 2,
+        "Unpacked bone TRS includes unweighted ancestors without physics, preserves missing fields and full-path identity");
     string physics = accessory;
     foreach (var (id, name, parent) in new[] { (300, "PhysicsHelper", 121), (310, "Tip", 301), (320, "ColliderHelper", 101) })
         physics += $"\n--- !u!1 &{id}\nGameObject:\n  m_Name: {name}\n--- !u!4 &{id + 1}\nTransform:\n  m_GameObject: {{fileID: {id}}}\n  m_Father: {{fileID: {parent}}}\n  m_LocalPosition: {{x: 0, y: 2, z: 0}}\n";
