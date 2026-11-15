@@ -11,6 +11,7 @@ namespace VrmToResonitePackage.Unity;
 /// </summary>
 public sealed class YamlNode
 {
+    public byte[] Bytes { get; init; }
     public string ScalarValue { get; init; }
     public Dictionary<string, YamlNode> Map { get; init; }
     public List<YamlNode> Seq { get; init; }

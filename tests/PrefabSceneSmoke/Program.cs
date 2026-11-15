@@ -7,8 +7,11 @@ using Renderite.Shared;
 using VrmToResonitePackage.Unity;
 using VrmToResonitePackage.Vrchat;
 
-if (args.Length != 2) throw new ArgumentException("Usage: PrefabSceneSmoke <FBX path> <skinned renderer with blendshapes>");
-string fbxPath = Path.GetFullPath(args[0]);
+bool nativePackage = args.Length == 3 && args[0] == "--native-package";
+if (args.Length != 2 && !nativePackage) throw new ArgumentException("Usage: PrefabSceneSmoke <FBX path> <skinned renderer with blendshapes> | --native-package <prefab> <package>");
+string fbxPath = nativePackage ? null : Path.GetFullPath(args[0]);
+string nativePrefab = nativePackage ? Path.GetFullPath(args[1]) : null;
+string nativeOutput = nativePackage ? Path.GetFullPath(args[2]) : null;
 string resonite = Environment.GetEnvironmentVariable("RESONITE_PATH")
     ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite";
 typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.ResoniteLocator")!
@@ -16,7 +19,7 @@ typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.ResoniteLocator")!
 Environment.CurrentDirectory = resonite;
 try
 {
-    await Run(fbxPath, args[1]);
+    await Run(fbxPath, args[1], nativePrefab, nativeOutput);
     Console.WriteLine("Prefab scene smoke checks passed.");
     // This is a standalone test process; do not run the engine's asynchronous shutdown
     // callbacks after disposing its services (headless shutdown can throw on background threads).
@@ -29,7 +32,7 @@ catch (Exception error)
 }
 
 [MethodImpl(MethodImplOptions.NoInlining)]
-static async Task Run(string fbxPath, string rendererName)
+static async Task Run(string fbxPath, string rendererName, string nativePrefab, string nativeOutput)
 {
     string temp = Path.Combine(Path.GetTempPath(), "ResoPonSceneSmoke", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(Path.Combine(temp, "Assets"));
@@ -57,7 +60,13 @@ static async Task Run(string fbxPath, string rendererName)
     {
         await default(ToWorld);
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
+        if (nativePrefab != null)
+        {
+            await NativeMeshSceneChecks.CheckReal(root, nativePrefab, nativeOutput);
+            return;
+        }
         ViewpointChecks.Run(root);
+        await NativeMeshSceneChecks.Run(root, temp);
         await MaterialLayerChecks.Run(assets, temp);
         await TransparentMaterialChecks.Run(assets, temp);
         await EmissionUvChecks.Run(assets, temp);
@@ -1127,6 +1136,8 @@ static async Task Run(string fbxPath, string rendererName)
               rightSource.GetComponent<MeshRenderer>() == null && !rightSource.IsDestroyed,
             "Removed renderer leaves its authored object and child placement intact and cannot reappear as an imported template");
     });
+
+    if (nativePrefab != null) return;
 
     // Exercise the production parser/importer/exporter in this isolated engine instance.
     // No Unity Editor, generated Library folder, or user application data is required.

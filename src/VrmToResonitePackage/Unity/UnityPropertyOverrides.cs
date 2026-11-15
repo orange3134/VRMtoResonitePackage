@@ -10,6 +10,7 @@ internal static class UnityPropertyOverrides
     public static YamlNode Clone(YamlNode node) => node == null ? null : new YamlNode
     {
         ScalarValue = node.ScalarValue,
+        Bytes = node.Bytes?.ToArray(),
         Map = node.Map?.ToDictionary(pair => pair.Key, pair => Clone(pair.Value)),
         Seq = node.Seq?.Select(Clone).ToList(),
     };

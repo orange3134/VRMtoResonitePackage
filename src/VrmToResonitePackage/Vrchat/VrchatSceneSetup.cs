@@ -155,7 +155,7 @@ internal static class VrchatSceneSetup
             slot.LocalPosition = new float3(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z);
             slot.LocalRotation = new floatQ(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W);
             slot.LocalScale = new float3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z);
-            if (!copy.IsSkinned && !copy.RendererRemoved)
+            if (!copy.IsSkinned && !copy.RendererRemoved && copy.GeneratedMesh == null)
             {
                 float correction = ImportScale(copy.FbxGuid) / ImportScale(copy.ParentFbxGuid);
                 if (!float.IsFinite(correction) || correction == 0)

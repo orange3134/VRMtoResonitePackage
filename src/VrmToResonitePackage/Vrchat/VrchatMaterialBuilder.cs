@@ -497,12 +497,11 @@ internal static partial class VrchatMaterialBuilder
         }
 
         UnityAsset matAsset = package.ByGuid(guid);
-        string text = package.ReadText(matAsset);
-        if (text == null)
+        if (matAsset?.HasContent != true)
         {
             return null;
         }
-        YamlDocument matDoc = UnityYaml.ParseDocuments(text).FirstOrDefault(d => d.TypeName == "Material");
+        YamlDocument matDoc = package.ReadScene(matAsset).Documents.Values.FirstOrDefault(d => d.TypeName == "Material");
         if (matDoc == null)
         {
             return null;

@@ -89,6 +89,44 @@ CLIの `--avatar` を使う。出力名は入力package名ではなく選択し�
   composition の候補探索はこの外側の Variant も扱う。Descriptor の元FBX数と全体のFBX数が
   異なることだけで、衣装を追加した Variant を変換不可にしない。
 
+## Unityで生成したネイティブアセット
+
+NDMF Manual Bake等で保存した`.asset`は、YAMLだけでなくUnity SerializedFileのバイナリ形式でも
+読み込む。`UnitySerializedAssets`がAssetsTools.NETとファイル内のtype treeを使い、既存の
+`YamlDocument`/`YamlNode`へ変換する。Unity Editor、Libraryのインポート結果、外部class databaseは不要。
+元のファイルは変更しない。型ツリーを含まないバイナリは対応外として停止する。
+
+- 識別子はGUIDと符号付き64bitのfileID。ファイル先頭のMeshやMaterialを代用しない。
+  バイナリPPtrの外部参照はexternal tableのGUIDへ、同じファイル内のClip等は元のGUIDとfileIDへ解決する。
+  Animatorのstate・transition・BlendTreeは既存グラフが扱うローカルfileIDを保持する。
+- 材質・Texture2Dは内部キー`GUID@fileID`で既存のキャッシュへ接続する。material variantの親や
+  texture参照も同じ方式で区別する。YAMLサブアセットも同様に扱う。
+- ControllerはDescriptorのfileIDで選び、同一ファイルの別Controllerを混ぜない。
+  ClipキャッシュもfileIDを含める。対応済みの表情推定・FaceEmo解析へ渡すが、Animator全体を実行するものではない。
+- `UnityNativeMesh`はUnity 2019以降の非圧縮Meshを直接MeshXへ変換する。
+  複数vertex streamの16byte境界、頂点channelのformat/offset/dimension、16/32bit index、
+  submeshのfirstByte/baseVertexを扱う。位置・法線・tangent・頂点色・UV0〜3、bindpose、
+  最大4本のbone weight、疎なblendshape deltaと複数frameを保持する。
+  1本のbone indexだけを保存するrigid skinでは、省略されたweightを1とする。
+- 座標・三角形の順序・bindposeはUnityのローカル値を使い、FBXの単位補正を重ねない。
+  `modular-avatar-resonite/Editor/SerializeAvatar/AvatarSerializer.cs`の`TranslateMesh`と、
+  `Resonite~/ResoniteHook/Puppeteer/conversion/MeshTranslator.cs`のMeshX変換を参照した。
+  frame weightは100で割り、blendshapeのnormal/tangent flagは同実装と同様に統一する。
+- `VrchatGeneratedMeshes`で一時templateを生成し、既存のMeshCopy構築・Prefab階層復元・明示的なBindに接続する。
+  bone番号は生成MeshのbindposeとRendererの`m_Bones`の順序を保持し、名前による再並べ替えはしない。
+  顔Descriptorも元FBXの同名メッシュへ戻さず、生成RendererのPrefab identityを使う。
+  root Animatorが参照するhumanoid FBXは引き続きリグ情報の取得に必要。
+- Texture2DはRGB24/RGBA32/ARGB32/BGRA32/Alpha8/R8の内蔵画素を一時PNGへ変換する。
+  上下反転、straight alpha、color space、wrap/filter設定を保持して既存の材質・ベイク処理へ渡す。
+  圧縮／streaming texture、圧縮／streaming Mesh、triangle以外のtopologyは現在対応外。
+  対応外形式・壊れたバッファ・欠落したMesh subassetは、元FBXへ置き換えずエラーにする。
+
+回帰ケースはManual Bake済みMANUKAの衣装25Mesh。`PrefabInputSmoke/NativeAssetChecks`は
+合成バイナリとYAMLで複数subasset、材質map、同一ファイルの参照、Texture2Dの上下・alpha、
+複数stream、indexの基点、rigid/2本skin、複数blendshape frameを検証する。
+`PrefabSceneSmoke/NativeMeshSceneChecks`は同名boneの接続、static/skinnedでのmesh共有とpackage再読込を確認する。
+実アバターの保存メッシュ比較は同テストの`--native-package <prefab> <resonitepackage>`を使う。
+
 ## prefab参照とstable fileID
 
 Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは

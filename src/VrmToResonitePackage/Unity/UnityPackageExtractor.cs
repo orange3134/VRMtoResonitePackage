@@ -6,6 +6,7 @@ namespace VrmToResonitePackage.Unity;
 /// <summary>One asset inside a .unitypackage, keyed by its Unity GUID.</summary>
 public sealed class UnityAsset
 {
+    internal long? SubAssetId { get; init; }
     public string Guid { get; init; }
 
     /// <summary>Original asset GUID, retained when Guid identifies a parsing occurrence.</summary>
@@ -33,7 +34,7 @@ public sealed class UnityAsset
 /// entries) to a temporary directory and exposes the contained assets by GUID, extension and path.
 /// Disposing removes the temporary directory.
 /// </summary>
-public sealed class UnityPackage : IDisposable
+public sealed partial class UnityPackage : IDisposable
 {
     private readonly string _root;
     private readonly Dictionary<string, UnityAsset> _byGuid;
@@ -128,7 +129,7 @@ public sealed class UnityPackage : IDisposable
     }
 
     public UnityAsset ByGuid(string guid)
-        => guid != null && _byGuid.TryGetValue(guid, out UnityAsset a) ? a : null;
+        => guid != null && _byGuid.TryGetValue(guid, out UnityAsset a) ? a : ResolveSubAsset(guid);
 
     internal UnityModelFileIdResolver ModelFileIds(string guid)
     {
@@ -154,7 +155,7 @@ public sealed class UnityPackage : IDisposable
     }
 
     public IEnumerable<UnityAsset> ByExtension(string extensionWithDot)
-        => _byGuid.Values.Where(a => a.Extension == extensionWithDot.ToLowerInvariant());
+        => _byGuid.Values.Where(a => a.Extension == extensionWithDot.ToLowerInvariant()).ToArray();
 
     public string ReadText(UnityAsset asset)
     {
@@ -184,7 +185,7 @@ public sealed class UnityPackage : IDisposable
         if (PrefabGraph?.Scene(asset.Guid) is {} resolved) return resolved;
         if (!_sceneByGuid.TryGetValue(asset.Guid, out UnityScene scene))
         {
-            scene = UnityScene.Parse(ReadText(asset));
+            scene = ReadAssetScene(asset);
             _sceneByGuid.Add(asset.Guid, scene);
         }
         return scene;
@@ -246,8 +247,11 @@ public sealed class UnityPackage : IDisposable
 
     public void Dispose()
     {
+        foreach (var file in _serializedFiles.Values) file?.Dispose();
         try
         {
+            if (_nativeAssetDirectory != null && Directory.Exists(_nativeAssetDirectory))
+                Directory.Delete(_nativeAssetDirectory, recursive: true);
             if (Directory.Exists(_root))
             {
                 Directory.Delete(_root, recursive: true);

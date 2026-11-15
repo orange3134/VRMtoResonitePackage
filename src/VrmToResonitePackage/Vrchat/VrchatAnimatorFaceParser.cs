@@ -21,8 +21,8 @@ public static class VrchatAnimatorFaceParser
             // SDK FX layer. Gesture/Action animations must not become always-on face drivers.
             if (layer["type"]?.AsInt() != 5 || layer["isDefault"]?.AsBool() == true) continue;
             UnityAsset asset = package.ByGuid(layer["animatorController"]?.Guid);
-            if (asset?.Extension != ".controller" || !asset.HasContent) continue;
-            UnityScene controller = package.ReadScene(asset);
+            UnityScene controller = package.ReadController(layer["animatorController"]);
+            if (controller == null) continue;
             YamlNode settings = controller.Documents.Values.FirstOrDefault(d => d.ClassId == 91)?.Root;
             var defaults = new Dictionary<string, float>(StringComparer.Ordinal);
             foreach (YamlNode parameter in settings?["m_AnimatorParameters"]?.Seq ?? new())
@@ -294,17 +294,19 @@ public static class VrchatAnimatorFaceParser
         {
             string guid = motion?.Guid;
             if (guid == null) return null;
-            if (clips.TryGetValue(guid, out var cached)) return cached;
+            string key = guid + ":" + motion.FileID;
+            if (clips.TryGetValue(key, out var cached)) return cached;
             UnityAsset asset = package.ByGuid(guid);
             // SDK proxy_hands_idle contains only humanoid hand-muscle curves. Packages
             // commonly omit SDK assets. Recognize this exact missing reference, never
             // an arbitrary missing motion or a packaged asset reusing the same GUID.
             if (asset?.HasContent != true && motion.FileID == 7400000 &&
                 guid.Equals("14980fc5fe40191418954549174fe63e", StringComparison.OrdinalIgnoreCase))
-                return clips[guid] = UnityYaml.ParseFlatDocument("m_FloatCurves: []");
-            YamlNode clip = asset?.Extension == ".anim" && asset.HasContent
-                ? package.ReadScene(asset).Doc(motion.FileID ?? 7400000)?.Root : null;
-            clips[guid] = clip;
+                return clips[key] = UnityYaml.ParseFlatDocument("m_FloatCurves: []");
+            var document = asset?.HasContent == true && asset.Extension is ".anim" or ".asset"
+                ? package.ReadScene(asset).Doc(motion.FileID ?? 7400000) : null;
+            YamlNode clip = document?.ClassId == 74 ? document.Root : null;
+            clips[key] = clip;
             return clip;
         }
     }

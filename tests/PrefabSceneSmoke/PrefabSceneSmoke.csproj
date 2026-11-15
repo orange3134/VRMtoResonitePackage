@@ -8,6 +8,7 @@
     <ResonitePath Condition="'$(ResonitePath)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Resonite</ResonitePath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../PrefabInputSmoke/NativeAssetChecks.cs" Link="NativeAssetChecks.cs" />
     <ProjectReference Include="../../src/VrmToResonitePackage/VrmToResonitePackage.csproj" />
     <Reference Include="FrooxEngine"><HintPath>$(ResonitePath)/FrooxEngine.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="FrooxEngine.Store"><HintPath>$(ResonitePath)/FrooxEngine.Store.dll</HintPath><Private>false</Private></Reference>
