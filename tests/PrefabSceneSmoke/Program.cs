@@ -73,6 +73,7 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
         await EmissionBakeChecks.Run(assets, temp);
         await OutlineExclusionSceneChecks.Run(root, temp);
         await MixedScaleSkinChecks.Run(root);
+        AuthoredBoneTransformChecks.Run(root);
         await FbxTransformHelperChecks.Run(root);
         {
             var exportRoot = root.AddSlot("Descriptor placement regression");

@@ -473,7 +473,13 @@ internal static class Converter
                 var alignmentNodes = model.HumanBones.Values.Distinct().Where(model.NodeTargets.ContainsKey)
                     .ToDictionary(index => index, index => Vrchat.VrchatSceneSetup.ResolveImportedTarget(
                         model.NodeTargets[index], importedMeshSources, importedNodePaths, prefabSlots));
-                AlignVrchatImportUp(importRoot, model, alignmentNodes);
+                // Saved Unity skeleton poses already use Unity's world axes. Inferring
+                // up from hips/head would straighten an intentionally authored lean.
+                bool authoredPrimaryPose = avatar.HasUnpackedRootPlacement && avatar.AuthoredBoneTransforms.Keys.Any(
+                    target => target.FbxGuid == avatar.FbxGuid &&
+                        !Unity.UnityModelPath.Normalize(target.Path).Contains('/'));
+                if (!authoredPrimaryPose)
+                    AlignVrchatImportUp(importRoot, model, alignmentNodes);
                 // Capture the SDK's unscaled world-axis offset through our import alignment
                 // before either the descriptor wrapper or the alignment root is collapsed.
                 float3? viewPosition = Vrchat.VrchatSceneSetup.ResolveViewPosition(avatar, descriptorRoot, importRoot);
@@ -718,6 +724,7 @@ internal static class Converter
         // still on its wrapper. A later override would erase those folded factors.
         CollapseAssimpFbxTransformBones(importRoot);
         Vrchat.VrchatSceneSetup.ApplyModelObjectScales(avatar, importedMeshSources, importedNodePaths);
+        Vrchat.VrchatSceneSetup.ApplyAuthoredBoneTransforms(avatar, importedMeshSources, importedNodePaths);
         return authoredObjects.GetValueOrDefault(avatar.DescriptorRootKey ?? "") ??
             avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms).Where(t => t.GameObjectKey == avatar.DescriptorRootKey)
                 .Select(t => slots.GetValueOrDefault(t.Key)).FirstOrDefault(slot => slot != null) ??

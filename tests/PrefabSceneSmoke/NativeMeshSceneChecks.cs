@@ -12,8 +12,20 @@ internal static class NativeMeshSceneChecks
     {
         using var package = UnityPackage.Open(prefab);
         var avatar = VrchatAvatarParser.Parse(package);
-        var expected = avatar.MeshCopies.Where(c => c.GeneratedMesh != null && !c.RendererRemoved).ToArray();
-        if (expected.Length == 0) throw new Exception("No generated meshes in test avatar.");
+        var expected = avatar.MeshCopies.Where(c => c.IsSkinned && !c.RendererRemoved).ToArray();
+        if (!expected.Any(c => c.GeneratedMesh != null)) throw new Exception("No generated meshes in test avatar.");
+        var sourceScene = package.ReadScene(package.InputPrefab);
+        var sourceWorld = new Dictionary<long, System.Numerics.Matrix4x4>();
+        System.Numerics.Matrix4x4 World(long id)
+        {
+            if (id == 0) return System.Numerics.Matrix4x4.Identity;
+            if (sourceWorld.TryGetValue(id, out var cached)) return cached;
+            var document = sourceScene.Doc(id) ?? throw new Exception("Missing source Transform: " + id);
+            var local = sourceScene.GetLocalTransform(document.Root["m_GameObject"].FileID.Value);
+            return sourceWorld[id] = System.Numerics.Matrix4x4.CreateScale(local.Scale) *
+                System.Numerics.Matrix4x4.CreateFromQuaternion(local.Rotation) *
+                System.Numerics.Matrix4x4.CreateTranslation(local.Position) * World(document.Root["m_Father"].FileID ?? 0);
+        }
         await PackageImporter.ImportPackage(output, parent);
         await default(ToWorld);
         var renderers = parent.GetComponentsInChildren<SkinnedMeshRenderer>().ToArray();
@@ -22,11 +34,14 @@ internal static class NativeMeshSceneChecks
         {
             var renderer = renderers.Single(r => r.Slot.Name == copy.Name);
             var actual = renderer.Mesh.Asset?.Data ?? throw new Exception("Mesh not loaded: " + copy.Name);
-            var source = UnityNativeMesh.Decode(copy.GeneratedMesh);
-            if (actual.VertexCount != source.VertexCount || actual.BoneCount != source.BoneCount ||
+            var source = copy.GeneratedMesh == null ? null : UnityNativeMesh.Decode(copy.GeneratedMesh);
+            if (source != null && (actual.VertexCount != source.VertexCount || actual.BoneCount != source.BoneCount ||
                 !actual.RawPositions.Take(actual.VertexCount).SequenceEqual(source.RawPositions.Take(source.VertexCount)) ||
-                !actual.BlendShapes.Select(s => s.Name).SequenceEqual(source.BlendShapes.Select(s => s.Name)))
+                !actual.BlendShapes.Select(s => s.Name).SequenceEqual(source.BlendShapes.Select(s => s.Name))))
                 throw new Exception("Saved generated geometry/morph mismatch: " + copy.Name);
+            var indices = source != null ? Enumerable.Range(0, actual.BoneCount).ToArray() :
+                VrchatSceneSetup.MapSourceBoneIndices(copy.SourceBoneNames,
+                    Enumerable.Range(0, actual.BoneCount).Select(i => actual.GetBone(i).Name).ToArray());
             var used = new HashSet<int>();
             for (int v = 0; v < actual.VertexCount; v++)
             {
@@ -37,11 +52,36 @@ internal static class NativeMeshSceneChecks
                 if (binding.weight3 > 0) used.Add(binding.boneIndex3);
             }
             foreach (int i in used)
-                if (i >= renderer.Bones.Count || renderer.Bones[i] == null || renderer.Bones[i].Name != copy.BoneTargets[i].Name)
+                if (i >= renderer.Bones.Count || renderer.Bones[i] == null || renderer.Bones[i].Name != copy.BoneTargets[indices[i]].Name)
                     throw new Exception($"Saved generated skin mismatch: {copy.Name}, bone {i}");
-            Console.WriteLine($"PASS: saved generated mesh {copy.Name}, vertices={actual.VertexCount}, bones={actual.BoneCount}, weightedBones={used.Count}, shapes={actual.BlendShapes.Count()}");
+            // Independently reconstruct the Unity hierarchy from the original YAML,
+            // not the converter's captured pose records. Compare affine bone bases
+            // in renderer space, so export wrappers and eye pivots cannot hide errors.
+            long rendererTransform = sourceScene.TransformOfGameObject(copy.GameObjectFileId)!.FileId;
+            if (!System.Numerics.Matrix4x4.Invert(World(rendererTransform), out var rendererInverse))
+                throw new Exception("Singular source renderer transform");
+            float maxError = 0;
+            foreach (int i in used)
+            {
+                var basis = World(copy.BoneTargets[indices[i]].TransformFileId) * rendererInverse;
+                foreach (var point in new[] { System.Numerics.Vector3.Zero, System.Numerics.Vector3.UnitX,
+                             System.Numerics.Vector3.UnitY, System.Numerics.Vector3.UnitZ })
+                {
+                    var wanted = System.Numerics.Vector3.Transform(point, basis);
+                    var got = renderer.Slot.GlobalPointToLocal(renderer.Bones[i].LocalPointToGlobal(new float3(point.X, point.Y, point.Z)));
+                    float error = MathX.Distance(got, new float3(wanted.X, wanted.Y, wanted.Z));
+                    maxError = Math.Max(maxError, error);
+                    if (error > .0001f) throw new Exception($"Saved authored bone pose mismatch: {copy.Name}/{copy.BoneTargets[indices[i]].Name}, error={error}, expected={wanted}, actual={got}");
+                    if (source != null && MathX.Distance(
+                            actual.GetBone(i).BindPose.TransformPoint3x4(new float3(point.X, point.Y, point.Z)),
+                            source.GetBone(i).BindPose.TransformPoint3x4(new float3(point.X, point.Y, point.Z))) > .00001f)
+                        throw new Exception($"Saved generated bind pose mismatch: {copy.Name}, bone {i}");
+                }
+            }
+            Console.WriteLine($"PASS: saved {(source == null ? "FBX" : "generated")} mesh {copy.Name}, vertices={actual.VertexCount}, bones={actual.BoneCount}, weightedBones={used.Count}, shapes={actual.BlendShapes.Count()}");
+            Console.WriteLine($"PASS: saved Unity bone transforms {copy.Name}, maximum affine basis error={maxError:G6}");
         }
-        Console.WriteLine($"PASS: {expected.Length} generated avatar meshes reloaded and compared with source assets");
+        Console.WriteLine($"PASS: {expected.Count(c => c.GeneratedMesh != null)} generated meshes and {expected.Length} skin poses reloaded and compared with source assets");
     }
 
     public static async Task Run(Slot parent, string temp)
