@@ -1,5 +1,10 @@
 Run from the repository root:
 
+`NativeAssetChecks` covers generated Unity binary/YAML subassets without Unity:
+fileID identity, same-file references, material maps, Texture2D orientation/alpha,
+vertex streams, half UVs, index offsets/baseVertex, rigid and weighted skinning,
+multi-frame sparse morphs, and invalid buffers. Fixtures stay in `.tmp_verify/native-assets`.
+
 ```powershell
 dotnet run --project tests/PrefabInputSmoke -c Release
 ```

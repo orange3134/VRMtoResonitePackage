@@ -14,7 +14,8 @@
 | lilToon | VrchatMainTextureBaker とレイヤー処理。lil_common_functions.hlsl 等の色補正・グラデーション・アルファマスク・合成 |
 | UniVRM / MToon | VrmParser の MToon 0.x → 1.0 変換。MToon10Migrator のシェーディング範囲・中心変換 |
 | Modular Avatar | VrchatSkinRetargeter の bind pose 補正。数式の互換実装と大規模なコード移植は区別し、参照元 MeshRetargeter のMIT通知を保持 |
-| Modular Avatar for Resonite | AvatarSetup の識別グラフ、SpringBoneSetup、MeshLoadingSetup、LoadingStandInSetup、LoadingFallback.png。構成・設定の移植と素材の再利用 |
+| Modular Avatar for Resonite | AvatarSetup の識別グラフ、SpringBoneSetup、MeshLoadingSetup、LoadingStandInSetup、LoadingFallback.png、UnityNativeMeshのMeshX変換規約。構成・設定の移植と素材の再利用 |
+| AssetsTools.NET | UnitySerializedAssetsのバイナリSerializedFile・type tree読み取り。NuGet 3.0.5を同梱しMIT通知と内包LZ4のBSD-2-Clause通知を保持 |
 | .NET | native application host。SelfContained=false でもEXEに含む。[公式ホストパッケージ](https://www.nuget.org/packages/Microsoft.NETCore.App.Host.win-x64/10.0.8)のMIT表示を確認 |
 | xxHash | UnityModelFileIdResolver.XxHash64 の round・merge・avalanche。Unity互換の符号付き4バイト末尾処理を持つ。参照実装のBSD-2-Clause通知を保持 |
 
@@ -28,7 +29,8 @@ Modular Avatar の `Editor/images` はMITの対象外だが、本アプリには
 
 ## 配布経路と検証
 
-- アプリに追加の NuGet PackageReference はない。FrooxEngine、AssimpNet 等は
+- AssetsTools.NETをNuGet PackageReferenceとして同梱する。単一ファイルpublishではEXEに含まれる。
+  FrooxEngine、AssimpNet 等は
   `Private=false` の参照で、利用者のResoniteから読み込み、配布に含めない。
 - .NET / WPF の共有ランタイムは別途インストールする。native host の通知は残す。
 - `THIRD-PARTY-NOTICES.md` は出力フォルダーへのコピーに加え、EXE内のリソースに埋め込む。

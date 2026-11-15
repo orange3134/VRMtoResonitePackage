@@ -1925,19 +1925,6 @@ public static class VrchatAvatarParser
             long go = scene.Doc(identity.Id)?.Root?["m_GameObject"]?.FileID ?? 0;
             long transform = scene.TransformOfGameObject(go)?.FileId ?? 0;
             if (transform == 0) return null;
-            // Baked standalone meshes retain the original imported FBX renderer rather
-            // than creating a mesh copy. Scope this fallback to the selected model and
-            // require a unique renderer path; unresolved references keep strict identity.
-            var mesh = scene.Doc(identity.Id)?.Root?["m_Mesh"];
-            if (package.ByGuid(mesh?.Guid)?.Extension == ".asset" && primaryFbxGuid != null)
-            {
-                var resolver = package.ModelFileIds(primaryFbxGuid);
-                string name = scene.GameObjectName(go);
-                var paths = resolver.RendererPathsUnder(0)
-                    .Where(path => path.Split('/')[^1] == name).ToArray();
-                if (paths.Length == 1)
-                    return new VrchatBoneTarget(primaryFbxGuid, name, paths[0]);
-            }
             return new VrchatBoneTarget(null, scene.GameObjectName(go), null, identity.Guid, transform);
         }
         return ResolveCopiedBoneTarget(package, identity.Guid, identity.Id, null, new(), new());
@@ -1952,6 +1939,12 @@ public static class VrchatAvatarParser
         if (reference.Guid != null)
         {
             var asset = package.ByGuid(reference.Guid);
+            if (asset?.Extension == ".asset")
+            {
+                var mesh = package.ReadAssetDocument(reference.Guid, id);
+                var channels = mesh?.ClassId == 43 ? mesh.Root["m_Shapes"]?["channels"]?.Items : null;
+                return channels != null && index >= 0 && index < channels.Count ? channels[index]["name"]?.AsString() : null;
+            }
             if (asset?.Extension == ".fbx")
             {
                 if (!resolvers.TryGetValue(reference.Guid, out var resolver))
@@ -2029,9 +2022,18 @@ public static class VrchatAvatarParser
             excluded.Contains(smr.Root["m_GameObject"]?.FileID ?? 0)) return;
         // Authored components are distinct from imported renderers even when their names
         // match. Preserve prefab/component identity for collection and state overrides.
-        if (!string.IsNullOrEmpty(rendererName) && package.ByGuid(fbxGuid)?.Extension == ".fbx")
+        var meshReference = scene.RendererMesh(smr);
+        if ((meshReference?.FileID ?? 0) == 0) return;
+        var generated = package.ByGuid(fbxGuid)?.Extension == ".asset"
+            ? package.ReadAssetDocument(fbxGuid, meshReference.FileID ?? 0) : null;
+        if (package.ByGuid(fbxGuid)?.Extension == ".asset" && generated == null)
+            throw new InvalidDataException($"Generated Unity Mesh subasset missing: {rendererName} ({fbxGuid}, {meshReference.FileID})");
+        if (generated != null && generated.ClassId != 43)
+            throw new InvalidDataException($"Renderer does not reference a Mesh: {rendererName}");
+        if (!string.IsNullOrEmpty(rendererName) && (generated != null || package.ByGuid(fbxGuid)?.Extension == ".fbx"))
         {
-            string sourceName = ResolveReferenceGameObjectName(package, scene, scene.RendererMesh(smr), modelResolvers);
+            string sourceName = generated?.Root["m_Name"]?.AsString() ??
+                ResolveReferenceGameObjectName(package, scene, meshReference, modelResolvers);
             if (!string.IsNullOrEmpty(sourceName) && (smr.Root["m_CorrespondingSourceObject"]?.FileID ?? 0) == 0 &&
                 avatar.ShouldKeepRenderer(fbxGuid, rendererName))
             {
@@ -2041,10 +2043,12 @@ public static class VrchatAvatarParser
                     smr.Root["m_Enabled"]?.AsBool(true) ?? true)
                 {
                     PrefabGuid = sceneGuid, RendererFileId = smr.FileId,
+                    GeneratedMesh = generated?.Root,
                     IsSkinned = smr.ClassId == 137,
                     GameObjectFileId = smr.Root["m_GameObject"]?.FileID ?? 0,
                     ReplaceSourceRenderer = replaceSourceRenderer,
-                    SourcePath = modelResolvers[fbxGuid].ResolveNodePath(scene.RendererMesh(smr).FileID ?? 0),
+                    SourcePath = generated != null ? generated.FileId.ToString() :
+                        modelResolvers[fbxGuid].ResolveNodePath(meshReference.FileID ?? 0),
                 };
                 var transform = scene.TransformOfGameObject(smr.Root["m_GameObject"]?.FileID ?? 0)?.Root;
                 if (transform != null)
@@ -2066,13 +2070,19 @@ public static class VrchatAvatarParser
                     copy.ParentTransforms.AddRange(placement.ParentTransforms);
                 }
                 var bones = smr.Root["m_Bones"]?.Seq;
-                var resolver = modelResolvers[fbxGuid];
-                string[] originalBones = copy.SourcePath != null
+                if (generated != null && copy.IsSkinned && bones == null && (generated.Root["m_BindPose"]?.Items.Count ?? 0) > 0)
+                    throw new InvalidDataException($"Generated skinned renderer has no bone references: {rendererName}");
+                var resolver = generated == null ? modelResolvers[fbxGuid] : null;
+                string[] originalBones = generated != null
+                    ? Enumerable.Range(0, generated.Root["m_BindPose"]?.Items.Count ?? 0).Select(i => $"Bone{i}").ToArray()
+                    : copy.SourcePath != null
                     ? resolver.MeshBoneNamesByPath.GetValueOrDefault(copy.SourcePath)
                     : resolver.MeshBoneNames.GetValueOrDefault(sourceName);
-                if (originalBones != null) copy.SourceBoneNames.AddRange(originalBones);
+                if (originalBones != null && generated == null) copy.SourceBoneNames.AddRange(originalBones);
                 if (bones != null && originalBones != null)
                 {
+                    if (generated != null && bones.Count != originalBones.Length)
+                        throw new InvalidDataException($"Generated mesh bind pose/bone count mismatch: {rendererName}");
                     int[] sourceIndices = bones.Count == originalBones.Length ? null :
                         ResolveShortenedBoneArray(package, sceneGuid, bones, copy, resolver);
                     for (int i = 0; i < bones.Count; i++)
@@ -2085,7 +2095,9 @@ public static class VrchatAvatarParser
                     }
                 }
                 avatar.MeshCopies.Add(copy);
-                var shapeNames = copy.SourcePath != null
+                var shapeNames = generated != null
+                    ? generated.Root["m_Shapes"]?["channels"]?.Items.Select(c => c["name"].AsString()).ToArray()
+                    : copy.SourcePath != null
                     ? resolver.BlendShapeNamesByPath.GetValueOrDefault(copy.SourcePath)
                     : resolver.BlendShapeNames.GetValueOrDefault(sourceName);
                 if (shapeNames != null)
@@ -3128,7 +3140,8 @@ public static class VrchatAvatarParser
         CaptureTargetPlacements(package, sourceGuid, avatar, sourceSubtree, scenes,
             avatar.PhysBones.SelectMany(b => b.IgnoreBoneTargets
                 .Concat(b.Colliders.Select(c => c.AttachBoneTarget)).Append(b.RootBoneTarget))
-                .Concat(new[] { avatar.LeftEyeBoneTarget, avatar.RightEyeBoneTarget }));
+                .Concat(new[] { avatar.LeftEyeBoneTarget, avatar.RightEyeBoneTarget })
+                .Concat(avatar.MeshCopies.Where(c => c.GeneratedMesh != null).SelectMany(c => c.BoneTargets.Values)));
     }
 
     private static void CaptureTargetPlacements(UnityPackage package, string sourceGuid, VrchatAvatar avatar,
@@ -3142,6 +3155,7 @@ public static class VrchatAvatarParser
         // Capture their hierarchy too; placement capture verifies imported bone matches.
         foreach (var target in targets.Where(t => t?.PrefabGuid != null))
         {
+            if (captured.Contains((target.PrefabGuid, target.TransformFileId))) continue;
             var entry = scenes.FirstOrDefault(e => e.Guid == target.PrefabGuid);
             if (entry == null) continue;
             var included = IncludedPrefabObjects(package, entry.Guid, entry.Scene, avatar, modelResolvers, prefabScenes);

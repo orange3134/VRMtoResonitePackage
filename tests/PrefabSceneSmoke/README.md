@@ -1,5 +1,17 @@
 # Prefab scene regression checks
 
+`NativeMeshSceneChecks` verifies generated Unity mesh templates, static/skinned
+instances sharing one mesh, exact bone indices with same-named bones, and geometry,
+skin references and morph weights after package save, inspect and reload.
+To compare all generated meshes of a local avatar with an existing converted package:
+
+```powershell
+dotnet run --project tests/PrefabSceneSmoke -c Release -- --native-package <prefab> <resonitepackage>
+```
+
+This checks source vertex data, shape names and used bone bindings in the reloaded
+package. It does not replace a visual/motion check in the Resonite client.
+
 `ViewpointChecks` uses the SDK's `transform.position + ViewPosition` as its oracle:
 prefab rotation/scale and FBX units must not transform the meter offset, while the
 converter's whole-import alignment must. It also checks precedence over eye pivots,

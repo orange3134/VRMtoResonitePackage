@@ -101,4 +101,8 @@
     </Reference>
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="AssetsTools.NET" Version="3.0.5" />
+  </ItemGroup>
+
 </Project>

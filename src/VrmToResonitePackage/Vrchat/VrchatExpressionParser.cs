@@ -18,8 +18,8 @@ public static class VrchatExpressionParser
             if (playable["isDefault"]?.AsBool() == true || playable["type"]?.AsInt() != 5) continue;
             var asset = package.ByGuid(playable["animatorController"]?.Guid);
             if (asset?.HasContent != true) continue;
-            if (asset.Extension != ".controller") { Warn(asset.LogicalPath + ": unsupported controller type"); continue; }
-            var scene = package.ReadScene(asset);
+            var scene = package.ReadController(playable["animatorController"]);
+            if (scene == null) { Warn(asset.LogicalPath + ": unsupported controller type"); continue; }
             controllers.Add((scene, asset.Guid + ":" + controllers.Count));
         }
         foreach (var (scene, id) in controllers)
@@ -43,7 +43,7 @@ public static class VrchatExpressionParser
         bool SafeRoutingMotion(YamlNode reference)
         {
             var asset = package.ByGuid(reference?.Guid);
-            if (asset?.HasContent != true || asset.Extension != ".anim" ||
+            if (asset?.HasContent != true || asset.Extension is not (".anim" or ".asset") ||
                 package.ReadScene(asset).Doc(reference.FileID ?? 0) is not { ClassId: 74 } doc) return false;
             var root = doc.Root;
             return root["m_Compressed"]?.AsBool() != true && (root["m_Events"]?.Seq?.Count ?? 0) == 0 &&
@@ -57,8 +57,9 @@ public static class VrchatExpressionParser
             if (clips.TryGetValue(key, out var cached)) return cached;
             clips[key] = null;
             var asset = package.ByGuid(guid);
-            if (asset?.Extension != ".anim" || !asset.HasContent) return null;
-            var root = package.ReadScene(asset).Doc(reference.FileID ?? 7400000)?.Root;
+            if (asset?.HasContent != true || asset.Extension is not (".anim" or ".asset")) return null;
+            var document = package.ReadScene(asset).Doc(reference.FileID ?? 7400000);
+            var root = document?.ClassId == 74 ? document.Root : null;
             if (root == null) return null;
             var clip = new ExpressionClip { Id = key, Name = root["m_Name"]?.AsString() ?? "Expression", Source = asset.LogicalPath };
             bool invalid = false;

@@ -64,6 +64,10 @@ ResoPon.exe "D:\MyUnityProject\Assets\Avatar\Avatar.prefab" -o "D:\ConvertedAvat
 外部フォルダのローカルパッケージやシンボリックリンク先は走査対象外です。
 入力アセットは変更せず、出力先の既定値はPrefabと同じフォルダです。
 Unity Editorの起動は不要で、変換の対応範囲・制限は既存の `.unitypackage` 変換と同じです。
+
+NDMFのManual Bakeなどで保存された生成Meshと、`.asset` 内の材質・テクスチャ・Animatorの
+サブアセットも読み込みます。生成アセットを含むプロジェクトまたはunitypackageを指定してください。
+対応形式と制限は[生成Unityアセット](docs/vrchat-conversion.md#unityで生成したネイティブアセット)を参照してください。
 Modular Avatar / NDMFのビルド処理は実行しません。
 アバター変換時は頭部ボーンのウェイトを使って一人称表示を生成し、
 装着者の視界から頭部を隠します（`--no-avatar` 指定時を除く）。

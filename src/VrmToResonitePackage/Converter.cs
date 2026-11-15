@@ -464,6 +464,7 @@ internal static class Converter
                 // are not unique (different clothing models may both be named "armature.1").
                 var importedMeshSources = Vrchat.VrchatSceneSetup.CaptureImportedObjects(importedFbxRoots);
                 var importedNodePaths = Vrchat.VrchatSceneSetup.CaptureImportedPaths(importedFbxRoots);
+                await Vrchat.VrchatGeneratedMeshes.AddTemplates(importRoot, assetsSlot, avatar, importedMeshSources, importedNodePaths);
 
                 var replacedTemplateSlots = new HashSet<Slot>();
                 Slot descriptorRoot = ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots,

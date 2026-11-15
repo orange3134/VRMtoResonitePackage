@@ -42,6 +42,7 @@ static void Run()
     FbxMorphSeamChecks.Run();
     BlendShapeNormalChecks.Run();
     OutlineExclusionChecks.Run();
+    NativeAssetChecks.Run();
     Console.WriteLine("PASS: FBX morph seams survive vertex welding (7400/7500, compressed arrays, existing colors)");
     var rootResolver = new UnityModelFileIdResolver(null);
     Check(rootResolver.ResolveName(919132149155446097L) == "RootNode" &&
@@ -1467,11 +1468,11 @@ MonoBehaviour:
             "lipSync: 3\nVisemeSkinnedMesh: {fileID: 2}\nVisemeBlendShapes: [Blink]\nenableEyeLook: 1\ncustomEyeLookSettings:\n  eyelidType: 2\n  eyelidsSkinnedMesh: {fileID: 2}\n  eyelidsBlendshapes: 00000000\n") };
         InvokeParser("ParseDescriptor", bakedPackage, bakedScene, descriptor, bakedAvatar, bakedPackage.InputPrefab.Guid);
         var adapted = VrchatModelAdapter.ToVrmModel(bakedAvatar);
-        bool importedFace = adapted.Expressions.Count == 2 && adapted.Expressions.All(e =>
+        bool authoredFace = adapted.Expressions.Count == 2 && adapted.Expressions.All(e =>
             adapted.NodeTargets[adapted.MeshToNodes[e.Binds.Single().MeshIndex].Single()] is { } target &&
-            target.FbxGuid == guid && target.Path.EndsWith("/Body"));
-        Console.WriteLine($"Baked descriptor face resolves imported renderer: {importedFace}");
-        Check(importedSkeleton && importedFace, "Standalone meshes retain Animator-selected face and physics identities");
+            target.PrefabGuid == bakedPackage.InputPrefab.Guid && target.TransformFileId == 3);
+        Console.WriteLine($"Baked descriptor face resolves authored renderer: {authoredFace}");
+        Check(importedSkeleton && authoredFace, "Standalone meshes use authored face identity and Animator-selected physics skeleton");
         Check(bakedAvatar.PhysicsPlacements.SelectMany(p => p.Transforms)
                 .Any(t => t.Name == "PhysicsHelper" && t.ImportedBone == null && t.LocalPosition.Y == 2),
             "Baked physics preserves authored helpers absent from the selected FBX");

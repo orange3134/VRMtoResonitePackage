@@ -212,6 +212,7 @@ public sealed record VrchatModelRendererReference
 
 public sealed record VrchatMeshCopy(string FbxGuid, string SourceName, string Name, bool Active, bool Enabled)
 {
+    internal Unity.YamlNode GeneratedMesh { get; init; }
     public IReadOnlyList<string> BlendShapeNames { get; set; } = Array.Empty<string>();
     public bool IsSkinned { get; init; } = true;
     public string SourcePath { get; init; }
