@@ -57,6 +57,9 @@ Notion側で画像やリンクがどう取り込まれるかは、実際のイ�
 本文を更新するときは次を確認する。API・内部構造の詳細は利用者向けページへ転載しない。
 
 - 画面項目: `src/VrmToResonitePackage/Locales/ja.json` / `en.json` と `GuiApp.cs`
+- アプリの「？」から開く公開リンク: `src/VrmToResonitePackage/HelpWindow.cs`。
+  [Issue #51](https://github.com/orange3134/VRMtoResonitePackage/issues/51)の6件を掲載し、
+  日英のガイドはUI言語にかかわらず両方表示する。公開先を変更した場合はここも更新する。
 - 必要環境: `src/VrmToResonitePackage/VrmToResonitePackage.csproj`
 - 入力・Prefabの条件: [プロジェクトREADME](../../README.md)、[VRChat変換](../vrchat-conversion.md)
 - 表情の対応範囲・メニュー・入力: [表情システム](../expression-system.md)
