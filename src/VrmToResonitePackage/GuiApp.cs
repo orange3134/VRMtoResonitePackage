@@ -67,6 +67,7 @@ internal sealed class MainWindow : Window
     private readonly TextBlock _message;
     private readonly TextBlock _detail;
     private readonly Button _settingsButton;
+    private readonly Button _helpButton;
     private readonly Button _openLogsButton;
     private readonly DispatcherTimer _spinnerTimer;
     private readonly Grid _loadingArea;
@@ -122,6 +123,23 @@ internal sealed class MainWindow : Window
             Foreground = AccentBrush
         };
         _settingsButton.Click += (_, _) => OpenSettings();
+
+        _helpButton = new Button
+        {
+            Content = "?",
+            Width = 44,
+            Height = 44,
+            FontSize = 22,
+            FontWeight = FontWeights.SemiBold,
+            Padding = new Thickness(0),
+            ToolTip = AppLocalization.Get("Help"),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 18, 70, 0),
+            Foreground = AccentBrush
+        };
+        System.Windows.Automation.AutomationProperties.SetName(_helpButton, AppLocalization.Get("Help"));
+        _helpButton.Click += (_, _) => new HelpWindow { Owner = this }.ShowDialog();
 
         var center = new StackPanel
         {
@@ -193,6 +211,7 @@ internal sealed class MainWindow : Window
         center.Children.Add(_openLogsButton);
         _root.Children.Add(center);
         _root.Children.Add(_settingsButton);
+        _root.Children.Add(_helpButton);
 
         DragEnter += WindowOnDragEnter;
         Drop += WindowOnDrop;
@@ -901,6 +920,8 @@ internal sealed class MainWindow : Window
     {
         _openLogsButton.Content = AppLocalization.Get("OpenLogFolder");
         _settingsButton.ToolTip = AppLocalization.Get("Settings");
+        _helpButton.ToolTip = AppLocalization.Get("Help");
+        System.Windows.Automation.AutomationProperties.SetName(_helpButton, AppLocalization.Get("Help"));
         _loadingCaption.Text = AppLocalization.Get("Converting");
         _dropPrompt.Text = AppLocalization.Get("DropPrompt");
         if (_lastResult != null)
