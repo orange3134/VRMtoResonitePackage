@@ -645,6 +645,8 @@ internal static class Converter
     {
         var slots = new Dictionary<string, Slot>(StringComparer.Ordinal);
         prefabSlots = slots;
+        float ImportUnits(string guid) => guid == null ? 1f : guid == avatar.FbxGuid ? avatar.FbxImportScale :
+            avatar.AdditionalFbxs.FirstOrDefault(model => model.Guid == guid)?.ImportScale ?? 1f;
         ApplyPrimaryFbxPlacement(importRoot, avatar, importedFbxRoots, slots);
 
         foreach (Vrchat.VrchatFbxAsset additional in avatar.AdditionalFbxs)
@@ -713,11 +715,11 @@ internal static class Converter
         }
         var meshBuild = Vrchat.VrchatSceneSetup.InstantiateMeshCopies(avatar, importedMeshSources, copy =>
             ResolvePrefabParent(importRoot, copy.ParentFbxGuid, copy.ParentName, copy.ParentTransforms,
-                importedFbxRoots, slots, importedMeshSources, importedNodePaths), importedNodePaths, slots, replacedTemplateSlots);
+                importedFbxRoots, slots, importedMeshSources, importedNodePaths, ImportUnits(copy.ParentFbxGuid)), importedNodePaths, slots, replacedTemplateSlots);
         authoredObjects = meshBuild.AuthoredObjects;
         foreach (var placement in avatar.PhysicsPlacements)
             ResolvePrefabParent(importRoot, placement.ParentFbxGuid, placement.ParentName, placement.Transforms,
-                importedFbxRoots, slots, importedMeshSources, importedNodePaths);
+                importedFbxRoots, slots, importedMeshSources, importedNodePaths, ImportUnits(placement.ParentFbxGuid));
         meshBuild.Bind();
         // Placement may reset an additional model's single payload. Override only
         // afterward, with Assimp helpers folded but primary placement/unit factors
@@ -738,7 +740,8 @@ internal static class Converter
     private static Slot ResolvePrefabParent(Slot importRoot, string parentFbxGuid,
         string parentNodeName, IReadOnlyList<Vrchat.VrchatPrefabTransform> parentTransforms,
         Dictionary<string, Slot> importedFbxRoots, Dictionary<string, Slot> prefabSlots,
-        IReadOnlyDictionary<Slot, string> importedSources = null, IReadOnlyDictionary<Slot, string> importedPaths = null)
+        IReadOnlyDictionary<Slot, string> importedSources = null, IReadOnlyDictionary<Slot, string> importedPaths = null,
+        float parentUnits = 1f)
     {
         Slot parent = importRoot;
         if (!string.IsNullOrEmpty(parentFbxGuid) &&
@@ -767,8 +770,11 @@ internal static class Converter
             }
             Slot slot = parent.AddSlot(transform.Name ?? "GameObject");
             slot.ActiveSelf = transform.Active;
+            // New bones below a reused FBX bone share its source-unit basis and
+            // bind poses. Convert each authored meter translation, keeping scales
+            // dimensionless so inserted parents do not shrink the whole skin.
             slot.LocalPosition = new float3(
-                transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z);
+                transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z) / parentUnits;
             slot.LocalRotation = new floatQ(
                 transform.LocalRotation.X, transform.LocalRotation.Y,
                 transform.LocalRotation.Z, transform.LocalRotation.W);

@@ -12,6 +12,20 @@ dotnet run --project tests/PrefabSceneSmoke -c Release -- --native-package <pref
 This checks source vertex data, shape names and used bone bindings in the reloaded
 package. It does not replace a visual/motion check in the Resonite client.
 
+For an unpacked FBX-based avatar in a unitypackage, select its avatar explicitly:
+
+```powershell
+dotnet run --project tests/PrefabSceneSmoke -c Release -- --skin-package <unitypackage> <resonitepackage> <avatar>
+```
+
+This source-pose oracle requires the copied renderers and bones to belong to one
+ordinary unpacked YAML scene. It reconstructs that hierarchy independently and
+compares every weighted bone's affine basis in renderer space, accounting for FBX
+source units. It covers Ritori's folded identity model container and inserted skirt
+parents; the old package fails with a 100-fold bone scale mismatch. The synthetic
+helper fixture also checks skinned vertices below added parents, including authored
+nonuniform scale in both meter and centimeter models.
+
 `ViewpointChecks` uses the SDK's `transform.position + ViewPosition` as its oracle:
 prefab rotation/scale and FBX units must not transform the meter offset, while the
 converter's whole-import alignment must. It also checks precedence over eye pivots,

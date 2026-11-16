@@ -8,13 +8,14 @@ using VrmToResonitePackage.Vrchat;
 
 internal static class NativeMeshSceneChecks
 {
-    public static async Task CheckReal(Slot parent, string prefab, string output)
+    public static async Task CheckReal(Slot parent, string prefab, string output, string avatarName = null)
     {
         using var package = UnityPackage.Open(prefab);
-        var avatar = VrchatAvatarParser.Parse(package);
+        var avatar = VrchatAvatarParser.Parse(package, avatarName);
         var expected = avatar.MeshCopies.Where(c => c.IsSkinned && !c.RendererRemoved).ToArray();
-        if (!expected.Any(c => c.GeneratedMesh != null)) throw new Exception("No generated meshes in test avatar.");
-        var sourceScene = package.ReadScene(package.InputPrefab);
+        if (expected.Length == 0 || avatarName == null && !expected.Any(c => c.GeneratedMesh != null))
+            throw new Exception("No expected meshes in test avatar.");
+        var sourceScene = package.ReadScene(package.InputPrefab ?? package.ByGuid(expected[0].PrefabGuid));
         var sourceWorld = new Dictionary<long, System.Numerics.Matrix4x4>();
         System.Numerics.Matrix4x4 World(long id)
         {
@@ -35,6 +36,8 @@ internal static class NativeMeshSceneChecks
             var renderer = renderers.Single(r => r.Slot.Name == copy.Name);
             var actual = renderer.Mesh.Asset?.Data ?? throw new Exception("Mesh not loaded: " + copy.Name);
             var source = copy.GeneratedMesh == null ? null : UnityNativeMesh.Decode(copy.GeneratedMesh);
+            float units = copy.GeneratedMesh != null ? 1f : copy.FbxGuid == avatar.FbxGuid ? avatar.FbxImportScale :
+                avatar.AdditionalFbxs.Single(model => model.Guid == copy.FbxGuid).ImportScale;
             if (source != null && (actual.VertexCount != source.VertexCount || actual.BoneCount != source.BoneCount ||
                 !actual.RawPositions.Take(actual.VertexCount).SequenceEqual(source.RawPositions.Take(source.VertexCount)) ||
                 !actual.BlendShapes.Select(s => s.Name).SequenceEqual(source.BlendShapes.Select(s => s.Name))))
@@ -67,7 +70,7 @@ internal static class NativeMeshSceneChecks
                 foreach (var point in new[] { System.Numerics.Vector3.Zero, System.Numerics.Vector3.UnitX,
                              System.Numerics.Vector3.UnitY, System.Numerics.Vector3.UnitZ })
                 {
-                    var wanted = System.Numerics.Vector3.Transform(point, basis);
+                    var wanted = System.Numerics.Vector3.Transform(point * units, basis);
                     var got = renderer.Slot.GlobalPointToLocal(renderer.Bones[i].LocalPointToGlobal(new float3(point.X, point.Y, point.Z)));
                     float error = MathX.Distance(got, new float3(wanted.X, wanted.Y, wanted.Z));
                     maxError = Math.Max(maxError, error);

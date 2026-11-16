@@ -211,6 +211,18 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   コピーの skin bone は全 renderer と親 Slot の生成後に prefab Transform identity を優先して解決する。
   unpack 後に改名されたローカル骨の path が FBX と一致せず、対応する authored Slot もない場合は、
   元の skin binding を保持して警告する。別名の骨を名前だけで推測しない。
+  unpack時にFBXの単一コンテナがPrefabルートへ置き換わる場合は、モデル側で確認したコンテナ名を
+  最初の子のpathへ補う。対象はTRSがidentityで、meshもskin boneとしての使用もない単一の直下ノード。
+  既存の完全一致を優先し、任意の祖先名を削るsuffix照合には広げない。子孫も元モデルの完全なpathで照合する。
+  再利用したFBX骨の下へ新規作成する親・子ボーンは、各local positionを親モデルのimport scaleで割る。
+  scaleは作者の値を保持し、meshコピーの位置も同じ単位へ変換する。
+  これにより追加された骨もFBXのbindposeと同じ単位系を保つ。
+  Ritori 1.0.5の`Ritori_lil`は、identityコンテナ`md_ritori`の省略と、`Skirt_Root`等の追加親が併存する回帰例。
+  ルート省略を扱わないとメートルの複製骨へセンチメートルのbindposeを接続し、100倍の変形になる。
+  ルートだけを修正しても、追加親以下の位置換算がないとスカート等が腰付近へ縮む。
+  `UnpackedModelRootChecks`で厳密なpath照合と除外条件、`FbxTransformHelperChecks`で
+  メートル／センチメートル・追加親の非一様scale・使用頂点の変形を確認する。
+  `PrefabSceneSmoke --skin-package`は単一のunpacked Prefabを対象に、保存後の使用骨の基底を元YAMLと比較する。
 - prefabの外側にあるattachmentも複製の親階層へ含める。上書きは表示名ではなく、
   explicit/omitted stripped参照を解決したobject identityへ適用する。EditorOnlyタグも同様。
   `m_RemovedGameObjects` also resolves per-occurrence object identities, including
