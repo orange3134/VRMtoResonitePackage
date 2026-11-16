@@ -130,6 +130,15 @@ NDMF Manual Bake等で保存した`.asset`は、YAMLだけでなくUnity Seriali
 `PrefabSceneSmoke/NativeMeshSceneChecks`は同名boneの接続、static/skinnedでのmesh共有とpackage再読込を確認する。
 実アバターの保存メッシュ比較は同テストの`--native-package <prefab> <resonitepackage>`を使う。
 
+## FBX表情の頂点溶接前処理
+
+`UnityFbxMorphSeams` のID索引は、Shape → BlendShapeChannel → BlendShape → Meshを辿るための
+`Geometry` と `Deformer` に限定する。NagmaのFBXには同じIDの`Texture`が複数記録されており、
+全Objectsを一意なIDで辞書化するとインポート前に失敗する。テクスチャを含む無関係なノードは
+索引に入れず、書き出し時は元のレコードを保持する。回帰テストは`FbxMorphSeamChecks`で、
+FBX 7400/7500、既存頂点色、圧縮配列、重複Texture IDを組み合わせ、Assimpによる頂点溶接後の
+表情と元ファイルの保持を確認する。
+
 ## prefab参照とstable fileID
 
 Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
