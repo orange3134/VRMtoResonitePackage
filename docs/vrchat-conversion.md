@@ -682,13 +682,22 @@ headless meshの生成と描画制御は[共通のFirstPerson処理](avatar-conv
   SDK 3.10.6 の `VRC_AvatarDescriptor.OnDrawGizmosSelected` は
   `transform.position + ViewPosition` で表示し、`TransformPoint` を使わない。
   Descriptorやその親の回転・拡縮、FBXの単位補正をオフセットに掛けない。
-  原点の配置は保持し、ResoPonがシーン全体に加えた `AlignVrchatImportUp` の変換だけを反映する。
+  原点の配置は保持するが、`AlignVrchatImportUp` の回転もオフセットには掛けない。
+  この補正はFBXの軸をUnityの軸へ揃えるためのもので、すでにUnity軸の視点へ重ねると二重補正になる。
 - インポートの向きを揃えた後、Descriptorを含むラッパーを畳む前にワールド座標を保存する。
   `AvatarSetup` はこれをHeadProxyの配置に使い、標準のVRIKAvatarセットアップでTargetを生成する。
 - 明示した `--view-forward` / `--view-up` は元の視点へのメートル単位の加算になる。
   元の視点がある場合は目の間隔による自動オフセットを加えない。
   設定またはDescriptorの参照先がない場合、非有限値の場合は
   [共通の視点推定](avatar-conversion.md#アバターセットアップ)へ戻る。
+- 回帰例: NagiyaRuri 1.4.3はZ-upのFBXで、骨格の直立補正が約94度になる。
+  この回転をUnity軸の視点 `(0, 1.1551697, 0.064976126)` へ重ねると、保存後の
+  `VRIKAvatar.AvatarHeight` が約-0.0129mになり、Head Proxyが頭から約1.56m離れる。
+  視点オフセットをそのまま加算すると高さは1.1551697mに戻る。
+  `ViewpointChecks` はZ-up・単位補正・親の回転と非一様scaleを含む座標の回帰を確認する。
+  `PrefabSceneSmoke --upright-package <package> <viewHeight>` は、Descriptor原点が地面にある
+  直立アバターの保存パッケージを実エンジンで再読込し、元Descriptorの視点高さ、骨格の上方向、
+  Head Proxyと頭の距離を検証する。変換・inspectの成功だけでは負の身長を検出できない。
 - 回帰例: NoraMiaree 1.0.0の目ボーン間隔は約6.5mmで、支点は顔の後方にある。
   元の視点は `(0, 0.734906, 0.0715642)`、Prefabルートのscaleは1.1。
   このscaleを視点にも掛けると約7.3cm上がり額の位置になる。ルートローカル座標と解釈しない。

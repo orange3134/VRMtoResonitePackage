@@ -1,10 +1,32 @@
 using System.Reflection;
 using Elements.Core;
 using FrooxEngine;
+using FrooxEngine.CommonAvatar;
+using FrooxEngine.FinalIK;
 using VrmToResonitePackage.Vrchat;
 
 internal static class ViewpointChecks
 {
+    // For upright avatars whose descriptor origin is at ground level. The expected
+    // height is read independently from the source descriptor, never from the output.
+    public static async Task CheckPackage(Slot parent, string path, float viewHeight)
+    {
+        await PackageImporter.ImportPackage(path, parent);
+        await default(ToWorld);
+        var avatar = parent.GetComponentInChildren<VRIKAvatar>();
+        var rig = parent.GetComponentInChildren<BipedRig>();
+        var head = rig[Renderite.Shared.BodyNode.Head];
+        var hips = rig[Renderite.Shared.BodyNode.Hips];
+        var proxy = parent.GetComponentInChildren((AvatarPoseNode node) => node.Node.Value == Renderite.Shared.BodyNode.Head);
+        float3 up = (head.GlobalPosition - hips.GlobalPosition).Normalized;
+        float distance = MathX.Distance(proxy.Slot.GlobalPosition, head.GlobalPosition);
+        Console.WriteLine($"Saved viewpoint: height={avatar.AvatarHeight.Value}, expected={viewHeight}, up={up}, headDistance={distance}");
+        Check(up.y > .99f, "Saved skeleton is upright");
+        Check(MathF.Abs(avatar.AvatarHeight.Value - viewHeight) < .001f,
+            "Saved avatar height matches the Unity descriptor viewpoint");
+        Check(distance < .2f, "Saved head proxy remains near the head");
+    }
+
     public static void Run(Slot root)
     {
         var assembly = typeof(VrchatAvatar).Assembly;
@@ -13,7 +35,7 @@ internal static class ViewpointChecks
         var avatar = new VrchatAvatar { FbxGuid = "body", FbxImportScale = .01f,
             ViewPosition = new System.Numerics.Vector3(.02f, .735f, .072f) };
         var alignment = root.AddSlot("Import alignment");
-        float3? Resolve(Slot descriptor) => (float3?)resolve.Invoke(null, new object[] { avatar, descriptor, alignment });
+        float3? Resolve(Slot descriptor) => (float3?)resolve.Invoke(null, new object[] { avatar, descriptor });
         var parent = alignment.AddSlot("Viewpoint placement");
         parent.LocalPosition = new float3(1, 2, 3);
         parent.LocalRotation = floatQ.Euler(12, 73, 5);
@@ -34,8 +56,12 @@ internal static class ViewpointChecks
         Near(Resolve(descriptor), expected, "Additional model import units do not rescale the SDK world offset");
         alignment.LocalRotation = floatQ.Euler(23, 90, 0);
         alignment.LocalPosition = new float3(-2, 1, 4);
-        expected = descriptor.GlobalPosition + alignment.GlobalRotation * offset;
-        Near(Resolve(descriptor), expected, "Only the converter's import alignment rotates the SDK world offset");
+        expected = descriptor.GlobalPosition + offset;
+        Near(Resolve(descriptor), expected, "FBX alignment changes the origin but preserves the Unity-world-axis viewpoint offset");
+        alignment.LocalRotation = floatQ.Euler(90, 0, 0);
+        alignment.LocalScale = new float3(.01f);
+        expected = descriptor.GlobalPosition + offset;
+        Near(Resolve(descriptor), expected, "Z-up centimeter FBX alignment must not rotate or scale an already Unity-axis viewpoint");
         var actual = Resolve(descriptor);
         descriptor.Destroy();
         Check(Resolve(descriptor) == null && Resolve(null) == null,

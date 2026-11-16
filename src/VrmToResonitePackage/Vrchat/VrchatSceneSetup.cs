@@ -27,18 +27,17 @@ internal static class VrchatSceneSetup
         return authoredDescriptor ? root : null;
     }
 
-    internal static float3? ResolveViewPosition(VrchatAvatar avatar, Slot descriptorRoot,
-        Slot importRoot)
+    internal static float3? ResolveViewPosition(VrchatAvatar avatar, Slot descriptorRoot)
     {
         if (avatar.ViewPosition is not { } view || descriptorRoot == null || descriptorRoot.IsDestroyed)
             return null;
 
         // VRC_AvatarDescriptor.OnDrawGizmosSelected uses transform.position + ViewPosition,
         // not TransformPoint: this is an unscaled Unity-world-axis offset in meters.
-        // Apply only our whole-import alignment, never the descriptor's rotation/scale
-        // or the model's FBX unit correction. Its origin still follows authored placement.
-        float3 origin = importRoot.GlobalPointToLocal(descriptorRoot.GlobalPosition);
-        float3 position = importRoot.LocalPointToGlobal(origin + new float3(view.X, view.Y, view.Z));
+        // FBX alignment corrects source model axes into Unity's axes. The descriptor
+        // offset is already in Unity axes, so rotating it again puts Z-up models'
+        // viewpoints beside the feet. Only the origin follows imported placement.
+        float3 position = descriptorRoot.GlobalPosition + new float3(view.X, view.Y, view.Z);
         if (!float.IsFinite(position.x) || !float.IsFinite(position.y) || !float.IsFinite(position.z)) return null;
         UniLog.Log($"VRChat authored viewpoint: position={position}, descriptor={descriptorRoot.Name}, worldOffset={view}");
         return position;
