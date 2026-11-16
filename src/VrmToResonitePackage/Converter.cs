@@ -480,9 +480,9 @@ internal static class Converter
                         !Unity.UnityModelPath.Normalize(target.Path).Contains('/'));
                 if (!authoredPrimaryPose)
                     AlignVrchatImportUp(importRoot, model, alignmentNodes);
-                // Capture the SDK's unscaled world-axis offset through our import alignment
-                // before either the descriptor wrapper or the alignment root is collapsed.
-                float3? viewPosition = Vrchat.VrchatSceneSetup.ResolveViewPosition(avatar, descriptorRoot, importRoot);
+                // Resolve the descriptor origin after model alignment, adding the SDK's
+                // already-Unity-axis offset before its wrapper is collapsed.
+                float3? viewPosition = Vrchat.VrchatSceneSetup.ResolveViewPosition(avatar, descriptorRoot);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
                 RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
                 profile?.Mark("prefab-hierarchy");

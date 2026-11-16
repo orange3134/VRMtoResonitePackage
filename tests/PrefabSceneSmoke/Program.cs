@@ -9,11 +9,13 @@ using VrmToResonitePackage.Vrchat;
 
 bool nativePackage = args.Length == 3 && args[0] == "--native-package";
 bool skinPackage = args.Length == 4 && args[0] == "--skin-package";
+bool uprightPackage = args.Length == 3 && args[0] == "--upright-package";
 nativePackage |= skinPackage;
-if (args.Length != 2 && !nativePackage) throw new ArgumentException("Usage: PrefabSceneSmoke <FBX path> <skinned renderer with blendshapes> | --native-package <prefab> <package> | --skin-package <input> <package> <avatar>");
-string fbxPath = nativePackage ? null : Path.GetFullPath(args[0]);
+if (args.Length != 2 && !nativePackage && !uprightPackage) throw new ArgumentException("Usage: PrefabSceneSmoke <FBX path> <skinned renderer with blendshapes> | --native-package <prefab> <package> | --skin-package <input> <package> <avatar> | --upright-package <package> <viewHeight>");
+string fbxPath = nativePackage || uprightPackage ? null : Path.GetFullPath(args[0]);
 string nativePrefab = nativePackage ? Path.GetFullPath(args[1]) : null;
 string nativeOutput = nativePackage ? Path.GetFullPath(args[2]) : null;
+string uprightOutput = uprightPackage ? Path.GetFullPath(args[1]) : null;
 string resonite = Environment.GetEnvironmentVariable("RESONITE_PATH")
     ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite";
 typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.ResoniteLocator")!
@@ -21,7 +23,9 @@ typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.ResoniteLocator")!
 Environment.CurrentDirectory = resonite;
 try
 {
-    await Run(fbxPath, args[1], nativePrefab, nativeOutput, skinPackage ? args[3] : null);
+    await Run(fbxPath, args[1], nativePrefab, nativeOutput, skinPackage ? args[3] : null,
+        uprightOutput,
+        uprightPackage ? float.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture) : 0);
     Console.WriteLine("Prefab scene smoke checks passed.");
     // This is a standalone test process; do not run the engine's asynchronous shutdown
     // callbacks after disposing its services (headless shutdown can throw on background threads).
@@ -34,7 +38,8 @@ catch (Exception error)
 }
 
 [MethodImpl(MethodImplOptions.NoInlining)]
-static async Task Run(string fbxPath, string rendererName, string nativePrefab, string nativeOutput, string avatarName)
+static async Task Run(string fbxPath, string rendererName, string nativePrefab, string nativeOutput, string avatarName,
+    string uprightPackage, float viewHeight)
 {
     string temp = Path.Combine(Path.GetTempPath(), "ResoPonSceneSmoke", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(Path.Combine(temp, "Assets"));
@@ -62,6 +67,11 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
     {
         await default(ToWorld);
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
+        if (uprightPackage != null)
+        {
+            await ViewpointChecks.CheckPackage(root, uprightPackage, viewHeight);
+            return;
+        }
         if (nativePrefab != null)
         {
             await NativeMeshSceneChecks.CheckReal(root, nativePrefab, nativeOutput, avatarName);
@@ -1142,7 +1152,7 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
             "Removed renderer leaves its authored object and child placement intact and cannot reappear as an imported template");
     });
 
-    if (nativePrefab != null) return;
+    if (nativePrefab != null || uprightPackage != null) return;
 
     // Exercise the production parser/importer/exporter in this isolated engine instance.
     // No Unity Editor, generated Library folder, or user application data is required.
