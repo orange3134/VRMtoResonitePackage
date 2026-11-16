@@ -12,6 +12,7 @@ public sealed class UnityModelFileIdResolver
 {
     private readonly Dictionary<long, string> _names = new();
     private string _authoredRootPath;
+    private string _unpackedRootPath;
     private readonly Dictionary<long, HashSet<string>> _nodePathsById = new();
     private readonly HashSet<long> _rendererComponentIds = new();
     private readonly Dictionary<string, HashSet<string>> _pathsByName = new(StringComparer.Ordinal);
@@ -95,6 +96,15 @@ public sealed class UnityModelFileIdResolver
             : UniquePath(ResolveName(fileId));
     public bool IsUniqueNodeName(string name) => UniquePath(name) != null;
     internal string UniqueNodePath(string name) => UniquePath(NormalizeName(name));
+
+    // Unity can replace a sole identity model container with the prefab root when
+    // unpacking. Preserve the complete imported path; never match arbitrary suffixes.
+    internal string ResolveUnpackedRootChild(string name)
+    {
+        if (NodePathsUnder(0).Count(candidate => UnityModelPath.Normalize(candidate) == name) == 1) return name;
+        string path = _unpackedRootPath == null ? name : _unpackedRootPath + "/" + name;
+        return NodePathsUnder(0).Count(candidate => UnityModelPath.Normalize(candidate) == path) == 1 ? path : null;
+    }
     /// <summary>Owner path for a renderer or MeshFilter component; never a whole subtree.</summary>
     public string ResolveRendererComponentPath(long fileId)
         => _rendererComponentIds.Contains(fileId) ? ResolveNodePath(fileId) : null;
@@ -197,6 +207,14 @@ public sealed class UnityModelFileIdResolver
 
             var roots = new List<(Node Node, List<string> Path)>();
             CollectNodes(scene.RootNode, new List<string>(), roots);
+            if (scene.RootNode.ChildCount == 1)
+            {
+                var container = scene.RootNode.Children[0];
+                if (container.MeshCount == 0 && container.Transform == Matrix4x4.Identity &&
+                    !scene.Meshes.SelectMany(mesh => mesh.Bones).Any(bone => bone.Name == container.Name) &&
+                    !UnityModelPath.IsTransformHelper(container.Name))
+                    _unpackedRootPath = NormalizeName(container.Name);
+            }
             // An actual top-level "root" owns this generation-2 path. Other top-level
             // nodes must not claim it through the synthetic-root path variants.
             var authoredRoot = roots.FirstOrDefault(entry =>

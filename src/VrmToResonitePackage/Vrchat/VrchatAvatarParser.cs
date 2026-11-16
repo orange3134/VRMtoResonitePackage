@@ -2180,7 +2180,14 @@ public static class VrchatAvatarParser
             // unless an explicit source ancestor identifies another FBX. Exclude the
             // prefab root name; FBX import wrappers can have different display names.
             string path = parent.Path.Length == 0 ? name : parent.Path + "/" + name;
-            return new VrchatBoneTarget(parent.FbxGuid ?? primaryFbxGuid, name, path, guid, fileId);
+            string modelGuid = parent.FbxGuid ?? primaryFbxGuid;
+            if (parent.Path.Length == 0 && parent.FbxGuid == null && modelGuid != null)
+            {
+                if (!resolvers.TryGetValue(modelGuid, out var resolver))
+                    resolvers[modelGuid] = resolver = package.ModelFileIds(modelGuid);
+                path = resolver.ResolveUnpackedRootChild(name) ?? path;
+            }
+            return new VrchatBoneTarget(modelGuid, name, path, guid, fileId);
         }
         if (document != null) return null; // Bone references must identify transforms.
 

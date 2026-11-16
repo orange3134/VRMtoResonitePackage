@@ -1388,6 +1388,8 @@ MeshRenderer:
   m_GameObject: {fileID: 200}
 """;
     string accessoryFile = asset("Assets/UnpackedAccessory.prefab", "74747474747474747474747474747475", accessory);
+    if (!multipleMaterials && !transformHelpers)
+        UnpackedModelRootChecks.Run(asset, File.ReadAllText(model), accessory, guid);
     using var accessoryPackage = UnityPackage.Open(accessoryFile);
     var accessoryScene = accessoryPackage.ReadScene(accessoryPackage.InputPrefab);
     var placementType = typeof(VrchatAvatarParser).GetNestedType("FbxPlacement", System.Reflection.BindingFlags.NonPublic)!;

@@ -8,7 +8,9 @@ using VrmToResonitePackage.Unity;
 using VrmToResonitePackage.Vrchat;
 
 bool nativePackage = args.Length == 3 && args[0] == "--native-package";
-if (args.Length != 2 && !nativePackage) throw new ArgumentException("Usage: PrefabSceneSmoke <FBX path> <skinned renderer with blendshapes> | --native-package <prefab> <package>");
+bool skinPackage = args.Length == 4 && args[0] == "--skin-package";
+nativePackage |= skinPackage;
+if (args.Length != 2 && !nativePackage) throw new ArgumentException("Usage: PrefabSceneSmoke <FBX path> <skinned renderer with blendshapes> | --native-package <prefab> <package> | --skin-package <input> <package> <avatar>");
 string fbxPath = nativePackage ? null : Path.GetFullPath(args[0]);
 string nativePrefab = nativePackage ? Path.GetFullPath(args[1]) : null;
 string nativeOutput = nativePackage ? Path.GetFullPath(args[2]) : null;
@@ -19,7 +21,7 @@ typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.ResoniteLocator")!
 Environment.CurrentDirectory = resonite;
 try
 {
-    await Run(fbxPath, args[1], nativePrefab, nativeOutput);
+    await Run(fbxPath, args[1], nativePrefab, nativeOutput, skinPackage ? args[3] : null);
     Console.WriteLine("Prefab scene smoke checks passed.");
     // This is a standalone test process; do not run the engine's asynchronous shutdown
     // callbacks after disposing its services (headless shutdown can throw on background threads).
@@ -32,7 +34,7 @@ catch (Exception error)
 }
 
 [MethodImpl(MethodImplOptions.NoInlining)]
-static async Task Run(string fbxPath, string rendererName, string nativePrefab, string nativeOutput)
+static async Task Run(string fbxPath, string rendererName, string nativePrefab, string nativeOutput, string avatarName)
 {
     string temp = Path.Combine(Path.GetTempPath(), "ResoPonSceneSmoke", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(Path.Combine(temp, "Assets"));
@@ -62,7 +64,7 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
         if (nativePrefab != null)
         {
-            await NativeMeshSceneChecks.CheckReal(root, nativePrefab, nativeOutput);
+            await NativeMeshSceneChecks.CheckReal(root, nativePrefab, nativeOutput, avatarName);
             return;
         }
         ViewpointChecks.Run(root);
@@ -218,7 +220,7 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
             new() { Key = "prefab:attachment", Name = "Attachment", LocalPosition = new System.Numerics.Vector3(1, 0, 0) } };
         var localSlots = new Dictionary<string, Slot>();
         var attachment = (Slot)Call("VrmToResonitePackage.Converter", "ResolvePrefabParent", root,
-            null, null, localParents, additionalRoots, localSlots, additionalSources, additionalPaths);
+            null, null, localParents, additionalRoots, localSlots, additionalSources, additionalPaths, 1f);
         Check(attachment.Parent == localBone && localSlots["prefab:head"] == localBone && attachment.LocalPosition.x == 1,
             "Unpacked attachment shares the imported skin bone and preserves its local placement");
         Check(!localBone.ActiveSelf && !attachment.IsActive,
@@ -677,9 +679,11 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
         var settings = ModelImportSettings.XiexeToon(false, true, false);
         settings.SetupIK = false;
         settings.ForceTpose = false;
-        await ModelImporter.ImportModelAsync(fbxPath, additional, settings, assets);
+        var modelAssets = assets.AddSlot("Imported model assets");
+        await ModelImporter.ImportModelAsync(fbxPath, additional, settings, modelAssets);
         await default(ToWorld);
-        await (Task)Call("VrmToResonitePackage.Converter", "WaitForAssets", assets);
+        // Earlier negative material fixtures intentionally leave unavailable assets.
+        await (Task)Call("VrmToResonitePackage.Converter", "WaitForAssets", modelAssets);
         SkinBoneIndexChecks.Run(additional, fbxPath);
         var avatar = new VrchatAvatar { FbxGuid = "primary" };
         var model = new VrchatFbxAsset { Guid = "additional", InstanceName = additional.Name };
