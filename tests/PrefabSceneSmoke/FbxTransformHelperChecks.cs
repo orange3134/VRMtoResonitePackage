@@ -9,10 +9,11 @@ internal static class FbxTransformHelperChecks
     public static async Task Run(Slot parent)
     {
         foreach (float units in new[] { .01f, 1f })
-            await CheckUnits(parent, units);
+        foreach (bool attachedFbx in new[] { false, true })
+            await CheckUnits(parent, units, attachedFbx);
     }
 
-    private static async Task CheckUnits(Slot parent, float units)
+    private static async Task CheckUnits(Slot parent, float units, bool attachedFbx)
     {
         var root = parent.AddSlot("FBX transform helper regression");
         var model = root.AddSlot("Model");
@@ -64,6 +65,18 @@ internal static class FbxTransformHelperChecks
             throw new Exception("Captured paths must match Unity metadata without aliasing helper slots");
         var target = new VrchatBoneTarget("model", "Hips", "Armature/Hips", "prefab", 2);
         var avatar = new VrchatAvatar { FbxGuid = "model", FbxImportScale = units };
+        Slot accessory = null;
+        if (attachedFbx)
+        {
+            accessory = root.AddSlot("Accessory");
+            roots["accessory"] = accessory;
+            var attachment = new VrchatFbxAsset { Guid = "accessory", ParentFbxGuid = "model", ImportScale = .1f,
+                LocalPosition = new(.06f, .07f, .08f) };
+            attachment.ParentTransforms.Add(new() { Key = "prefab:2", Name = "Hips", ImportedBone = target });
+            attachment.ParentTransforms.Add(new() { Key = "prefab:mount", Name = "Mount",
+                LocalPosition = new(.3f, .4f, .5f), LocalScale = new(1.3f, .9f, 1.1f) });
+            avatar.AdditionalFbxs.Add(attachment);
+        }
         var copy = new VrchatMeshCopy("model", "Body", "AuthoredBody", true, true)
         {
             SourcePath = "RootNode/Body",
@@ -85,6 +98,11 @@ internal static class FbxTransformHelperChecks
         typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
             .GetMethod("ApplyVrchatPrefabHierarchy", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, args);
         var slots = (Dictionary<string, Slot>)args[6];
+        if (attachedFbx && (slots["prefab:mount"].Parent != hips || accessory.Parent != slots["prefab:mount"] ||
+            MathX.Distance(accessory.GlobalPosition, hips.LocalPointToGlobal(
+                (new float3(.3f, .4f, .5f) + new float3(1.3f, .9f, 1.1f) * new float3(.06f, .07f, .08f)) / units)) > .00001f ||
+            MathX.Distance(accessory.LocalScale, float3.One * (.1f / units)) > .00001f))
+            throw new Exception("Attached FBX must share the imported bone and convert attachment/model units exactly once.");
         var result = slots["prefab:body"].GetComponent<SkinnedMeshRenderer>();
         if (result.Bones[0] != hips || slots["prefab:2"] != hips || result.Bones[1] != slots["prefab:4"] ||
             before.Zip(Positions(result)).Any(pair => MathX.Distance(pair.First, pair.Second) > 0.00001f))

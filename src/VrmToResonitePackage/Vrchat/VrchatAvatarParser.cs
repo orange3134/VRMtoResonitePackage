@@ -181,7 +181,7 @@ public static class VrchatAvatarParser
             }
             avatar.FbxGuid = primaryFbxGuid;
             avatar.FbxPath = fbx.DiskPath;
-            selected.FbxPlacements ??= CollectFbxPlacements(package, selected.Source.Guid);
+            selected.FbxPlacements ??= CollectFbxPlacements(package, selected.Source.Guid, primaryFbxGuid);
             FbxPlacement primaryPlacement = null;
             selected.FbxPlacements?.TryGetValue(primaryFbxGuid, out primaryPlacement);
             ApplyPrimaryFbxPlacement(avatar, fbx, primaryPlacement);
@@ -819,16 +819,17 @@ public static class VrchatAvatarParser
         }
     }
 
-    private static Dictionary<string, FbxPlacement> CollectFbxPlacements(UnityPackage package, string sourceGuid)
+    private static Dictionary<string, FbxPlacement> CollectFbxPlacements(UnityPackage package, string sourceGuid,
+        string primaryFbxGuid)
     {
         var result = new Dictionary<string, FbxPlacement>(StringComparer.OrdinalIgnoreCase);
         CollectFbxPlacements(package, sourceGuid, null, result,
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase), 0);
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase), 0, primaryFbxGuid);
         return result;
     }
 
     private static void CollectFbxPlacements(UnityPackage package, string guid, FbxPlacement inherited,
-        Dictionary<string, FbxPlacement> result, HashSet<string> visited, int depth)
+        Dictionary<string, FbxPlacement> result, HashSet<string> visited, int depth, string primaryFbxGuid)
     {
         if (string.IsNullOrEmpty(guid) || depth > 8 || !visited.Add(guid))
         {
@@ -867,8 +868,8 @@ public static class VrchatAvatarParser
             long parentId = instance.Root?["m_Modification"]?["m_TransformParent"]?.FileID ?? 0;
             FbxPlacement placement = parentId == 0 && inherited != null
                 ? inherited
-                : PlacementFromInstance(package, scene, guid, instance);
-            CollectFbxPlacements(package, childGuid, placement, result, visited, depth + 1);
+                : PlacementFromInstance(package, scene, guid, instance, primaryFbxGuid);
+            CollectFbxPlacements(package, childGuid, placement, result, visited, depth + 1, primaryFbxGuid);
         }
 
         // Some authored prefabs unpack the model hierarchy and reference FBX meshes directly
@@ -889,7 +890,7 @@ public static class VrchatAvatarParser
     }
 
     private static FbxPlacement PlacementFromInstance(UnityPackage package, UnityScene scene,
-        string sceneGuid, YamlDocument instance)
+        string sceneGuid, YamlDocument instance, string primaryFbxGuid)
     {
         long parentId = instance.Root?["m_Modification"]?["m_TransformParent"]?.FileID ?? 0;
         (string parentGuid, string parentName) = ResolveReferenceNode(package, scene, parentId, 0);
@@ -926,7 +927,12 @@ public static class VrchatAvatarParser
                 FindModificationFloat(package, instance, transformTarget, "m_LocalScale.y", 1f),
                 FindModificationFloat(package, instance, transformTarget, "m_LocalScale.z", 1f)),
         };
-        CaptureLocalPlacementParents(package, scene, sceneGuid, parentId, placement);
+        // Accessories parented to an unpacked rig must reuse its imported bones, just
+        // like copied skins and physics. Recreating their ancestors first would put
+        // meter-based placeholders in the shared prefab identity table, where skin
+        // binding could pick them instead of the source-unit FBX skeleton.
+        CaptureLocalPlacementParents(package, scene, sceneGuid, parentId, placement,
+            SelectLocalSkeletonModel(package, scene, primaryFbxGuid), new(), includeSkeletonAncestors: true);
         return placement;
     }
 

@@ -232,6 +232,13 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   `UnpackedModelRootChecks`で厳密なpath照合と除外条件、`FbxTransformHelperChecks`で
   メートル／センチメートル・追加親の非一様scale・使用頂点の変形を確認する。
   `PrefabSceneSmoke --skin-package`は単一のunpacked Prefabを対象に、保存後の使用骨の基底を元YAMLと比較する。
+  unpack済み骨格へ追加FBXを取り付ける場合も、配置収集時に主モデルの骨所属と完全pathを検証し、
+  `ImportedBone` と親モデルの単位を保持する。追加FBXの配置はmesh copyより先に行われるため、
+  この段階で通常の親Slotとして骨格を複製すると、そのPrefab identityがskinの接続先になってしまう。
+  `ResolvePrefabParent`へimport済み参照と単位を渡し、追加した中間親の位置も同じ単位へ換算する。
+  Nagmaは手の剣の親階層がこの複製を起こし、胸・腕の骨が100倍の基底となって本体と衣装が破裂した回帰例。
+  `UnpackedFbxAttachmentChecks`で配置収集、`FbxTransformHelperChecks`で追加モデルとskinの骨共有・
+  中間親の非一様scale・異なるFBX単位・変形後頂点を検証する。
 - prefabの外側にあるattachmentも複製の親階層へ含める。上書きは表示名ではなく、
   explicit/omitted stripped参照を解決したobject identityへ適用する。EditorOnlyタグも同様。
   `m_RemovedGameObjects` also resolves per-occurrence object identities, including

@@ -62,8 +62,8 @@ Transform:
         using var source = UnityPackage.Open(input);
         using var view = UnityPrefabInstances.CreateView(source, guid, null);
         var method = typeof(VrchatAvatarParser).GetMethods(BindingFlags.Static | BindingFlags.NonPublic)
-            .Single(m => m.Name == "CollectFbxPlacements" && m.GetParameters().Length == 2);
-        var placements = (IDictionary)method.Invoke(null, new object[] { view, guid })!;
+            .Single(m => m.Name == "CollectFbxPlacements" && m.GetParameters().Length == 3);
+        var placements = (IDictionary)method.Invoke(null, new object[] { view, guid, null })!;
         var values = placements.Values.Cast<object>().ToArray();
         T Field<T>(object placement, string name) => (T)placement.GetType().GetField(name)!.GetValue(placement)!;
         bool Matches(object placement, Vector3 expectedScale, float expectedY) =>

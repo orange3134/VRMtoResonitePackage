@@ -8,14 +8,27 @@ using VrmToResonitePackage.Vrchat;
 
 internal static class NativeMeshSceneChecks
 {
-    public static async Task CheckReal(Slot parent, string prefab, string output, string avatarName = null)
+    public static async Task CheckReal(Slot parent, string prefab, string output, string avatarName = null,
+        bool primaryOnly = false)
     {
         using var package = UnityPackage.Open(prefab);
         var avatar = VrchatAvatarParser.Parse(package, avatarName);
-        var expected = avatar.MeshCopies.Where(c => c.IsSkinned && !c.RendererRemoved).ToArray();
+        var expected = avatar.MeshCopies.Where(c => c.IsSkinned && !c.RendererRemoved &&
+            (!primaryOnly || c.FbxGuid == avatar.FbxGuid)).ToArray();
+        if (primaryOnly) Console.WriteLine($"Checking primary model skins only: {avatar.FbxGuid}, copies={expected.Length}");
         if (expected.Length == 0 || avatarName == null && !expected.Any(c => c.GeneratedMesh != null))
             throw new Exception("No expected meshes in test avatar.");
         var sourceScene = package.ReadScene(package.InputPrefab ?? package.ByGuid(expected[0].PrefabGuid));
+        string SourcePath(long gameObject)
+        {
+            var names = new List<string>();
+            for (var transform = sourceScene.TransformOfGameObject(gameObject); transform != null;
+                transform = sourceScene.Doc(transform.Root["m_Father"].FileID ?? 0))
+                names.Add(sourceScene.Doc(transform.Root["m_GameObject"].FileID.Value).Root["m_Name"].AsString());
+            names.Reverse();
+            return string.Join("/", names);
+        }
+        string SavedPath(Slot slot) => slot == parent ? "" : SavedPath(slot.Parent) + "/" + slot.Name;
         var sourceWorld = new Dictionary<long, System.Numerics.Matrix4x4>();
         System.Numerics.Matrix4x4 World(long id)
         {
@@ -33,7 +46,16 @@ internal static class NativeMeshSceneChecks
         for (int frame = 0; frame < 7200 && renderers.Any(r => r.Mesh.Target != null && !r.Mesh.IsAssetAvailable); frame++) await default(NextUpdate);
         foreach (var copy in expected)
         {
-            var renderer = renderers.Single(r => r.Slot.Name == copy.Name);
+            string sourcePath = SourcePath(copy.GameObjectFileId);
+            Console.WriteLine($"Checking {sourcePath}, model={copy.FbxGuid}, source={copy.SourcePath}");
+            var matches = renderers.Where(r => r.Slot.Name == copy.Name).ToArray();
+            if (matches.Length > 1)
+                matches = matches.Where(r => SavedPath(r.Slot).EndsWith("/" + sourcePath, StringComparison.Ordinal)).ToArray();
+            // A retained imported skeleton lives below RootNode instead of the
+            // authored descriptor wrapper. Keep every path segment below that root.
+            if (matches.Length == 0 && sourcePath.Count(c => c == '/') > 1)
+                matches = renderers.Where(r => SavedPath(r.Slot).EndsWith(sourcePath[sourcePath.IndexOf('/')..], StringComparison.Ordinal)).ToArray();
+            var renderer = matches.Single();
             var actual = renderer.Mesh.Asset?.Data ?? throw new Exception("Mesh not loaded: " + copy.Name);
             var source = copy.GeneratedMesh == null ? null : UnityNativeMesh.Decode(copy.GeneratedMesh);
             float units = copy.GeneratedMesh != null ? 1f : copy.FbxGuid == avatar.FbxGuid ? avatar.FbxImportScale :
