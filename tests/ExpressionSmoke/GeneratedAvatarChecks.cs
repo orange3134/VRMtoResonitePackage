@@ -6,10 +6,18 @@ using FrooxEngine.Store;
 using Renderite.Shared;
 using SkyFrost.Base;
 using VrmToResonitePackage;
+using VrmToResonitePackage.Vrm;
 
 internal static class GeneratedAvatarChecks
 {
     public static async Task Run(Slot parent, string artifacts)
+    {
+        foreach (var (source, expectedSwing) in new[]
+            { (ModelSource.Vrm0, 4f), (ModelSource.Vrm1, 4f), (ModelSource.VrchatFbx, 10f) })
+            await RunCase(parent, artifacts, source, expectedSwing);
+    }
+
+    private static async Task RunCase(Slot parent, string artifacts, ModelSource source, float expectedSwing)
     {
         var avatar = parent.AddSlot("Generated avatar helpers");
         Slot restored = null;
@@ -20,7 +28,7 @@ internal static class GeneratedAvatarChecks
             AvatarSetup.EnsureAvatarRootIdentification(avatar);
             AvatarSetup.EnsureAvatarRootIdentification(avatar);
             Check(avatar.Children.Count(s => s.Name == "Avatar Root Identification") == 1, "identification is idempotent");
-            AvatarSetup.SetupEyeSwing(avatar, avatar.AddSlot("Eye Manager").AttachComponent<EyeRotationDriver>());
+            AvatarSetup.SetupEyeSwing(avatar, avatar.AddSlot("Eye Manager").AttachComponent<EyeRotationDriver>(), source);
             var rig = avatar.AttachComponent<BipedRig>();
             foreach (BodyNode bone in new[] { BodyNode.Hips, BodyNode.Spine, BodyNode.Head,
                 BodyNode.LeftUpperArm, BodyNode.LeftLowerArm, BodyNode.LeftHand,
@@ -58,7 +66,7 @@ internal static class GeneratedAvatarChecks
             Check(!renderer.Enabled && standIn.ActiveSelf, "pending mesh shows stand-in and hides avatar renderer");
             Check(avatar.GetComponentInChildren<MeshRendererLoadStatus>().Renderers.Count == 1,
                 "stand-in renderer is excluded from the mesh loading gate");
-            await Verify(avatar, standIn, parent);
+            await Verify(avatar, standIn, parent, expectedSwing);
             renderer.Mesh.Target = meshSlot.AttachComponent<QuadMesh>();
             pendingMesh.Destroy();
             for (int i = 0; i < 1200 && !renderer.Enabled; i++) await default(NextUpdate);
@@ -67,7 +75,7 @@ internal static class GeneratedAvatarChecks
             // Save while dequipped: no synthetic wearer references should escape into the package.
             var graph = avatar.SaveObject(DependencyHandling.CollectAssets);
             var record = RecordHelper.CreateForObject<SkyFrost.Base.Record>(avatar.Name, avatar.World.LocalUser.MachineID, null);
-            string package = Path.Combine(artifacts, "GeneratedAvatar.resonitepackage");
+            string package = Path.Combine(artifacts, $"GeneratedAvatar-{source}.resonitepackage");
             var engine = avatar.Engine;
             await default(ToBackground);
             using (var stream = File.Create(package))
@@ -85,12 +93,12 @@ internal static class GeneratedAvatarChecks
             if (activeDriver != null) activeDriver.Target = null;
             restoredStandIn.ActiveSelf = true;
             await Frames(30);
-            await Verify(restored, restoredStandIn, parent);
+            await Verify(restored, restoredStandIn, parent, expectedSwing);
         }
         finally { restored?.Destroy(); avatar.Destroy(); }
     }
 
-    private static async Task VerifyEyeSwing(Slot avatar)
+    private static async Task VerifyEyeSwing(Slot avatar, float expectedSwing)
     {
         var rotation = avatar.GetComponentInChildren<EyeRotationDriver>();
         var variable = avatar.GetComponentsInChildren<DynamicValueVariable<float>>()
@@ -107,21 +115,21 @@ internal static class GeneratedAvatarChecks
             binding.VariableName.Value == "modular_avatar/EyeSwing" && !binding.OverrideOnLink.Value &&
             rotation.Slot.GetComponent<DynamicValueVariableDriver<float>>() == null,
             "eye swing uses DynamicField instead of a value driver after reload");
-        Check(variable.Value.Value == 10f && rotation.MaxSwing.Value == 10f,
-            "eye swing defaults to 10 after reload");
+        Check(variable.Value.Value == expectedSwing && rotation.MaxSwing.Value == expectedSwing,
+            $"eye swing defaults to {expectedSwing} after reload");
         variable.Value.Value = 6f;
         await Frames(20);
         Check(rotation.MaxSwing.Value == 6f, "editing EyeSwing changes the rotation limit");
         rotation.MaxSwing.Value = 8f;
         await Frames(20);
         Check(variable.Value.Value == 8f, "editing MaxSwing updates the EyeSwing setting");
-        variable.Value.Value = 10f;
+        variable.Value.Value = expectedSwing;
         await Frames(20);
     }
 
-    private static async Task Verify(Slot avatar, Slot standIn, Slot parent)
+    private static async Task Verify(Slot avatar, Slot standIn, Slot parent, float expectedSwing)
     {
-        await VerifyEyeSwing(avatar);
+        await VerifyEyeSwing(avatar, expectedSwing);
         Check(avatar.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "generated Flux groups are valid");
         Check(avatar.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("AvatarRoot", out var root) && root == avatar,
             "AvatarRoot reference points at this avatar");

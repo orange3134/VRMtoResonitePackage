@@ -552,7 +552,7 @@ internal static class AvatarSetup
 
             EyeRotationDriver rotationDriver = managerSlot.AttachComponent<EyeRotationDriver>();
             rotationDriver.EyeManager.Target = eyeManager;
-            SetupEyeSwing(root, rotationDriver);
+            SetupEyeSwing(root, rotationDriver, vrm.Source);
             EyeRotationDriver.Eye left = rotationDriver.Eyes.Add();
             EyeRotationDriver.Eye right = rotationDriver.Eyes.Add();
             left.Root.Target = leftPivot;
@@ -632,11 +632,11 @@ internal static class AvatarSetup
         return result;
     }
 
-    internal static void SetupEyeSwing(Slot root, EyeRotationDriver rotationDriver)
+    internal static void SetupEyeSwing(Slot root, EyeRotationDriver rotationDriver, ModelSource source)
     {
-        // Share modular-avatar-resonite's setting name and default via an editable field binding.
+        // Share modular-avatar-resonite's setting; keep a smaller default for VRM eyes.
         const string variableName = ModularAvatarNamespace + "/EyeSwing";
-        const float defaultSwing = 10f;
+        float defaultSwing = source == ModelSource.VrchatFbx ? 10f : 4f;
         Slot settings = EnsureAvatarSettingsRoot(root).AddSlot("Eye Swing");
         var variable = settings.AttachComponent<DynamicValueVariable<float>>();
         variable.Value.Value = defaultSwing;

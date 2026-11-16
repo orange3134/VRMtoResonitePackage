@@ -101,13 +101,13 @@ CLI では従来どおり `--no-protection` を指定した実行で保護を外
 - `AvatarRenderSettings` はルート直下へ作り、既定 `NearClip=0.075`、`FarClip=null` とする。
 - ビセームと瞬きはResoniteの名前推測による自動補完を避け、入力から解決した設定を使う。
   視線の `EyeRotationDriver.MaxSwing` はVRM・VRChatともに `modular_avatar/EyeSwing` と値を共有する。
-  `modular-avatar-resonite` の `EyeSwingVariableFilter` に合わせ、初期値10の
-  `DynamicValueVariable<float>` を `Avatar Settings/Eye Swing` に生成し、
+  `modular-avatar-resonite` と同名の `DynamicValueVariable<float>` を
+  `Avatar Settings/Eye Swing` に生成する。初期値はUnityPackage / Prefabが10、VRM 0.x / 1.0が4。
   Eye Manager の `DynamicField<float>.TargetField` を `MaxSwing` に接続する。
   `OverrideOnLink=false` とし、接続時は設定側の値を受け取り、接続後はどちらの編集も相手へ反映する。
-  `MaxSwing` 自体も初期値10とする。値ドライバーによる駆動や未接続時の値リセットは行わない。
+  `MaxSwing` 自体も同じ初期値とする。値ドライバーによる駆動や未接続時の値リセットは行わない。
   両目ボーンが揃わず `EyeRotationDriver` を作らない場合は、このDVも生成しない。
-  旧実装の固定値（VRM: 4、VRChat: 15）は使わず、変換後の可動範囲はこのDVで調整する。
+  変換後の可動範囲はこのDVまたは `MaxSwing` の直接編集で調整する。
   設定ルートは揺れもの・読み込み表示と共有し、`modular_avatar/AvatarSettingsRoot` として公開する。
 - `AvatarExpressionDriver` は既定で作らず、`--face-tracking` 指定時だけ有効にする。
 - `SimpleAvatarProtection` は既定でrootと各SkinnedMeshRendererへ付与し、
@@ -115,7 +115,7 @@ CLI では従来どおり `--no-protection` を指定した実行で保護を外
 
 ### 元データからの視線可動範囲の取り込み（未実装）
 
-現在の `EyeSwing` 初期値は10で、元データの可動範囲はまだ取り込まない。
+現在の `EyeSwing` 初期値はUnityPackage / Prefabが10、VRMが4で、元データの可動範囲はまだ取り込まない。
 取り込みを実装する場合の候補は次のとおり。
 
 - VRM 1.0の `lookAt.type=bone` は `rangeMapHorizontalInner/Outer`、
