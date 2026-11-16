@@ -102,18 +102,19 @@ internal static class GeneratedAvatarChecks
             settings.GetComponents<DynamicReferenceVariable<Slot>>().Count() == 1 &&
             avatar.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("AvatarSettingsRoot", out var published) &&
             published == settings, "settings root reference is shared and survives reload");
-        Check(variable.Value.Value == 10f && rotation.MaxSwing.Value == 10f && rotation.MaxSwing.IsDriven,
-            "eye swing defaults to 10 and remains driven after reload");
+        var binding = rotation.Slot.GetComponent<DynamicField<float>>();
+        Check(binding?.TargetField.Target == rotation.MaxSwing &&
+            binding.VariableName.Value == "modular_avatar/EyeSwing" && !binding.OverrideOnLink.Value &&
+            rotation.Slot.GetComponent<DynamicValueVariableDriver<float>>() == null,
+            "eye swing uses DynamicField instead of a value driver after reload");
+        Check(variable.Value.Value == 10f && rotation.MaxSwing.Value == 10f,
+            "eye swing defaults to 10 after reload");
         variable.Value.Value = 6f;
         await Frames(20);
         Check(rotation.MaxSwing.Value == 6f, "editing EyeSwing changes the rotation limit");
-        var driver = rotation.Slot.GetComponent<DynamicValueVariableDriver<float>>();
-        driver.VariableName.Value = "modular_avatar/MissingEyeSwing";
+        rotation.MaxSwing.Value = 8f;
         await Frames(20);
-        Check(rotation.MaxSwing.Value == 10f, "unresolved EyeSwing falls back to 10");
-        driver.VariableName.Value = "modular_avatar/EyeSwing";
-        await Frames(20);
-        Check(rotation.MaxSwing.Value == 6f, "EyeSwing reconnects to the edited value");
+        Check(variable.Value.Value == 8f, "editing MaxSwing updates the EyeSwing setting");
         variable.Value.Value = 10f;
         await Frames(20);
     }

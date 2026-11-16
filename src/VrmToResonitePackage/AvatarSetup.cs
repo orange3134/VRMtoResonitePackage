@@ -634,7 +634,7 @@ internal static class AvatarSetup
 
     internal static void SetupEyeSwing(Slot root, EyeRotationDriver rotationDriver)
     {
-        // Match modular-avatar-resonite's EyeSwingVariableFilter and expose the same setting.
+        // Share modular-avatar-resonite's setting name and default via an editable field binding.
         const string variableName = ModularAvatarNamespace + "/EyeSwing";
         const float defaultSwing = 10f;
         Slot settings = EnsureAvatarSettingsRoot(root).AddSlot("Eye Swing");
@@ -643,10 +643,10 @@ internal static class AvatarSetup
         variable.VariableName.Value = variableName;
 
         rotationDriver.MaxSwing.Value = defaultSwing;
-        var driver = rotationDriver.Slot.AttachComponent<DynamicValueVariableDriver<float>>();
-        driver.VariableName.Value = variableName;
-        driver.DefaultValue.Value = defaultSwing;
-        driver.Target.Target = rotationDriver.MaxSwing;
+        var binding = rotationDriver.Slot.AttachComponent<DynamicField<float>>();
+        binding.TargetField.Target = rotationDriver.MaxSwing;
+        binding.OverrideOnLink.Value = false;
+        binding.VariableName.Value = variableName;
     }
 
     internal static Slot EnsureAvatarSettingsRoot(Slot root)

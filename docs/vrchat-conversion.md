@@ -560,7 +560,7 @@ customEyeLookSettingsの左右の目はprefab配置・Transform fileIDまたはF
 通常のhumanoid骨も主FBXの配置IDとnode pathを保持し、向き補正・リグ設定で同じ参照解決を使う。
 ローカルの目Transformも配置を生成し、Merge Armature後の参照表をAvatarSetupのリグ割り当てまで渡す。
 同名の目があっても指定されたobjectを使用し、欠落・破棄された明示参照を名前検索で置き換えない。
-視線には共通の `modular_avatar/EyeSwing`（初期値10）で駆動する `EyeRotationDriver.MaxSwing` を使う。
+視線には共通の `modular_avatar/EyeSwing`（初期値10）と値を共有する `EyeRotationDriver.MaxSwing` を使う。
 詳細は[共通アバター設定](avatar-conversion.md#アバターセットアップ)を参照する。
 瞬きは `eyelidsBlendshapes[0]` だけを使い、LookingUp / LookingDownはblinkとして扱わない。
 Blendshape repair selects original tables by imported model identity or the authored

@@ -100,10 +100,12 @@ CLI では従来どおり `--no-protection` を指定した実行で保護を外
   VRChatのDescriptor視点の優先順位とオプションの加算規則は[視点](vrchat-conversion.md#視点)を参照する。
 - `AvatarRenderSettings` はルート直下へ作り、既定 `NearClip=0.075`、`FarClip=null` とする。
 - ビセームと瞬きはResoniteの名前推測による自動補完を避け、入力から解決した設定を使う。
-  視線の `EyeRotationDriver.MaxSwing` はVRM・VRChatともに `modular_avatar/EyeSwing` で駆動する。
+  視線の `EyeRotationDriver.MaxSwing` はVRM・VRChatともに `modular_avatar/EyeSwing` と値を共有する。
   `modular-avatar-resonite` の `EyeSwingVariableFilter` に合わせ、初期値10の
   `DynamicValueVariable<float>` を `Avatar Settings/Eye Swing` に生成し、
-  `DynamicValueVariableDriver<float>` を Eye Manager に置く。変数未解決時の既定値も10とする。
+  Eye Manager の `DynamicField<float>.TargetField` を `MaxSwing` に接続する。
+  `OverrideOnLink=false` とし、接続時は設定側の値を受け取り、接続後はどちらの編集も相手へ反映する。
+  `MaxSwing` 自体も初期値10とする。値ドライバーによる駆動や未接続時の値リセットは行わない。
   両目ボーンが揃わず `EyeRotationDriver` を作らない場合は、このDVも生成しない。
   旧実装の固定値（VRM: 4、VRChat: 15）は使わず、変換後の可動範囲はこのDVで調整する。
   設定ルートは揺れもの・読み込み表示と共有し、`modular_avatar/AvatarSettingsRoot` として公開する。
