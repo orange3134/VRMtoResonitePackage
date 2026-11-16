@@ -100,10 +100,38 @@ CLI では従来どおり `--no-protection` を指定した実行で保護を外
   VRChatのDescriptor視点の優先順位とオプションの加算規則は[視点](vrchat-conversion.md#視点)を参照する。
 - `AvatarRenderSettings` はルート直下へ作り、既定 `NearClip=0.075`、`FarClip=null` とする。
 - ビセームと瞬きはResoniteの名前推測による自動補完を避け、入力から解決した設定を使う。
-  視線の `EyeRotationDriver.MaxSwing` は入力形式ごとの値を使う。
+  視線の `EyeRotationDriver.MaxSwing` はVRM・VRChatともに `modular_avatar/EyeSwing` と値を共有する。
+  `modular-avatar-resonite` と同名の `DynamicValueVariable<float>` を
+  `Avatar Settings/Eye Swing` に生成する。初期値はUnityPackage / Prefabが10、VRM 0.x / 1.0が4。
+  Eye Manager の `DynamicField<float>.TargetField` を `MaxSwing` に接続する。
+  `OverrideOnLink=false` とし、接続時は設定側の値を受け取り、接続後はどちらの編集も相手へ反映する。
+  `MaxSwing` 自体も同じ初期値とする。値ドライバーによる駆動や未接続時の値リセットは行わない。
+  両目ボーンが揃わず `EyeRotationDriver` を作らない場合は、このDVも生成しない。
+  変換後の可動範囲はこのDVまたは `MaxSwing` の直接編集で調整する。
+  設定ルートは揺れもの・読み込み表示と共有し、`modular_avatar/AvatarSettingsRoot` として公開する。
 - `AvatarExpressionDriver` は既定で作らず、`--face-tracking` 指定時だけ有効にする。
 - `SimpleAvatarProtection` は既定でrootと各SkinnedMeshRendererへ付与し、
   `--no-protection` で無効にする。
+
+### 元データからの視線可動範囲の取り込み（未実装）
+
+現在の `EyeSwing` 初期値はUnityPackage / Prefabが10、VRMが4で、元データの可動範囲はまだ取り込まない。
+取り込みを実装する場合の候補は次のとおり。
+
+- VRM 1.0の `lookAt.type=bone` は `rangeMapHorizontalInner/Outer`、
+  `rangeMapVerticalUp/Down` の `outputScale` が出力角度の上限。
+  `inputMaxValue` は入力角度の範囲であり、出力角度と混同しない。
+- VRM 0.xのBone方式は `firstPerson.lookAtHorizontalInner/Outer`、
+  `lookAtVerticalUp/Down` の `yRange` が候補。`xRange` とカーブは応答の再現にも関わる。
+- VRChatは `customEyeLookSettings.eyesLookingStraight` を基準に、
+  `eyesLookingUp/Down/Left/Right` の左右の目の回転差から可動角度を求められる。
+  SDKの `linked` 設定も考慮する。保存されたEuler角の単純な引き算では扱わない。
+- 単一の `MaxSwing` では方向別・左右別の範囲や応答カーブを完全には再現できない。
+  代表値の選び方は未決定。VRMのExpression方式の出力値は角度ではなく、直接流用できない。
+
+参照: [VRM 1.0 LookAt仕様](https://github.com/vrm-c/vrm-specification/blob/master/specification/VRMC_vrm-1.0/lookAt.ja.md)、
+[VRM 0.x DegreeMap](https://github.com/vrm-c/vrm-specification/blob/master/specification/0.0/schema/vrm.firstperson.degreemap.schema.json)、
+VRChat SDKの `VRCAvatarDescriptorEditor3EyeLook.cs`。
 
 ## 表情システムへの接続
 

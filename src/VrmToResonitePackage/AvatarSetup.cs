@@ -552,8 +552,7 @@ internal static class AvatarSetup
 
             EyeRotationDriver rotationDriver = managerSlot.AttachComponent<EyeRotationDriver>();
             rotationDriver.EyeManager.Target = eyeManager;
-            // The default (15) lets eyes swing far enough to clip through VRM face meshes.
-            rotationDriver.MaxSwing.Value = vrm.Source == ModelSource.VrchatFbx ? 15f : 4f;
+            SetupEyeSwing(root, rotationDriver, vrm.Source);
             EyeRotationDriver.Eye left = rotationDriver.Eyes.Add();
             EyeRotationDriver.Eye right = rotationDriver.Eyes.Add();
             left.Root.Target = leftPivot;
@@ -631,6 +630,48 @@ internal static class AvatarSetup
             }
         }
         return result;
+    }
+
+    internal static void SetupEyeSwing(Slot root, EyeRotationDriver rotationDriver, ModelSource source)
+    {
+        // Share modular-avatar-resonite's setting; keep a smaller default for VRM eyes.
+        const string variableName = ModularAvatarNamespace + "/EyeSwing";
+        float defaultSwing = source == ModelSource.VrchatFbx ? 10f : 4f;
+        Slot settings = EnsureAvatarSettingsRoot(root).AddSlot("Eye Swing");
+        var variable = settings.AttachComponent<DynamicValueVariable<float>>();
+        variable.Value.Value = defaultSwing;
+        variable.VariableName.Value = variableName;
+
+        rotationDriver.MaxSwing.Value = defaultSwing;
+        var binding = rotationDriver.Slot.AttachComponent<DynamicField<float>>();
+        binding.TargetField.Target = rotationDriver.MaxSwing;
+        binding.OverrideOnLink.Value = false;
+        binding.VariableName.Value = variableName;
+    }
+
+    internal static Slot EnsureAvatarSettingsRoot(Slot root)
+    {
+        var space = root.GetComponents<DynamicVariableSpace>()
+            .FirstOrDefault(s => s.SpaceName.Value == ModularAvatarNamespace)
+            ?? root.AttachComponent<DynamicVariableSpace>();
+        space.SpaceName.Value = ModularAvatarNamespace;
+        space.OnlyDirectBinding.Value = true;
+
+        Slot settings = root.FindChild("<color=#00ffff>Avatar Settings</color>")
+                        ?? root.FindChild("Avatar Settings")
+                        ?? root.AddSlot("<color=#00ffff>Avatar Settings</color>");
+        const string variableName = ModularAvatarNamespace + "/AvatarSettingsRoot";
+        var variable = settings.GetComponents<DynamicReferenceVariable<Slot>>()
+            .FirstOrDefault(v => v.VariableName.Value == variableName);
+        if (variable == null)
+        {
+            var self = settings.AttachComponent<ReferenceField<Slot>>();
+            self.Reference.Target = settings;
+            variable = settings.AttachComponent<DynamicReferenceVariable<Slot>>();
+            variable.VariableName.Value = variableName;
+            variable.Reference.DriveFrom(self.Reference);
+        }
+        return settings;
     }
 
     /// <summary>Adds one Eye entry per bound morph; ClosedState carries the bind weight.</summary>

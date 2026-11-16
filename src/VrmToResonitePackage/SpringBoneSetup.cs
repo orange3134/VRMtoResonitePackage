@@ -16,9 +16,7 @@ internal static class SpringBoneSetup
 {
     // Variable / tag strings must stay byte-for-byte identical to modular-avatar-resonite's
     // ResoNamespaces so chains authored by either tool share the same DynamicVariable space.
-    private const string SpaceName = "modular_avatar";
     private const string DynBoneTemplatePrefix = "modular_avatar/dynamic_bone_template.";
-    private const string SettingsRootVariable = "modular_avatar/AvatarSettingsRoot";
     private const string DynBoneControllerTag = "modular_avatar/dynamic_bone_controller";
 
     public static void Apply(Slot root, VrmModel vrm, IReadOnlyDictionary<int, Slot> resolvedNodes = null)
@@ -120,23 +118,7 @@ internal static class SpringBoneSetup
                 return;
             }
 
-            // Reuse an existing modular_avatar space if one is already present on the root.
-            DynamicVariableSpace space = _root.GetComponents<DynamicVariableSpace>()
-                .FirstOrDefault(s => s.SpaceName.Value == SpaceName);
-            if (space == null)
-            {
-                space = _root.AttachComponent<DynamicVariableSpace>();
-                space.SpaceName.Value = SpaceName;
-                space.OnlyDirectBinding.Value = true;
-            }
-
-            // "Avatar Settings" slot publishes itself as modular_avatar/AvatarSettingsRoot.
-            _settingsRoot = _root.AddSlot("<color=#00ffff>Avatar Settings</color>");
-            ReferenceField<Slot> selfRef = _settingsRoot.AttachComponent<ReferenceField<Slot>>();
-            selfRef.Reference.Target = _settingsRoot;
-            DynamicReferenceVariable<Slot> settingsRootVar = _settingsRoot.AttachComponent<DynamicReferenceVariable<Slot>>();
-            settingsRootVar.VariableName.Value = SettingsRootVariable;
-            settingsRootVar.Reference.DriveFrom(selfRef.Reference);
+            _settingsRoot = AvatarSetup.EnsureAvatarSettingsRoot(_root);
 
             _templateRoot = _settingsRoot.AddSlot("Dynamic Bone Settings");
         }

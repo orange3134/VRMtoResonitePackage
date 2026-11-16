@@ -45,7 +45,8 @@
 ## VRMのアバター設定と表情取り込み
 
 - リグの対応表はVRM humanoid mapから取得する。
-- `EyeRotationDriver.MaxSwing=4` を使う。
+- 視線の可動範囲は共通の `modular_avatar/EyeSwing`（VRM 0.x / 1.0ともに初期値4）から設定する。
+  詳細は[共通アバター設定](avatar-conversion.md#アバターセットアップ)を参照する。
 - ビセームと瞬きはVRM Expressionから構築する。
 
 感情表情は `VrmExpressionAdapter` から共通の[表情システム](expression-system.md)へ渡す。
