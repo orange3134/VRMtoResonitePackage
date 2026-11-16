@@ -50,7 +50,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-local-avatar.ps
 パス・ログ・アバター本体がステージされていないことを確認する。
 
 `-SkipBuild` で同じDLLを使う複数の変換を同秒に起動すると、DLL横の `Logs/convert_yyyyMMdd_HHmmss.log`
-が衝突する。並行検証には既定の実行別ビルドを使う。また、実行中のDLLへビルド出力を上書きしない。
+が衝突する。並行検証には既定の実行別ビルドを使う。ただし `-o` で出力先を分けても
+`obj/Release` は共有されるため、ビルド工程は順番に実行して中間DLLのロック競合を避ける。
+また、実行中のDLLへビルド出力を上書きしない。
 
 ### 登録アバターをすべてAlphaからCutoutへ変換する
 

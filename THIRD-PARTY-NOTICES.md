@@ -207,10 +207,11 @@ SOFTWARE.
 
 ## Modular Avatar for Resonite
 
-ResoPon adapts the avatar identification, mesh-loading gate, loading stand-in
+ResoPon adapts the avatar identification, eye-swing setting, mesh-loading gate, loading stand-in
 and dynamic-bone template setup from modular-avatar-resonite.
 The relevant upstream files include Puppeteer/conversion/AvatarSetup.cs,
-Puppeteer/conversion/Dynamics.cs, Puppeteer/filters/MeshLoadingFilter.cs,
+Puppeteer/conversion/Dynamics.cs, Puppeteer/filters/EyeSwingVariableFilter.cs,
+Puppeteer/filters/MeshLoadingFilter.cs,
 and MA.Gadgets/resources/loading_standin.resonitepackage under
 Resonite~/ResoniteHook/.
 

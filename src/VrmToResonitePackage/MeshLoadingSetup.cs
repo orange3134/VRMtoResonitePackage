@@ -42,9 +42,7 @@ internal static class MeshLoadingSetup
         variableNameDriver.TargetField.Target = loadVariable.VariableName;
         variableNameDriver.State.DriveFrom(loadStatus.IsLoaded);
 
-        Slot avatarSettings = root.FindChild("<color=#00ffff>Avatar Settings</color>")
-                              ?? root.FindChild("Avatar Settings")
-                              ?? root.AddSlot("<color=#00ffff>Avatar Settings</color>");
+        Slot avatarSettings = AvatarSetup.EnsureAvatarSettingsRoot(root);
         Slot loadingDisplay = avatarSettings.AddSlot("Avatar Loading Display");
         Slot standIn = await LoadingStandInSetup.BuildAsync(loadingDisplay);
 

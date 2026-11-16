@@ -20,6 +20,7 @@ internal static class GeneratedAvatarChecks
             AvatarSetup.EnsureAvatarRootIdentification(avatar);
             AvatarSetup.EnsureAvatarRootIdentification(avatar);
             Check(avatar.Children.Count(s => s.Name == "Avatar Root Identification") == 1, "identification is idempotent");
+            AvatarSetup.SetupEyeSwing(avatar, avatar.AddSlot("Eye Manager").AttachComponent<EyeRotationDriver>());
             var rig = avatar.AttachComponent<BipedRig>();
             foreach (BodyNode bone in new[] { BodyNode.Hips, BodyNode.Spine, BodyNode.Head,
                 BodyNode.LeftUpperArm, BodyNode.LeftLowerArm, BodyNode.LeftHand,
@@ -89,8 +90,37 @@ internal static class GeneratedAvatarChecks
         finally { restored?.Destroy(); avatar.Destroy(); }
     }
 
+    private static async Task VerifyEyeSwing(Slot avatar)
+    {
+        var rotation = avatar.GetComponentInChildren<EyeRotationDriver>();
+        var variable = avatar.GetComponentsInChildren<DynamicValueVariable<float>>()
+            .Single(v => v.VariableName.Value == "modular_avatar/EyeSwing");
+        var settings = variable.Slot.Parent;
+        Check(avatar.Children.Count(s => s.Name == settings.Name) == 1,
+            "eye swing and loading display share one settings root");
+        Check(AvatarSetup.EnsureAvatarSettingsRoot(avatar) == settings &&
+            settings.GetComponents<DynamicReferenceVariable<Slot>>().Count() == 1 &&
+            avatar.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("AvatarSettingsRoot", out var published) &&
+            published == settings, "settings root reference is shared and survives reload");
+        Check(variable.Value.Value == 10f && rotation.MaxSwing.Value == 10f && rotation.MaxSwing.IsDriven,
+            "eye swing defaults to 10 and remains driven after reload");
+        variable.Value.Value = 6f;
+        await Frames(20);
+        Check(rotation.MaxSwing.Value == 6f, "editing EyeSwing changes the rotation limit");
+        var driver = rotation.Slot.GetComponent<DynamicValueVariableDriver<float>>();
+        driver.VariableName.Value = "modular_avatar/MissingEyeSwing";
+        await Frames(20);
+        Check(rotation.MaxSwing.Value == 10f, "unresolved EyeSwing falls back to 10");
+        driver.VariableName.Value = "modular_avatar/EyeSwing";
+        await Frames(20);
+        Check(rotation.MaxSwing.Value == 6f, "EyeSwing reconnects to the edited value");
+        variable.Value.Value = 10f;
+        await Frames(20);
+    }
+
     private static async Task Verify(Slot avatar, Slot standIn, Slot parent)
     {
+        await VerifyEyeSwing(avatar);
         Check(avatar.GetComponentsInChildren<ProtoFluxNode>().All(n => n.Group?.IsValid == true), "generated Flux groups are valid");
         Check(avatar.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("AvatarRoot", out var root) && root == avatar,
             "AvatarRoot reference points at this avatar");
