@@ -30,6 +30,7 @@
 |---|---|
 | [ローカルアバター回帰テスト](local-avatar-tests.md) | 実アバター登録、変換・dump・inspect、利用中EXEへの反映確認 |
 | [ExpressionSmoke](../tests/ExpressionSmoke/README.md) | 合成データの表情検証、生成・複製・保存再読込、保存パッケージの64組検証 |
+| [Unity参照データとの比較](unity-reference-tests.md) | Unity Editorで採取した期待値とPrefab解析結果の比較 |
 | [PrefabInputSmoke](../tests/PrefabInputSmoke/README.md) | Unity入力・Prefab解析の回帰検証 |
 | [PrefabSceneSmoke](../tests/PrefabSceneSmoke/README.md) | 実FBXを用いたシーン生成検証 |
 | [外部ソース・素材のライセンス](third-party-licenses.md) | 使用範囲、ソース・配布物の通知、配布検証 |

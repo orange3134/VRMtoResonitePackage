@@ -1,0 +1,51 @@
+{
+  "format": "resopon.unity-reference",
+  "schemaVersion": 1,
+  "prefabGuid": "00000000000000000000000000000001",
+  "projection": "selected-prefab-authored-components",
+  "sections": {
+    "renderers": [
+      {
+        "id": "1001",
+        "path": "Body",
+        "type": "UnityEngine.SkinnedMeshRenderer",
+        "enabled": true,
+        "activeSelf": true,
+        "activeInHierarchy": true,
+        "mesh": {
+          "guid": "00000000000000000000000000000003",
+          "fileId": "4300000"
+        },
+        "materials": [
+          {
+            "guid": "00000000000000000000000000000002",
+            "fileId": "2100000"
+          }
+        ]
+      }
+    ],
+    "physBones": [
+      {
+        "id": "2001",
+        "path": "Hair",
+        "type": "VRC.SDK3.Dynamics.PhysBone.Components.VRCPhysBone",
+        "enabled": true,
+        "activeInHierarchy": true,
+        "root": "2000",
+        "colliders": [
+          "3001"
+        ]
+      }
+    ],
+    "colliders": [
+      {
+        "id": "3001",
+        "path": "Head",
+        "type": "VRC.SDK3.Dynamics.PhysBone.Components.VRCPhysBoneCollider",
+        "enabled": true,
+        "activeInHierarchy": true,
+        "root": "3000"
+      }
+    ]
+  }
+}

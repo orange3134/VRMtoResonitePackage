@@ -27,6 +27,15 @@ SHA-256 は `30a0bc21f298c2e75427245468405849b6c7ea67eb9ced14ecbc5dc1ef3eabb3`�
 `Resources/ResoPon.png`、`.ico`、`logo.svg`、`loading.svg`、`arrow.svg` は作者が自作と確認済み。
 Modular Avatar の `Editor/images` はMITの対象外だが、本アプリには含めていない。
 
+## Unity参照データの採取ツール
+
+[vrctomのUnity用エクスポーター](https://github.com/halby24/vrctom/tree/983995e2372c30b07828b88644b971912ffb68a1/tools/unity)
+（commit `983995e2372c30b07828b88644b971912ffb68a1`、[MIT](https://github.com/halby24/vrctom/blob/983995e2372c30b07828b88644b971912ffb68a1/LICENSE)）は
+Unityの解決値を比較用JSONに採取する設計の参照元。ResoPon側の採取・比較は独立実装で、
+vrctomのコード、依存物、アバター素材、取得済みの期待値は移植・同梱していない。
+開発用エクスポーターはUnity Editor APIを利用し、VRChat SDKはローカル検証用プロジェクト側で利用する。
+いずれもResoPonの配布EXEには同梱しない。検証手順は[Unity参照データとの比較](unity-reference-tests.md)。
+
 ## 配布経路と検証
 
 - AssetsTools.NETをNuGet PackageReferenceとして同梱する。単一ファイルpublishではEXEに含まれる。

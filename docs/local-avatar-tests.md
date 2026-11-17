@@ -1,5 +1,7 @@
 # ローカルアバター回帰テスト
 
+Prefabの解析結果をUnity Editorの値と比較する場合は、[Unity参照データとの比較](unity-reference-tests.md)を参照。
+
 ユーザーからアバターのパスを渡されたら、調査の最初に `.local/avatar-tests.json` に追記する。
 既存ケースは残し、同じ入力は更新する。`.local/` は Git の除外対象で、環境固有の情報を保存する。
 アバター本体はコピーせず、保存済みの Unity プロジェクトまたは VRM / unitypackage を参照する。
