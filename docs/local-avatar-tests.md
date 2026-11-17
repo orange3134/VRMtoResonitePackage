@@ -51,6 +51,42 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-local-avatar.ps
 コミット前に `git check-ignore .local/avatar-tests.json` と `git diff --cached` で、
 パス・ログ・アバター本体がステージされていないことを確認する。
 
+### 収集した解析データを回帰テストで再利用する
+
+継続利用するデータセットは `.local/avatar-analysis/<採取ID>/` に保存する。
+一時ビルド・展開したアバターは引き続き `.tmp_verify/` に置く。
+`.local/avatar-analysis/latest.json` の `path` が直近の `index.json` を指す。
+登録一覧のコピー、入力SHA-256、採取したGit HEAD、実行DLLのSHA-256、元ログ、
+比較用の `parser.expected.json`、取得できたケースの `unity.expected.json` を保持する。
+各ケースの `analysisCollection` からも採取先を参照できる。
+
+Python 3.11以降と現在の開発ビルドで、Unityを起動せず再検査する例:
+
+```powershell
+dotnet build tests/UnityReferenceDump -c Release -o .tmp_verify/avatar-analysis-build
+$index = (Get-Content -Raw .local/avatar-analysis/latest.json | ConvertFrom-Json).path
+python -B scripts/test-avatar-analysis.py $index `
+  --converter .tmp_verify/avatar-analysis-build/ResoPon.dll `
+  --reference-dump .tmp_verify/avatar-analysis-build/UnityReferenceDump.dll `
+  --output .tmp_verify/avatar-analysis-replay
+```
+
+出力先は毎回新しいディレクトリを指定する。`--case <ケースID>` は複数指定できる。
+入力・記録済み依存ファイル・期待値のハッシュが変わった場合は失敗し、期待値を自動更新しない。
+Prefab入力の依存記録はAssets/Packages内のserialized GUID参照とパッケージmanifestであり、
+ネイティブアセット内部の外部参照やPackageCache全体を網羅するプロジェクトバックアップではない。
+
+終了コード0は、選択した全ケースの解析結果と、`verified` のUnity参照が一致したことを示す。
+1は実行失敗・ハッシュ変更・差分、2はコマンド引数の誤りを示す。
+`report.json` の `unityMatched` を別に確認する。未対応・採取失敗・保留中のUnityケースは
+`not-verified` として理由を残し、Unityの成功件数には含めない。
+
+解析スナップショットは、VRChatでは選択アバターの診断セクション、VRMではメッシュ診断を
+行単位で保持する。起動時のバージョン・環境表示・取り込み途中の診断は元ログ側に保存する。
+これは現在の解析動作を固定する比較基準であり、正しさを独立に保証する期待値ではない。
+Unity参照との一致も[採取対象のフィールド](unity-reference-tests.md#比較する範囲)に限られ、
+実変換・inspect・クライアントでの外観と動作は別途検証する。
+
 `-SkipBuild` で同じDLLを使う複数の変換を同秒に起動すると、DLL横の `Logs/convert_yyyyMMdd_HHmmss.log`
 が衝突する。並行検証には既定の実行別ビルドを使う。ただし `-o` で出力先を分けても
 `obj/Release` は共有されるため、ビルド工程は順番に実行して中間DLLのロック競合を避ける。
