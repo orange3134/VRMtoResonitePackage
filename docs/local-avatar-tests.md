@@ -140,6 +140,10 @@ EXE の実変換ログのバージョンと、参照する DLL のバージョ�
 
 ### Unityで継承を解決した期待値の保存
 
+プロジェクト内 `.prefab` を直接指定する場合は `scripts/check-prefab-unity.py` で採取・解析・比較を
+一括実行できる。[実行手順](unity-reference-tests.md#プロジェクト内prefabから採取と比較を一括実行する)を参照。
+出力先の `report.json` と `unity/coverage.json` をケースから参照し、元の `inputPath` は保持する。
+
 Variantを含むPrefabの解決済み状態は[Unity参照データのv2採取](unity-reference-tests.md)を使い、
 `.local/unity-resolved/` に保存する。ケースの `unityResolvedCollection` には採取先・状態・失敗理由を記録する。
 `captured` はUnityの期待値を収集できた状態であり、ResoPonとの照合成功ではない。

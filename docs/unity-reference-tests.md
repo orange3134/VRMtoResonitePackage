@@ -13,6 +13,47 @@
 
 ## 解決済みデータの採取（v2）
 
+### プロジェクト内Prefabから採取と比較を一括実行する
+
+`scripts/check-prefab-unity.py` に保存済みPrefabを渡すと、そのプロジェクトでUnity参照値を採取し、
+同じ `.prefab` をResoPonの本番パーサで読み込んで比較する。Python 3.11以降・.NET 10 SDK・
+Resonite、およびプロジェクトと同じ版のUnity Editorが必要。対象プロジェクトのEditorは閉じておく。
+依存物と利用条件を確認済みの信頼できるプロジェクトで実行する。
+
+```powershell
+python scripts/check-prefab-unity.py "D:\Unity\Project\ResoPonTest\Assets\Unan\12B\12B.prefab" `
+  --case-id 12b-100
+```
+
+Prefabからプロジェクトを特定し、`ProjectVersion.txt` と同じ版をUnity Hubの標準インストール先から探す。
+別の場所にある場合は `--unity "D:\Unity\2022.3.22f1\Editor\Unity.exe"` で同じ版を指定する。
+`--reference-dump <UnityReferenceDump.dll>` を省略すると比較用ビルドを自動作成する。
+`--output <new-directory>` を省略すると `.local/prefab-reference/<日時と識別子>/` に保存する。
+出力先は新規ディレクトリに限り、Unityプロジェクト内には作成しない。一時ビルドは `.tmp_verify/` に置く。
+
+採取スクリプトが未導入なら、その実行専用の `Assets/ResoPonReference_<識別子>/Editor/` に一時配置し、
+終了後に自分が配置した未変更のファイルだけを除去する。同一内容の導入済みスクリプトは再利用する。
+別版や重複がある場合は上書きせず停止するため、診断に示された既存スクリプトを明示的に更新する。
+Unityは通常のimportとプロジェクト内のEditorコードを実行する。アセットの再保存は要求しないが、
+インポーターによる更新まで禁止する機能ではない。
+
+保存内容:
+
+- `unity/<case-id>/expected.json` と `repeat.json`: Unityで2回採取した解決済みv2データ。
+- `unity/coverage.json`: 同じPrefab入力で後から再比較できるmanifest。
+- `parity/`: ResoPon解析JSON、項目ごとの差分、比較ログ。
+- `report.json`: 採取状態と比較状態、Unity版、Prefabとmeta・プロジェクト設定の前後ハッシュ、
+  Unityの採取前後の依存ハッシュ、採取コードのハッシュ。ビルド・Unityログも同じ出力先に保存する。
+
+終了コードは一致0、差分または実行失敗1、引数・事前条件の不備2。
+`captureStatus=captured` は採取成功だけを意味し、`parityStatus=matched` とは区別する。
+比較中に入力や監視対象の設定ファイルが変わった場合は全体を失敗にする。
+Unityの依存ハッシュは実体化の前後を検査するもので、Editor起動前の全依存アセットの不変性を保証しない。
+登録一覧や過去の期待値は更新しない。必要なケースへ結果の参照先を別途記録する。
+これは開発用の採取・解析比較コマンドで、配布GUIの通常変換や `.resonitepackage` の生成は実行しない。
+
+### Unityから個別に採取する
+
 アバターと同梱依存物の利用条件を確認し、VRChat SDK・シェーダー等を揃えた信頼できる
 プロジェクトを使う。導入済みの依存物を旧版で上書きしない。
 [tools/unity/Editor](../tools/unity/Editor/) の3つの `.cs` を `Assets/Editor/` にコピーする。
