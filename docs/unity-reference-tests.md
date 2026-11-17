@@ -27,7 +27,7 @@ $unity = 'C:\Program Files\Unity\Hub\Editor\2022.3.22f1\Editor\Unity.exe'
 $project = 'C:\work\trusted-avatar-project'
 $env:RESOPON_REFERENCE_PREFAB = 'Assets/Example/Avatar.prefab'
 $env:RESOPON_REFERENCE_OUT = 'C:\work\private-tests\unity-expected.json'
-$process = Start-Process -FilePath $unity -ArgumentList '-batchmode', '-projectPath', ('"' + $project + '"'), '-executeMethod', 'ResoPonReferenceExporter.Run', '-logFile', '-' -Wait -PassThru
+$process = Start-Process -FilePath $unity -ArgumentList '-batchmode', '-projectPath', ('"' + $project + '"'), '-executeMethod', 'ResoPonReferenceExporter.Run', '-logFile', '-' -WindowStyle Hidden -Wait -PassThru
 if ($process.ExitCode -ne 0) { throw "Unity reference capture failed: $($process.ExitCode)" }
 
 $env:RESONITE_PATH = 'C:\Program Files (x86)\Steam\steamapps\common\Resonite'
@@ -41,6 +41,29 @@ python scripts/compare-unity-reference.py $env:RESOPON_REFERENCE_OUT $actual
 期待値の採取後にUnity上でPrefabの上書きや依存の更新をした場合は、古いパッケージ
 と比較せず、期待値と入力が同じ状態になるように揃える。出力JSONはどちらも
 新しいファイル名を指定し、市販・非公開アバターのパッケージやJSONはコミットしない。
+
+### 登録済みの実アバターから選んで検証する
+
+`.local/avatar-tests.json` のケースを再利用し、元の `inputPath` と `arguments` を保持する。
+通常の変換で成功しているアバターでも、この診断ツールの対象範囲に入るとは限らない。
+最初は Renderer・PhysBone・Collider をPrefab自身に持つ通常Prefabを選ぶ。
+Variantの採取拒否は対応範囲の確認として別に記録し、一致したケース数には含めない。
+
+- Unityプロジェクトへの追加前に、アバターと同梱依存物の利用条件を確認する。
+  既に導入済みのシェーダーやSDKを、アバター同梱の旧版で重複導入・上書きしない。
+- 保存済みPrefabのGUID・SHA-256を元パッケージ内のPrefabと照合する。
+  Unityによる再保存や依存の差し替えがある場合は、その差を記録する。
+- 同じ期待値に対し、プロジェクト内 `.prefab` と元 `.unitypackage` の両方から
+  別々のactual JSONを生成すると、両入力経路の参照解決を確認できる。
+- 終了コードに加えて各sectionの件数と差分レポートを保存する。通常Prefabの中に
+  ネストPrefabやFBXのインスタンスがあっても、対象外コンポーネントは採取されないため、
+  アバター全体のコンポーネント数との一致は期待しない。
+- 作業ツリー内のビルド出力・Unityログ・JSON・差分は `.tmp_verify/` に置く。
+  `.local/` のケースには、UnityプロジェクトとPrefabのパス、Unity・SDKの版、
+  検証したGit HEAD、各終了コード、結果へのパスを追記する。環境固有の結果はコミットしない。
+
+Unityが終了コード1でVariantを拒否した場合は、期待値JSONが作られていないことも確認する。
+期待値を得るためだけに元PrefabをUnpackすると別の入力になるため、元アバターの一致検証には使わない。
 
 ## 比較する範囲
 

@@ -36,6 +36,11 @@ vrctomのコード、依存物、アバター素材、取得済みの期待値�
 開発用エクスポーターはUnity Editor APIを利用し、VRChat SDKはローカル検証用プロジェクト側で利用する。
 いずれもResoPonの配布EXEには同梱しない。検証手順は[Unity参照データとの比較](unity-reference-tests.md)。
 
+実アバターを照合する際の素材・採取JSON・利用条件の確認記録は `.local/` または
+`.tmp_verify/` に保持する。検証専用にPython公式のembeddable packageを展開する場合も、
+同梱の `LICENSE.txt`（PSF Licenseと内包コードの通知）を残し、版と入手元をローカルに記録する。
+これらを製品・リポジトリへ取り込まない検証では、配布用の第三者通知の追加対象にはしない。
+
 ## 配布経路と検証
 
 - AssetsTools.NETをNuGet PackageReferenceとして同梱する。単一ファイルpublishではEXEに含まれる。
