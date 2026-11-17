@@ -17,7 +17,7 @@
 | Modular Avatar for Resonite | AvatarSetup の識別グラフ、SpringBoneSetup、MeshLoadingSetup、LoadingStandInSetup、LoadingFallback.png、UnityNativeMeshのMeshX変換規約。構成・設定の移植と素材の再利用 |
 | AssetsTools.NET | UnitySerializedAssetsのバイナリSerializedFile・type tree読み取り。NuGet 3.0.5を同梱しMIT通知と内包LZ4のBSD-2-Clause通知を保持 |
 | .NET | native application host。SelfContained=false でもEXEに含む。[公式ホストパッケージ](https://www.nuget.org/packages/Microsoft.NETCore.App.Host.win-x64/10.0.8)のMIT表示を確認 |
-| xxHash | UnityModelFileIdResolver.XxHash64 の round・merge・avalanche。Unity互換の符号付き4バイト末尾処理を持つ。参照実装のBSD-2-Clause通知を保持 |
+| xxHash | UnityModelFileIdResolver.XxHash64 の round・merge・avalanche。4バイト末尾は符号なしで扱い、UTF-8名での符号拡張を防ぐ。参照実装のBSD-2-Clause通知を保持 |
 
 `LoadingFallback.png` は modular-avatar-resonite の
 `Resonite~/ResoniteHook/MA.Gadgets/resources/loading_standin.resonitepackage` 内の画像とバイト一致する。
@@ -58,6 +58,12 @@ FBX診断用の階層・skin接続情報は既存の本番解析から取得す�
 ModelImporterのDeformPercent設定、Prefabのルート命名、座標軸・行列分解、暗黙の物理rootの修正は、
 インストール済みUnityでの実測と既存の自作fixtureに基づく独立実装。外部ソースのコピーはない。
 実アバターのローカル採取では、素材ごとの版・作者・利用条件と導入範囲を `.local/` に記録する。
+
+保存パッケージの `PackageRegressionDump` とPython比較器も独立実装で、既存の
+RecordPackage/DataTree APIを呼び出す。FrooxEngine 2026.11.16.1330のCollider調査は
+インストール済みDLLの型・フィールドの反射確認のみで、逆コンパイル実装のコピーはない。
+開発用ツール・実アバター由来の期待条件・採取データは製品EXEへ同梱しない。
+新しい外部コード・配布依存・通知対象は追加しない。
 
 同梱規約の探索はunitypackage直下だけでなく、その商品のダウンロードディレクトリ内の
 Readme・Licenseフォルダーと `.url` も対象にする。リンク先は作者の公式販売ページと照合する。

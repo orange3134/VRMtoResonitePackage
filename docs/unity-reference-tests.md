@@ -223,6 +223,14 @@ FBX RendererとGameObjectの削除、通常GameObjectの追加、別配置への
   `rootTransform: 0` の所有GameObjectに対応するTransformのYAMLがない場合も、FBX出典から
   所有Transformを解決する。v2で参照が一致しても本番解析や生成物で欠落し得るため、実変換・inspectも行う。
 
+再採取で残差を調べるときは、旧期待値を上書きせず、新しい採取先で同じPrefabを2回取得する。
+元入力・依存ハッシュ・Unity版と、旧採取値に対するバイト一致を確認してからResoPonと比較する。
+Fyuett・Pilica・Sanatia・12B・Lina・NagiyaはUnity 2022.3.22f1で再採取しても旧期待値と
+バイト一致し、微小な局所Transformの数値差が再現した。採取の揺らぎで消える差ではない。
+これは全残差の原因や無害性を証明するものではなく、厳密比較では引き続き差分として扱う。
+一般条件を含む[生成パッケージの構造検査](local-avatar-tests.md#保存パッケージの構造を自動検査する)と、
+Unityとの解析値比較、実クライアントの外観・動作確認は別の結果として保存する。
+
 ## 従来のResoPon解析との照合（v1）
 
 Unity EditorがPrefabを実体化したときの状態を期待値として採取し、

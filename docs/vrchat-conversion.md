@@ -793,6 +793,13 @@ headless meshの生成と描画制御は[共通のFirstPerson処理](avatar-conv
   同名ボーンを持つ別枝との混同や、親変換の二重適用を避ける。
 - 12Bの登録ケースにはplane colliderが7個ある。PhysBone 14個を取り込めても、これらは既存の
   plane非対応方針により出力されない。チェーン生成の成功を衝突挙動の完全な再現とみなさない。
+- FrooxEngine 2026.11.16.1330の実DLLを反射で確認したところ、`DynamicBoneChain.StaticColliders`
+  は `SyncRefList<IDynamicBoneCollider>` で、同DLL内の具象実装は `DynamicBoneSphereCollider` のみ。
+  PlaneCollider型は存在しない。標準コンポーネントへの直接変換はできず、独自コンポーネントは
+  受け取るクライアント側にも実装を必要とするため、通常パッケージの互換性を満たさない。
+  大球による平面近似も境界・裏面・接触方向が変わるので自動適用しない。必要ならUnity側で
+  対応するSphere/Capsuleへ調整した別ケースを作り、実クライアントで衝突を確認する。
+  APIは更新され得るため、再検討時は実行対象DLLで実装型と保存可能な参照先を再確認する。
 - node、offset、tail、radiusの署名でcolliderを共有する。
 
 ## マテリアル

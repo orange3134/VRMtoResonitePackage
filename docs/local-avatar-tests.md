@@ -146,3 +146,62 @@ Variantを含むPrefabの解決済み状態は[Unity参照データのv2採取](
 `test-avatar-analysis.py` と `UnityReferenceDump` は従来のv1照合を継続し、v2は入力に使わない。
 v2の再現性・構造検査には `compare-unity-reference.py expected.json repeat.json` を使う。
 元入力・依存物・Unity/SDK版・採取コードのハッシュも保存し、期待値は自動上書きしない。
+
+### 保存パッケージの構造を自動検査する
+
+実変換後の `--inspect` に加え、開発用 `PackageRegressionDump` で保存値をJSONへ取り出し、
+`check-package-snapshot.py` で明示した条件を検査できる。エンジンは起動せず、RecordPackageの
+main assetを読む。メッシュの外観、表情の再生、装着・衝突の動作は検査しない。
+
+```powershell
+dotnet build tests/PackageRegressionDump -c Release -o .tmp_verify/package-check-build
+dotnet .tmp_verify/package-check-build/PackageRegressionDump.dll `
+  .tmp_verify/avatar-output/Avatar.resonitepackage .local/package-checks/run-001/snapshot.json
+python -B scripts/check-package-snapshot.py .local/package-checks/run-001/snapshot.json `
+  .local/package-checks/expectations.json --report .local/package-checks/run-001/report.json
+python -B -m unittest discover -s tests/PackageRegressionComparison -v
+```
+
+出力先の親ディレクトリは先に作る。ダンプとレポートは既存ファイルを上書きしない。
+比較の終了コードは一致0、条件違反1、入力・出力エラー2。ダンプは成功0、実行失敗1、引数誤り2。
+スナップショットには元パッケージのSHA-256、全Slotの構造ID・名前の配列・タグ・active状態、
+コンポーネントの完全な型名、SkinnedMeshRendererのBlendShapeWeightsを保存する。
+未設定のnullタグは空文字列へ統一する。パスは `/` を含む名前も区別するため配列で保持する。
+
+期待値の例（対象に応じて独立に条件を選ぶ）:
+
+```json
+{
+  "format": "resopon.package-expectations",
+  "schemaVersion": 1,
+  "componentCounts": {
+    "[FrooxEngine]FrooxEngine.BipedRig": { "min": 1, "max": 1 },
+    "[FrooxEngine]FrooxEngine.FinalIK.VRIK": { "min": 1, "max": 1 },
+    "[FrooxEngine]FrooxEngine.SkinnedMeshRenderer": { "min": 1 }
+  },
+  "slotRules": [
+    {
+      "selector": { "pathSuffix": ["socks"] },
+      "count": 1,
+      "weights": [{ "componentIndex": 0, "index": 0, "value": 0 }]
+    }
+  ]
+}
+```
+
+`selector` は `pathSuffix`、`tag`、`componentType` のAND条件。選択件数を必須にし、
+欠落や同名Slotの重複を見逃さない。`activeSelf` / `activeInHierarchy` も条件に指定できる。
+weightの `componentIndex` は選択Slot内のSkinnedMeshRendererの順序、`index` はshapeの順序。
+weight比較は既定で完全一致し、必要なら明示的な `absoluteTolerance` を指定する。
+存在しないrenderer・shapeを0扱いしない。型名・項目名の誤記、不正数値、重複JSONキーはエラー。
+
+回帰条件はUnity参照や仕様から決め、現在の出力をそのまま期待値へ自動更新しない。
+Linaはsocksの初期weight=0、OmanekoはcatToyのactiveSelf=false、12Bは
+`tag=modular_avatar/dynamic_bone_controller` かつ
+`componentType=[FrooxEngine]FrooxEngine.DynamicBoneChain` のSlotが14個、を確認する。
+12Bの全DynamicBoneChain数にはテンプレートも含まれるため、型の総数だけで14と比較しない。
+Unityのshape weightは0–100、Resoniteの保存値は0–1であることにも注意する。
+
+再現用には、入力・選択引数・実行DLL・生成パッケージ・期待条件・スナップショットのハッシュと、
+変換およびinspectの終了コードを `.local/` に保存する。生成パッケージは `.tmp_verify/` に置く。
+一般条件の成功は、登録した全rendererや物理設定がUnityと一致したという意味ではない。
