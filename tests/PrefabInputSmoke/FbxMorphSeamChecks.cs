@@ -11,9 +11,10 @@ internal static class FbxMorphSeamChecks
         Directory.CreateDirectory(directory);
         foreach (int version in new[] { 7400, 7500 })
         foreach (bool existingColor in new[] { false, true })
+        foreach (bool duplicateTextures in new[] { false, true })
         {
-            string source = Path.Combine(directory, $"seam-{version}-{existingColor}.fbx");
-            Write(source, version, existingColor, seam: true);
+            string source = Path.Combine(directory, $"seam-{version}-{existingColor}-{duplicateTextures}.fbx");
+            Write(source, version, existingColor, seam: true, duplicateTextures);
             byte[] originalBytes = File.ReadAllBytes(source);
             using var context = new AssimpContext();
             var original = context.ImportFile(source, PostProcessSteps.None).Meshes.Single();
@@ -25,8 +26,15 @@ internal static class FbxMorphSeamChecks
             Require(Errors(original, fixedMesh) == 0, $"FBX {version}, existing colors={existingColor}: morph corners preserved");
             if (existingColor)
                 Require(fixedMesh.VertexColorChannels[0].All(c => c == new Color4D(.25f, .5f, .75f, 1)), "authored colors preserved");
-            string noSeam = Path.Combine(directory, $"no-seam-{version}-{existingColor}.fbx");
-            Write(noSeam, version, existingColor, seam: false);
+            if (duplicateTextures)
+            {
+                byte[] preparedBytes = File.ReadAllBytes(prepared);
+                foreach (string marker in new[] { "TextureDuplicateA", "TextureDuplicateB" })
+                    Require(preparedBytes.AsSpan().IndexOf(Encoding.UTF8.GetBytes(marker)) >= 0,
+                        "unrelated duplicate texture records are preserved");
+            }
+            string noSeam = Path.Combine(directory, $"no-seam-{version}-{existingColor}-{duplicateTextures}.fbx");
+            Write(noSeam, version, existingColor, seam: false, duplicateTextures);
             Require(UnityFbxMorphSeams.Prepare(noSeam) == noSeam, "matching morph deltas need no protection");
         }
     }
@@ -48,7 +56,7 @@ internal static class FbxMorphSeamChecks
 
     private sealed record Node(string Name, object[] Values, params Node[] Children);
     private static Node N(string name, object value) => new(name, new[] { value });
-    private static void Write(string path, int version, bool color, bool seam)
+    private static void Write(string path, int version, bool color, bool seam, bool duplicateTextures)
     {
         // Two overlapping triangles have identical base attributes. Only control point 0
         // moves; point 3 must stay still, despite occupying the same base position.
@@ -80,6 +88,14 @@ internal static class FbxMorphSeamChecks
                 N("Indexes", seam ? new[] { 0 } : new[] { 0, 3 }),
                 N("Vertices", seam ? new double[] { 0, 0, .2 } : new double[] { 0, 0, .2, 0, 0, .2 }),
                 N("Normals", seam ? new double[3] : new double[6])));
+        // Nagma contains repeated Texture IDs. They are unrelated to the morph graph
+        // and must neither prevent seam protection nor be removed from the saved FBX.
+        if (duplicateTextures)
+            objects = objects with { Children = objects.Children.Concat(new Node[]
+            {
+                new("Texture", new object[] { 60L, "TextureDuplicateA\0\u0001Texture", "" }),
+                new("Texture", new object[] { 60L, "TextureDuplicateB\0\u0001Texture", "" }),
+            }).ToArray() };
         var connections = new Node("Connections", [], new[] { (20L, 0L), (10L, 20L), (30L, 10L), (40L, 30L), (50L, 40L) }
             .Select(p => new Node("C", new object[] { "OO", p.Item1, p.Item2 })).ToArray());
         using var stream = File.Create(path);

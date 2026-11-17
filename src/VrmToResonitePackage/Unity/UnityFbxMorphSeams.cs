@@ -15,7 +15,11 @@ internal static class UnityFbxMorphSeams
         var objects = document.Roots.FirstOrDefault(n => n.Name == "Objects")?.Children;
         var connections = document.Roots.FirstOrDefault(n => n.Name == "Connections")?.Children;
         if (objects == null || connections == null) return path;
-        var byId = objects.Where(n => n.Values.FirstOrDefault() is long).ToDictionary(n => (long)n.Values[0]);
+        // Only Geometry and Deformer objects participate in Shape -> Channel ->
+        // BlendShape -> Mesh traversal. Some exporters repeat unrelated Texture IDs
+        // (e.g. Nagma); leave those records intact without indexing them here.
+        var byId = objects.Where(n => (n.Name is "Geometry" or "Deformer") && n.Values.FirstOrDefault() is long)
+            .ToDictionary(n => (long)n.Values[0]);
         var parents = connections.Where(n => n.Name == "C" && n.Values.Length >= 3 && n.Values[0] as string == "OO")
             .GroupBy(n => (long)n.Values[1]).ToDictionary(g => g.Key, g => g.Select(n => (long)n.Values[2]).ToArray());
         var shapes = new Dictionary<long, List<Node>>();

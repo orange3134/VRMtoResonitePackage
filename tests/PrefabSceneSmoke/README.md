@@ -26,6 +26,16 @@ parents; the old package fails with a 100-fold bone scale mismatch. The syntheti
 helper fixture also checks skinned vertices below added parents, including authored
 nonuniform scale in both meter and centimeter models.
 
+`--primary-skin-package <unitypackage> <resonitepackage> <avatar>` explicitly limits
+that oracle to copied skins from the primary FBX. Use it when the body is unpacked
+but accessory models retain separate imported hierarchies, which the single-YAML
+pose oracle does not reconstruct. Nagma's eight primary body/clothing renderers
+exercise this mode; matching duplicate renderer names also uses their full source
+hierarchy. This does not verify accessory poses or replace client visual checks.
+The synthetic helper fixture additionally attaches an FBX through an authored mount
+before creating skins: the attachment and skin must share the original bone,
+including mixed import units, nonuniform mount scale and unchanged skinned vertices.
+
 `ViewpointChecks` uses the SDK's `transform.position + ViewPosition` as its oracle:
 prefab rotation/scale and FBX units must not transform the meter offset, while the
 converter's whole-import alignment must. It also checks precedence over eye pivots,

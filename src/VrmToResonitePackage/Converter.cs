@@ -656,7 +656,8 @@ internal static class Converter
                 continue;
             }
             Slot parent = ResolvePrefabParent(importRoot, additional.ParentFbxGuid,
-                additional.ParentNodeName, additional.ParentTransforms, importedFbxRoots, slots);
+                additional.ParentNodeName, additional.ParentTransforms, importedFbxRoots, slots,
+                importedMeshSources, importedNodePaths, ImportUnits(additional.ParentFbxGuid));
             instanceRoot.Parent = parent;
             float3 position = new(
                 additional.LocalPosition.X, additional.LocalPosition.Y, additional.LocalPosition.Z);
