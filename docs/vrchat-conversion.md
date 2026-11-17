@@ -147,6 +147,11 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - `fileIdsGeneration=1`: 型とobject名を使うxxHash64候補を生成する。
 - `fileIdsGeneration=2`: `//RootNode` からのhierarchy pathとcomponent typeを使う。
 - GameObjectのhash pathには `/GameObject` を付けず、componentだけ型名を付ける。
+- xxHash64の4バイト末尾は符号なし32bitとして読む。符号拡張するとUTF-8の非ASCII名で
+  fileIDが変わる。`Mesh` の `髪`、`頭アクセサリ`、`服` はUnityから取得したIDで回帰検証する。
+  Omanekoの `ねこじゃらし` もこの修正でMesh copyの参照を解決できるようになる。
+  非アクティブな親 `catToy` はcopyの親Transformに状態を保持するため、名前ベースの
+  `InactiveGameObjects` からは除外される。診断件数の減少だけで状態喪失と判断せず、親の `Active` も確認する。
 - serialized stripped documentがない参照は、prefab instance fileIDとのXORからsource fileID候補を復元する。
 - Assimpの人工root配下に実mesh nodeが1つある場合、Unityのsynthetic `//RootNode/root` pathを実childへ割り当てる。
 - A real top-level child named `root` takes precedence over the synthetic lowercase-root
@@ -154,6 +159,13 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   exclusion and physics references; sibling branches remain part of the model.
 
 ## FBXの選択と合成
+
+fileID resolverは同じAssimp importから `UnityModelNode` の読み取り専用メタデータも保持する。
+補助ノードを畳んだローカル姿勢・完全なpath・材質スロットをv2診断出力で使い、モデルの配置ごとに
+元のメタデータを書き換えない。AssimpNetの行列積はその格納方式に対して合成順が逆になるため、
+Translation→PreRotationの鎖で親の平行移動を回してしまわないようテストする。
+FBXのskin接続はclusterの接続順で読み、同名Jointでも完全なパスで区別する。
+BlendShapeはボーンのあるメッシュに限定せず、morphだけを持つメッシュでも取得する。
 
 ### 配置の識別と不要なテンプレートの除去
 

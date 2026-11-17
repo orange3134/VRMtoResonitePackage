@@ -25,6 +25,14 @@ def snapshot():
 
 
 class ResolvedTests(unittest.TestCase):
+    def test_quaternion_sign_is_equivalent_but_rotation_changes_fail(self):
+        original = snapshot()
+        changed = copy.deepcopy(original)
+        changed["sections"]["transforms"][0]["localRotation"]["w"] = -1.
+        self.assertEqual([], comparison.compare(original, changed))
+        changed["sections"]["transforms"][0]["localRotation"]["x"] = .1
+        self.assertTrue(comparison.compare(original, changed))
+
     def test_repeated_instances_are_distinct(self):
         original = snapshot()
         changed = copy.deepcopy(original)

@@ -11,8 +11,11 @@ internal static class UnityFbxBlendShapeDefaults
 {
     internal readonly record struct Channel(string Name, float Weight, string RendererPath, string ShapeName = null);
 
-    public static IReadOnlyList<Channel> Read(string path)
+    public static IReadOnlyList<Channel> Read(string path) => Read(path, out _);
+
+    internal static IReadOnlyList<Channel> Read(string path, out IReadOnlyDictionary<string, string[]> skinBonePaths)
     {
+        skinBonePaths = null;
         try
         {
             byte[] data = File.ReadAllBytes(path);
@@ -23,7 +26,7 @@ internal static class UnityFbxBlendShapeDefaults
             }
             int version = BitConverter.ToInt32(data, 23);
             var reader = new Reader(data, version >= 7500);
-            return reader.ReadChannels();
+            return reader.ReadChannels(out skinBonePaths);
         }
         catch
         {
@@ -43,7 +46,7 @@ internal static class UnityFbxBlendShapeDefaults
             _wide = wide;
         }
 
-        public IReadOnlyList<Channel> ReadChannels()
+        public IReadOnlyList<Channel> ReadChannels(out IReadOnlyDictionary<string, string[]> skinBonePaths)
         {
             var nodes = new List<Node>();
             void Collect(Node node)
@@ -58,6 +61,32 @@ internal static class UnityFbxBlendShapeDefaults
                 n.Properties[0] as string == "OO" && n.Properties[1] is long && n.Properties[2] is long)
                 .GroupBy(n => (long)n.Properties[1]).ToDictionary(g => g.Key,
                     g => g.Select(n => (long)n.Properties[2]).Distinct().ToArray());
+            var skinPaths = new Dictionary<string, string[]>(StringComparer.Ordinal);
+            foreach (var skin in objects.Where(e => e.Value.Name == "Deformer" && e.Value.Properties[2] as string == "Skin"))
+            {
+                // Connection order is the cluster index order; object names alone cannot
+                // distinguish a mesh from a joint or repeated names in separate branches.
+                var clusters = parents.Where(p => p.Value.Contains(skin.Key) &&
+                    objects.GetValueOrDefault(p.Key)?.Properties.ElementAtOrDefault(2) as string == "Cluster").Select(p => p.Key);
+                var paths = new List<string>();
+                bool valid = true;
+                foreach (long cluster in clusters)
+                {
+                    var bones = parents.Where(p => p.Value.Contains(cluster) && objects.GetValueOrDefault(p.Key)?.Name == "Model")
+                        .Select(p => p.Key).ToArray();
+                    string path = bones.Length == 1 ? ModelPath(bones[0], new()) : null;
+                    if (path == null) { valid = false; break; }
+                    paths.Add(path);
+                }
+                if (!valid) continue;
+                foreach (long model in ModelsAbove(skin.Key, new()))
+                    if (ModelPath(model, new()) is string path)
+                    {
+                        if (skinPaths.ContainsKey(path)) skinPaths[path] = null; // ambiguous multiple skins
+                        else skinPaths.Add(path, paths.ToArray());
+                    }
+            }
+            skinBonePaths = skinPaths.Where(p => p.Value != null).ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
             var result = new List<Channel>();
             foreach (var entry in objects.Where(e => e.Value.Name == "Deformer" &&
                          e.Value.Properties[2] as string == "BlendShapeChannel"))

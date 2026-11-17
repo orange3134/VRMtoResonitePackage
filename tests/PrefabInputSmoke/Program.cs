@@ -40,6 +40,7 @@ static void Run()
         Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite",
         "runtimes", "win-x64", "native", "assimp.dll"));
     FbxMorphSeamChecks.Run();
+    ModelHierarchyChecks.Run();
     BlendShapeNormalChecks.Run();
     OutlineExclusionChecks.Run();
     NativeAssetChecks.Run();

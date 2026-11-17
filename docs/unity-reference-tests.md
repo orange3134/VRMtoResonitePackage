@@ -121,17 +121,24 @@ dotnet .tmp_verify/unity-reference/bin/UnityReferenceDump.dll input.unitypackage
 python scripts/compare-unity-reference.py expected.json actual.json --report difference.json
 ```
 
-現在のv2出力は、**YAMLとして階層とコンポーネントが存在する**通常Prefab・Variant・ネストPrefabに
-対応する。削除、追加、同一Prefabの複数配置、兄弟順、参照の上書きを合成した後に比較する。
-FBXをメッシュ資産として参照するRendererのBlendShape名は、本番のFBX fileID resolverから取得する。
+v2出力は通常Prefab・Variant・ネストPrefabと、**FBX由来の暗黙のTransform・Renderer**に対応する。
+削除、追加、同一Prefabの複数配置、兄弟順、参照の上書きを合成した後に比較する。
+FBXの階層・姿勢・材質スロットは本番のfileID resolverと同じAssimp importから取得し、
+skinの接続先はFBXのcluster接続から完全なパスとして取得する。同名のメッシュやボーンを名前だけで選ばない。
+BlendShape名・初期ウェイトも既存の本番メタデータから取得する。ボーンのないmorph専用メッシュも対象とする。
 FBX全体の走査でBlendShapeがないことを証明できれば、メッシュノードのpathが曖昧でも空配列を出せる。
 走査失敗や形状を持つメッシュの曖昧なpathを、空配列として成功させない。
 
-**FBXのPrefabInstanceから暗黙に生成されるTransform・Rendererのv2出力は未対応**。
-これはUnity採取の制約でも、Variant全体の制約でもない。本番のPrefab graphが保持するYAMLと、
-モデルインポート時に生成する階層を結ぶ出力処理が別途必要なため、ダンプは
-`UNSUPPORTED_MODEL_HIERARCHY` で失敗する。未出力の階層を省略したJSONで一致判定しない。
-この検証基盤の導入と、暗黙のモデル階層の出力・変換後パッケージとの比較は段階を分ける。
+モデル内の補助ノードの姿勢を合成し、ModelImporterの単位・globalScale・fileID世代・既存ID表・
+`sortHierarchyByName` を反映する。モデル内のroot表現は元Prefabの参照IDと照合し、
+合成済みのプロパティ上書き・削除をモデルのレコードへ適用する。
+これは解析段階の診断用投影であり、Resoniteへインポートした後の状態や全ModelImporter設定を保証しない。
+最適化されたGameObject階層、参照がなくroot表現を決められないモデル、曖昧な同名skin接続などは失敗させる。
+未出力の階層を省略して一致扱いにしない。変換後パッケージとの比較は別途必要である。
+
+Quaternionは `q` と `-q` が同じ回転を表すため、v2の `localRotation` では符号反転も比較する。
+それ以外の数値差に対する既定の許容差（絶対・相対とも `1e-6`）は維持する。
+実アバターの局所的な姿勢の差を一律に丸めたり、許容差を広げて一致に変更したりしない。
 
 ### 収集済みケースの一括再検証
 
@@ -166,6 +173,21 @@ python scripts/test-unity-reference-producer.py path/to/variant.prefab path/to/f
 全項目一致に加え、期待値の数値を意図的に変えても実値JSONが変わらないこと、変更した期待値は
 不一致になること、既存出力・期待値の上書き拒否、入力資産の不変を検査する。
 
+FBXを含むfixtureは、既存のAssimpライブラリで自作三角形モデルを書き出してからUnityへ読み込む。
+
+```powershell
+dotnet .tmp_verify/unity-reference/bin/UnityReferenceDump.dll --write-fbx-fixture .tmp_verify/unity-reference/source.fbx
+$env:RESOPON_FBX_SMOKE_SOURCE = 'C:\work\ResoPon\.tmp_verify\unity-reference\source.fbx'
+$env:RESOPON_REFERENCE_SMOKE_OUT = 'C:\work\ResoPon\.tmp_verify\unity-reference\fbx-capture'
+```
+
+`tools/unity/Tests/ResoPonFbxReferenceSmoke.cs` を指定プロジェクトの `Assets/Editor/` に置き、
+同じEditor起動手順で `-executeMethod ResoPonFbxReferenceSmoke.Run` を実行する。
+日本語名・大小文字・アンダースコアを含むモデルを2個配置し、Variant、非アクティブ状態、
+FBX RendererとGameObjectの削除、通常GameObjectの追加、別配置へのPhysBone参照を採取する。
+出力の `prefab-path.txt` と `first.json` を上記のproducer統合チェックへ渡す。
+モデル・採取結果はローカルに保持し、配布しない。
+
 ### 再利用する回帰事例
 
 - Variantで `m_AddedGameObjects` の `insertIndex: -1` が複数ある場合、配列に記録された順に
@@ -180,8 +202,15 @@ python scripts/test-unity-reference-producer.py path/to/variant.prefab path/to/f
   解決可能性を仮定せず、依存不足として残す。別プロジェクトから黙って依存を補完しない。
   FaceEmoを導入済みのプロジェクト内の12B Prefabを入力にすれば、この依存は解決できる。
   パッケージ単独の結果を保持し、プロジェクト入力・依存パッケージの版とハッシュを別に記録する。
-  その場合もv2出力は12Bの暗黙のFBX階層で未対応になるため、依存解決や通常解析の正常終了を
-  Unityとの全項目一致として扱わない。12B自体を検証対象から除外する必要はない。
+  プロジェクト入力ではFBX階層を含むv2出力が可能。依存解決や通常解析の正常終了を
+  Unityとの全項目一致として扱わない。元の登録入力を置換せず、比較用manifestで入力種別を明記する。
+- `sortHierarchyByName: 0` ではFBXの元順序を保持する。1では小文字化した名前のordinal順で
+  比較する。`OrdinalIgnoreCase` は大文字を基準に比較するため、アンダースコアと英字の相対順が
+  Unityと異なる。Marycia・Sanatiaの順序設定、Lina・Milfyのアンダースコアで検出できる。
+- Siskaのように現在のMeshより長い `m_BlendShapeWeights` が残る場合、Unityは現在のMeshの
+  チャンネル数までを公開する。余剰の保存値を新しいチャンネルとみなさない。
+  LinaではFBXの初期DeformPercentとUnity採取ウェイトに差がある。既存の本番メタデータ由来の値を
+  期待値に合わせて消さず、変換処理の調査対象として差分に残す。
 
 ## 従来のResoPon解析との照合（v1）
 

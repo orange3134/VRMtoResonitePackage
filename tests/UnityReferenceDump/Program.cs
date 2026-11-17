@@ -5,6 +5,17 @@ using VrmToResonitePackage;
 using VrmToResonitePackage.Unity;
 using VrmToResonitePackage.Vrchat;
 
+if (args.Length == 2 && args[0] == "--write-fbx-fixture")
+{
+    try
+    {
+        ResoniteLocator.InstallAssemblyResolver(ResoniteLocator.Locate(null));
+        FbxReferenceFixture.Write(Path.GetFullPath(args[1]));
+        return 0;
+    }
+    catch (Exception error) { Console.Error.WriteLine(error.Message); return 1; }
+}
+
 if (args.Length != 3)
 {
     Console.Error.WriteLine("Usage: UnityReferenceDump <input.prefab|input.unitypackage> <unity-expected.json> <resopon-actual.json>");

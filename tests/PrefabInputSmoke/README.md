@@ -18,6 +18,11 @@ branches indexed by file ID/path, and exclusion of whole model/object hierarchie
 without starting the engine. Fixtures remain in the printed temp directory for
 inspection. This does not verify an end-to-end avatar conversion.
 
+`ModelHierarchyChecks` verifies folded FBX translation/pre-rotation chains, child
+local pose isolation, morph-only renderer metadata and non-ASCII Unity fileIDs.
+`DefaultBlendShapeChecks` also checks full skin-bone paths for same-named joints
+and cluster connection order, including shared geometry and reversed object order.
+
 `ConversionPerformanceChecks` verifies source-model cache reuse across occurrences
 and views, isolation for different metadata and newly opened packages, and recovery
 after missing-source lookups. Fast LZ4 mesh roundtrips compare complete Plain MeshX

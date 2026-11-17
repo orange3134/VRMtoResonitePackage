@@ -205,6 +205,13 @@ def compare(expected, actual, abs_tol=1e-6, rel_tol=1e-6):
         raise ValueError("cannot compare authored and resolved projections")
     differences = []
     def walk(left, right, path):
+        # q and -q encode the same rotation. Importers may choose opposite signs;
+        # retain component-wise tolerances and never normalize a different rotation.
+        if (expected["schemaVersion"] == 2 and path.startswith("$.sections.transforms.")
+                and path.endswith(".localRotation") and isinstance(left, dict) and isinstance(right, dict)
+                and set(left) == set(right) == set("xyzw")
+                and all(math.isclose(left[k], -right[k], rel_tol=rel_tol, abs_tol=abs_tol) for k in left)):
+            return
         if isinstance(left, dict) and isinstance(right, dict):
             for key in sorted(left.keys() - right.keys()):
                 differences.append(f"{path}.{key}: missing in actual")

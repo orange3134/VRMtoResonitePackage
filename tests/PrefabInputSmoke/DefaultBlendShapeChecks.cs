@@ -13,7 +13,12 @@ internal static class DefaultBlendShapeChecks
         foreach (bool reverse in new[] { false, true })
         {
             WriteFbx(model, reverse);
-            var channels = UnityFbxBlendShapeDefaults.Read(model);
+            var channels = UnityFbxBlendShapeDefaults.Read(model, out var skinPaths);
+            var expectedSkin = new[] { "RootNode/Left/Joint", "RootNode/Right/Joint" };
+            if (reverse) Array.Reverse(expectedSkin);
+            Require(skinPaths["RootNode/Left/Body"].SequenceEqual(expectedSkin) &&
+                    skinPaths["RootNode/Twin/Body"].SequenceEqual(expectedSkin),
+                "FBX skin connections distinguish same-named joints and preserve cluster connection order");
             Require(channels.Count == 3 && channels.Single(c => c.RendererPath == "RootNode/Left/Body").Weight == 25 &&
                 channels.Single(c => c.RendererPath == "RootNode/Right/Body").Weight == 75 &&
                 channels.Single(c => c.RendererPath == "RootNode/Twin/Body").Weight == 25,
@@ -144,6 +149,13 @@ internal static class DefaultBlendShapeChecks
             objects.Add(new("Geometry", new object[] { id + 5, "Smile\0\u0001Geometry", "Shape" }));
             Connect(id + 5, id + 4);
         }
+        objects.Add(new("Model", new object[] { 100L, "Joint\0\u0001Model", "LimbNode" }));
+        objects.Add(new("Model", new object[] { 101L, "Joint\0\u0001Model", "LimbNode" }));
+        objects.Add(new("Deformer", new object[] { 102L, "Skin\0\u0001Deformer", "Skin" }));
+        objects.Add(new("Deformer", new object[] { 103L, "Cluster\0\u0001Deformer", "Cluster" }));
+        objects.Add(new("Deformer", new object[] { 104L, "Cluster\0\u0001Deformer", "Cluster" }));
+        Connect(100, 10); Connect(101, 20); Connect(102, 12);
+        Connect(103, 102); Connect(104, 102); Connect(100, 103); Connect(101, 104);
         if (reverse) { objects.Reverse(); connections.Reverse(); }
         using var stream = File.Create(path);
         using var writer = new BinaryWriter(stream);
