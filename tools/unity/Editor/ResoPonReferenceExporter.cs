@@ -77,10 +77,19 @@ public static class ResoPonReferenceExporter
 
     private static void ExportFromEnvironment()
     {
+        Export(Environment.GetEnvironmentVariable("RESOPON_REFERENCE_PREFAB"),
+            Environment.GetEnvironmentVariable("RESOPON_REFERENCE_OUT"),
+            Environment.GetEnvironmentVariable("RESOPON_REFERENCE_PROJECTION"));
+    }
+
+    // Resolved is the collection default; authored retains the existing parser comparison schema.
+    public static void Export(string prefabPath, string outputPath, string projection = "resolved")
+    {
         if (EditorApplication.isPlayingOrWillChangePlaymode)
             throw new InvalidOperationException("Reference capture requires Edit Mode.");
-        string prefabPath = Environment.GetEnvironmentVariable("RESOPON_REFERENCE_PREFAB");
-        string outputPath = Environment.GetEnvironmentVariable("RESOPON_REFERENCE_OUT");
+        if (string.IsNullOrEmpty(projection)) projection = "resolved";
+        if (projection != "resolved" && projection != "authored")
+            throw new InvalidOperationException("Projection must be resolved or authored.");
         if (string.IsNullOrWhiteSpace(prefabPath) || string.IsNullOrWhiteSpace(outputPath))
             throw new InvalidOperationException("Set RESOPON_REFERENCE_PREFAB and RESOPON_REFERENCE_OUT.");
         prefabPath = prefabPath.Replace('\\', '/');
@@ -89,7 +98,7 @@ public static class ResoPonReferenceExporter
             throw new InvalidOperationException("Input must be an Assets/... .prefab asset path.");
         var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
         if (prefab == null) throw new InvalidOperationException("Prefab not found: " + prefabPath);
-        if (PrefabUtility.GetPrefabAssetType(prefab) == PrefabAssetType.Variant)
+        if (projection == "authored" && PrefabUtility.GetPrefabAssetType(prefab) == PrefabAssetType.Variant)
             throw new InvalidOperationException("Prefab variants are outside this initial authored-component projection.");
         string guid = AssetDatabase.AssetPathToGUID(prefabPath);
         if (string.IsNullOrEmpty(guid)) throw new InvalidOperationException("Prefab GUID unavailable.");
@@ -102,7 +111,9 @@ public static class ResoPonReferenceExporter
         {
             var instance = PrefabUtility.InstantiatePrefab(prefab, preview) as GameObject;
             if (instance == null) throw new InvalidOperationException("Prefab instantiation failed.");
-            json = JsonUtility.ToJson(BuildCapture(instance.transform, guid), true) + "\n";
+            json = projection == "resolved"
+                ? ResoPonResolvedReference.Capture(instance.transform, guid)
+                : JsonUtility.ToJson(BuildCapture(instance.transform, guid), true) + "\n";
         }
         finally { EditorSceneManager.ClosePreviewScene(preview); }
 

@@ -84,7 +84,7 @@ Prefab入力の依存記録はAssets/Packages内のserialized GUID参照とパ�
 解析スナップショットは、VRChatでは選択アバターの診断セクション、VRMではメッシュ診断を
 行単位で保持する。起動時のバージョン・環境表示・取り込み途中の診断は元ログ側に保存する。
 これは現在の解析動作を固定する比較基準であり、正しさを独立に保証する期待値ではない。
-Unity参照との一致も[採取対象のフィールド](unity-reference-tests.md#比較する範囲)に限られ、
+Unity参照との一致も[採取対象のフィールド](unity-reference-tests.md#比較する範囲v1)に限られ、
 実変換・inspect・クライアントでの外観と動作は別途検証する。
 
 `-SkipBuild` で同じDLLを使う複数の変換を同秒に起動すると、DLL横の `Logs/convert_yyyyMMdd_HHmmss.log`
@@ -132,3 +132,12 @@ Windows の GUI EXE を PowerShell から検証するときは `Start-Process -W
 DLL を併置して直接実行・参照する環境では、同じ publish ビルドの
 `bin/Release/win-x64/ResoPon.dll` も揃え、古い併置 DLL を検証対象にしない。
 EXE の実変換ログのバージョンと、参照する DLL のバージョン・SHA-256を確認する。
+
+### Unityで継承を解決した期待値の保存
+
+Variantを含むPrefabの解決済み状態は[Unity参照データのv2採取](unity-reference-tests.md)を使い、
+`.local/unity-resolved/` に保存する。ケースの `unityResolvedCollection` には採取先・状態・失敗理由を記録する。
+`captured` はUnityの期待値を収集できた状態であり、ResoPonとの照合成功ではない。
+`test-avatar-analysis.py` と `UnityReferenceDump` は従来のv1照合を継続し、v2は入力に使わない。
+v2の再現性・構造検査には `compare-unity-reference.py expected.json repeat.json` を使う。
+元入力・依存物・Unity/SDK版・採取コードのハッシュも保存し、期待値は自動上書きしない。

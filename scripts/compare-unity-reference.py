@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare Unity-resolved reference JSON with ResoPon's parser snapshot, offline.
+"""Compare matching Unity reference projections offline (authored v1 or resolved v2).
 
 Exit 0: equal, 1: differences, 2: invalid input or invocation. No Unity or SDK
 is needed. Collection records are matched by id, never by display names.
@@ -60,8 +60,11 @@ def _asset_ref(value):
 def validate_snapshot(data):
     if not isinstance(data, dict) or data.get("format") != FORMAT:
         raise ValueError("expected format " + FORMAT)
+    if type(data.get("schemaVersion")) is int and data["schemaVersion"] == 2:
+        _validate_resolved(data)
+        return
     if type(data.get("schemaVersion")) is not int or data["schemaVersion"] != 1:
-        raise ValueError("unsupported schemaVersion (expected integer 1)")
+        raise ValueError("unsupported schemaVersion (expected integer 1 or 2)")
     if not isinstance(data.get("prefabGuid"), str) or not re.fullmatch(r"[0-9a-fA-F]{32}", data["prefabGuid"]):
         raise ValueError("prefabGuid must be a 32-character hexadecimal GUID")
     if data.get("projection") != PROJECTION:
@@ -110,10 +113,96 @@ def validate_snapshot(data):
                     raise ValueError("PhysBone colliders must be a string array")
 
 
+def _validate_resolved(data):
+    if data.get("projection") != "unity-resolved-prefab":
+        raise ValueError("expected resolved projection")
+    if not isinstance(data.get("prefabGuid"), str) or not re.fullmatch(r"[0-9a-fA-F]{32}", data["prefabGuid"]):
+        raise ValueError("invalid prefabGuid")
+    sections = data.get("sections")
+    if not isinstance(sections, dict) or set(sections) != {"transforms", *SECTIONS}:
+        raise ValueError("invalid resolved sections")
+    identities = set()
+    maps = {}
+    for name, records in sections.items():
+        if not isinstance(records, list):
+            raise ValueError(name + " must be an array")
+        maps[name] = {}
+        for record in records:
+            if not isinstance(record, dict):
+                raise ValueError("record must be an object")
+            identity = record.get("id")
+            pattern = r"r(?:/[0-9]+)*" if name == "transforms" else r"r(?:/[0-9]+)*/c:[^/]+:[0-9]+"
+            if not isinstance(identity, str) or not re.fullmatch(pattern, identity) or identity in identities:
+                raise ValueError("invalid or duplicate resolved identity")
+            identities.add(identity)
+            maps[name][identity] = record
+            for field in ("path", "type"):
+                if not isinstance(record.get(field), str):
+                    raise ValueError("missing " + field)
+            for field in ("source", "originalSource"):
+                if not _asset_ref(record.get(field)):
+                    raise ValueError("invalid source identity")
+            if type(record.get("activeInHierarchy")) is not bool:
+                raise ValueError("invalid activeInHierarchy")
+            if name != "transforms" and type(record.get("enabled")) is not bool:
+                raise ValueError("invalid enabled")
+    transforms = maps["transforms"]
+    if "r" not in transforms or not any(maps[name] for name in SECTIONS):
+        raise ValueError("empty resolved capture")
+    def ref(value, allowed, nullable=False):
+        if not isinstance(value, str) or (value not in allowed and not (nullable and value == "")):
+            raise ValueError("dangling resolved reference: " + str(value))
+    def numbers(value, keys):
+        if not isinstance(value, dict) or set(value) != set(keys) or any(type(v) not in (int, float) or not math.isfinite(v) for v in value.values()):
+            raise ValueError("invalid transform vector")
+    for identity, record in transforms.items():
+        parent = "" if identity == "r" else identity.rsplit("/", 1)[0]
+        if record.get("parent") != parent:
+            raise ValueError("invalid hierarchy parent")
+        ref(parent, transforms, nullable=True)
+        if not isinstance(record.get("name"), str) or type(record.get("activeSelf")) is not bool:
+            raise ValueError("invalid transform state")
+        index = 0 if identity == "r" else int(identity.rsplit("/", 1)[1])
+        if type(record.get("siblingIndex")) is not int or record["siblingIndex"] != index:
+            raise ValueError("invalid sibling index")
+        numbers(record.get("localPosition"), "xyz")
+        numbers(record.get("localScale"), "xyz")
+        numbers(record.get("localRotation"), "xyzw")
+    for name in SECTIONS:
+        for record in maps[name].values():
+            ref(record.get("transform"), transforms)
+            if record["id"].split("/c:", 1)[0] != record["transform"]:
+                raise ValueError("component owner does not match identity")
+            if name == "renderers":
+                if type(record.get("activeSelf")) is not bool or not _asset_ref(record.get("mesh")):
+                    raise ValueError("invalid renderer state")
+                if not isinstance(record.get("materials"), list) or not all(_asset_ref(v) for v in record["materials"]):
+                    raise ValueError("invalid renderer materials")
+                ref(record.get("rootBone"), transforms, nullable=True)
+                if not isinstance(record.get("bones"), list):
+                    raise ValueError("invalid bones")
+                for bone in record["bones"]:
+                    ref(bone, transforms, nullable=True)
+                weights = record.get("blendShapes")
+                if not isinstance(weights, list) or any(not isinstance(v, dict) or type(v.get("index")) is not int or v["index"] != i or not isinstance(v.get("name"), str) or type(v.get("weight")) not in (int, float) or not math.isfinite(v["weight"]) for i, v in enumerate(weights)):
+                    raise ValueError("invalid blendshape weights")
+            else:
+                ref(record.get("root"), transforms)
+                if not isinstance(record.get("colliders"), list):
+                    raise ValueError("invalid collider list")
+                for collider in record["colliders"]:
+                    ref(collider, maps["colliders"], nullable=True)
+                parameters = record.get("parameters")
+                if not isinstance(parameters, list) or any(not isinstance(v, dict) or not isinstance(v.get("name"), str) or type(v.get("value")) not in (int, float) or not math.isfinite(v["value"]) for v in parameters):
+                    raise ValueError("invalid physics parameters")
+
+
 def compare(expected, actual, abs_tol=1e-6, rel_tol=1e-6):
     """Return deterministic field-level differences. All non-record arrays are ordered."""
     validate_snapshot(expected)
     validate_snapshot(actual)
+    if expected["schemaVersion"] != actual["schemaVersion"]:
+        raise ValueError("cannot compare authored and resolved projections")
     differences = []
     def walk(left, right, path):
         if isinstance(left, dict) and isinstance(right, dict):
@@ -139,7 +228,7 @@ def compare(expected, actual, abs_tol=1e-6, rel_tol=1e-6):
             differences.append(f"{path}: expected {left!r}, actual {right!r}")
     walk({k: v for k, v in expected.items() if k != "sections"},
          {k: v for k, v in actual.items() if k != "sections"}, "$")
-    for section in SECTIONS:
+    for section in expected["sections"]:
         left = {r["id"]: r for r in expected["sections"][section]}
         right = {r["id"]: r for r in actual["sections"][section]}
         walk(left, right, "$.sections." + section)
@@ -149,7 +238,7 @@ def compare(expected, actual, abs_tol=1e-6, rel_tol=1e-6):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("expected", help="Unity-exported reference JSON")
-    parser.add_argument("actual", help="ResoPon parser snapshot JSON")
+    parser.add_argument("actual", help="matching snapshot JSON (ResoPon v1 or repeated Unity v2)")
     parser.add_argument("--abs-tol", type=float, default=1e-6)
     parser.add_argument("--rel-tol", type=float, default=1e-6)
     parser.add_argument("--report", help="optional JSON comparison report path")

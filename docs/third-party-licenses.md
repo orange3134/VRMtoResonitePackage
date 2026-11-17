@@ -44,6 +44,14 @@ vrctomのコード、依存物、アバター素材、取得済みの期待値�
 同梱ライセンスをローカルに保持する。再検査スクリプトはPython標準ライブラリだけを使い、
 規約確認用ライブラリを製品依存やテストの必須依存へ追加しない。
 
+解決済みv2の採取はUnity 2022.3の
+[InstantiatePrefab](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/PrefabUtility.InstantiatePrefab.html) と
+[GetCorrespondingObjectFromOriginalSource](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/PrefabUtility.GetCorrespondingObjectFromOriginalSource.html)
+等の公開API仕様を参照した独立実装。ドキュメントのサンプルコードやUnity実装を転載していない。
+Variantのスモークテスト用メッシュ・材質・Prefabもテスト内で自作し、第三者のアバターは同梱しない。
+この変更は開発用ツール・資料のみで配布物の依存は増えず、追加の第三者通知対象はない。
+実アバターのローカル採取では、素材ごとの版・作者・利用条件と導入範囲を `.local/` に記録する。
+
 ## 配布経路と検証
 
 - AssetsTools.NETをNuGet PackageReferenceとして同梱する。単一ファイルpublishではEXEに含まれる。
