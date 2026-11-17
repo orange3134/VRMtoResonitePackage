@@ -8,6 +8,7 @@ internal static class DefaultBlendShapeChecks
     public static void Run(Func<string, string, string, string> asset)
     {
         CheckChannelNames(asset);
+        CheckDisabledDefaults(asset);
         const string modelGuid = "adef0000000000000000000000000001";
         string model = asset("Assets/DefaultWeightChannels.fbx", modelGuid, "");
         foreach (bool reverse in new[] { false, true })
@@ -77,6 +78,30 @@ internal static class DefaultBlendShapeChecks
             Require(avatar.BlendShapeNamesFor(modelGuid, "Body", rendererPath: "Right/Body").Single() == "Right only" &&
                 avatar.BlendShapeNamesFor(modelGuid, "Body", rendererPath: "Missing/Body") == null,
                 "Indexed shape repair uses the matching path and cannot fall back to a namesake");
+        }
+    }
+
+    private static void CheckDisabledDefaults(Func<string, string, string, string> asset)
+    {
+        string path = asset("Assets/DefaultImportSettings.asset", "adef0000000000000000000000000003", "fixture");
+        foreach (string setting in new[] { "", "  importBlendShapeDeformPercent: 1\n", "  importBlendShapeDeformPercent: 0\n" })
+        {
+            File.WriteAllText(path + ".meta", "ModelImporter:\n" + setting);
+            var resolver = new UnityModelFileIdResolver(new UnityAsset
+                { LogicalPath = "Assets/DefaultImportSettings.asset", DiskPath = path, MetaPath = path + ".meta" });
+            typeof(UnityModelFileIdResolver).GetField("_defaultWeightChannels", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .SetValue(resolver, new[] { new UnityFbxBlendShapeDefaults.Channel("Smile", 75, "RootNode/Body") });
+            var scene = new Assimp.Scene();
+            var mesh = new Assimp.Mesh();
+            mesh.MeshAnimationAttachments.Add(new Assimp.MeshAnimationAttachment { Name = "Smile" });
+            scene.Meshes.Add(mesh);
+            var node = new Assimp.Node("Body"); node.MeshIndices.Add(0);
+            typeof(UnityModelFileIdResolver).GetMethod("AddBlendShapeNames", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .Invoke(resolver, new object[] { scene, node, "RootNode/Body" });
+            Require(resolver.BlendShapeNamesByPath["RootNode/Body"].Single() == "Smile", "disabled DeformPercent import retains shape identity");
+            Require(setting.Contains(": 0") ? resolver.BlendShapeDefaultWeightsByPath.Count == 0 :
+                resolver.BlendShapeDefaultWeightsByPath["RootNode/Body"].Single() == 75,
+                "ModelImporter DeformPercent setting controls defaults; omitted setting preserves legacy behavior");
         }
     }
 

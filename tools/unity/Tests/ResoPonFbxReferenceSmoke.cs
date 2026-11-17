@@ -77,6 +77,15 @@ public static class ResoPonFbxReferenceSmoke
         string variantPath = folder + "/variant.prefab";
         PrefabUtility.SaveAsPrefabAsset(variant, variantPath);
         UnityEngine.Object.DestroyImmediate(variant);
+        // Renamed prefab files can retain an old serialized root name. Unity's
+        // importer exposes the file name as the asset root without rewriting YAML.
+        string yaml = File.ReadAllText(variantPath);
+        if (!yaml.Contains("value: variant\n")) throw new InvalidOperationException("Missing root name override in fixture.");
+        yaml = yaml.Replace("value: variant\n", "value: StaleSerializedRoot\n");
+        File.WriteAllText(variantPath, yaml);
+        AssetDatabase.ImportAsset(variantPath, ImportAssetOptions.ForceSynchronousImport);
+        if (AssetDatabase.LoadAssetAtPath<GameObject>(variantPath).name != "variant")
+            throw new InvalidOperationException("Prefab root does not follow the asset file name.");
         byte[] before = File.ReadAllBytes(variantPath);
         ResoPonReferenceExporter.Export(variantPath, Path.Combine(output, "first.json"), "resolved");
         ResoPonReferenceExporter.Export(variantPath, Path.Combine(output, "second.json"), "resolved");

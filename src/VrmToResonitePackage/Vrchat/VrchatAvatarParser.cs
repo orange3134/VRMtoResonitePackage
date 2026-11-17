@@ -3318,8 +3318,11 @@ public static class VrchatAvatarParser
             }
             YamlNode r = pb.Root;
             long rootId = r?["rootTransform"]?.FileID ?? 0;
-            var rootTarget = ResolvePhysicsTarget(package, rootId != 0 ? r["rootTransform"].Guid ?? sceneGuid : sceneGuid,
-                rootId != 0 ? rootId : scene.TransformOfGameObject(r?["m_GameObject"]?.FileID ?? 0)?.FileId ?? 0,
+            var owner = r?["m_GameObject"];
+            // A component added to an FBX object can serialize only its stripped
+            // GameObject. The model's implicit Transform has no local YAML record.
+            var rootTarget = ResolvePhysicsTarget(package, rootId != 0 ? r["rootTransform"].Guid ?? sceneGuid : owner?.Guid ?? sceneGuid,
+                rootId != 0 ? rootId : scene.TransformOfGameObject(owner?.FileID ?? 0)?.FileId ?? owner?.FileID ?? 0,
                 avatar.FbxGuid);
             string rootBone = rootTarget?.Name;
             if (string.IsNullOrEmpty(rootBone))
@@ -3426,11 +3429,22 @@ public static class VrchatAvatarParser
             UnityScene.LocalTransform local = ownerGo != null ? scene.GetLocalTransform(ownerGo.FileId) : default;
             if (!local.Found)
             {
-                return null;
+                var ownerRef = r?["m_GameObject"];
+                var identity = ResolveObjectIdentity(package, ownerRef?.Guid ?? sceneGuid, ownerRef?.FileID ?? 0);
+                if (package.ByGuid(identity.Guid)?.Extension != ".fbx") return null;
+                attachTarget = ResolvePhysicsTarget(package, identity.Guid, identity.Id, null);
+                // Attach directly to the implicit model transform. The collider's
+                // center/orientation already use this local space; do not fold it twice.
+                attachBone = attachTarget?.Name;
+                center = position;
+                orient = rotation;
             }
-            attachBone = attachTarget?.Name ?? local.ParentName;
-            center = local.Position + Vec3.Transform(position * local.Scale, local.Rotation);
-            orient = local.Rotation * rotation;
+            else
+            {
+                attachBone = attachTarget?.Name ?? local.ParentName;
+                center = local.Position + Vec3.Transform(position * local.Scale, local.Rotation);
+                orient = local.Rotation * rotation;
+            }
         }
         if (string.IsNullOrEmpty(attachBone))
         {

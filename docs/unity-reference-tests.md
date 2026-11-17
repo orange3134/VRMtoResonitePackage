@@ -195,8 +195,9 @@ FBX RendererとGameObjectの削除、通常GameObjectの追加、別配置への
   追加した通常GameObjectと兄弟順が入れ替わる。
 - UnityのPrefabルート名と、YAMLのルート `m_Name` が違う入力がある。
   Omanekoの例では、Prefabファイル名とUnity採取値にない末尾の ` 1` がYAMLとResoPon解析値に残る。
-  全体の一致判定から名前だけを除外して隠さず、命名差として記録する。これだけでskinや物理の
-  不具合とは判断しない。
+  Unityはアセットを読み込む段階でファイル名をルート名として公開する。v2出力も選択Prefabの
+  ファイル名を使う。子オブジェクトの名前や上書きは維持し、名前比較は除外しない。
+  自作VariantのYAMLに古いルート名を残す統合テストで確認する。
 - Unityプロジェクトで解決できても、元unitypackageに外部Prefabが同梱されない入力がある。
   12Bの例ではFaceEmo側のPrefab依存が不足する。Unity採取済みという理由で元入力単独の
   解決可能性を仮定せず、依存不足として残す。別プロジェクトから黙って依存を補完しない。
@@ -209,8 +210,18 @@ FBX RendererとGameObjectの削除、通常GameObjectの追加、別配置への
   Unityと異なる。Marycia・Sanatiaの順序設定、Lina・Milfyのアンダースコアで検出できる。
 - Siskaのように現在のMeshより長い `m_BlendShapeWeights` が残る場合、Unityは現在のMeshの
   チャンネル数までを公開する。余剰の保存値を新しいチャンネルとみなさない。
-  LinaではFBXの初期DeformPercentとUnity採取ウェイトに差がある。既存の本番メタデータ由来の値を
-  期待値に合わせて消さず、変換処理の調査対象として差分に残す。
+  Linaの `importBlendShapeDeformPercent: 0` は、元FBXの非ゼロ値を初期ウェイトへ取り込まない設定。
+  Unityで同じFBXの別コピーの設定を切り替えると、Body・socksの初期値が0/100へ変わる。
+  本番のfileID resolverもこの設定を反映し、チャンネル名・順序は維持する。
+- 姿勢差は成分差に加えて位置距離・最短回転角・スケール差を集計する。回転角の診断では
+  quaternionを正規化するが、一致判定の値や許容差は変えない。
+  FyuettのPointesは回転した非均一スケール、SanatiaはQuaternionの一部成分だけの上書き、
+  NagiyaはZ-upと負のCoordAxisSignを含むモデルであり、単なる丸め差ではない。
+  行列をSystem.Numericsの行ベクトル形式へ転置し、軸・左右手系変換後に分解して投影する。
+  q/-qが同じ回転でも、一部成分の上書き前には符号を任意に選べない。
+- 12Bでは暗黙のFBX Transformを持つGameObjectへPhysBoneを追加している。
+  `rootTransform: 0` の所有GameObjectに対応するTransformのYAMLがない場合も、FBX出典から
+  所有Transformを解決する。v2で参照が一致しても本番解析や生成物で欠落し得るため、実変換・inspectも行う。
 
 ## 従来のResoPon解析との照合（v1）
 

@@ -18,6 +18,12 @@ branches indexed by file ID/path, and exclusion of whole model/object hierarchie
 without starting the engine. Fixtures remain in the printed temp directory for
 inspection. This does not verify an end-to-end avatar conversion.
 
+`ModelHierarchyChecks` also verifies rotated nonuniform scale, quaternion sign before
+partial overrides, and Z-up axis conversion. Importer tests cover enabled, disabled,
+and omitted `importBlendShapeDeformPercent` settings without losing channel identity.
+Implicit-model physics tests resolve default roots through stripped GameObjects with
+no serialized Transform and keep same-named collider targets in distinct branches.
+
 `ModelHierarchyChecks` verifies folded FBX translation/pre-rotation chains, child
 local pose isolation, morph-only renderer metadata and non-ASCII Unity fileIDs.
 `DefaultBlendShapeChecks` also checks full skin-bone paths for same-named joints

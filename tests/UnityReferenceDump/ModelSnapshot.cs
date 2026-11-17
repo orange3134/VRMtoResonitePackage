@@ -131,8 +131,8 @@ internal sealed class ModelSnapshot
             var p = node.Position * units; var q = node.Rotation; var s = node.Scale;
             Add(4, transform, Map(("m_GameObject", Ref(go)), ("m_Father", Ref(root ? 0 : Identity(node.ParentPath, 4))),
                 ("m_Children", Sequence(children.Select(n => Ref(Identity(n.Path, 4))))),
-                ("m_LocalPosition", Vector(-p.X, p.Y, p.Z)), ("m_LocalScale", Vector(s.X, s.Y, s.Z)),
-                ("m_LocalRotation", Map(("x", Scalar(q.X)), ("y", Scalar(-q.Y)), ("z", Scalar(-q.Z)), ("w", Scalar(q.W))))));
+                ("m_LocalPosition", Vector(p.X, p.Y, p.Z)), ("m_LocalScale", Vector(s.X, s.Y, s.Z)),
+                ("m_LocalRotation", Map(("x", Scalar(q.X)), ("y", Scalar(q.Y)), ("z", Scalar(q.Z)), ("w", Scalar(q.W))))));
         }
     }
 

@@ -162,7 +162,10 @@ internal sealed class ResolvedSnapshot
         foreach (var node in ordered)
         {
             var r = Identity(node.Key, node, node.Document.ClassId == 224 ? "UnityEngine.RectTransform" : "UnityEngine.Transform");
-            r["parent"] = node.Parent?.Id ?? ""; r["name"] = node.Name;
+            r["parent"] = node.Parent?.Id ?? "";
+            // Unity's Prefab importer names the asset root after its file even when
+            // the serialized root name is stale (for example after a file rename).
+            r["name"] = node.Parent == null ? Path.GetFileNameWithoutExtension(view.ByGuid(guid).LogicalPath) : node.Name;
             r["siblingIndex"] = node.Parent?.Children.IndexOf(node) ?? 0;
             r["activeSelf"] = node.ActiveSelf; r["activeInHierarchy"] = node.Active;
             foreach (string property in new[] { "localPosition", "localRotation", "localScale" })

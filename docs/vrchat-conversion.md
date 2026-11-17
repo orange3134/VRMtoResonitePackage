@@ -162,8 +162,12 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 
 fileID resolverは同じAssimp importから `UnityModelNode` の読み取り専用メタデータも保持する。
 補助ノードを畳んだローカル姿勢・完全なpath・材質スロットをv2診断出力で使い、モデルの配置ごとに
-元のメタデータを書き換えない。AssimpNetの行列積はその格納方式に対して合成順が逆になるため、
+元のメタデータを書き換えない。Assimpの列ベクトル行列をSystem.Numericsの行ベクトル形式へ転置し、
 Translation→PreRotationの鎖で親の平行移動を回してしまわないようテストする。
+モデルの直下へFBXのCoord/Up/Front軸変換を一度適用し、X反転による左右手系変換後に分解する。
+回転済みの非均一スケールを行方向から取り出すと軸が入れ替わる。Quaternionも分解後の成分反転だけでは
+Unityと符号の選び方が異なり、一部成分だけのPrefab上書きで別の回転になる。
+この姿勢メタデータはv2診断用であり、本番のModelImporterによる頂点・skin変換を置換しない。
 FBXのskin接続はclusterの接続順で読み、同名Jointでも完全なパスで区別する。
 BlendShapeはボーンのあるメッシュに限定せず、morphだけを持つメッシュでも取得する。
 
@@ -575,7 +579,9 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
 - FBX内の元shape順を記録する。
 - blinkやprefab weightが数値参照する最大indexまで、欠落shapeを空frameとして復元する。
 - 名前参照だけのrendererは大量の空frameを復元しない。
-- FBX `BlendShapeChannel.DeformPercent` をモデルprefabの既定weightとして読み込む。
+- FBX `BlendShapeChannel.DeformPercent` はModelImporterの `importBlendShapeDeformPercent` が
+  有効な場合だけモデルprefabの既定weightとして読み込む。明示的な0では取り込まず、設定省略時は従来どおり有効。
+  無効でもチャンネル名・順序・aliasは保持し、Prefabの明示的なweightは通常どおり適用する。
 - Scope FBX default weights by model occurrence and renderer name, and fill missing
   weights on every corresponding renderer record. Explicit zero overrides remain authoritative.
 - 明示的なprefab `m_BlendShapeWeights` は0を含めて既定値より優先する。
@@ -651,7 +657,9 @@ SNIFF CONTROLの到達可能motionには同じbindingがあるが、初期状態
 LinaのFBXには両目用 `まばたき` の `DeformPercent=100` がある。
 従来はこの値が初期weightと表情出力のBaseに残り、保存パッケージのBodyもweight=1となっていた。
 ループの0指定を初期値と表情解除時のBaseへ反映することで、左右の瞬きを追加した後も残る閉眼を防ぐ。
-衣服の調整shapeなど、瞬きと関係しないFBX既定値は維持する。
+Unity参照との照合で、LinaのModelImporterには `importBlendShapeDeformPercent: 0` があり、
+Bodyの `まばたき` とsocksの `調整用` はモデルを読み込んだ直後も0になることを確認した。
+本番解析もこの設定を尊重する。瞬きの初期リセットは保持し、他のアバターで設定が有効なFBX既定値は維持する。
 
 Shipilka 1.02はDescriptorの瞬き設定が空で、初期 `Default Shape / ShapeDefault` のループが
 Bodyの `まばたき` を0に保つ。動く瞬きループではないため、中立表情からの補完で両目1本を登録する。
@@ -777,7 +785,14 @@ headless meshの生成と描画制御は[共通のFirstPerson処理](avatar-conv
   as well as remapping descendants. Apply this at every merge so later merges retain live references.
 
 - `insideBounds=1` とplane colliderはResoniteで正しく再現できないため変換しない。
-- `rootTransform` があればそのboneへ、なければ所有GameObjectの親boneへ局所変換を畳む。
+- PhysBoneの `rootTransform` 未指定時は所有Transformを使う。12BのようにFBXオブジェクトへ
+  コンポーネントを追加すると、stripped GameObjectだけが保存され、TransformのYAMLがない場合がある。
+  この場合もGameObjectの出典IDからモデル内の完全なパスを解決し、物理を欠落させない。
+- Colliderの `rootTransform` があればそのboneへ、なければ所有GameObjectの親boneへ局所変換を畳む。
+  所有Transformが暗黙のFBXノードならそのノードへ直接取り付け、position/rotationはその局所空間のまま使う。
+  同名ボーンを持つ別枝との混同や、親変換の二重適用を避ける。
+- 12Bの登録ケースにはplane colliderが7個ある。PhysBone 14個を取り込めても、これらは既存の
+  plane非対応方針により出力されない。チェーン生成の成功を衝突挙動の完全な再現とみなさない。
 - node、offset、tail、radiusの署名でcolliderを共有する。
 
 ## マテリアル

@@ -11,6 +11,7 @@ namespace VrmToResonitePackage.Unity;
 public sealed class UnityModelFileIdResolver
 {
     private readonly Dictionary<long, string> _names = new();
+    private bool _importBlendShapeDeformPercent = true;
     private readonly Dictionary<long, int> _classes = new();
     internal int ClassId(long fileId) => _classes.GetValueOrDefault(fileId);
     internal IReadOnlyList<UnityModelNode> Hierarchy { get; private set; }
@@ -149,6 +150,7 @@ public sealed class UnityModelFileIdResolver
             return;
         }
         YamlNode importer = UnityYaml.ParseFlatDocument(File.ReadAllText(model.MetaPath))?["ModelImporter"];
+        _importBlendShapeDeformPercent = importer?["importBlendShapeDeformPercent"]?.AsBool(true) ?? true;
         YamlNode table = importer?["internalIDToNameTable"];
         if (table?.Seq != null)
         {
@@ -358,7 +360,7 @@ public sealed class UnityModelFileIdResolver
         _blendShapeNames.TryAdd(node.Name, names);
         _blendShapeNamesByPath[path] = names;
         var defaults = new float[names.Count];
-        for (int i = 0; i < names.Count; i++)
+        for (int i = 0; _importBlendShapeDeformPercent && i < names.Count; i++)
         {
             string attachmentName = names[i];
             var channels = _defaultWeightChannels.Where(channel => channel.RendererPath == path &&
