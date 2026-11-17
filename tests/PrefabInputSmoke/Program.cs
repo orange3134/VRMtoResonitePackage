@@ -1408,6 +1408,22 @@ MeshRenderer:
     Check((string)placementType.GetField("ParentFbxGuid")!.GetValue(placement)! == guid,
         "Imported bone parent carries its model identity for static import scale correction");
     Check(!parents[0].Active, "Imported bone parent preserves authored inactive state");
+    foreach (bool removed in new[] { false, true })
+    {
+        var skinAvatar = new VrchatAvatar { FbxGuid = guid };
+        var skinCopy = new VrchatMeshCopy(guid, "Body", "Clothing", true, true) { RendererRemoved = removed };
+        skinCopy.BoneTargets[0] = new(guid, "Attachment", "Left/Shared/Attachment", accessoryPackage.InputPrefab.Guid, 151);
+        skinAvatar.MeshCopies.Add(skinCopy); // FBX source, no GeneratedMesh and no PhysBone.
+        typeof(VrchatAvatarParser).GetMethod("ParsePhysics", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { accessoryPackage, accessoryPackage.InputPrefab.Guid, skinAvatar, null });
+        var skinPlacement = skinAvatar.PhysicsPlacements.SingleOrDefault(p =>
+            p.Transforms.LastOrDefault()?.Key == $"{accessoryPackage.InputPrefab.Guid}:151");
+        Check(removed ? skinPlacement == null : skinPlacement != null &&
+              skinPlacement.Transforms.First().ImportedBone?.Path == "Left/Shared" &&
+              skinPlacement.Transforms.Last().ImportedBone == null,
+            removed ? "Removed FBX renderer does not create otherwise unused skin bones" :
+                "FBX skin creates its authored bone below the exact imported parent without physics");
+    }
     var authoredAvatar = new VrchatAvatar { FbxGuid = guid };
     typeof(VrchatAvatarParser).GetMethod("ParsePhysics", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
         .Invoke(null, new object[] { accessoryPackage, accessoryPackage.InputPrefab.Guid, authoredAvatar, null });

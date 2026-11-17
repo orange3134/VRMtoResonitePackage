@@ -228,6 +228,10 @@ FBX RendererとGameObjectの削除、通常GameObjectの追加、別配置への
 Fyuett・Pilica・Sanatia・12B・Lina・NagiyaはUnity 2022.3.22f1で再採取しても旧期待値と
 バイト一致し、微小な局所Transformの数値差が再現した。採取の揺らぎで消える差ではない。
 これは全残差の原因や無害性を証明するものではなく、厳密比較では引き続き差分として扱う。
+残差のある13件・181成分について `originalSource` のGUID/fileIDから元FBXのTransformを
+Unityで直接読み直すと、すべてPrefab採取値と一致した。差はPrefab合成前のFBXインポート時点に
+存在し、回転の0/1付近の成分とスケールの1付近の成分に限られる。UnityとAssimpの内部計算のどの演算が
+差を生むかまでは確定していない。合成処理へ補正値を埋めたり、許容差を広げて一致扱いにはしない。
 一般条件を含む[生成パッケージの構造検査](local-avatar-tests.md#保存パッケージの構造を自動検査する)と、
 Unityとの解析値比較、実クライアントの外観・動作確認は別の結果として保存する。
 

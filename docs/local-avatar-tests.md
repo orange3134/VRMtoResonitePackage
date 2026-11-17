@@ -205,3 +205,31 @@ Unityのshape weightは0–100、Resoniteの保存値は0–1であることに�
 再現用には、入力・選択引数・実行DLL・生成パッケージ・期待条件・スナップショットのハッシュと、
 変換およびinspectの終了コードを `.local/` に保存する。生成パッケージは `.tmp_verify/` に置く。
 一般条件の成功は、登録した全rendererや物理設定がUnityと一致したという意味ではない。
+
+### 保存スキンの追従を検査する
+
+`PrefabSceneSmoke --skin-motion-package <package> <expectations.json>` はパッケージを
+ヘッドレスエンジンへ再読込し、指定した骨を動かしたときに対象Rendererの全使用骨が追従するかを検査する。
+期待条件はUnityの骨階層などから選び、実アバターの条件ファイルは `.local/` に置く。
+
+```json
+{
+  "rootBonePathSuffix": ["RootNode", "Armature", "Hips"],
+  "renderers": [
+    { "pathSuffix": ["Avatar", "Outfit", "Shirt"], "minimumWeightedBones": 1 }
+  ]
+}
+```
+
+```powershell
+dotnet build tests/PrefabSceneSmoke -c Release -o .tmp_verify/skin-motion-build
+dotnet .tmp_verify/skin-motion-build/PrefabSceneSmoke.dll --skin-motion-package `
+  .tmp_verify/avatar-output/Avatar.resonitepackage .local/skin-motion-expectations.json
+```
+
+パスはSlot名の配列で、末尾が一致する対象を一意に選ぶ。欠落・曖昧な対象・空の使用骨は失敗する。
+IK等が対象骨自身を駆動していても試験できるよう、一時的な親を `(0.1, 0.05, -0.03)` m動かす。
+対照となる骨の移動を確認してから、使用骨の移動誤差を `1e-5` m以内で検査する。
+試験後は親と位置を復元し、パッケージファイルは変更しない。成功0、検査失敗1。
+この許容差は移動試験専用で、Unity v2比較の許容差を変更するものではない。
+元からその骨に追従しない仕様のアクセサリーは対象へ含めない。クライアントでの装着・外観確認は別途必要。

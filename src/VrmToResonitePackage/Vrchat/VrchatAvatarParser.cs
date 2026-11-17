@@ -3176,7 +3176,10 @@ public static class VrchatAvatarParser
             avatar.PhysBones.SelectMany(b => b.IgnoreBoneTargets
                 .Concat(b.Colliders.Select(c => c.AttachBoneTarget)).Append(b.RootBoneTarget))
                 .Concat(new[] { avatar.LeftEyeBoneTarget, avatar.RightEyeBoneTarget })
-                .Concat(avatar.MeshCopies.Where(c => c.GeneratedMesh != null).SelectMany(c => c.BoneTargets.Values)));
+                // FBX-backed skins also reference locally authored bones. Capturing
+                // only generated-mesh targets leaves manually attached clothing on
+                // its unused imported armature instead of the avatar's hierarchy.
+                .Concat(avatar.MeshCopies.Where(c => !c.RendererRemoved).SelectMany(c => c.BoneTargets.Values)));
     }
 
     private static void CaptureTargetPlacements(UnityPackage package, string sourceGuid, VrchatAvatar avatar,

@@ -50,7 +50,8 @@ internal static partial class VrchatMaterialBuilder
             // Appended submeshes must not take over an existing extra material slot.
             if (assigned.Length != asset.Data.SubmeshCount)
             {
-                UniLog.Warning($"Outline mesh exclusion skipped on {renderer.Slot.Name}: material/submesh count mismatch.");
+                UniLog.Warning($"Outline mesh exclusion skipped on {renderer.Slot.Name}: material/submesh count mismatch " +
+                    $"({assigned.Length} materials, {asset.Data.SubmeshCount} submeshes).");
                 continue;
             }
             var engine = renderer.Engine;

@@ -259,7 +259,8 @@ internal static partial class VrchatMaterialBuilder
         material.Color.Value = ToColor(info.Color, ColorProfile.sRGB);
         material.MainTextureScale.Value = ToFloat2(info.MainTexScale);
         material.MainTextureOffset.Value = ToFloat2(info.MainTexOffset);
-        var bakePlan = LilToonMainTextureBakePlan.Create(info, guid => package.ByGuid(guid)?.HasContent == true);
+        var bakePlan = LilToonMainTextureBakePlan.Create(info, guid => package.ByGuid(guid)?.HasContent == true,
+            guid => package.ByGuid(guid)?.Extension == ".rendertexture");
         var (mainTex, bakedMain) = await BakeMainLayers(assetsSlot, package, info, bakePlan);
         if (mainTex != null)
         {
@@ -912,7 +913,8 @@ internal static partial class VrchatMaterialBuilder
             return null;
         }
         using FileStream source = File.OpenRead(asset.DiskPath);
-        return TextureDecoder.Decode(source, Path.GetExtension(asset.LogicalPath), generateMipMaps: false);
+        return TextureDecoder.Decode(source, Path.GetExtension(asset.LogicalPath), generateMipMaps: false)
+            ?? throw new InvalidDataException($"Could not decode texture '{asset.LogicalPath}' ({asset.Guid}).");
     }
 
     private static float SampleChannel(Bitmap2D bitmap, int x, int y, int width, int height, int channel,
