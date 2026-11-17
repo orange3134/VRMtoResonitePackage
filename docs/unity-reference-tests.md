@@ -178,6 +178,10 @@ python scripts/test-unity-reference-producer.py path/to/variant.prefab path/to/f
 - Unityプロジェクトで解決できても、元unitypackageに外部Prefabが同梱されない入力がある。
   12Bの例ではFaceEmo側のPrefab依存が不足する。Unity採取済みという理由で元入力単独の
   解決可能性を仮定せず、依存不足として残す。別プロジェクトから黙って依存を補完しない。
+  FaceEmoを導入済みのプロジェクト内の12B Prefabを入力にすれば、この依存は解決できる。
+  パッケージ単独の結果を保持し、プロジェクト入力・依存パッケージの版とハッシュを別に記録する。
+  その場合もv2出力は12Bの暗黙のFBX階層で未対応になるため、依存解決や通常解析の正常終了を
+  Unityとの全項目一致として扱わない。12B自体を検証対象から除外する必要はない。
 
 ## 従来のResoPon解析との照合（v1）
 
