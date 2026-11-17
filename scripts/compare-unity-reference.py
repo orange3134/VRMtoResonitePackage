@@ -238,7 +238,7 @@ def compare(expected, actual, abs_tol=1e-6, rel_tol=1e-6):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("expected", help="Unity-exported reference JSON")
-    parser.add_argument("actual", help="matching snapshot JSON (ResoPon v1 or repeated Unity v2)")
+    parser.add_argument("actual", help="matching snapshot JSON (ResoPon v1/v2 or repeated Unity v2)")
     parser.add_argument("--abs-tol", type=float, default=1e-6)
     parser.add_argument("--rel-tol", type=float, default=1e-6)
     parser.add_argument("--report", help="optional JSON comparison report path")

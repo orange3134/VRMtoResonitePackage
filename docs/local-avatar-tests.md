@@ -1,5 +1,10 @@
 # ローカルアバター回帰テスト
 
+Unityで継承を解決して採取したv2基準値は、[Unity参照データの直接比較](unity-reference-tests.md#resopon解析との直接比較v2)
+で再検証する。`.local/avatar-tests.json` の `unityResolvedParity` に比較レポートへのパス、状態、
+入力・期待値・実値のハッシュを追記できる。採取状態の `unityResolvedCollection` や既存の
+`analysisCollection` は保持し、比較成功と採取成功を区別する。
+
 Prefabの解析結果をUnity Editorの値と比較する場合は、[Unity参照データとの比較](unity-reference-tests.md)を参照。
 
 ユーザーからアバターのパスを渡されたら、調査の最初に `.local/avatar-tests.json` に追記する。

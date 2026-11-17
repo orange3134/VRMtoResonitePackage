@@ -8,7 +8,7 @@
 
 | モード | 形式と対象 | 比較先 |
 | --- | --- | --- |
-| `resolved`（既定） | schemaVersion 2 / `unity-resolved-prefab`。継承解決後の対応フィールド | Unityの再採取JSON。ResoPonのv2出力は未実装 |
+| `resolved`（既定） | schemaVersion 2 / `unity-resolved-prefab`。継承解決後の対応フィールド | Unityの再採取JSON、またはResoPonのv2ダンプ（下記の制約あり） |
 | `authored` | schemaVersion 1 / `selected-prefab-authored-components`。通常Prefab自身の対応コンポーネント | `tests/UnityReferenceDump` のResoPon解析JSON |
 
 ## 解決済みデータの採取（v2）
@@ -107,6 +107,77 @@ Play Mode、Animator、VRChat・NDMFのビルド処理で初めて適用され�
 プレビューシーンでも `ExecuteAlways` 等は動作し得るため、信頼できるプロジェクトを使う。
 材質の全プロパティや頂点データは採取しない。変換後のskin・物理挙動・外観・装着動作の検証には、
 実変換・inspect・クライアント検証を併用する。
+
+## ResoPon解析との直接比較（v2）
+
+`tests/UnityReferenceDump` は期待値のバージョンでv1/v2を切り替える。期待値から読むのは
+形式・バージョン・projection・選択Prefab GUIDだけであり、実値の階層・参照・数値は
+本番の `UnityPrefabInstances` / `UnityPrefabGraph` とMeshメタデータから組み立てる。
+Unity EditorやFrooxEngineを起動せずに実行できる。
+
+```powershell
+dotnet build tests/UnityReferenceDump -c Release -o .tmp_verify/unity-reference/bin
+dotnet .tmp_verify/unity-reference/bin/UnityReferenceDump.dll input.unitypackage expected.json actual.json
+python scripts/compare-unity-reference.py expected.json actual.json --report difference.json
+```
+
+現在のv2出力は、**YAMLとして階層とコンポーネントが存在する**通常Prefab・Variant・ネストPrefabに
+対応する。削除、追加、同一Prefabの複数配置、兄弟順、参照の上書きを合成した後に比較する。
+FBXをメッシュ資産として参照するRendererのBlendShape名は、本番のFBX fileID resolverから取得する。
+FBX全体の走査でBlendShapeがないことを証明できれば、メッシュノードのpathが曖昧でも空配列を出せる。
+走査失敗や形状を持つメッシュの曖昧なpathを、空配列として成功させない。
+
+**FBXのPrefabInstanceから暗黙に生成されるTransform・Rendererのv2出力は未対応**。
+これはUnity採取の制約でも、Variant全体の制約でもない。本番のPrefab graphが保持するYAMLと、
+モデルインポート時に生成する階層を結ぶ出力処理が別途必要なため、ダンプは
+`UNSUPPORTED_MODEL_HIERARCHY` で失敗する。未出力の階層を省略したJSONで一致判定しない。
+この検証基盤の導入と、暗黙のモデル階層の出力・変換後パッケージとの比較は段階を分ける。
+
+### 収集済みケースの一括再検証
+
+```powershell
+python scripts/test-unity-resolved.py .local/unity-resolved/collection/coverage.json `
+  --reference-dump .tmp_verify/unity-reference/bin/UnityReferenceDump.dll `
+  --output .local/unity-parity/new-run --work .tmp_verify/unity-parity/new-run
+```
+
+`--output` と `--work` は未使用のディレクトリを指定する。`--case ID` は複数指定できる。
+期待値と元入力のSHA-256を確認してから実行し、終了後にも再確認する。unitypackageの展開物と
+FBX一時ファイルは `--work` に置く。期待値・登録一覧を更新せず、実値JSON、producerログ、
+フィールド単位の差分と `report.json` を `--output` に保存する。
+
+結果は `matched`、`different`、`unsupported`、`missing-dependency`、`producer-failed`、`failed` に分ける。
+Unity未採取の登録ケースは `not-captured` として別集計する。選択した採取済みケースがすべて
+一致した場合だけ終了コード0、それ以外は1。未採取を含む登録全体の網羅を意味しない。
+各結果は入力・期待値・実値のハッシュ、実行したダンプと本番DLL・比較ソースのハッシュを保持する。
+
+### Unity由来の自作Variantによる統合検証
+
+`ResoPonResolvedReferenceSmoke` が作る `variant.prefab` と `first.json` を使う。
+fixtureは自作メッシュ・材質のみで、同名のネスト2個、非アクティブ階層、削除・追加、材質順序、
+別インスタンスへのPhysBone参照を含む。Unity側でfixtureを作った後は、Unityを起動せず再実行できる。
+
+```powershell
+python scripts/test-unity-reference-producer.py path/to/variant.prefab path/to/first.json `
+  --reference-dump .tmp_verify/unity-reference/bin/UnityReferenceDump.dll `
+  --output .tmp_verify/unity-reference/producer-check
+```
+
+全項目一致に加え、期待値の数値を意図的に変えても実値JSONが変わらないこと、変更した期待値は
+不一致になること、既存出力・期待値の上書き拒否、入力資産の不変を検査する。
+
+### 再利用する回帰事例
+
+- Variantで `m_AddedGameObjects` の `insertIndex: -1` が複数ある場合、配列に記録された順に
+  末尾へ追加する。Prefab graphのscene列挙順で追加すると、継承元・ネスト側が先に現れ、
+  追加した通常GameObjectと兄弟順が入れ替わる。
+- UnityのPrefabルート名と、YAMLのルート `m_Name` が違う入力がある。
+  Omanekoの例では、Prefabファイル名とUnity採取値にない末尾の ` 1` がYAMLとResoPon解析値に残る。
+  全体の一致判定から名前だけを除外して隠さず、命名差として記録する。これだけでskinや物理の
+  不具合とは判断しない。
+- Unityプロジェクトで解決できても、元unitypackageに外部Prefabが同梱されない入力がある。
+  12Bの例ではFaceEmo側のPrefab依存が不足する。Unity採取済みという理由で元入力単独の
+  解決可能性を仮定せず、依存不足として残す。別プロジェクトから黙って依存を補完しない。
 
 ## 従来のResoPon解析との照合（v1）
 

@@ -49,6 +49,9 @@ vrctomのコード、依存物、アバター素材、取得済みの期待値�
 [GetCorrespondingObjectFromOriginalSource](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/PrefabUtility.GetCorrespondingObjectFromOriginalSource.html)
 等の公開API仕様を参照した独立実装。ドキュメントのサンプルコードやUnity実装を転載していない。
 Variantのスモークテスト用メッシュ・材質・Prefabもテスト内で自作し、第三者のアバターは同梱しない。
+ResoPon側のv2ダンプ・再検証runnerも独立実装で、本リポジトリのPrefab graphと既存の
+FBXメタデータ解析APIを呼ぶ。外部の実装コードや採取したアバターデータをソースへ取り込まない。
+既存参照のAssimpNet等は引き続き利用者のResoniteからロードし、新しい配布依存は追加しない。
 この変更は開発用ツール・資料のみで配布物の依存は増えず、追加の第三者通知対象はない。
 実アバターのローカル採取では、素材ごとの版・作者・利用条件と導入範囲を `.local/` に記録する。
 

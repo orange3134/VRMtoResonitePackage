@@ -3,7 +3,7 @@
 This development-only comparator uses Python 3 standard libraries. It does not
 start Unity, install packages, run the conversion app, or read any avatar assets.
 Its input is the JSON reference captured in Unity and the matching JSON snapshot
-from the ResoPon parser (v1), or a repeated Unity capture (v2). Capture/compare is separate from the production converter.
+from the ResoPon parser (v1/v2), or a repeated Unity capture (v2). Capture/compare is separate from the production converter.
 
 ```sh
 python scripts/compare-unity-reference.py expected.json actual.json
@@ -42,11 +42,15 @@ or reordering siblings intentionally changes IDs. Source and original-source
 asset references remain provenance, not instance identity. Ordered bone bindings,
 blendshape weights, local transforms and selected PhysBone parameters are included.
 The validator checks internal references and field types; v1/v2 mixing is rejected.
-The current ResoPon producer is v1-only: comparing two Unity captures proves
+The ResoPon v2 producer resolves YAML-authored hierarchy/components, including
+variants and repeated nested prefabs. It fails explicitly for implicit FBX model
+hierarchy and missing dependencies. Comparing two Unity captures still proves
 repeatability of captured fields, not ResoPon parity.
 
 The Python suite includes invented v2 data for repeated instances, missing records,
 ordered references, transform/weight changes, invalid identities and dangling refs.
+Replay tests also prevent unsupported cases, changed baselines and field differences
+from being reported as matches. Existing replay output is never reused.
 
 For the Unity integration smoke test, copy `tools/unity/Editor/*.cs` and
 `tools/unity/Tests/ResoPonResolvedReferenceSmoke.cs` into a trusted project's
@@ -60,3 +64,11 @@ duplicate-name nested instances, inactive state and cross-instance collider refs
 It also checks identical repeated captures, unchanged prefab bytes, refusal to
 overwrite output, and the legacy authored projection's Variant rejection.
 Exit code 0 and the `PASS` log indicate success. Generated assets/JSON stay local.
+
+After building `tests/UnityReferenceDump`, run the generated fixture through
+`scripts/test-unity-reference-producer.py variant.prefab first.json --reference-dump
+path/to/UnityReferenceDump.dll --output .tmp_verify/new-producer-check`.
+This checks actual parser parity with Unity, independence from expected values,
+negative comparison controls, output protection and unchanged source assets.
+Use `scripts/test-unity-resolved.py` to replay a private collection's `coverage.json`;
+see [the v2 workflow](../../docs/unity-reference-tests.md) for status semantics and limits.

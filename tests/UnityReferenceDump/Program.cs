@@ -20,15 +20,16 @@ try
         throw new ArgumentException("Write actual JSON to a separate, new file.");
     using var reference = JsonDocument.Parse(File.ReadAllBytes(expected));
     JsonElement root = reference.RootElement;
+    int version = root.GetProperty("schemaVersion").GetInt32();
     if (root.GetProperty("format").GetString() != ReferenceSnapshot.Format ||
-        root.GetProperty("schemaVersion").GetInt32() != 1 ||
-        root.GetProperty("projection").GetString() != ReferenceSnapshot.Projection)
+        !((version == 1 && root.GetProperty("projection").GetString() == ReferenceSnapshot.Projection) ||
+          (version == 2 && root.GetProperty("projection").GetString() == ResolvedSnapshot.Projection)))
         throw new InvalidDataException("Unsupported Unity reference format, version or projection.");
     string guid = root.GetProperty("prefabGuid").GetString();
     if (guid?.Length != 32 || !guid.All(Uri.IsHexDigit))
         throw new InvalidDataException("Missing or invalid prefab GUID in the Unity reference.");
     ResoniteLocator.InstallAssemblyResolver(ResoniteLocator.Locate(null));
-    Run(input, guid.ToLowerInvariant(), output);
+    Run(input, guid.ToLowerInvariant(), output, version);
     return 0;
 }
 catch (Exception error)
@@ -38,7 +39,7 @@ catch (Exception error)
 }
 
 [MethodImpl(MethodImplOptions.NoInlining)]
-static void Run(string input, string guid, string output)
+static void Run(string input, string guid, string output, int version)
 {
     using var source = UnityPackage.Open(input);
     if (source.InputPrefab != null && !string.Equals(source.InputPrefab.Guid, guid, StringComparison.OrdinalIgnoreCase))
@@ -47,7 +48,7 @@ static void Run(string input, string guid, string output)
     if (selected?.HasContent != true || selected.Extension != ".prefab")
         throw new InvalidDataException($"Expected prefab {guid} is not present in the input.");
     using var view = UnityPrefabInstances.CreateView(source, guid, null);
-    var snapshot = ReferenceSnapshot.Capture(view, guid);
+    var snapshot = version == 2 ? ResolvedSnapshot.Capture(view, guid) : ReferenceSnapshot.Capture(view, guid);
     // CreateNew protects captured expectations and previous test outputs, even when paths
     // alias one another via links or differ only in spelling on the current filesystem.
     byte[] json = JsonSerializer.SerializeToUtf8Bytes(snapshot, new JsonSerializerOptions
