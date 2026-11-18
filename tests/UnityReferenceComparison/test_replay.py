@@ -64,6 +64,30 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertEqual("unsupported", report["cases"][0]["status"])
 
+    def test_batch_selection_is_verified_by_producer(self):
+        manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
+        manifest["cases"][0]["conversionArguments"] = ["--avatar", "Other avatar"]
+        self.coverage.write_text(json.dumps(manifest), encoding="utf-8")
+        def producer(command, **kwargs):
+            self.assertEqual(["--verify-selection", "Other avatar"], command[-2:])
+            kwargs["stdout"].write(b"SELECTION_MISMATCH: different prefab\n")
+            return types.SimpleNamespace(returncode=1)
+        code, report, _ = self.run_replay(producer)
+        self.assertEqual(1, code)
+        self.assertEqual("selection-mismatch", report["cases"][0]["status"])
+
+    def test_batch_default_selection_is_also_verified(self):
+        manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
+        manifest["cases"][0]["conversionArguments"] = []
+        self.coverage.write_text(json.dumps(manifest), encoding="utf-8")
+        def producer(command, **kwargs):
+            self.assertEqual(["--verify-selection", ""], command[-2:])
+            replay.write_json(Path(command[4]), snapshot())
+            return types.SimpleNamespace(returncode=0)
+        code, report, _ = self.run_replay(producer)
+        self.assertEqual(0, code)
+        self.assertEqual("matched", report["cases"][0]["status"])
+
     def test_new_package_lock_invalidates_prefab_replay(self):
         manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
         lock = self.root / "packages-lock.json"

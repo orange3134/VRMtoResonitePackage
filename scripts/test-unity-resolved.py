@@ -117,6 +117,14 @@ def main(argv=None):
             result.update(expectedPath=str(expected_path), expectedSha256=case["expectedSha256"],
                           inputPath=str(input_path), inputSha256=case["inputSha256"])
             command = ["dotnet", str(binary), str(input_path), str(expected_path), str(actual_path)]
+            if "conversionArguments" in case:
+                arguments = case["conversionArguments"]
+                if not isinstance(arguments, list) or any(not isinstance(a, str) for a in arguments):
+                    raise ValueError("Invalid conversion arguments")
+                selected = [i for i, a in enumerate(arguments) if a == "--avatar"]
+                if len(selected) > 1 or (selected and selected[0] + 1 >= len(arguments)):
+                    raise ValueError("Invalid avatar selection arguments")
+                command += ["--verify-selection", arguments[selected[0] + 1] if selected else ""]
             env = dict(os.environ, RESOPON_NOPAUSE="1", TEMP=str(temporary), TMP=str(temporary))
             with (directory / "producer.log").open("xb") as log:
                 run = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, env=env, cwd=repo,
@@ -125,8 +133,10 @@ def main(argv=None):
             verify_project_files(case)
             if run.returncode:
                 log = (directory / "producer.log").read_text(encoding="utf-8-sig", errors="replace")
-                status = "unsupported" if "UNSUPPORTED_MODEL_HIERARCHY:" in log else (
-                    "missing-dependency" if "MISSING_PREFAB_SOURCE:" in log else "producer-failed")
+                status = next((name for marker, name in (
+                    ("SELECTION_MISMATCH:", "selection-mismatch"),
+                    ("UNSUPPORTED_MODEL_HIERARCHY:", "unsupported"),
+                    ("MISSING_PREFAB_SOURCE:", "missing-dependency")) if marker in log), "producer-failed")
                 result.update(status=status,
                               error=log.strip().splitlines()[-1] if log.strip() else "No producer diagnostic")
             else:

@@ -257,6 +257,13 @@ Unity未採取の登録ケースは `not-captured` として別集計する。�
 一致した場合だけ終了コード0、それ以外は1。未採取を含む登録全体の網羅を意味しない。
 各結果は入力・期待値・実値のハッシュ、実行したダンプと本番DLL・比較ソースのハッシュを保持する。
 
+網羅テストの `convert-all-local-avatars.py` はこの比較を各ケースの変換前に必ず実行する。
+登録coverageのケースを複製して `conversionArguments` を付け、`UnityReferenceDump` の
+`--verify-selection` で本番パーサの選択PrefabがUnity参照と一致することも確認する。
+指定名がない場合も既定選択を検査し、別Prefabなら `selection-mismatch` で失敗する。
+採取済み参照の更新や追加採取は行わず、未採取・再採取必要は網羅テストの未完了として報告する。
+詳細は[全アバター変換の検証フロー](local-avatar-tests.md#登録アバターをすべて変換して一か所へ集約する)を参照。
+
 ### Unity由来の自作Variantによる統合検証
 
 `ResoPonResolvedReferenceSmoke` が作る `variant.prefab` と `first.json` を使う。

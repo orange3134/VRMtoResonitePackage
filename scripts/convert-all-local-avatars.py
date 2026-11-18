@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build once, convert every registered local avatar, and collect inspected packages."""
 import argparse
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 import hashlib
@@ -21,6 +22,63 @@ def sha256(path):
 
 def write_json(path, data):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def compare_unity(case, input_path, directory, build, repo, timeout):
+    """Replay the registered capture, never an earlier parity result or a learned baseline."""
+    if input_path.suffix.lower() == ".vrm":
+        return {"status": "not-applicable", "reason": "Unity prefab projection does not cover VRM inputs"}
+    capture = case.get("unityResolvedCollection", {})
+    coverage_name = capture.get("coveragePath") or case.get("prefabUnityCheck", {}).get("coveragePath")
+    if not coverage_name:
+        return {"status": "not-captured", "reason": "No Unity coverage registered; capture Unity reference first"}
+    provenance = {}
+    try:
+        coverage_path = Path(coverage_name).resolve()
+        coverage = json.loads(coverage_path.read_text(encoding="utf-8-sig"))
+        provenance = {"sourceCoveragePath": str(coverage_path), "sourceCoverageSha256": sha256(coverage_path)}
+        if (coverage.get("format") != "resopon.unity-resolved-coverage"
+                or coverage.get("schemaVersion") != 1):
+            raise ValueError("Invalid Unity coverage manifest")
+        matches = [c for c in coverage["cases"] if c["id"] == case["id"]]
+        if len(matches) != 1:
+            raise ValueError("Unity coverage must contain exactly one matching case ID")
+        reference = dict(matches[0])
+        if Path(reference["inputPath"]).resolve() != input_path:
+            raise ValueError("Unity capture input differs from registered conversion input")
+        if reference["status"] != "captured":
+            return dict(provenance, status="not-captured", captureStatus=reference["status"],
+                        reason=reference.get("reason", reference.get("error", "Unity reference not captured")))
+        # Verify the production parser selects this same prefab, including default selection.
+        reference["conversionArguments"] = case.get("arguments", [])
+        baseline = directory / "unity-baseline"
+        baseline.mkdir()
+        manifest = baseline / "coverage.json"
+        write_json(manifest, {"format": "resopon.unity-resolved-coverage", "schemaVersion": 1,
+                              "cases": [reference]})
+        output = directory / "unity-comparison"
+        command = [sys.executable, "-B", str(repo / "scripts/test-unity-resolved.py"), str(manifest),
+                   "--reference-dump", str(build / "UnityReferenceDump.dll"),
+                   "--output", str(output), "--work", str(directory / "unity-work"),
+                   "--timeout", str(timeout)]
+        with (directory / "unity-comparison.log").open("wb") as log:
+            run = subprocess.run(command, cwd=repo, stdout=log, stderr=subprocess.STDOUT, timeout=timeout + 120)
+        report_path = output / "report.json"
+        replay = json.loads(report_path.read_text(encoding="utf-8"))
+        result, = replay["cases"]
+        if result["id"] != case["id"] or replay["converterSha256"] != sha256(build / "ResoPon.dll"):
+            raise ValueError("Unity replay case/converter identity mismatch")
+        if run.returncode != 0 and result["status"] == "matched":
+            raise ValueError("Unity replay failed despite a matched case")
+        return dict(result, **provenance, reportPath=str(report_path), exitCode=run.returncode)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+        return dict(provenance, status="failed", error=str(error))
+
+
+def validation_status(conversion, unity):
+    if conversion == "failed" or unity in ("different", "failed", "producer-failed", "missing-dependency", "selection-mismatch"):
+        return "failed"
+    return "passed" if unity in ("matched", "not-applicable") else "incomplete"
 
 
 def main():
@@ -61,7 +119,7 @@ def main():
     print(f"Output: {root}", flush=True)
     build = root / "build"
     with (root / "build.log").open("wb") as log:
-        result = subprocess.run(["dotnet", "build", "src/VrmToResonitePackage", "-c", "Release",
+        result = subprocess.run(["dotnet", "build", "tests/UnityReferenceDump", "-c", "Release",
                                  "-o", str(build)], cwd=repo, env=environment,
                                 stdout=log, stderr=subprocess.STDOUT)
     if result.returncode:
@@ -69,13 +127,15 @@ def main():
         write_json(root / "report.json", report)
         return 1
     report["converterSha256"] = sha256(build / "ResoPon.dll")
+    report["referenceDumpSha256"] = sha256(build / "UnityReferenceDump.dll")
 
     def convert(case):
         case_id = case["id"]
         directory = root / "cases" / case_id
         directory.mkdir(parents=True)
         item = {"caseId": case_id, "inputPath": case["inputPath"], "status": "running",
-                "commands": [], "startedUtc": datetime.now(timezone.utc).isoformat()}
+                "commands": [], "startedUtc": datetime.now(timezone.utc).isoformat(),
+                "unityComparison": {"status": "not-run", "reason": "Input preparation did not complete"}}
 
         def invoke(arguments, log_name):
             command = ["dotnet", str(directory / "build/ResoPon.dll"), *arguments]
@@ -93,6 +153,8 @@ def main():
             input_path = Path(case["inputPath"]).resolve()
             item["inputPath"] = str(input_path)
             item["inputSha256"] = sha256(input_path)
+            item["unityComparison"] = compare_unity(case, input_path, directory, build, repo, args.timeout)
+            print(f"Unity {case_id}: {item['unityComparison']['status']}", flush=True)
             shutil.copytree(build, directory / "build")
             temp = directory / "temp"
             temp.mkdir()
@@ -113,6 +175,7 @@ def main():
                         packageBytes=target.stat().st_size)
         except Exception as error:
             item.update(status="failed", error=str(error))
+        item["validationStatus"] = validation_status(item["status"], item["unityComparison"]["status"])
         item["finishedUtc"] = datetime.now(timezone.utc).isoformat()
         write_json(directory / "result.json", item)
         print(f"{item['status']}: {case_id}", flush=True)
@@ -126,10 +189,14 @@ def main():
             write_json(root / "report.json", report)
     report["passed"] = sum(item["status"] == "passed" for item in report["cases"])
     report["failed"] = len(cases) - report["passed"]
-    report["status"] = "passed" if report["failed"] == 0 else "failed"
+    report["conversionStatus"] = "passed" if report["failed"] == 0 else "failed"
+    report["unityComparisonSummary"] = dict(Counter(c["unityComparison"]["status"] for c in report["cases"]))
+    report["validationSummary"] = dict(Counter(c["validationStatus"] for c in report["cases"]))
+    report["status"] = next((s for s in ("failed", "incomplete") if report["validationSummary"].get(s)), "passed")
     report["finishedUtc"] = datetime.now(timezone.utc).isoformat()
     write_json(root / "report.json", report)
-    print(f"Passed {report['passed']}/{len(cases)}; packages: {packages}", flush=True)
+    print(f"Conversion passed {report['passed']}/{len(cases)}; validation: {report['status']}; packages: {packages}", flush=True)
+    print(f"Unity comparison: {report['unityComparisonSummary']}", flush=True)
     return 0 if report["status"] == "passed" else 1
 
 

@@ -33,9 +33,10 @@ if (args.Length == 2 && args[0] == "--write-fbx-fixture")
     catch (Exception error) { Console.Error.WriteLine(error.Message); return 1; }
 }
 
-if (args.Length != 3)
+bool verifySelection = args.Length == 5 && args[3] == "--verify-selection";
+if (args.Length != 3 && !verifySelection)
 {
-    Console.Error.WriteLine("Usage: UnityReferenceDump <input.prefab|input.unitypackage> <unity-expected.json> <resopon-actual.json>");
+    Console.Error.WriteLine("Usage: UnityReferenceDump <input.prefab|input.unitypackage> <unity-expected.json> <resopon-actual.json> [--verify-selection <avatar-or-empty-for-default>]");
     return 2;
 }
 try
@@ -57,7 +58,7 @@ try
     if (guid?.Length != 32 || !guid.All(Uri.IsHexDigit))
         throw new InvalidDataException("Missing or invalid prefab GUID in the Unity reference.");
     ResoniteLocator.InstallAssemblyResolver(ResoniteLocator.Locate(null));
-    Run(input, guid.ToLowerInvariant(), output, version);
+    Run(input, guid.ToLowerInvariant(), output, version, verifySelection, verifySelection ? args[4] : null);
     return 0;
 }
 catch (Exception error)
@@ -67,7 +68,7 @@ catch (Exception error)
 }
 
 [MethodImpl(MethodImplOptions.NoInlining)]
-static void Run(string input, string guid, string output, int version)
+static void Run(string input, string guid, string output, int version, bool verifySelection, string avatarName)
 {
     using var source = UnityPackage.Open(input);
     if (source.InputPrefab != null && !string.Equals(source.InputPrefab.Guid, guid, StringComparison.OrdinalIgnoreCase))
@@ -75,6 +76,12 @@ static void Run(string input, string guid, string output, int version)
     UnityAsset selected = source.ByGuid(guid);
     if (selected?.HasContent != true || selected.Extension != ".prefab")
         throw new InvalidDataException($"Expected prefab {guid} is not present in the input.");
+    if (verifySelection)
+    {
+        var avatar = VrchatAvatarParser.Parse(source, string.IsNullOrEmpty(avatarName) ? null : avatarName);
+        if (!string.Equals(avatar.PrefabPath, selected.LogicalPath, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"SELECTION_MISMATCH: conversion selects {avatar.PrefabPath}, Unity reference selects {selected.LogicalPath}");
+    }
     using var view = UnityPrefabInstances.CreateView(source, guid, null);
     var snapshot = version == 2 ? ResolvedSnapshot.Capture(view, guid) : ReferenceSnapshot.Capture(view, guid);
     // CreateNew protects captured expectations and previous test outputs, even when paths

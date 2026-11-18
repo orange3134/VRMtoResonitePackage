@@ -107,7 +107,8 @@ Python 3.11以降で、登録済みの `arguments` を保った通常変換を�
 python -B scripts/convert-all-local-avatars.py --jobs 3
 ```
 
-現在のソースを一度だけReleaseビルドし、ケースごとにビルド出力と一時ディレクトリを分離する。
+現在の `UnityReferenceDump` と本番変換DLLを一度のReleaseビルドで生成し、
+ケースごとにビルド出力と一時ディレクトリを分離する。
 並行数の既定値は2。`--timeout` は変換・inspectそれぞれの制限秒数で、既定値は1800。
 入力がないケースや変換に失敗したケースも結果に残し、残りのケースを続行する。
 
@@ -116,7 +117,26 @@ python -B scripts/convert-all-local-avatars.py --jobs 3
 `<caseId>__<元の出力名>.resonitepackage` として集約し、コピー前後のSHA-256も照合する。
 `report.json` に全件の成否、入力・実行DLL・出力のハッシュ、Git HEAD、実行引数を記録する。
 登録一覧のコピーは `registry.json`、個別ログは `cases/<caseId>/` に残る。
-既存の単体テストの直近結果は更新しない。全件成功時だけ終了コード0を返す。
+既存の単体テストの直近結果は更新しない。
+
+網羅的テストには次の解析比較を必ず含める。このバッチでは各ケースの変換前に自動実行する。
+
+1. 登録ケースの `unityResolvedCollection.coveragePath`（未登録なら
+   `prefabUnityCheck.coveragePath`）から同じID・入力のUnity v2参照を選ぶ。
+2. `test-unity-resolved.py` で入力・期待値・Prefab依存のハッシュを検証し、今回ビルドした
+   ResoPonの解析結果と比較する。通常変換の `--avatar` または既定選択が同じPrefabを
+   指すことも本番パーサで検証する。過去の一致記録を今回の結果として流用しない。
+3. `unityComparison` に一致・不一致・未採取・未対応・再採取必要・失敗とレポートを保存する。
+   差分があっても残りの比較・変換・inspectは続行し、手動確認用のパッケージも集約する。
+4. `conversionStatus` と `unityComparisonSummary` を分け、全体の `status` は不一致・失敗が
+   あれば `failed`、未採取・未対応・再採取必要なら `incomplete` とする。どちらも終了コード1。
+   VRMはUnity Prefab投影の対象外として `not-applicable` を理由付きで記録し、一致件数に含めない。
+   対象ケースの比較と全変換が成功した場合だけ `passed`・終了コード0になる。
+
+Unity参照がない、または依存が変わった場合は[Unity参照の採取手順](unity-reference-tests.md)で
+再採取し、登録先を更新して再実行する。期待値は比較結果から自動更新しない。
+解析比較はTransform・Renderer・骨接続・PhysBone等のv2投影の範囲を検証するものであり、
+生成パッケージの検査やResoniteクライアントでの外観・動作確認は引き続き別途行う。
 外観・装着・表情・揺れものの動作は、集約したパッケージをResoniteクライアントで確認する。
 
 この処理は利用条件を確認済みのローカル素材を使う。素材と結果はコミット・配布しない。
