@@ -67,6 +67,10 @@ ModelImporterのDeformPercent設定、Prefabのルート命名、座標軸・行
 既存のUnity Editor API、OSのバージョン情報、リポジトリ内のFBXパーサを使用し、配布依存や第三者通知の追加はない。
 実アバターのローカル採取では、素材ごとの版・作者・利用条件と導入範囲を `.local/` に記録する。
 
+共有Meshのv2回帰検査は自作の最小FBX・Prefabを既存のAssimpとパーサで読み取る。
+一括変換の相対パス回帰検査もPython標準ライブラリと自作データのみを使う。
+外部コード・素材の取り込み、新しい配布依存・第三者通知の追加はない。
+
 保存パッケージの `PackageRegressionDump` とPython比較器も独立実装で、既存の
 RecordPackage/DataTree APIを呼び出す。FrooxEngine 2026.11.16.1330のCollider調査は
 インストール済みDLLの型・フィールドの反射確認のみで、逆コンパイル実装のコピーはない。

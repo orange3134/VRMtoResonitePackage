@@ -11,6 +11,17 @@ if (args.Length == 2 && args[0] == "--check-native-metadata")
     catch (Exception error) { Console.Error.WriteLine(error); return 1; }
 }
 
+if (args.Length == 2 && args[0] == "--check-shared-mesh")
+{
+    try
+    {
+        ResoniteLocator.InstallAssemblyResolver(ResoniteLocator.Locate(null));
+        SharedMeshChecks.Run(Path.GetFullPath(args[1]));
+        return 0;
+    }
+    catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+}
+
 if (args.Length == 2 && args[0] == "--write-fbx-fixture")
 {
     try

@@ -289,6 +289,13 @@ FBX RendererとGameObjectの削除、通常GameObjectの追加、別配置への
 
 ### 再利用する回帰事例
 
+- FBX内の別枝にある同名Rendererが同じMesh subassetを共有する場合、MeshのfileIDから
+  Rendererパスへの対応は一対多になる。v2生成では全パスを保持し、表情メタデータは
+  Rendererの出典を使って選ぶ。`m_Mesh` が上書きされている場合は、元Rendererのパスを
+  無条件で流用しない。Rendererの文脈がない参照は、候補すべての表情チャンネル名・順序が
+  一致する場合に限り共有する。異なる候補を先勝ちで選ばない。
+  `UnityReferenceDump --check-shared-mesh <新規ディレクトリ>` は自作FBXで、共有ID、
+  別々のRenderer識別子、Rendererごとの表情ウェイト上書き、文脈付きパス解決を検証する。
 - Variantで `m_AddedGameObjects` の `insertIndex: -1` が複数ある場合、配列に記録された順に
   末尾へ追加する。Prefab graphのscene列挙順で追加すると、継承元・ネスト側が先に現れ、
   追加した通常GameObjectと兄弟順が入れ替わる。

@@ -100,6 +100,8 @@ Unity参照との一致も[採取対象のフィールド](unity-reference-tests
 ### 登録アバターをすべて変換して一か所へ集約する
 
 Python 3.11以降で、登録済みの `arguments` を保った通常変換を全件実行する。
+相対 `inputPath` はスクリプトを起動した作業ディレクトリを基準に絶対パスへ解決し、
+入力ハッシュ・変換引数・結果の記録に同じパスを使う。ケースごとの作業ディレクトリには依存しない。
 
 ```powershell
 python -B scripts/convert-all-local-avatars.py --jobs 3

@@ -90,12 +90,14 @@ def main():
 
         print(f"Starting {case_id}", flush=True)
         try:
-            item["inputSha256"] = sha256(Path(case["inputPath"]))
+            input_path = Path(case["inputPath"]).resolve()
+            item["inputPath"] = str(input_path)
+            item["inputSha256"] = sha256(input_path)
             shutil.copytree(build, directory / "build")
             temp = directory / "temp"
             temp.mkdir()
             env = dict(environment, TEMP=str(temp), TMP=str(temp))
-            invoke([case["inputPath"], *case.get("arguments", []), "--output", str(directory / "output")],
+            invoke([str(input_path), *case.get("arguments", []), "--output", str(directory / "output")],
                    "convert.log")
             outputs = list((directory / "output").glob("*.resonitepackage"))
             if len(outputs) != 1:

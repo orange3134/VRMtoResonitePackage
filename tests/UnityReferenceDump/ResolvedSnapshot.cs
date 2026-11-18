@@ -287,7 +287,8 @@ internal sealed class ResolvedSnapshot
         if (asset.Extension == ".fbx")
         {
             var resolver = view.ModelFileIds(asset.Guid);
-            string path = models.TryGetValue(asset.Guid, out var model) ? model.MeshPaths.GetValueOrDefault(mesh.FileID ?? 0) : null;
+            string path = models.TryGetValue(asset.Guid, out var model)
+                ? model.ResolveMeshPath(mesh.FileID ?? 0, context.Occurrence == asset.Guid ? context.FileId : 0) : null;
             path ??= resolver.ResolveNodePath(mesh.FileID ?? 0);
             if (resolver.PossibleBlendShapeNames == null || (path == null && resolver.PossibleBlendShapeNames.Count != 0))
                 throw new InvalidDataException("Unresolved FBX mesh/blendshape metadata: " + asset.LogicalPath);

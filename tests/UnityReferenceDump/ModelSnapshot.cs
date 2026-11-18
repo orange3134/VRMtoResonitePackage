@@ -11,7 +11,8 @@ internal sealed class ModelSnapshot
     private readonly Dictionary<(int Class, string Name), List<long>> metaIds = new();
     private readonly Dictionary<(string Path, int Class), long> identities = new();
     public Dictionary<long, YamlDocument> Documents { get; } = new();
-    public Dictionary<long, string> MeshPaths { get; } = new();
+    private readonly Dictionary<long, List<string>> meshPaths = new();
+    private readonly Dictionary<long, string> rendererPaths = new();
     private IReadOnlyList<UnityModelNode> hierarchy;
 
     public ModelSnapshot(UnityAsset asset, UnityModelFileIdResolver resolver, IReadOnlySet<long> references)
@@ -81,10 +82,25 @@ internal sealed class ModelSnapshot
 
     public long Canonical(long fileId)
     {
-        if (Documents.ContainsKey(fileId) || MeshPaths.ContainsKey(fileId)) return fileId;
+        if (Documents.ContainsKey(fileId) || meshPaths.ContainsKey(fileId)) return fileId;
         string path = resolver.ResolveNodePath(fileId);
         int type = resolver.ClassId(fileId);
         return path != null && identities.TryGetValue((path, type), out long id) ? id : fileId;
+    }
+
+    public string ResolveMeshPath(long meshId, long rendererId)
+    {
+        if (!meshPaths.TryGetValue(meshId, out var paths)) return null;
+        // Prefer the actual renderer, but only while it still uses this mesh.
+        // Prefab overrides can replace m_Mesh with a different subasset.
+        if (rendererPaths.TryGetValue(rendererId, out string path) && paths.Contains(path)) return path;
+        // An authored renderer outside the model has no source renderer context.
+        // Shared paths are interchangeable only when their channel metadata agrees.
+        var names = resolver.BlendShapeNamesByPath.GetValueOrDefault(paths[0]) ?? Array.Empty<string>();
+        if (paths.Skip(1).Any(p => !names.SequenceEqual(
+                resolver.BlendShapeNamesByPath.GetValueOrDefault(p) ?? Array.Empty<string>())))
+            throw new InvalidDataException("Ambiguous shared FBX mesh/blendshape metadata: " + asset.LogicalPath);
+        return paths[0];
     }
 
     private void Build()
@@ -107,7 +123,9 @@ internal sealed class ModelSnapshot
                 long renderer = Identity(node.Path, type), mesh = Identity(node.Path, 43);
                 if (!node.Skinned) components.Add(Map(("component", Ref(Identity(node.Path, 33)))));
                 components.Add(Map(("component", Ref(renderer))));
-                MeshPaths.Add(mesh, node.Path);
+                if (!meshPaths.TryGetValue(mesh, out var paths)) meshPaths.Add(mesh, paths = new());
+                paths.Add(node.Path);
+                rendererPaths.Add(renderer, node.Path);
                 var boneNames = resolver.MeshBoneNamesByPath.GetValueOrDefault(node.Path) ?? Array.Empty<string>();
                 string[] connected = resolver.SourceSkinBonePaths?.GetValueOrDefault(node.Path);
                 var bonePaths = connected != null && connected.Select(p => p.Split('/')[^1]).SequenceEqual(boneNames)
