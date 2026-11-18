@@ -183,6 +183,23 @@ Quaternionは `q` と `-q` が同じ回転を表すため、v2の `localRotation
 
 ### 収集済みケースの一括再検証
 
+登録一覧のPrefab入力は、その元プロジェクトで直接採取できる。別のテストプロジェクトへ未導入でも、
+元プロジェクトの依存関係が揃っていれば採取対象から除外しない。
+LilLeo・ClonkaのVariantとNDMF Bake済みMANUKAで、Unity 2022.3.22f1による2回採取の一致、
+Prefab・meta・監視対象のプロジェクト設定の前後ハッシュ一致を確認した。
+
+この3件の比較結果には次の制約が残る。
+
+- LilLeoはv2出力に成功するが、BlendShape名118件に `SubDeformer::.` 接頭辞の差、
+  Transformの回転・スケール16成分に数値差がある。
+- Clonkaはv2出力に成功するが、Transformの回転・スケール19成分に数値差がある。
+- MANUKAはUnity採取に成功するが、比較用 `ResolvedSnapshot` の生成Mesh情報取得で
+  `Unsupported native mesh metadata` となる。生成 `.asset` のMeshを取得できず、比較は未完了。
+  これは診断用v2ダンプの制約であり、既存の本番変換の失敗を意味しない。
+
+上記の差を一致や無害とは扱わない。採取済み件数と比較成功件数を分け、元の登録入力と
+過去の結果を保持したまま `prefabUnityCheck` と統合coverageへ最新の参照先を記録する。
+
 ```powershell
 python scripts/test-unity-resolved.py .local/unity-resolved/collection/coverage.json `
   --reference-dump .tmp_verify/unity-reference/bin/UnityReferenceDump.dll `
