@@ -8,7 +8,7 @@ internal sealed record UnityModelNode(string Path, string ParentPath, string Nam
     System.Numerics.Vector3 Position, System.Numerics.Quaternion Rotation, System.Numerics.Vector3 Scale,
     bool HasMesh, bool Skinned, string[] MaterialNames)
 {
-    internal static IReadOnlyList<UnityModelNode> Capture(Scene scene)
+    internal static IReadOnlyList<UnityModelNode> Capture(Scene scene, bool importBlendShapes = true)
     {
         var nodes = new List<UnityModelNode>();
         var axes = AxisConversion(scene);
@@ -39,7 +39,7 @@ internal sealed record UnityModelNode(string Path, string ParentPath, string Nam
             var meshes = node.MeshIndices.Select(i => scene.Meshes[i]).ToArray();
             nodes.Add(new(path, parent, name, new(position.X, position.Y, position.Z),
                 new(rotation.X, rotation.Y, rotation.Z, rotation.W), new(scale.X, scale.Y, scale.Z),
-                meshes.Length != 0, meshes.Any(m => m.HasBones || m.MeshAnimationAttachmentCount > 0),
+                meshes.Length != 0, meshes.Any(m => m.HasBones || (importBlendShapes && m.MeshAnimationAttachmentCount > 0)),
                 meshes.Select(m => scene.Materials[m.MaterialIndex].Name).ToArray()));
             foreach (var child in node.Children) Walk(child, path, System.Numerics.Matrix4x4.Identity);
         }

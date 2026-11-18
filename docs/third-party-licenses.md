@@ -63,6 +63,8 @@ Python標準ライブラリによる独立実装。Unityプロジェクトへ一
 AssetsTools.NETで自作する。新たな外部コード・モデルデータ・配布依存は追加しない。
 ModelImporterのDeformPercent設定、Prefabのルート命名、座標軸・行列分解、暗黙の物理rootの修正は、
 インストール済みUnityでの実測と既存の自作fixtureに基づく独立実装。外部ソースのコピーはない。
+依存ファイルのハッシュ採取、Editor実行ファイルの版照合、BlendShapeインポート設定の解析も
+既存のUnity Editor API、OSのバージョン情報、リポジトリ内のFBXパーサを使用し、配布依存や第三者通知の追加はない。
 実アバターのローカル採取では、素材ごとの版・作者・利用条件と導入範囲を `.local/` に記録する。
 
 保存パッケージの `PackageRegressionDump` とPython比較器も独立実装で、既存の

@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using UnityEditor;
 using UnityEngine;
@@ -25,7 +26,9 @@ public static class ResoPonResolvedReferenceBatch
         public string inputSha256, inputSha256After, dependencyHash, dependencyHashAfter;
         public string expectedPath, expectedSha256, repeatSha256;
         public bool repeatMatches, sourceUnchanged;
+        public List<DependencyFile> dependencyFiles;
     }
+    [Serializable] private class DependencyFile { public string path, sha256; }
 
     public static void Run()
     {
@@ -57,6 +60,7 @@ public static class ResoPonResolvedReferenceBatch
                     result.assetType = PrefabUtility.GetPrefabAssetType(AssetDatabase.LoadAssetAtPath<GameObject>(item.prefabPath)).ToString();
                     result.inputSha256 = Hash(item.prefabPath);
                     result.dependencyHash = AssetDatabase.GetAssetDependencyHash(item.prefabPath).ToString();
+                    result.dependencyFiles = DependencyFiles(item.prefabPath);
                     result.expectedPath = item.id + "/expected.json";
                     string expected = Path.Combine(output, result.expectedPath);
                     string repeat = Path.Combine(folder, "repeat.json");
@@ -67,7 +71,8 @@ public static class ResoPonResolvedReferenceBatch
                     result.inputSha256After = Hash(item.prefabPath);
                     result.dependencyHashAfter = AssetDatabase.GetAssetDependencyHash(item.prefabPath).ToString();
                     result.repeatMatches = result.expectedSha256 == result.repeatSha256;
-                    result.sourceUnchanged = result.inputSha256 == result.inputSha256After && result.dependencyHash == result.dependencyHashAfter;
+                    result.sourceUnchanged = result.inputSha256 == result.inputSha256After && result.dependencyHash == result.dependencyHashAfter &&
+                        result.dependencyFiles.All(file => FileDigest(file.path) == file.sha256);
                     if (!result.repeatMatches || !result.sourceUnchanged)
                         throw new InvalidOperationException("Capture or source changed across instantiations; baseline not accepted.");
                     result.status = "captured";
@@ -81,6 +86,32 @@ public static class ResoPonResolvedReferenceBatch
         }
         catch (Exception error) { Debug.LogException(error); EditorApplication.Exit(1); }
     }
+
+    private static List<DependencyFile> DependencyFiles(string prefab)
+    {
+        var files = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var asset in AssetDatabase.GetDependencies(prefab, true))
+        {
+            // These virtual assets are supplied by the selected Editor.
+            if (asset == "Resources/unity_builtin_extra" || asset == "Library/unity default resources" ||
+                asset == "Library/unity editor resources") continue;
+            string physical = asset;
+            if (asset.StartsWith("Packages/", StringComparison.Ordinal))
+            {
+                var package = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(asset);
+                if (package == null) throw new IOException("Cannot locate package dependency: " + asset);
+                physical = Path.Combine(package.resolvedPath, asset.Substring(package.assetPath.Length).TrimStart('/'));
+            }
+            physical = Path.GetFullPath(physical);
+            if (File.Exists(physical)) files.Add(physical);
+            else if (!Directory.Exists(physical)) throw new FileNotFoundException("Missing Unity dependency", physical);
+            files.Add(physical + ".meta");
+        }
+        return files.Select(path => new DependencyFile { path = path, sha256 = FileDigest(path) }).ToList();
+    }
+
+    // An absent meta is also an input state (for example in a package).
+    private static string FileDigest(string path) => File.Exists(path) ? Hash(path) : "";
 
     private static string Hash(string path)
     {

@@ -577,6 +577,8 @@ Import / None / 指定なしにはこの再計算を適用しない。共有mesh
 Resoniteは空または微小なshapeを除去するため、Unityのindex参照がずれる場合がある。
 
 - FBX内の元shape順を記録する。
+- ModelImporterの `meshes.importBlendShapes: 0` では、FBX由来のshape名・既定weight・
+  アニメーション候補を解析結果から除く。ボーンを持つMeshは引き続きスキン付きとして扱う。
 - blinkやprefab weightが数値参照する最大indexまで、欠落shapeを空frameとして復元する。
 - 名前参照だけのrendererは大量の空frameを復元しない。
 - FBX `BlendShapeChannel.DeformPercent` はModelImporterの `importBlendShapeDeformPercent` が

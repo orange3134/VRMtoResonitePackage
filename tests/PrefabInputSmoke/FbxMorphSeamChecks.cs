@@ -9,6 +9,18 @@ internal static class FbxMorphSeamChecks
     {
         string directory = Path.GetFullPath(Path.Combine(".tmp_verify", "morph-seams", Guid.NewGuid().ToString("N")));
         Directory.CreateDirectory(directory);
+        string model = Path.Combine(directory, "import-settings.fbx");
+        Write(model, 7400, false, true, false);
+        var asset = new UnityAsset { DiskPath = model, LogicalPath = "Assets/import-settings.fbx", MetaPath = model + ".meta" };
+        foreach (bool enabled in new[] { true, false })
+        {
+            File.WriteAllText(asset.MetaPath, $"ModelImporter:\n  meshes:\n    importBlendShapes: {(enabled ? 1 : 0)}\n");
+            var resolver = new UnityModelFileIdResolver(asset);
+            Require(resolver.Hierarchy.Single(node => node.HasMesh).Skinned == enabled &&
+                resolver.BlendShapeNamesByPath.Any() == enabled && resolver.BlendShapeNames.Any() == enabled &&
+                resolver.PossibleBlendShapeNames.Any() == enabled,
+                "ModelImporter controls morph-only renderers, their channels and animation target candidates");
+        }
         foreach (int version in new[] { 7400, 7500 })
         foreach (bool existingColor in new[] { false, true })
         foreach (bool duplicateTextures in new[] { false, true })

@@ -75,6 +75,18 @@ class ReplayTests(unittest.TestCase):
         self.assertIn("project configuration changed", report["cases"][0]["error"])
         producer.assert_not_called()
 
+    def test_prefab_capture_without_dependency_inventory_requires_recapture(self):
+        manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
+        source = Path(manifest["cases"][0]["inputPath"])
+        prefab = source.with_suffix(".prefab")
+        source.rename(prefab)
+        manifest["cases"][0]["inputPath"] = str(prefab)
+        self.coverage.write_text(json.dumps(manifest), encoding="utf-8")
+        code, report, producer = self.run_replay(None)
+        self.assertEqual(1, code)
+        self.assertEqual("recapture-required", report["cases"][0]["status"])
+        producer.assert_not_called()
+
     def test_missing_dependency_is_not_success(self):
         def producer(command, **kwargs):
             kwargs["stdout"].write(b"MISSING_PREFAB_SOURCE: abc\n")

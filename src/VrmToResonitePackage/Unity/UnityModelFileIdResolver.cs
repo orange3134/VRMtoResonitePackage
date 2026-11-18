@@ -11,6 +11,7 @@ namespace VrmToResonitePackage.Unity;
 public sealed class UnityModelFileIdResolver
 {
     private readonly Dictionary<long, string> _names = new();
+    private bool _importBlendShapes = true;
     private bool _importBlendShapeDeformPercent = true;
     private readonly Dictionary<long, int> _classes = new();
     internal int ClassId(long fileId) => _classes.GetValueOrDefault(fileId);
@@ -150,6 +151,7 @@ public sealed class UnityModelFileIdResolver
             return;
         }
         YamlNode importer = UnityYaml.ParseFlatDocument(File.ReadAllText(model.MetaPath))?["ModelImporter"];
+        _importBlendShapes = importer?["meshes"]?["importBlendShapes"]?.AsBool(true) ?? true;
         _importBlendShapeDeformPercent = importer?["importBlendShapeDeformPercent"]?.AsBool(true) ?? true;
         YamlNode table = importer?["internalIDToNameTable"];
         if (table?.Seq != null)
@@ -309,13 +311,12 @@ public sealed class UnityModelFileIdResolver
             }
             // A conservative superset across every mesh/submesh and source channel. Publish only
             // after successful import so callers can prove that an animation target is absent.
-            var possibleShapes = scene.Meshes.SelectMany(mesh => mesh.MeshAnimationAttachments)
+            PossibleBlendShapeNames = _importBlendShapes ? scene.Meshes.SelectMany(mesh => mesh.MeshAnimationAttachments)
                 .SelectMany(shape => new[] { shape.Name, BlendShapeNameNormalizer.CollapseRepeatedName(shape.Name ?? "") })
                 .Concat(_defaultWeightChannels.SelectMany(channel => new[] { channel.Name, channel.ShapeName }))
                 .Concat(_blendShapeNamesByPath.Values.SelectMany(names => names))
-                .Where(name => !string.IsNullOrEmpty(name)).ToHashSet(StringComparer.Ordinal);
-            PossibleBlendShapeNames = possibleShapes;
-            Hierarchy = UnityModelNode.Capture(scene);
+                .Where(name => !string.IsNullOrEmpty(name)).ToHashSet(StringComparer.Ordinal) : new HashSet<string>(StringComparer.Ordinal);
+            Hierarchy = UnityModelNode.Capture(scene, _importBlendShapes);
         }
         catch (Exception ex)
         {
@@ -333,6 +334,7 @@ public sealed class UnityModelFileIdResolver
 
     private void AddBlendShapeNames(Scene scene, Node node, string path)
     {
+        if (!_importBlendShapes) return;
         Mesh mesh = node.MeshIndices
             .Where(index => index >= 0 && index < scene.MeshCount)
             .Select(index => scene.Meshes[index])

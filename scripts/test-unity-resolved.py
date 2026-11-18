@@ -28,11 +28,23 @@ def write_json(path, value):
         stream.write("\n")
 
 
+class RecaptureRequired(ValueError):
+    pass
+
+
 def verify_project_files(case):
+    prefab = Path(case["inputPath"])
+    if prefab.suffix.lower() == ".prefab":
+        files = {Path(name): digest for name, digest in case.get("dependencyFiles", {}).items()}
+        if not files.get(prefab) or not files.get(Path(str(prefab) + ".meta")):
+            raise RecaptureRequired("Recapture prefab with dependency checksums")
+        for path, digest in files.items():
+            if (sha256(path) if path.is_file() else "") != digest:
+                raise RecaptureRequired("Unity dependency changed; recapture prefab: " + str(path))
     for name, digest in case.get("projectFiles", {}).items():
         path = Path(name)
         if (sha256(path) if path.exists() else None) != digest:
-            raise ValueError("Prefab metadata or project configuration changed: " + name)
+            raise RecaptureRequired("Prefab metadata or project configuration changed; recapture: " + name)
 
 
 def load_comparator():
@@ -110,6 +122,7 @@ def main(argv=None):
                 run = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, env=env, cwd=repo,
                                      timeout=args.timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             result["exitCode"] = run.returncode
+            verify_project_files(case)
             if run.returncode:
                 log = (directory / "producer.log").read_text(encoding="utf-8-sig", errors="replace")
                 status = "unsupported" if "UNSUPPORTED_MODEL_HIERARCHY:" in log else (
@@ -122,9 +135,10 @@ def main(argv=None):
                 write_json(directory / "comparison.json", {"equal": not differences, "differences": differences})
                 result.update(status="different" if differences else "matched", differences=len(differences),
                               actualPath=str(actual_path), actualSha256=sha256(actual_path))
-            verify_project_files(case)
             if sha256(expected_path) != case["expectedSha256"] or sha256(input_path) != case["inputSha256"]:
                 raise ValueError("Baseline/input changed during replay")
+        except RecaptureRequired as error:
+            result.update(status="recapture-required", error=str(error))
         except (ValueError, OSError, subprocess.TimeoutExpired) as error:
             result.update(status="failed", error=str(error))
         write_json(directory / "result.json", result)

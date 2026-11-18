@@ -32,6 +32,9 @@ class PrefabCaptureTests(unittest.TestCase):
         Path(str(self.prefab) + ".meta").write_text("guid: " + "b" * 32)
         self.unity = self.root / "Unity.exe"
         self.unity.touch()
+        self.editor_version = self.enterContext(mock.patch.object(capture, "editor_product_version", return_value="2022.3.22f1"))
+        self.model_meta = self.project / "Assets/Source.fbx.meta"
+        self.model_meta.write_text("importBlendShapes: 1")
         self.binary = self.root / "UnityReferenceDump.dll"
         self.binary.write_bytes(b"mock producer")
         self.binary.with_name("ResoPon.dll").write_bytes(b"mock converter")
@@ -55,7 +58,9 @@ class PrefabCaptureTests(unittest.TestCase):
                 repeatMatches=True, sourceUnchanged=True, expectedPath="prefab/expected.json",
                 expectedSha256=capture.sha(expected), repeatSha256=capture.sha(expected), inputSha256=capture.sha(self.prefab),
                 inputSha256After=capture.sha(self.prefab), prefabGuid="b" * 32,
-                dependencyHash="same", dependencyHashAfter="same")]))
+                dependencyHash="same", dependencyHashAfter="same",
+                dependencyFiles=[dict(path=str(p), sha256=capture.sha(p)) for p in
+                                 (self.prefab, Path(str(self.prefab) + ".meta"), self.model_meta)])]))
         else:
             self.called_producer = True
             value = snapshot()
@@ -86,7 +91,32 @@ class PrefabCaptureTests(unittest.TestCase):
         self.assertEqual("matched", report["parityStatus"])
         self.assertTrue(report["inputAndProjectFilesUnchanged"])
         self.assertEqual([], list((self.project / "Assets").glob("ResoPonReference_*")))
-        self.assertEqual(str(self.prefab), capture.read(self.output / "unity/coverage.json")["cases"][0]["inputPath"])
+        case = capture.read(self.output / "unity/coverage.json")["cases"][0]
+        self.assertEqual(str(self.prefab), case["inputPath"])
+        self.assertEqual(capture.sha(self.model_meta), case["dependencyFiles"][str(self.model_meta)])
+        self.model_meta.write_text("importBlendShapes: 0")
+        with self.assertRaisesRegex(ValueError, "dependency changed"):
+            capture.load_replay().verify_project_files(case)
+
+    def test_wrong_editor_rejected_before_project_or_output_changes(self):
+        self.editor_version.return_value = "2022.3.62f3"
+        with mock.patch.object(capture, "invoke") as invoked, contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            capture.main(self.args)
+        invoked.assert_not_called()
+        self.assertFalse(self.output.exists())
+        self.assertFalse(list((self.project / "Assets").glob("ResoPonReference_*")))
+
+    def test_dependency_changed_during_parser_invalidates_capture(self):
+        def change(command, **kwargs):
+            result = self.run_process(command, **kwargs)
+            if self.called_producer:
+                self.model_meta.unlink()
+            return result
+        code, report = self.run_capture(change)
+        self.assertEqual(1, code)
+        self.assertEqual("recapture-required", report["parityStatus"])
+        self.assertEqual("failed", report["captureStatus"])
+        self.assertFalse((self.output / "unity/coverage.json").exists())
 
     def test_difference_keeps_valid_unity_capture(self):
         self.different = True

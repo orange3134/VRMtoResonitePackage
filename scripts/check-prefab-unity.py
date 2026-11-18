@@ -58,6 +58,17 @@ def locate_project(prefab):
     raise ValueError("Unity project not found for prefab")
 
 
+def editor_product_version(editor):
+    # Read the executable's version resource without starting the Editor.
+    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                             "[Diagnostics.FileVersionInfo]::GetVersionInfo($env:RESOPON_EDITOR_EXE).ProductVersion"],
+                            env=dict(os.environ, RESOPON_EDITOR_EXE=str(editor.resolve())), capture_output=True,
+                            timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if result.returncode or not result.stdout.strip():
+        raise ValueError("Cannot read Unity Editor product version: " + str(editor))
+    return result.stdout.decode("ascii").strip().split("_", 1)[0]
+
+
 def editor_path(project, explicit):
     version_file = project / "ProjectSettings/ProjectVersion.txt"
     match = re.search(r"^m_EditorVersion: (\S+)$", version_file.read_text(encoding="utf-8-sig"), re.M)
@@ -67,6 +78,9 @@ def editor_path(project, explicit):
     editor = explicit or Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Unity/Hub/Editor" / version / "Editor/Unity.exe"
     if not editor.is_file():
         raise ValueError("Matching Unity Editor not found; specify --unity")
+    actual = editor_product_version(editor)
+    if actual != version:
+        raise ValueError(f"Unity Editor {actual} differs from ProjectVersion.txt ({version})")
     return editor.resolve(), version
 
 
@@ -249,7 +263,7 @@ def main(argv=None):
         missing, installed = exporter_plan(project)
         if args.reference_dump and not args.reference_dump.resolve().is_file():
             raise ValueError("Reference dump does not exist")
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
         parser.error(str(error))
 
     output.mkdir(parents=True, exist_ok=False)
@@ -319,6 +333,7 @@ def main(argv=None):
         accepted_coverage = dict(format="resopon.unity-resolved-coverage", schemaVersion=1, cases=[dict(
             id=args.case_id, status="captured", inputPath=str(prefab), inputSha256=case["inputSha256"],
             projectFiles={path: digest for path, digest in before.items() if path != str(prefab)},
+            dependencyFiles={entry["path"]: entry["sha256"] for entry in case["dependencyFiles"]},
             prefabGuid=case["prefabGuid"], expectedPath=str(expected), expectedSha256=case["expectedSha256"])])
         write(coverage, accepted_coverage)
         print("Comparing ResoPon with Unity...", flush=True)
@@ -341,6 +356,7 @@ def main(argv=None):
             if before != after or any(not Path(p).is_file() or sha(p) != digest for p, digest in installed.items()):
                 raise ValueError("Input, project configuration or installed exporter changed during the run")
             if accepted_coverage is not None:
+                replay.verify_project_files(accepted_coverage["cases"][0])
                 if any(sha(path) != case["expectedSha256"] for path in (expected, expected.with_name("repeat.json"))):
                     raise ValueError("Unity reference changed during comparison")
                 write(capture / "coverage.json", accepted_coverage)

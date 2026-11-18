@@ -39,6 +39,11 @@ internal static class ModelHierarchyChecks
         var morph = nodes.Single(n => n.Name == "MorphOnly");
         Check(morph.Skinned && morph.HasMesh && morph.MaterialNames.SequenceEqual(new[] { "SourceMaterial" }),
             "morph-only meshes retain renderer classification and material slot order");
+        Check(!UnityModelNode.Capture(scene, false).Single(n => n.Name == "MorphOnly").Skinned,
+            "ignored morphs alone do not create a skinned renderer");
+        mesh.Bones.Add(new Bone { Name = "Bone" });
+        Check(UnityModelNode.Capture(scene, false).Single(n => n.Name == "MorphOnly").Skinned,
+            "disabled morph import preserves a renderer with bones");
         Add("Nonuniform", scene.RootNode, Matrix4x4.FromScaling(new Vector3D(.9f, .8f, 1)) * Matrix4x4.FromRotationX(-MathF.PI / 2));
         var scaled = UnityModelNode.Capture(scene).Single(n => n.Name == "Nonuniform");
         Check(System.Numerics.Vector3.Distance(scaled.Scale, new(.9f, .8f, 1)) < 1e-6f,

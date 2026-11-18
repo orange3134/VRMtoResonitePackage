@@ -27,6 +27,7 @@ python scripts/check-prefab-unity.py "D:\Unity\Project\ResoPonTest\Assets\Unan\1
 
 Prefabからプロジェクトを特定し、`ProjectVersion.txt` と同じ版をUnity Hubの標準インストール先から探す。
 別の場所にある場合は `--unity "D:\Unity\2022.3.22f1\Editor\Unity.exe"` で同じ版を指定する。
+採取コマンドはプロジェクトを開く前に、選択した実行ファイルの製品バージョンを照合する。
 `--reference-dump <UnityReferenceDump.dll>` を省略すると比較用ビルドを自動作成する。
 `--output <new-directory>` を省略すると `.local/prefab-reference/<日時と識別子>/` に保存する。
 出力先は新規ディレクトリに限り、Unityプロジェクト内には作成しない。一時ビルドは `.tmp_verify/` に置く。
@@ -82,8 +83,11 @@ python scripts/test-unity-resolved.py .local/prefab-reference/<run>/coverage.jso
 全登録ケースの検証完了を判断するときは、比較の終了コードだけでなく未採取件数も確認する。
 
 個別Prefabの再比較用coverageは、採取時のPrefab・期待値のSHA-256と、終了時の入力・設定の
-不変性を確認してから保存する。新規採取ではPrefabのmeta、ProjectVersion、package manifest・lockの
-状態も記録し、再比較の前後に照合する。旧coverageでは記録済みの項目だけを照合する。
+不変性を確認してから保存する。Unityが列挙した継承元Prefab、FBX、マテリアルなどの再帰的な依存ファイルと
+各 `.meta` をSHA-256で記録し、ProjectVersion、package manifest・lockとともに再比較の前後に照合する。
+パッケージ依存は実ファイルのパスで記録する。依存ファイルが変化した場合や、旧形式のPrefab採取に
+依存一覧がない場合は `recapture-required` になる。同じPrefabを採取コマンドで再実行し、新しいcoverageを使う。
+単一の `.unitypackage` を入力とする既存のcoverageは引き続きアーカイブのSHA-256で照合する。
 比較CLIの `--report` には新しいファイル名を指定する。
 
 ### Unityから個別に採取する
