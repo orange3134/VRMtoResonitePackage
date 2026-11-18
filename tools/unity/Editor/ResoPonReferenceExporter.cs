@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -79,11 +80,12 @@ public static class ResoPonReferenceExporter
     {
         Export(Environment.GetEnvironmentVariable("RESOPON_REFERENCE_PREFAB"),
             Environment.GetEnvironmentVariable("RESOPON_REFERENCE_OUT"),
-            Environment.GetEnvironmentVariable("RESOPON_REFERENCE_PROJECTION"));
+            Environment.GetEnvironmentVariable("RESOPON_REFERENCE_PROJECTION"),
+            Environment.GetEnvironmentVariable("RESOPON_REFERENCE_SCENE_ROOT"));
     }
 
     // Resolved is the collection default; authored retains the existing parser comparison schema.
-    public static void Export(string prefabPath, string outputPath, string projection = "resolved")
+    public static void Export(string prefabPath, string outputPath, string projection = "resolved", string sceneRootPath = null)
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode)
             throw new InvalidOperationException("Reference capture requires Edit Mode.");
@@ -93,29 +95,40 @@ public static class ResoPonReferenceExporter
         if (string.IsNullOrWhiteSpace(prefabPath) || string.IsNullOrWhiteSpace(outputPath))
             throw new InvalidOperationException("Set RESOPON_REFERENCE_PREFAB and RESOPON_REFERENCE_OUT.");
         prefabPath = prefabPath.Replace('\\', '/');
+        bool sceneInput = prefabPath.EndsWith(".unity", StringComparison.OrdinalIgnoreCase);
         if (!prefabPath.StartsWith("Assets/", StringComparison.Ordinal) ||
-            !prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Input must be an Assets/... .prefab asset path.");
-        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
-        if (prefab == null) throw new InvalidOperationException("Prefab not found: " + prefabPath);
+            !(prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase) || sceneInput))
+            throw new InvalidOperationException("Input must be an Assets/... .prefab or .unity asset path.");
+        if (sceneInput && (projection != "resolved" || string.IsNullOrEmpty(sceneRootPath)))
+            throw new InvalidOperationException("Scene capture requires resolved projection and an exact scene root path.");
+        if (sceneInput && (!Application.isBatchMode || SceneManager.GetSceneByPath(prefabPath).isLoaded))
+            throw new InvalidOperationException("Scene capture requires a closed scene in a batch Editor.");
+        var prefab = sceneInput ? null : AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        if (!sceneInput && prefab == null) throw new InvalidOperationException("Prefab not found: " + prefabPath);
         if (projection == "authored" && PrefabUtility.GetPrefabAssetType(prefab) == PrefabAssetType.Variant)
             throw new InvalidOperationException("Prefab variants are outside this initial authored-component projection.");
         string guid = AssetDatabase.AssetPathToGUID(prefabPath);
         if (string.IsNullOrEmpty(guid)) throw new InvalidOperationException("Prefab GUID unavailable.");
 
-        // An isolated preview scene leaves existing unsaved scenes open and untouched.
+        // Prefabs use a preview scene; scene inputs open additively in batch mode only.
+        // Neither path saves the source scene.
         // Instantiation can invoke ExecuteAlways callbacks: use a trusted project only.
-        Scene preview = EditorSceneManager.NewPreviewScene();
+        Scene preview = sceneInput ? EditorSceneManager.OpenScene(prefabPath, OpenSceneMode.Additive) : EditorSceneManager.NewPreviewScene();
         string json;
         try
         {
-            var instance = PrefabUtility.InstantiatePrefab(prefab, preview) as GameObject;
+            var instance = sceneInput ? SelectSceneRoot(preview, sceneRootPath)
+                : PrefabUtility.InstantiatePrefab(prefab, preview) as GameObject;
             if (instance == null) throw new InvalidOperationException("Prefab instantiation failed.");
             json = projection == "resolved"
                 ? ResoPonResolvedReference.Capture(instance.transform, guid)
                 : JsonUtility.ToJson(BuildCapture(instance.transform, guid), true) + "\n";
         }
-        finally { EditorSceneManager.ClosePreviewScene(preview); }
+        finally
+        {
+            if (sceneInput) EditorSceneManager.CloseScene(preview, true);
+            else EditorSceneManager.ClosePreviewScene(preview);
+        }
 
         // Require a new output path, never overwrite a project asset or an earlier capture.
         string fullOutput = Path.GetFullPath(outputPath);
@@ -125,6 +138,21 @@ public static class ResoPonReferenceExporter
         using (var file = new FileStream(fullOutput, FileMode.CreateNew, FileAccess.Write))
         using (var writer = new StreamWriter(file, new UTF8Encoding(false))) writer.Write(json);
         Debug.Log("ResoPon Unity reference written: " + fullOutput);
+    }
+
+    private static GameObject SelectSceneRoot(Scene scene, string path)
+    {
+        var parts = path.Split('/');
+        var roots = scene.GetRootGameObjects().Where(o => o.name == parts[0]).ToArray();
+        if (roots.Length != 1) throw new InvalidOperationException("Scene root path is missing or ambiguous: " + path);
+        Transform selected = roots[0].transform;
+        foreach (string part in parts.Skip(1))
+        {
+            var children = selected.Cast<Transform>().Where(t => t.name == part).ToArray();
+            if (children.Length != 1) throw new InvalidOperationException("Scene root path is missing or ambiguous: " + path);
+            selected = children[0];
+        }
+        return selected.gameObject;
     }
 
     private static Capture BuildCapture(Transform root, string guid)

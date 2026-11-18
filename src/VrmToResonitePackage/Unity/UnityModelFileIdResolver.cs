@@ -201,7 +201,7 @@ public sealed class UnityModelFileIdResolver
                 importPath = temporaryPath;
             }
             using var context = new AssimpContext();
-            _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath, out var sourceSkinPaths);
+            _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath, out var sourceSkinPaths, out var sourceTransforms);
             SourceSkinBonePaths = sourceSkinPaths;
             Scene scene = context.ImportFile(importPath, PostProcessSteps.None);
             if (scene?.RootNode == null)
@@ -316,7 +316,7 @@ public sealed class UnityModelFileIdResolver
                 .Concat(_defaultWeightChannels.SelectMany(channel => new[] { channel.Name, channel.ShapeName }))
                 .Concat(_blendShapeNamesByPath.Values.SelectMany(names => names))
                 .Where(name => !string.IsNullOrEmpty(name)).ToHashSet(StringComparer.Ordinal) : new HashSet<string>(StringComparer.Ordinal);
-            Hierarchy = UnityModelNode.Capture(scene, _importBlendShapes);
+            Hierarchy = UnityModelNode.Capture(scene, _importBlendShapes, sourceTransforms);
         }
         catch (Exception ex)
         {

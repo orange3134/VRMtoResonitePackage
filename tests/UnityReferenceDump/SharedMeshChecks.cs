@@ -86,7 +86,7 @@ PrefabInstance:
         using var package = UnityPackage.Open(prefab);
         using var view = UnityPrefabInstances.CreateView(package, prefabGuid, null);
         var resolver = view.ModelFileIds(modelGuid);
-        var modelSnapshot = new ModelSnapshot(view.ByGuid(modelGuid), resolver,
+        var modelSnapshot = new ModelSnapshot(view, view.ByGuid(modelGuid), resolver,
             new HashSet<long> { Renderer("Left"), Renderer("Right") });
         foreach (string branch in new[] { "Left", "Right" })
             Require(modelSnapshot.ResolveMeshPath(4300000, Renderer(branch)) == "RootNode/" + branch + "/Shared",

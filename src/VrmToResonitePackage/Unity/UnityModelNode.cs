@@ -8,7 +8,8 @@ internal sealed record UnityModelNode(string Path, string ParentPath, string Nam
     System.Numerics.Vector3 Position, System.Numerics.Quaternion Rotation, System.Numerics.Vector3 Scale,
     bool HasMesh, bool Skinned, string[] MaterialNames)
 {
-    internal static IReadOnlyList<UnityModelNode> Capture(Scene scene, bool importBlendShapes = true)
+    internal static IReadOnlyList<UnityModelNode> Capture(Scene scene, bool importBlendShapes = true,
+        IReadOnlyDictionary<string, System.Numerics.Matrix4x4> sourceTransforms = null)
     {
         var nodes = new List<UnityModelNode>();
         var axes = AxisConversion(scene);
@@ -30,6 +31,8 @@ internal sealed record UnityModelNode(string Path, string ParentPath, string Nam
             }
             string name = node.Name == "//RootNode" ? "RootNode" : node.Name;
             string path = parent.Length == 0 ? name : parent + "/" + name;
+            if (sourceTransforms?.TryGetValue(path, out var sourceLocal) == true)
+                local = sourceLocal * (parent == "RootNode" ? axes : System.Numerics.Matrix4x4.Identity);
             var mirror = System.Numerics.Matrix4x4.CreateScale(-1, 1, 1);
             // Decompose after handedness conversion: partial quaternion overrides
             // depend on the imported quaternion's sign, even though q/-q rotate alike.

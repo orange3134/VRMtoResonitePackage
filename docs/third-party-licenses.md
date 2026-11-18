@@ -67,6 +67,16 @@ ModelImporterのDeformPercent設定、Prefabのルート命名、座標軸・行
 既存のUnity Editor API、OSのバージョン情報、リポジトリ内のFBXパーサを使用し、配布依存や第三者通知の追加はない。
 実アバターのローカル採取では、素材ごとの版・作者・利用条件と導入範囲を `.local/` に記録する。
 
+FBX局所行列の復元は、[Autodesk FBX Developer Help 2020の変換行列の説明](https://help.autodesk.com/cloudhelp/2020/ENU/FBX-Developer-Help/files/nodes_and_scene_graph/fbx_nodes/FBX_Developer_Help_nodes_and_scene_graph_fbx_nodes_computing_transformation_matrix_html.html)
+の数式を仕様として参照した独立実装。SDKの実装やサンプルコードをコピー・翻訳・同梱しない。
+微小TRSのバイナリfixtureとskin rootの三角形モデルは自作で、既存のAssimpとUnity 2022.3.22f1で検証する。
+シーン採取と依存補完も本リポジトリの既存APIによる独立実装で、新しい配布依存・通知対象はない。
+ローカルのAizara再採取にはユーザー導入済みAvatarMenuCreatorForMA 1.39.0
+（Narazaka、Zlib、同梱LICENSEを確認）を使用した。Yuzukiの隔離プロジェクトには既存の
+FaceEmo 1.7.0（Copyright (c) 2023 suzuryg、MIT、内包コードの表示を含むLICENSE.md）を
+通知ごと保持し、参照するテンプレートもローカル検証に限る。両パッケージのコード・アセット・
+Unity採取値を本リポジトリや配布EXEへ取り込まないため、THIRD-PARTY-NOTICESの追加は不要。
+
 共有Meshのv2回帰検査は自作の最小FBX・Prefabを既存のAssimpとパーサで読み取る。
 一括変換の相対パス回帰検査もPython標準ライブラリと自作データのみを使う。
 外部コード・素材の取り込み、新しい配布依存・第三者通知の追加はない。

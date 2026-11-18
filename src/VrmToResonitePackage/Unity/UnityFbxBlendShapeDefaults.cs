@@ -14,8 +14,13 @@ internal static class UnityFbxBlendShapeDefaults
     public static IReadOnlyList<Channel> Read(string path) => Read(path, out _);
 
     internal static IReadOnlyList<Channel> Read(string path, out IReadOnlyDictionary<string, string[]> skinBonePaths)
+        => Read(path, out skinBonePaths, out _);
+
+    internal static IReadOnlyList<Channel> Read(string path, out IReadOnlyDictionary<string, string[]> skinBonePaths,
+        out IReadOnlyDictionary<string, System.Numerics.Matrix4x4> localTransforms)
     {
         skinBonePaths = null;
+        localTransforms = null;
         try
         {
             byte[] data = File.ReadAllBytes(path);
@@ -26,7 +31,7 @@ internal static class UnityFbxBlendShapeDefaults
             }
             int version = BitConverter.ToInt32(data, 23);
             var reader = new Reader(data, version >= 7500);
-            return reader.ReadChannels(out skinBonePaths);
+            return reader.ReadChannels(out skinBonePaths, out localTransforms);
         }
         catch
         {
@@ -46,7 +51,8 @@ internal static class UnityFbxBlendShapeDefaults
             _wide = wide;
         }
 
-        public IReadOnlyList<Channel> ReadChannels(out IReadOnlyDictionary<string, string[]> skinBonePaths)
+        public IReadOnlyList<Channel> ReadChannels(out IReadOnlyDictionary<string, string[]> skinBonePaths,
+            out IReadOnlyDictionary<string, System.Numerics.Matrix4x4> localTransforms)
         {
             var nodes = new List<Node>();
             void Collect(Node node)
@@ -88,6 +94,20 @@ internal static class UnityFbxBlendShapeDefaults
                     }
             }
             skinBonePaths = skinPaths.Where(p => p.Value != null).ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+            var transforms = new Dictionary<string, System.Numerics.Matrix4x4>();
+            var ambiguous = new HashSet<string>();
+            foreach (var entry in objects.Where(e => e.Value.Name == "Model"))
+                if (ModelPath(entry.Key, new()) is string path &&
+                    UnityFbxLocalTransform.TryRead(entry.Value.Children
+                        .FirstOrDefault(n => n.Name == "Properties70")?.Children
+                        .Where(n => n.Name == "P").Select(n => (IReadOnlyList<object>)n.Properties), out var matrix,
+                        entry.Value.Properties[2] as string == "Mesh" && !skinPaths.ContainsKey(path) &&
+                        !children[entry.Key].Any(id => objects.GetValueOrDefault(id)?.Name == "Model")))
+                {
+                    if (!transforms.TryAdd(path, matrix)) ambiguous.Add(path);
+                }
+            foreach (string path in ambiguous) transforms.Remove(path);
+            localTransforms = transforms;
             var result = new List<Channel>();
             foreach (var entry in objects.Where(e => e.Value.Name == "Deformer" &&
                          e.Value.Properties[2] as string == "BlendShapeChannel"))

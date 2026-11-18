@@ -88,7 +88,28 @@ python scripts/test-unity-resolved.py .local/prefab-reference/<run>/coverage.jso
 パッケージ依存は実ファイルのパスで記録する。依存ファイルが変化した場合や、旧形式のPrefab採取に
 依存一覧がない場合は `recapture-required` になる。同じPrefabを採取コマンドで再実行し、新しいcoverageを使う。
 単一の `.unitypackage` を入力とする既存のcoverageは引き続きアーカイブのSHA-256で照合する。
+アーカイブに含まれないPrefab等を採取元プロジェクトから補う診断では、coverageへ
+`dependencyFiles`（絶対パス→SHA-256）を明示して保存する。再比較は `--dependencies` で
+その一覧だけを渡し、アーカイブにないGUIDを補完する。元のGUIDを置換しない。
+一覧の全ファイルを前後に照合し、変更時は `recapture-required` とする。
+レポートの `dependencyScope` は補完を明記する。この一致は「アーカイブ＋採取時の依存」の
+解析結果であり、アーカイブ単体の依存充足や通常の変換出力まで証明するものではない。
 比較CLIの `--report` には新しいファイル名を指定する。
+
+### シーン内アバターの採取
+
+Prefabではなく `.unity` に選択対象がある場合は、バッチmanifestの `prefabPath` にシーンを、
+`sceneRootPath` に対象のルートからの名前パスを指定する（例: `yuzuki`）。
+個別採取では `RESOPON_REFERENCE_SCENE_ROOT` が同じ指定になる。
+`resolved`・batch mode専用で、既に開いているシーン、存在しないパス、同名による曖昧なパスは拒否する。
+シーンを加算で開き、指定した部分木だけを採取して保存せず閉じる。
+シーン自身のオブジェクトのsource参照は空、ネストPrefab由来のsource参照はPrefabを指す。
+
+再比較の入力は元の `.unitypackage` とし、coverageの `conversionArguments` に登録済みの
+`--avatar` 指定を保持する。診断側は `--verify-selection` を必須とし、本番と共通の候補選択・
+シーン配置の合成処理を通す。Yuzuki 2.1.1はこの経路で2回採取し、シーンのハッシュ不変と
+採取結果の一致を確認した。FaceEmoのテンプレートPrefabはアーカイブ外にあるため、上記の
+明示的な依存補完を用いた比較として記録する。
 
 ### Unityから個別に採取する
 
@@ -202,7 +223,9 @@ python scripts/compare-unity-reference.py expected.json actual.json --report dif
 
 v2出力は通常Prefab・Variant・ネストPrefabと、**FBX由来の暗黙のTransform・Renderer**に対応する。
 削除、追加、同一Prefabの複数配置、兄弟順、参照の上書きを合成した後に比較する。
-FBXの階層・姿勢・材質スロットは本番のfileID resolverと同じAssimp importから取得し、
+FBXの階層・材質スロットは本番のfileID resolverと同じAssimp importから取得し、
+姿勢は対応するバイナリFBXのProperties70から元の局所行列を復元する。未対応の形式・幾何変換では
+従来のimport行列を使う。材質の外部参照と名前による検索は本番の材質マッピング処理を共有する。
 skinの接続先はFBXのcluster接続から完全なパスとして取得する。同名のメッシュやボーンを名前だけで選ばない。
 BlendShape名・初期ウェイトも既存の本番メタデータから取得する。ボーンのないmorph専用メッシュも対象とする。
 Unityで生成された `.asset` のMeshは、YAML・バイナリともGUIDとfileIDを指定して本番の
@@ -340,11 +363,22 @@ FBX RendererとGameObjectの削除、通常GameObjectの追加、別配置への
 元入力・依存ハッシュ・Unity版と、旧採取値に対するバイト一致を確認してからResoPonと比較する。
 Fyuett・Pilica・Sanatia・12B・Lina・NagiyaはUnity 2022.3.22f1で再採取しても旧期待値と
 バイト一致し、微小な局所Transformの数値差が再現した。採取の揺らぎで消える差ではない。
-これは全残差の原因や無害性を証明するものではなく、厳密比較では引き続き差分として扱う。
-残差のある13件・181成分について `originalSource` のGUID/fileIDから元FBXのTransformを
+当初、残差のある13件・181成分について `originalSource` のGUID/fileIDから元FBXのTransformを
 Unityで直接読み直すと、すべてPrefab採取値と一致した。差はPrefab合成前のFBXインポート時点に
-存在し、回転の0/1付近の成分とスケールの1付近の成分に限られる。UnityとAssimpの内部計算のどの演算が
-差を生むかまでは確定していない。合成処理へ補正値を埋めたり、許容差を広げて一致扱いにはしない。
+存在した。追加調査では、元の `PreRotation` の微小角度と `Lcl Scaling` の1付近の値が
+Assimpの行列ではidentityへ省略されることを確認した。Plumの約-0.000162度のPreRotationや
+Kipfelの約1.00001526のスケールも、バイナリFBXから読むと値が残っている。
+`UnityFbxLocalTransform` はFBXの回転順序・pre/post回転・pivot/offsetを含む局所行列を
+独立に復元し、既存の座標系変換と分解へ渡す。モデル別の補正値や許容差の拡大は使わない。
+修正後、アーカイブの依存が揃った元の不一致12件は既存のUnity期待値と一致した。
+
+AizaraのPAWSはskinのない末端Meshでrotation/scaling pivotを共有し、Unityはpivotを
+オブジェクト原点として残す。skinのcluster接続があるMeshへこの原点補正を適用しない。
+爪Meshのように共通祖先がskinの骨配列に含まれない場合、UnityのrootBoneは最後のclusterの骨になる。
+共通祖先が骨配列に含まれる場合はその祖先を使う。自作FBXをUnityへ読み込む
+`ResoPonSkinRootSmoke` で、cluster順序の反転と祖先を含む場合を別々に検証する。
+バイナリFBX 7400/7500の微小TRS・static/skinのpivot・全6回転順序・未対応形式のfallbackは
+`UnityReferenceDump --check-source-transforms <新規ディレクトリ>` で検証する。
 一般条件を含む[生成パッケージの構造検査](local-avatar-tests.md#保存パッケージの構造を自動検査する)と、
 Unityとの解析値比較、実クライアントの外観・動作確認は別の結果として保存する。
 

@@ -11,7 +11,7 @@ using UnityEngine;
 public static class ResoPonResolvedReferenceBatch
 {
     [Serializable] private class Manifest { public Item[] cases; }
-    [Serializable] private class Item { public string id, prefabPath; }
+    [Serializable] private class Item { public string id, prefabPath, sceneRootPath; }
     [Serializable] private class Results
     {
         public string format = "resopon.unity-resolved-collection";
@@ -22,7 +22,7 @@ public static class ResoPonResolvedReferenceBatch
     }
     [Serializable] private class Result
     {
-        public string id, prefabPath, prefabGuid, assetType, status, error;
+        public string id, prefabPath, sceneRootPath, prefabGuid, assetType, status, error;
         public string inputSha256, inputSha256After, dependencyHash, dependencyHashAfter;
         public string expectedPath, expectedSha256, repeatSha256;
         public bool repeatMatches, sourceUnchanged;
@@ -50,22 +50,23 @@ public static class ResoPonResolvedReferenceBatch
             bool failed = false;
             foreach (var item in manifest.cases)
             {
-                var result = new Result { id = item.id, prefabPath = item.prefabPath, status = "failed" };
+                var result = new Result { id = item.id, prefabPath = item.prefabPath, sceneRootPath = item.sceneRootPath, status = "failed" };
                 results.cases.Add(result);
                 string folder = Path.Combine(output, item.id);
                 Directory.CreateDirectory(folder);
                 try
                 {
                     result.prefabGuid = AssetDatabase.AssetPathToGUID(item.prefabPath);
-                    result.assetType = PrefabUtility.GetPrefabAssetType(AssetDatabase.LoadAssetAtPath<GameObject>(item.prefabPath)).ToString();
+                    result.assetType = item.prefabPath.EndsWith(".unity", StringComparison.OrdinalIgnoreCase) ? "Scene"
+                        : PrefabUtility.GetPrefabAssetType(AssetDatabase.LoadAssetAtPath<GameObject>(item.prefabPath)).ToString();
                     result.inputSha256 = Hash(item.prefabPath);
                     result.dependencyHash = AssetDatabase.GetAssetDependencyHash(item.prefabPath).ToString();
                     result.dependencyFiles = DependencyFiles(item.prefabPath);
                     result.expectedPath = item.id + "/expected.json";
                     string expected = Path.Combine(output, result.expectedPath);
                     string repeat = Path.Combine(folder, "repeat.json");
-                    ResoPonReferenceExporter.Export(item.prefabPath, expected, "resolved");
-                    ResoPonReferenceExporter.Export(item.prefabPath, repeat, "resolved");
+                    ResoPonReferenceExporter.Export(item.prefabPath, expected, "resolved", item.sceneRootPath);
+                    ResoPonReferenceExporter.Export(item.prefabPath, repeat, "resolved", item.sceneRootPath);
                     result.expectedSha256 = Hash(expected);
                     result.repeatSha256 = Hash(repeat);
                     result.inputSha256After = Hash(item.prefabPath);

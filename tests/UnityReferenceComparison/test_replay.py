@@ -119,6 +119,34 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertEqual("missing-dependency", report["cases"][0]["status"])
 
+    def test_archive_dependency_overlay_is_explicit_and_hashed(self):
+        manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
+        dependency = self.root / "template.prefab"
+        dependency.write_bytes(b"self-authored dependency")
+        files = {str(dependency): replay.sha256(dependency)}
+        manifest["cases"][0]["dependencyFiles"] = files
+        self.coverage.write_text(json.dumps(manifest), encoding="utf-8")
+        def producer(command, **kwargs):
+            self.assertEqual("--dependencies", command[-2])
+            self.assertEqual(files, json.loads(Path(command[-1]).read_text(encoding="utf-8")))
+            replay.write_json(Path(command[4]), snapshot())
+            return types.SimpleNamespace(returncode=0)
+        code, report, _ = self.run_replay(producer)
+        self.assertEqual(0, code)
+        self.assertIn("archive plus", report["cases"][0]["dependencyScope"])
+
+    def test_changed_archive_dependency_requires_recapture(self):
+        manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
+        dependency = self.root / "template.prefab"
+        dependency.write_bytes(b"before")
+        manifest["cases"][0]["dependencyFiles"] = {str(dependency): replay.sha256(dependency)}
+        self.coverage.write_text(json.dumps(manifest), encoding="utf-8")
+        dependency.write_bytes(b"after")
+        code, report, producer = self.run_replay(None)
+        self.assertEqual(1, code)
+        self.assertEqual("recapture-required", report["cases"][0]["status"])
+        producer.assert_not_called()
+
     def test_actual_difference_fails_replay(self):
         def producer(command, **kwargs):
             actual = snapshot()

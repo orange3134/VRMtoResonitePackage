@@ -11,6 +11,7 @@ internal sealed class ResolvedSnapshot
     private const string Collider = "VRC.SDK3.Dynamics.PhysBone.Components.VRCPhysBoneCollider";
     private readonly UnityPackage view;
     private readonly string guid;
+    private bool SceneInput => view.ByGuid(guid).Extension == ".unity";
     private readonly Dictionary<UnityObjectId, YamlDocument> documents = new();
     private readonly Dictionary<UnityObjectId, Node> nodes = new();
     private readonly Dictionary<UnityObjectId, Node> owners = new();
@@ -56,7 +57,7 @@ internal sealed class ResolvedSnapshot
                     Collect(document.Root);
             foreach (var modification in view.PrefabGraph.Modifications.Where(m => m.Target.Occurrence == occurrence))
                 references.Add(modification.Target.FileId);
-            var model = new ModelSnapshot(view.ByGuid(occurrence), view.ModelFileIds(occurrence), references);
+            var model = new ModelSnapshot(view, view.ByGuid(occurrence), view.ModelFileIds(occurrence), references);
             models.Add(occurrence, model);
             foreach (var modification in view.PrefabGraph.Modifications.Where(m => m.Target.Occurrence == occurrence))
             {
@@ -165,7 +166,7 @@ internal sealed class ResolvedSnapshot
             r["parent"] = node.Parent?.Id ?? "";
             // Unity's Prefab importer names the asset root after its file even when
             // the serialized root name is stale (for example after a file rename).
-            r["name"] = node.Parent == null ? Path.GetFileNameWithoutExtension(view.ByGuid(guid).LogicalPath) : node.Name;
+            r["name"] = node.Parent == null && !SceneInput ? Path.GetFileNameWithoutExtension(view.ByGuid(guid).LogicalPath) : node.Name;
             r["siblingIndex"] = node.Parent?.Children.IndexOf(node) ?? 0;
             r["activeSelf"] = node.ActiveSelf; r["activeInHierarchy"] = node.Active;
             foreach (string property in new[] { "localPosition", "localRotation", "localScale" })
@@ -241,22 +242,25 @@ internal sealed class ResolvedSnapshot
     private Dictionary<string, object> Identity(UnityObjectId key, Node node, string type) => new()
     {
         ["id"] = ids[key], ["path"] = node.Path, ["type"] = type,
-        ["source"] = Source(key), ["originalSource"] = new AssetReference(OriginalGuid(key.Occurrence), Id(key.FileId)),
+        ["source"] = Source(key), ["originalSource"] = SceneInput && key.Occurrence == guid
+            ? new AssetReference("", "0") : new AssetReference(OriginalGuid(key.Occurrence), Id(key.FileId)),
     };
     private AssetReference Source(UnityObjectId key)
     {
         string occurrence = key.Occurrence;
         long fileId = key.FileId;
+        if (SceneInput && occurrence == guid) return new("", "0");
         while (occurrence != guid)
         {
             if (!occurrences.TryGetValue(occurrence, out var link)) throw new InvalidDataException("Missing source occurrence.");
+            if (SceneInput && link.Parent == guid) break;
             var explicitIds = view.ReadScene(view.ByGuid(link.Parent)).Documents.Values
                 .Where(d => d.Stripped && Canonical(view.PrefabGraph.Identity(link.Parent, d.FileId)) == key).Select(d => d.FileId).ToArray();
             if (explicitIds.Length > 1) throw new InvalidDataException("Ambiguous source identity.");
             fileId = explicitIds.Length == 1 ? explicitIds[0] : (fileId ^ link.Instance.FileId) & long.MaxValue;
             occurrence = link.Parent;
         }
-        return new(guid, Id(fileId));
+        return new(OriginalGuid(occurrence), Id(fileId));
     }
     private UnityObjectId Ref(UnityObjectId context, YamlNode reference)
     {

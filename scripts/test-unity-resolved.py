@@ -34,13 +34,13 @@ class RecaptureRequired(ValueError):
 
 def verify_project_files(case):
     prefab = Path(case["inputPath"])
+    files = {Path(name): digest for name, digest in case.get("dependencyFiles", {}).items()}
     if prefab.suffix.lower() == ".prefab":
-        files = {Path(name): digest for name, digest in case.get("dependencyFiles", {}).items()}
         if not files.get(prefab) or not files.get(Path(str(prefab) + ".meta")):
             raise RecaptureRequired("Recapture prefab with dependency checksums")
-        for path, digest in files.items():
-            if (sha256(path) if path.is_file() else "") != digest:
-                raise RecaptureRequired("Unity dependency changed; recapture prefab: " + str(path))
+    for path, digest in files.items():
+        if (sha256(path) if path.is_file() else "") != digest:
+            raise RecaptureRequired("Unity dependency changed; recapture prefab: " + str(path))
     for name, digest in case.get("projectFiles", {}).items():
         path = Path(name)
         if (sha256(path) if path.exists() else None) != digest:
@@ -125,6 +125,11 @@ def main(argv=None):
                 if len(selected) > 1 or (selected and selected[0] + 1 >= len(arguments)):
                     raise ValueError("Invalid avatar selection arguments")
                 command += ["--verify-selection", arguments[selected[0] + 1] if selected else ""]
+            if case.get("dependencyFiles") and input_path.suffix.lower() == ".unitypackage":
+                dependencies = directory / "dependencies.json"
+                write_json(dependencies, case["dependencyFiles"])
+                command += ["--dependencies", str(dependencies)]
+                result["dependencyScope"] = "archive plus captured Unity project dependencies; archive assets take precedence"
             env = dict(os.environ, RESOPON_NOPAUSE="1", TEMP=str(temporary), TMP=str(temporary))
             with (directory / "producer.log").open("xb") as log:
                 run = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, env=env, cwd=repo,

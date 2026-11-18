@@ -8,6 +8,7 @@ internal sealed class ModelSnapshot
     private readonly UnityAsset asset;
     private readonly UnityModelFileIdResolver resolver;
     private readonly YamlNode importer;
+    private readonly Dictionary<string, string> materialGuids = new(StringComparer.Ordinal);
     private readonly Dictionary<(int Class, string Name), List<long>> metaIds = new();
     private readonly Dictionary<(string Path, int Class), long> identities = new();
     public Dictionary<long, YamlDocument> Documents { get; } = new();
@@ -15,10 +16,12 @@ internal sealed class ModelSnapshot
     private readonly Dictionary<long, string> rendererPaths = new();
     private IReadOnlyList<UnityModelNode> hierarchy;
 
-    public ModelSnapshot(UnityAsset asset, UnityModelFileIdResolver resolver, IReadOnlySet<long> references)
+    public ModelSnapshot(UnityPackage package, UnityAsset asset, UnityModelFileIdResolver resolver, IReadOnlySet<long> references)
     {
         this.asset = asset; this.resolver = resolver;
-        importer = asset.MetaPath == null ? null : UnityYaml.ParseFlatDocument(File.ReadAllText(asset.MetaPath))?["ModelImporter"];
+        var meta = asset.MetaPath == null ? null : UnityYaml.ParseFlatDocument(File.ReadAllText(asset.MetaPath));
+        importer = meta?["ModelImporter"];
+        VrmToResonitePackage.Vrchat.VrchatAvatarParser.ParseFbxMaterialMappings(package, asset, meta, materialGuids);
         hierarchy = resolver.Hierarchy ?? throw new InvalidDataException("FBX source hierarchy could not be imported: " + asset.LogicalPath);
         if (hierarchy.Count == 0 || hierarchy.Select(n => n.Path).Distinct().Count() != hierarchy.Count)
             throw new InvalidDataException("Empty or ambiguous FBX hierarchy: " + asset.LogicalPath);
@@ -135,6 +138,10 @@ internal sealed class ModelSnapshot
                     return matches.Length == 1 ? matches[0].Path : throw new InvalidDataException("Ambiguous FBX skin bone: " + name);
                 }).ToArray();
                 string rootBone = CommonAncestor(bonePaths);
+                // Unity uses the last connected cluster when the shared ancestor is not
+                // itself in this skin. ResoPonSkinRootSmoke checks reversed cluster order
+                // and a skin that explicitly includes the common ancestor in Unity.
+                if (rootBone != null && !bonePaths.Contains(rootBone)) rootBone = bonePaths[^1];
                 var fields = Map(("m_GameObject", Ref(go)), ("m_Enabled", Scalar(1)),
                     ("m_Materials", Sequence(node.MaterialNames.Select(Material))), ("m_Mesh", Ref(mesh)),
                     ("m_RootBone", Ref(rootBone == null ? 0 : Identity(rootBone, 4))),
@@ -174,6 +181,8 @@ internal sealed class ModelSnapshot
             e["first"]?["name"]?.AsString() == name && e["first"]?["type"]?.AsString() == "UnityEngine:Material").ToArray();
         if (mappings.Length > 1) throw new InvalidDataException("Ambiguous FBX material remap.");
         if (mappings.Length == 1) return UnityPropertyOverrides.Clone(mappings[0]["second"]);
+        if (materialGuids.TryGetValue(name, out string materialGuid))
+            return Map(("fileID", Scalar(2100000L)), ("guid", Scalar(materialGuid)));
         long id = metaIds.TryGetValue((21, name), out var ids) && ids.Count == 1 ? ids[0]
             : UnityModelFileIdResolver.Compute("Material", name, 0);
         return Ref(id);

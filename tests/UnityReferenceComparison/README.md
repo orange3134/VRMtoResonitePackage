@@ -15,10 +15,21 @@ Native generated-mesh metadata has a separate synthetic regression:
 ```sh
 dotnet build tests/UnityReferenceDump -c Release -o .tmp_verify/reference-build
 dotnet .tmp_verify/reference-build/UnityReferenceDump.dll --check-native-metadata .tmp_verify/new-native-metadata-fixture
+dotnet .tmp_verify/reference-build/UnityReferenceDump.dll --check-source-transforms .tmp_verify/new-source-transform-fixture
 ```
 
 It checks binary and YAML subassets, signed fileIDs, channel names/order, stale
 weights, empty meshes, missing/wrong-type rejection and unchanged mesh inputs.
+Source transform checks cover tiny authored TRS in binary FBX 7400/7500, helper
+collapse, static versus skinned pivots, six Euler orders and unsupported fallbacks.
+
+For an independent Unity skin-root oracle, generate a self-authored model with
+`--write-skin-root-fixture <new.fbx>`. Copy `ResoPonSkinRootSmoke.cs` from
+`tools/unity/Tests` into a trusted project's Editor folder alongside the exporter.
+Set `RESOPON_SKIN_ROOT_SOURCE` to that FBX and `RESOPON_REFERENCE_SMOKE_OUT` to a
+new output directory, then invoke `ResoPonSkinRootSmoke.Run` in batch mode. It tests
+opposite cluster orders and a weighted common ancestor, and writes a prefab path
+and Unity expectation for the regular producer/comparator to replay.
 
 ```sh
 python scripts/compare-unity-reference.py expected.json actual.json

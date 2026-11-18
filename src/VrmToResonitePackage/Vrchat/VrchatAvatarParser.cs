@@ -106,11 +106,19 @@ public static class VrchatAvatarParser
     public static VrchatAvatar Parse(UnityPackage package, string avatarOverride = null)
         => Parse(package, avatarOverride, false);
 
-    private static VrchatAvatar Parse(UnityPackage package, string avatarOverride, bool instanceView)
+    // Diagnostics must select the same scene placement as production, including its attachments.
+    internal static UnityPackage CreateSelectedView(UnityPackage package, string avatarOverride, out string sourceGuid)
     {
-        using var profile = ConversionProfile.Start(instanceView ? "parse-view" : "parse-input");
+        var (_, selected) = SelectCandidate(package, avatarOverride);
+        sourceGuid = selected.Source.Guid;
+        return selected.SceneInstanceId != 0
+            ? UnityPrefabInstances.CreateSceneInstanceView(package, sourceGuid, selected.SceneInstanceId)
+            : UnityPrefabInstances.CreateView(package, sourceGuid, selected.Root != null ? selected.Subtree : null);
+    }
+
+    private static (List<Candidate> Candidates, Candidate Selected) SelectCandidate(UnityPackage package, string avatarOverride)
+    {
         List<Candidate> candidates = FindCandidates(package);
-        profile?.Mark("find-candidates");
         if (package.InputPrefab != null && candidates.Count == 0)
         {
             Candidate composed = TryCreateComposedCandidate(package, package.InputPrefab);
@@ -124,7 +132,14 @@ public static class VrchatAvatarParser
                 "（prefab/シーンを走査しましたが、VRCAvatarDescriptorコンポーネントを検出できませんでした）");
         }
 
-        Candidate selected = SelectPrimary(candidates, avatarOverride);
+        return (candidates, SelectPrimary(candidates, avatarOverride));
+    }
+
+    private static VrchatAvatar Parse(UnityPackage package, string avatarOverride, bool instanceView)
+    {
+        using var profile = ConversionProfile.Start(instanceView ? "parse-view" : "parse-input");
+        var (candidates, selected) = SelectCandidate(package, avatarOverride);
+        profile?.Mark("find-candidates");
         if (!instanceView)
         {
             // All collectors must see the same selected hierarchy and instance identities.
@@ -1752,7 +1767,7 @@ public static class VrchatAvatarParser
         return Vec3.One;
     }
 
-    private static void ParseFbxMaterialMappings(UnityPackage package, UnityAsset fbx, YamlNode meta,
+    internal static void ParseFbxMaterialMappings(UnityPackage package, UnityAsset fbx, YamlNode meta,
         Dictionary<string, string> materialGuids)
     {
         YamlNode externalObjects = meta?["ModelImporter"]?["externalObjects"];
