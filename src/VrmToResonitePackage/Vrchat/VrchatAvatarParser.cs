@@ -2247,6 +2247,12 @@ public static class VrchatAvatarParser
             .Select(document => document.Root?["m_SourcePrefab"]?.Guid)
             .Where(guid => package.ByGuid(guid)?.Extension == ".fbx")
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Animator.m_Avatar can require a model's skeleton even when every authored
+        // renderer uses a standalone Mesh asset. Importing that FBX must not revive
+        // its original geometry. Occurrence IDs also distinguish real sibling instances.
+        avatar.UninstantiatedFbxGuids.UnionWith(new[] { avatar.FbxGuid }
+            .Concat(avatar.AdditionalFbxs.Select(model => model.Guid))
+            .Where(guid => !string.IsNullOrEmpty(guid) && !instantiatedModels.Contains(guid)));
         foreach ((string sceneGuid, UnityScene scene) in inheritedScenes)
         {
             foreach (YamlDocument smr in scene.MeshRenderers)

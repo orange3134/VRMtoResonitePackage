@@ -1805,11 +1805,18 @@ PrefabInstance:
         Check(parsed.FbxGuid == modelGuid && parsed.MeshCopies.Single().Name == "Body_Base" &&
               parsed.PrefabGameObjectNames.Contains("Body_Base"),
             "Named descriptor wrapper imports nested authored geometry and retains its renderer");
+        Check(parsed.UninstantiatedFbxGuids.Contains(modelGuid),
+            "Unpacked body model is used only as a renderer/skeleton template");
     }
     File.WriteAllText(input, wrapper.Replace(nestedGuid, modelGuid));
     using (var package = UnityPackage.Open(input))
-        Check(VrchatAvatarParser.Parse(package).FbxGuid == modelGuid,
+    {
+        var parsed = VrchatAvatarParser.Parse(package);
+        Check(parsed.FbxGuid == modelGuid,
             "Named descriptor wrapper also imports a direct nested FBX instance");
+        Check(!parsed.UninstantiatedFbxGuids.Contains(modelGuid),
+            "A real nested FBX instance retains its imported renderers");
+    }
     const string accessoryGuid = "53535353535353535353535353535353";
     string accessory = asset("Assets/WrapperBadge.fbx", accessoryGuid, "");
     File.AppendAllText(accessory + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: 4300000\n    second: Badge\n");
@@ -1923,6 +1930,8 @@ SkinnedMeshRenderer:
             Check(parsed.MeshCopies.Count == 2 && parsed.MeshCopies.Select(c => c.FbxGuid).Distinct().Count() == 2 &&
                   parsed.MeshCopies.Count(c => c.Enabled) == 1,
                 "Repeated nested prefab retains independent renderer overrides and source identities");
+        Check(parsed.UninstantiatedFbxGuids.Count == (geometry == nestedGuid ? 2 : 0),
+            "Repeated model occurrences distinguish authored templates from real FBX instances");
         Check(ReferenceEquals(originalScene, package.ReadScene(package.InputPrefab)) &&
               originalScene.Doc(5).Root["m_SourcePrefab"].Guid == geometry &&
               VrchatAvatarParser.Parse(package).AdditionalFbxs.Single().Guid == parsed.AdditionalFbxs.Single().Guid,

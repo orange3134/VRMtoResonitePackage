@@ -87,6 +87,7 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
             await NativeMeshSceneChecks.CheckReal(root, nativePrefab, nativeOutput, avatarName, primarySkinPackage);
             return;
         }
+        SkeletonModelRendererChecks.Run(root);
         ViewpointChecks.Run(root);
         await NativeMeshSceneChecks.Run(root, temp);
         await MaterialLayerChecks.Run(assets, temp);

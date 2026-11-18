@@ -186,6 +186,14 @@ BlendShapeはボーンのあるメッシュに限定せず、morphだけを持�
   書き換える。元の package のアセット・キャッシュ・Unity プロジェクトは変更しない。
 - 循環参照は祖先経路で検出する。兄弟の同一アセットを循環として除外しない。
 - unpacked prefabのFBXはメッシュのテンプレートとして扱い、複製後に元rendererを除く。
+  Animatorの `m_Avatar` だけから骨格を取得するFBXも、実際のPrefabInstanceがなければ
+  元rendererを出力しない。`UninstantiatedFbxGuids` は選択済みモデルの配置IDと
+  合成済みPrefabInstanceを照合して保持し、生成コピーの接続後に元rendererのcomponentだけを除く。
+  bone・Transform・field参照は保持し、別配置の実FBXやPrefab由来のrendererは対象外とする。
+  Omaneko v1.1の本体16メッシュは独立した `.asset` から生成するため、同名のFBXメッシュを
+  名前ベースの保持リストだけで残すと二重描画になる。保存パッケージはUnity採取値にある
+  各本体名のSkinnedMeshRendererが1個であることを検査する。空の元SlotやFirstPerson用の
+  `_headless_` rendererはこの重複判定に含めない。
   置換したrendererの元スロットとimport側の祖先を記録し、アバター設定後に子・componentが
   なくなったものだけを葉から削除する。Prefab由来のobjectやcomponentから参照されるSlot・
   Slotのfieldは保持する。Revan underwearのように骨格統合後に空になるimport階層も対象となる。

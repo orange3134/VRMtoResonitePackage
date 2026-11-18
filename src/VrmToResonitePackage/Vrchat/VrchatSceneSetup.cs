@@ -479,7 +479,7 @@ internal static class VrchatSceneSetup
         IReadOnlyDictionary<Slot, string> importedPaths = null)
     {
         if (avatar.PrefabGameObjectNames.Count == 0 && avatar.PrefabRendererStates.Count == 0 &&
-            avatar.RemovedModelRenderers.Count == 0)
+            avatar.RemovedModelRenderers.Count == 0 && avatar.UninstantiatedFbxGuids.Count == 0)
         {
             return;
         }
@@ -490,12 +490,14 @@ internal static class VrchatSceneSetup
         foreach (MeshRenderer renderer in root.GetComponentsInChildren<MeshRenderer>())
         {
             Slot slot = renderer.Slot;
-            if (authoredSlots.Contains(slot) || importedPaths == null ||
-                !importedPaths.TryGetValue(slot, out string path) ||
-                !importedMeshSources.TryGetValue(slot, out string guid) ||
-                !avatar.RemovedModelRenderers.Contains(new(guid, path))) continue;
+            if (authoredSlots.Contains(slot) || !importedMeshSources.TryGetValue(slot, out string guid)) continue;
+            string path = importedPaths?.GetValueOrDefault(slot);
+            bool templateOnly = avatar.UninstantiatedFbxGuids.Contains(guid);
+            if (!templateOnly && (path == null || !avatar.RemovedModelRenderers.Contains(new(guid, path)))) continue;
             // Component removal leaves the Transform, bones, attachments and child renderers alive.
-            UniLog.Log($"Removing prefab-deleted renderer component: {path} (fbx={guid})");
+            UniLog.Log(templateOnly
+                ? $"Removing uninstantiated FBX renderer component: {path ?? slot.Name} (fbx={guid})"
+                : $"Removing prefab-deleted renderer component: {path} (fbx={guid})");
             renderer.Destroy();
             removed++;
         }

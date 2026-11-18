@@ -135,6 +135,9 @@ public sealed class VrchatAvatar
     public Dictionary<VrchatGameObjectReference, bool> PrefabRendererStates { get; } = new();
     /// <summary>Removed FBX renderer/MeshFilter components. Preserve their objects and children.</summary>
     public HashSet<VrchatModelRendererReference> RemovedModelRenderers { get; } = new();
+    /// <summary>Models imported for skeleton/mesh templates, without an authored FBX instance.
+    /// Keep their bones and objects, but remove their original renderer components after copying.</summary>
+    public HashSet<string> UninstantiatedFbxGuids { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Whole excluded models; never import their geometry or skeletons.</summary>
     public HashSet<string> EditorOnlyFbxGuids { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Excluded model nodes, including bones and non-rendering objects.</summary>
