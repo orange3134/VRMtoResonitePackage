@@ -6,6 +6,7 @@ Unity Editor are required. Private results default to .local/prefab-reference.
 Exit 0: matched, 1: differences or execution failure, 2: invalid invocation.
 """
 import argparse
+import collections
 import datetime
 import hashlib
 import importlib.util
@@ -106,15 +107,132 @@ def invoke(command, log, timeout, env=None):
                               timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).returncode
 
 
+def check_registry(args, parser):
+    """Run cases sequentially: two prefabs can belong to the same Unity project."""
+    registry = args.registry.resolve()
+    token = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8]
+    output = (args.output or REPO / ".local/prefab-reference" / token).resolve()
+    work = REPO / ".tmp_verify/prefab-reference" / token
+    try:
+        data = read(registry)
+        cases = data["cases"]
+        ids = [c["id"] for c in cases]
+        if data.get("version") != 1 or len(set(ids)) != len(ids) or any(
+                not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", key) for key in ids):
+            raise ValueError("Invalid registry version or duplicate/invalid case IDs")
+        if args.case and set(args.case) - set(ids):
+            raise ValueError("Unknown case ID")
+        selected = [c for c in cases if c["id"] in args.case] if args.case else [
+            c for c in cases if Path(c["inputPath"]).suffix.lower() == ".prefab"]
+        if not selected or any(Path(c["inputPath"]).suffix.lower() != ".prefab" for c in selected):
+            raise ValueError("Select at least one prefab input; selected non-prefab cases are not supported")
+        if args.timeout <= 0 or args.case_id != "prefab" or output.exists():
+            raise ValueError("Use a positive timeout, a new output directory and --case (not --case-id)")
+        for case in selected:
+            path = Path(case["inputPath"])
+            # Registry paths can be relative to the registry file, not the shell cwd.
+            case["inputPath"] = str((path if path.is_absolute() else registry.parent / path).resolve())
+            try:
+                project, _ = locate_project(Path(case["inputPath"]))
+            except (OSError, ValueError):
+                continue  # Record missing/malformed inputs per case; continue others.
+            if output == project or project in output.parents:
+                raise ValueError("Output must be outside every selected Unity project")
+        if args.reference_dump and not args.reference_dump.resolve().is_file():
+            raise ValueError("Reference dump does not exist")
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        parser.error(str(error))
+    output.mkdir(parents=True, exist_ok=False)
+    work.mkdir(parents=True, exist_ok=False)
+    registry_hash = sha(registry)
+    report = dict(format="resopon.prefab-unity-batch", schemaVersion=1, registryPath=str(registry),
+                  registrySha256=registry_hash, workPath=str(work), cases=[], status="failed",
+                  runnerSha256=sha(Path(__file__)))
+    exit_code = 1
+    try:
+        binary = args.reference_dump.resolve() if args.reference_dump else work / "bin/UnityReferenceDump.dll"
+        if not args.reference_dump:
+            print("Building shared ResoPon reference reader...", flush=True)
+            if invoke(["dotnet", "build", str(REPO / "tests/UnityReferenceDump"), "-c", "Release", "-o", str(binary.parent)],
+                      output / "build.log", args.timeout):
+                raise ValueError("Reference reader build failed; see build.log")
+        coverage = []
+        for case in selected:
+            folder = output / case["id"]
+            command = [sys.executable, "-B", str(Path(__file__).resolve()), case["inputPath"],
+                       "--case-id", case["id"], "--reference-dump", str(binary),
+                       "--output", str(folder), "--timeout", str(args.timeout)]
+            if args.unity:
+                command.extend(["--unity", str(args.unity.resolve())])
+            result = dict(id=case["id"], inputPath=case["inputPath"], captureStatus="not-captured",
+                          parityStatus="not-run", status="failed", logPath=str(output / (case["id"] + ".log")))
+            report["cases"].append(result)
+            print("Checking " + case["id"] + "...", flush=True)
+            try:
+                # Child has a timeout for each process and owns temporary-script cleanup.
+                # Do not kill the wrapper before it can clean up after a Unity timeout.
+                result["exitCode"] = invoke(command, Path(result["logPath"]), None)
+                if (folder / "report.json").is_file():
+                    child = read(folder / "report.json")
+                    result.update(reportPath=str(folder / "report.json"), captureStatus=child["captureStatus"],
+                                  parityStatus=child["parityStatus"], status=child["status"])
+                    for key in ("error", "cleanupOrSourceError"):
+                        if key in child:
+                            result[key] = child[key]
+                    if (folder / "parity/report.json").is_file():
+                        parity = read(folder / "parity/report.json")["cases"][0]
+                        result["differences"] = parity.get("differences")
+                        if parity.get("error"):
+                            result["error"] = parity["error"]
+                    if result["exitCode"] == 0 and result["status"] != "matched":
+                        raise ValueError("Successful process did not report a comparison match")
+                    if result["exitCode"] != 0 and result["status"] == "matched":
+                        raise ValueError("Failed process reported a match")
+                    if child.get("inputAndProjectFilesUnchanged") is not True:
+                        raise ValueError("Input/project integrity was not verified")
+                    if child["captureStatus"] == "captured":
+                        coverage.extend(read(folder / "unity/coverage.json")["cases"])
+                else:
+                    result.update(status="preflight-failed", error="See case log; no capture report produced")
+            except (OSError, ValueError, KeyError) as error:
+                result.update(status="failed", error=str(error))
+            if not any(c["id"] == case["id"] for c in coverage):
+                coverage.append(dict(id=case["id"], status="failed", inputPath=case["inputPath"],
+                                     reason=result.get("error", result["status"])))
+            print(case["id"] + ": " + result["status"], flush=True)
+        write(output / "coverage.json", dict(format="resopon.unity-resolved-coverage", schemaVersion=1, cases=coverage))
+        report["coveragePath"] = str(output / "coverage.json")
+        report["summary"] = dict(collections.Counter(c["status"] for c in report["cases"]))
+        report["captureSummary"] = dict(collections.Counter(c["captureStatus"] for c in report["cases"]))
+        if sha(registry) != registry_hash:
+            raise ValueError("Registry changed during the batch")
+        exit_code = 0 if all(c["status"] == "matched" and c["exitCode"] == 0 for c in report["cases"]) else 1
+        report["status"] = "matched" if exit_code == 0 else "not-all-matched"
+    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
+        report["error"] = str(error)
+    finally:
+        report["exitCode"] = exit_code
+        report["finishedUtc"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        write(output / "report.json", report)
+    print("Batch result: " + report["status"] + "; " + str(output / "report.json"), flush=True)
+    return exit_code
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("prefab", type=Path)
+    parser.add_argument("prefab", type=Path, nargs="?")
+    parser.add_argument("--registry", type=Path, help="avatar-tests.json; check all registered prefab inputs")
+    parser.add_argument("--case", action="append", help="select a registry case ID; repeatable")
     parser.add_argument("--unity", type=Path, help="Unity.exe (default: Hub installation matching ProjectVersion.txt)")
     parser.add_argument("--reference-dump", type=Path, help="prebuilt UnityReferenceDump.dll; otherwise build it")
     parser.add_argument("--output", type=Path, help="new result directory; default .local/prefab-reference/<run>")
     parser.add_argument("--case-id", default="prefab", help="ID used in the replayable coverage manifest")
     parser.add_argument("--timeout", type=int, default=1800, help="timeout in seconds for each process")
     args = parser.parse_args(argv)
+    if (args.prefab is None) == (args.registry is None) or (args.case and not args.registry):
+        parser.error("Specify one prefab or --registry; --case requires --registry")
+    if args.registry:
+        return check_registry(args, parser)
     token = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8]
     output = (args.output or REPO / ".local/prefab-reference" / token).resolve()
     work = REPO / ".tmp_verify/prefab-reference" / token

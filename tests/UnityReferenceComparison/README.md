@@ -5,6 +5,21 @@ start Unity, install packages, run the conversion app, or read any avatar assets
 Its input is the JSON reference captured in Unity and the matching JSON snapshot
 from the ResoPon parser (v1/v2), or a repeated Unity capture (v2). Capture/compare is separate from the production converter.
 
+Use `scripts/check-prefab-unity.py --registry .local/avatar-tests.json` to capture
+and compare all registered prefab inputs sequentially. `--case <id>` selects a
+subset. The resulting report distinguishes capture, parity and process failures;
+its coverage manifest can be replayed without starting Unity.
+
+Native generated-mesh metadata has a separate synthetic regression:
+
+```sh
+dotnet build tests/UnityReferenceDump -c Release -o .tmp_verify/reference-build
+dotnet .tmp_verify/reference-build/UnityReferenceDump.dll --check-native-metadata .tmp_verify/new-native-metadata-fixture
+```
+
+It checks binary and YAML subassets, signed fileIDs, channel names/order, stale
+weights, empty meshes, missing/wrong-type rejection and unchanged mesh inputs.
+
 ```sh
 python scripts/compare-unity-reference.py expected.json actual.json
 python scripts/compare-unity-reference.py expected.json actual.json --report diff.json

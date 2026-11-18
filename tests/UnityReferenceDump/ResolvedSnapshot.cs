@@ -297,7 +297,9 @@ internal sealed class ResolvedSnapshot
         }
         else
         {
-            var document = view.ReadScene(asset)?.Doc(mesh.FileID ?? 0);
+            // Mesh/Texture payloads are intentionally omitted from binary scene
+            // enumeration. Resolve the exact subasset using the production reader.
+            var document = view.ReadAssetDocument(asset.Guid, mesh.FileID ?? 0);
             if (document?.ClassId != 43) throw new NotSupportedException("Unsupported native mesh metadata: " + asset.LogicalPath);
             names = Items(document.Root["m_Shapes"]?["channels"]).Select(n => n["name"]?.AsString()
                 ?? throw new InvalidDataException("Unnamed blendshape.")).ToArray();

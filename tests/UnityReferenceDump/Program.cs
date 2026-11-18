@@ -5,6 +5,12 @@ using VrmToResonitePackage;
 using VrmToResonitePackage.Unity;
 using VrmToResonitePackage.Vrchat;
 
+if (args.Length == 2 && args[0] == "--check-native-metadata")
+{
+    try { NativeMetadataChecks.Run(Path.GetFullPath(args[1])); return 0; }
+    catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+}
+
 if (args.Length == 2 && args[0] == "--write-fbx-fixture")
 {
     try

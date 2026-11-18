@@ -52,6 +52,35 @@ Unityの依存ハッシュは実体化の前後を検査するもので、Editor
 登録一覧や過去の期待値は更新しない。必要なケースへ結果の参照先を別途記録する。
 これは開発用の採取・解析比較コマンドで、配布GUIの通常変換や `.resonitepackage` の生成は実行しない。
 
+### 登録済みのPrefabをまとめて検証する
+
+同じコマンドの `--registry` にテストアバター一覧を渡すと、入力の拡張子が `.prefab` のケースを
+自動選択する。`--case` で特定の登録IDだけを選択することもできる。
+
+```powershell
+python scripts/check-prefab-unity.py --registry .local/avatar-tests.json
+python scripts/check-prefab-unity.py --registry .local/avatar-tests.json --case my-prefab
+```
+
+比較用ビルドは一度だけ作成し、同じUnityプロジェクトを同時に開かないよう順番に実行する。
+一件が採取・解析に失敗しても残りを続行し、各ケースのログと `report.json` を保存する。
+最上位の `report.json` は採取状態・比較状態・差分数・エラーを一覧化する。
+全選択ケースが一致した場合だけ終了コード0、差分・実行失敗が一件でもあれば1、
+未知のIDやPrefab以外の明示選択などの引数不備は2になる。
+相対入力パスは登録ファイルのディレクトリを基準にする。登録一覧自体は変更しない。
+
+最上位の `coverage.json` には採取できた期待値への参照と、採取できなかったケースの理由を記録する。
+ResoPonの解析処理を修正した後は、このファイルでUnityを起動せず再比較できる。
+
+```powershell
+python scripts/test-unity-resolved.py .local/prefab-reference/<run>/coverage.json `
+  --reference-dump .tmp_verify/my-build/UnityReferenceDump.dll `
+  --output .local/prefab-parity/new-run --work .tmp_verify/prefab-parity/new-run
+```
+
+再比較は採取済みケースのみを判定し、未採取は `not-captured` として別集計する。
+全登録ケースの検証完了を判断するときは、比較の終了コードだけでなく未採取件数も確認する。
+
 ### Unityから個別に採取する
 
 アバターと同梱依存物の利用条件を確認し、VRChat SDK・シェーダー等を揃えた信頼できる
@@ -167,6 +196,10 @@ v2出力は通常Prefab・Variant・ネストPrefabと、**FBX由来の暗黙の
 FBXの階層・姿勢・材質スロットは本番のfileID resolverと同じAssimp importから取得し、
 skinの接続先はFBXのcluster接続から完全なパスとして取得する。同名のメッシュやボーンを名前だけで選ばない。
 BlendShape名・初期ウェイトも既存の本番メタデータから取得する。ボーンのないmorph専用メッシュも対象とする。
+Unityで生成された `.asset` のMeshは、YAML・バイナリともGUIDとfileIDを指定して本番の
+`ReadAssetDocument` で取得する。バイナリのシーン一覧はMesh payloadを列挙しないため、
+`ReadScene(...).Doc(...)` では代用できない。同一ファイル内の複数Meshと符号付きfileIDを区別し、
+BlendShapeの名前・順序・初期ウェイトを比較する。存在しない参照やMesh以外の型はエラーにする。
 FBX全体の走査でBlendShapeがないことを証明できれば、メッシュノードのpathが曖昧でも空配列を出せる。
 走査失敗や形状を持つメッシュの曖昧なpathを、空配列として成功させない。
 
@@ -193,9 +226,8 @@ Prefab・meta・監視対象のプロジェクト設定の前後ハッシュ一�
 - LilLeoはv2出力に成功するが、BlendShape名118件に `SubDeformer::.` 接頭辞の差、
   Transformの回転・スケール16成分に数値差がある。
 - Clonkaはv2出力に成功するが、Transformの回転・スケール19成分に数値差がある。
-- MANUKAはUnity採取に成功するが、比較用 `ResolvedSnapshot` の生成Mesh情報取得で
-  `Unsupported native mesh metadata` となる。生成 `.asset` のMeshを取得できず、比較は未完了。
-  これは診断用v2ダンプの制約であり、既存の本番変換の失敗を意味しない。
+- 生成 `.asset` のMeshで比較用 `ResolvedSnapshot` が `Unsupported native mesh metadata` となる
+  問題は、上記のfileID指定による取得に修正した。本番変換の処理は変更しない。
 
 上記の差を一致や無害とは扱わない。採取済み件数と比較成功件数を分け、元の登録入力と
 過去の結果を保持したまま `prefabUnityCheck` と統合coverageへ最新の参照先を記録する。

@@ -70,6 +70,8 @@ Unity Editorの起動は不要で、変換の対応範囲・制限は既存の `
 
 開発・回帰検証では、`python scripts/check-prefab-unity.py "D:\MyUnityProject\Assets\Avatar\Avatar.prefab"`
 でUnityが解決した情報の採取とResoPon解析との比較を一括実行できます。
+テストアバター一覧のPrefabをまとめて検証する場合は、同じコマンドに
+`--registry .local/avatar-tests.json` を渡します。結果一覧と再比較用の `coverage.json` を保存します。
 必要環境・保存先は[PrefabからのUnity参照採取](docs/unity-reference-tests.md#プロジェクト内prefabから採取と比較を一括実行する)を参照してください。
 
 NDMFのManual Bakeなどで保存された生成Meshと、`.asset` 内の材質・テクスチャ・Animatorの
