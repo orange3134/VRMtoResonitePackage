@@ -57,23 +57,24 @@ internal static class UnityFbxBlendShapeDefaults
             while (TryReadNode(out Node node)) Collect(node);
             var objects = nodes.Where(n => n.Name is "Model" or "Geometry" or "Deformer" &&
                 n.Properties.Count >= 3 && n.Properties[0] is long).ToDictionary(n => (long)n.Properties[0]);
-            var parents = nodes.Where(n => n.Name == "C" && n.Properties.Count >= 3 &&
+            var connections = nodes.Where(n => n.Name == "C" && n.Properties.Count >= 3 &&
                 n.Properties[0] as string == "OO" && n.Properties[1] is long && n.Properties[2] is long)
-                .GroupBy(n => (long)n.Properties[1]).ToDictionary(g => g.Key,
-                    g => g.Select(n => (long)n.Properties[2]).Distinct().ToArray());
+                .Select(n => (Child: (long)n.Properties[1], Parent: (long)n.Properties[2])).Distinct().ToArray();
+            var parents = connections.GroupBy(c => c.Child).ToDictionary(g => g.Key, g => g.Select(c => c.Parent).ToArray());
+            // A cluster can have earlier links to other objects. Enumerate this
+            // parent's incoming connections in file order, not global child order.
+            var children = connections.ToLookup(c => c.Parent, c => c.Child);
             var skinPaths = new Dictionary<string, string[]>(StringComparer.Ordinal);
             foreach (var skin in objects.Where(e => e.Value.Name == "Deformer" && e.Value.Properties[2] as string == "Skin"))
             {
                 // Connection order is the cluster index order; object names alone cannot
                 // distinguish a mesh from a joint or repeated names in separate branches.
-                var clusters = parents.Where(p => p.Value.Contains(skin.Key) &&
-                    objects.GetValueOrDefault(p.Key)?.Properties.ElementAtOrDefault(2) as string == "Cluster").Select(p => p.Key);
+                var clusters = children[skin.Key].Where(id => objects.GetValueOrDefault(id)?.Properties[2] as string == "Cluster");
                 var paths = new List<string>();
                 bool valid = true;
                 foreach (long cluster in clusters)
                 {
-                    var bones = parents.Where(p => p.Value.Contains(cluster) && objects.GetValueOrDefault(p.Key)?.Name == "Model")
-                        .Select(p => p.Key).ToArray();
+                    var bones = children[cluster].Where(id => objects.GetValueOrDefault(id)?.Name == "Model").ToArray();
                     string path = bones.Length == 1 ? ModelPath(bones[0], new()) : null;
                     if (path == null) { valid = false; break; }
                     paths.Add(path);
@@ -96,8 +97,8 @@ internal static class UnityFbxBlendShapeDefaults
                     ?.Properties.FirstOrDefault() as double? ?? 0d;
                 double endWeight = GetEndFrameWeight(channel);
                 float weight = endWeight > 0 ? (float)(percent / endWeight * 100d) : (float)percent;
-                var shapes = objects.Where(o => o.Value.Name == "Geometry" && o.Value.Properties[2] as string == "Shape" &&
-                    (parents.GetValueOrDefault(o.Key)?.Contains(entry.Key) ?? false)).Select(o => o.Value).ToArray();
+                var shapes = children[entry.Key].Select(objects.GetValueOrDefault)
+                    .Where(o => o?.Name == "Geometry" && o.Properties[2] as string == "Shape").ToArray();
                 string shapeName = shapes.Length == 1 ? NormalizeObjectName(shapes[0].Properties[1] as string) : null;
                 foreach (long model in ModelsAbove(entry.Key, new()))
                     if (ModelPath(model, new()) is string path)

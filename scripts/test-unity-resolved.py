@@ -28,6 +28,13 @@ def write_json(path, value):
         stream.write("\n")
 
 
+def verify_project_files(case):
+    for name, digest in case.get("projectFiles", {}).items():
+        path = Path(name)
+        if (sha256(path) if path.exists() else None) != digest:
+            raise ValueError("Prefab metadata or project configuration changed: " + name)
+
+
 def load_comparator():
     spec = importlib.util.spec_from_file_location("unity_compare", Path(__file__).with_name("compare-unity-reference.py"))
     module = importlib.util.module_from_spec(spec)
@@ -87,6 +94,7 @@ def main(argv=None):
         input_path = Path(case["inputPath"]).resolve()
         actual_path = directory / "actual.json"
         try:
+            verify_project_files(case)
             if sha256(expected_path) != case["expectedSha256"]:
                 raise ValueError("Unity baseline checksum mismatch")
             if sha256(input_path) != case["inputSha256"]:
@@ -114,6 +122,7 @@ def main(argv=None):
                 write_json(directory / "comparison.json", {"equal": not differences, "differences": differences})
                 result.update(status="different" if differences else "matched", differences=len(differences),
                               actualPath=str(actual_path), actualSha256=sha256(actual_path))
+            verify_project_files(case)
             if sha256(expected_path) != case["expectedSha256"] or sha256(input_path) != case["inputSha256"]:
                 raise ValueError("Baseline/input changed during replay")
         except (ValueError, OSError, subprocess.TimeoutExpired) as error:

@@ -364,7 +364,7 @@ public sealed class UnityModelFileIdResolver
         {
             string attachmentName = names[i];
             var channels = _defaultWeightChannels.Where(channel => channel.RendererPath == path &&
-                (string.Equals(attachmentName, channel.Name, StringComparison.Ordinal) ||
+                (string.Equals(attachmentName, string.IsNullOrEmpty(channel.Name) ? channel.ShapeName : channel.Name, StringComparison.Ordinal) ||
                  string.Equals(attachmentName, $"{channel.Name}.{channel.Name}", StringComparison.Ordinal))).ToArray();
             // A channel belongs to a connected model object, not to the next same-named
             // attachment visited by Assimp. Ambiguous ownership must not select a neighbor.

@@ -266,6 +266,7 @@ def main(argv=None):
                                 REPO / "scripts/compare-unity-reference.py", *sorted(EXPORTERS.glob("*.cs"))]})
     folder = project / "Assets" / ("ResoPonReference_" + uuid.uuid4().hex)
     copied = {}
+    accepted_coverage = None
     exit_code = 1
     try:
         binary = args.reference_dump.resolve() if args.reference_dump else work / "bin/UnityReferenceDump.dll"
@@ -314,11 +315,12 @@ def main(argv=None):
             raise ValueError("Unity capture schema or prefab GUID mismatch")
         report.update(captureStatus="captured", unityVersion=index["unityVersion"],
                       dependencyHash=case["dependencyHash"], dependencyHashAfter=case["dependencyHashAfter"])
-        coverage = capture / "coverage.json"
-        write(coverage, dict(format="resopon.unity-resolved-coverage", schemaVersion=1, cases=[dict(
-            id=args.case_id, status="captured", inputPath=str(prefab), inputSha256=sha(prefab),
-            prefabGuid=case["prefabGuid"], expectedPath=str(expected), expectedSha256=sha(expected))]))
-        report["coveragePath"] = str(coverage)
+        coverage = work / "coverage.json"
+        accepted_coverage = dict(format="resopon.unity-resolved-coverage", schemaVersion=1, cases=[dict(
+            id=args.case_id, status="captured", inputPath=str(prefab), inputSha256=case["inputSha256"],
+            projectFiles={path: digest for path, digest in before.items() if path != str(prefab)},
+            prefabGuid=case["prefabGuid"], expectedPath=str(expected), expectedSha256=case["expectedSha256"])])
+        write(coverage, accepted_coverage)
         print("Comparing ResoPon with Unity...", flush=True)
         exit_code = replay.main([str(coverage), "--reference-dump", str(binary),
                                       "--output", str(output / "parity"), "--work", str(work / "parity"),
@@ -338,8 +340,13 @@ def main(argv=None):
             report["inputAndProjectFilesUnchanged"] = before == after
             if before != after or any(not Path(p).is_file() or sha(p) != digest for p, digest in installed.items()):
                 raise ValueError("Input, project configuration or installed exporter changed during the run")
+            if accepted_coverage is not None:
+                if any(sha(path) != case["expectedSha256"] for path in (expected, expected.with_name("repeat.json"))):
+                    raise ValueError("Unity reference changed during comparison")
+                write(capture / "coverage.json", accepted_coverage)
+                report["coveragePath"] = str(capture / "coverage.json")
         except (OSError, ValueError) as error:
-            report.update(status="failed", cleanupOrSourceError=str(error))
+            report.update(status="failed", captureStatus="failed", cleanupOrSourceError=str(error))
             exit_code = 1
         report["finishedUtc"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
         report["exitCode"] = exit_code

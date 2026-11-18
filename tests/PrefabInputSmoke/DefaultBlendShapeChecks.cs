@@ -139,6 +139,12 @@ internal static class DefaultBlendShapeChecks
         Dictionary<string, string> Map(string[] imported, params (string, string)[] channels) =>
             VrmToResonitePackage.BlendShapeNameNormalizer.ChannelAliases(imported, channels);
         Require(Map(new[] { "Smile" }, ("eye.Smile", "Smile"))["Smile"] == "eye.Smile", "connected channel alias restored");
+        Require(Map(new[] { "SubDeformer::.Smile" }, ("", "Smile"))["SubDeformer::.Smile"] == "Smile",
+            "Unnamed channel uses its single connected geometry name");
+        Require(Map(new[] { "SubDeformer::.Smile" }, ("", "Smile"), ("", "Smile")).Count == 0 &&
+                Map(new[] { "SubDeformer::.Smile", "Smile" }, ("", "Smile")).Count == 0 &&
+                Map(new[] { "SubDeformer::.Smile" }, ("", null)).Count == 0,
+            "Missing, ambiguous and colliding unnamed channel aliases remain unresolved");
         Require(Map(new[] { "Smile" }, ("eye.Smile", null)).Count == 0, "dotted suffix alone never establishes identity");
         Require(Map(new[] { "Smile" }, ("eye.Smile", "Smile"), ("mouth.Smile", "Smile")).Count == 0, "ambiguous geometry alias rejected");
         Require(Map(new[] { "Smile", "eye.Smile" }, ("eye.Smile", "Smile")).Count == 0, "existing channel name is not overwritten");
@@ -180,6 +186,7 @@ internal static class DefaultBlendShapeChecks
         objects.Add(new("Deformer", new object[] { 103L, "Cluster\0\u0001Deformer", "Cluster" }));
         objects.Add(new("Deformer", new object[] { 104L, "Cluster\0\u0001Deformer", "Cluster" }));
         Connect(100, 10); Connect(101, 20); Connect(102, 12);
+        Connect(104, 999); // An unrelated earlier connection must not reorder skin 102.
         Connect(103, 102); Connect(104, 102); Connect(100, 103); Connect(101, 104);
         if (reverse) { objects.Reverse(); connections.Reverse(); }
         using var stream = File.Create(path);

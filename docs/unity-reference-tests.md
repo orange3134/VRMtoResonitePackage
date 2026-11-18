@@ -81,6 +81,11 @@ python scripts/test-unity-resolved.py .local/prefab-reference/<run>/coverage.jso
 再比較は採取済みケースのみを判定し、未採取は `not-captured` として別集計する。
 全登録ケースの検証完了を判断するときは、比較の終了コードだけでなく未採取件数も確認する。
 
+個別Prefabの再比較用coverageは、採取時のPrefab・期待値のSHA-256と、終了時の入力・設定の
+不変性を確認してから保存する。新規採取ではPrefabのmeta、ProjectVersion、package manifest・lockの
+状態も記録し、再比較の前後に照合する。旧coverageでは記録済みの項目だけを照合する。
+比較CLIの `--report` には新しいファイル名を指定する。
+
 ### Unityから個別に採取する
 
 アバターと同梱依存物の利用条件を確認し、VRChat SDK・シェーダー等を揃えた信頼できる
@@ -223,8 +228,8 @@ Prefab・meta・監視対象のプロジェクト設定の前後ハッシュ一�
 
 この3件の比較結果には次の制約が残る。
 
-- LilLeoはv2出力に成功するが、BlendShape名118件に `SubDeformer::.` 接頭辞の差、
-  Transformの回転・スケール16成分に数値差がある。
+- 空名のFBX BlendShapeChannelにAssimpが `SubDeformer::.` を付ける場合は、
+  同じRendererで一意に接続されたShapeの名前と照合する。既存名との衝突や複数候補があれば元の名前を保持する。
 - Clonkaはv2出力に成功するが、Transformの回転・スケール19成分に数値差がある。
 - 生成 `.asset` のMeshで比較用 `ResolvedSnapshot` が `Unsupported native mesh metadata` となる
   問題は、上記のfileID指定による取得に修正した。本番変換の処理は変更しない。

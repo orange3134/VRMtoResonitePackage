@@ -64,6 +64,17 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertEqual("unsupported", report["cases"][0]["status"])
 
+    def test_new_package_lock_invalidates_prefab_replay(self):
+        manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
+        lock = self.root / "packages-lock.json"
+        manifest["cases"][0]["projectFiles"] = {str(lock): None}
+        self.coverage.write_text(json.dumps(manifest), encoding="utf-8")
+        lock.write_text("{}", encoding="utf-8")
+        code, report, producer = self.run_replay(None)
+        self.assertEqual(1, code)
+        self.assertIn("project configuration changed", report["cases"][0]["error"])
+        producer.assert_not_called()
+
     def test_missing_dependency_is_not_success(self):
         def producer(command, **kwargs):
             kwargs["stdout"].write(b"MISSING_PREFAB_SOURCE: abc\n")

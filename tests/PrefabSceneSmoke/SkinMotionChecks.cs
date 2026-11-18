@@ -70,14 +70,19 @@ internal static class SkinMotionChecks
             pivot.GlobalPosition += delta;
             try
             {
-                if (MathX.Distance(root.GlobalPosition - before[root], delta) > .00001f)
+                const float tolerance = .00001f;
+                if (!(MathX.Distance(root.GlobalPosition - before[root], delta) <= tolerance))
                     throw new InvalidOperationException("Control root did not move; motion test is invalid.");
                 foreach (var target in targets)
                 {
-                    float error = target.bones.Max(b => MathX.Distance(b.GlobalPosition - before[b], delta));
+                    float error = target.bones.Max(b =>
+                    {
+                        float distance = MathX.Distance(b.GlobalPosition - before[b], delta);
+                        return float.IsFinite(distance) ? distance : float.PositiveInfinity;
+                    });
                     string message = $"Skin motion {string.Join("/", target.rule.PathSuffix)}: weighted bones={target.bones.Length}, max error={error:G6} m";
-                    Console.WriteLine((error <= .00001f ? "PASS: " : "FAIL: ") + message);
-                    if (error > .00001f) failures.Add(message);
+                    Console.WriteLine((error <= tolerance ? "PASS: " : "FAIL: ") + message);
+                    if (error > tolerance) failures.Add(message);
                 }
             }
             finally { pivot.GlobalPosition = oldPosition; }

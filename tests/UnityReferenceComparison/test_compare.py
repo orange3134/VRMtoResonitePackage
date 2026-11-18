@@ -157,6 +157,17 @@ class CompareTests(unittest.TestCase):
             self.assertEqual(2, result.returncode)
             self.assertEqual(data, path.read_text(encoding='utf-8'))
 
+    def test_report_cannot_overwrite_hardlinked_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'input.json'
+            path.write_text(json.dumps(snapshot()), encoding='utf-8')
+            alias = path.with_name('report.json')
+            alias.hardlink_to(path)
+            before = path.read_bytes()
+            result = subprocess.run([sys.executable, str(SCRIPT), str(path), str(path), '--report', str(alias)], capture_output=True)
+            self.assertEqual(2, result.returncode)
+            self.assertEqual(before, path.read_bytes())
+
     def test_invalid_tolerance_rejected(self):
         result = subprocess.run([sys.executable, str(SCRIPT), 'unused', 'unused', '--abs-tol', 'nan'], capture_output=True)
         self.assertEqual(2, result.returncode)

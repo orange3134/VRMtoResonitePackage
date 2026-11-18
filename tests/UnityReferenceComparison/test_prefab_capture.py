@@ -53,7 +53,7 @@ class PrefabCaptureTests(unittest.TestCase):
             capture.write(target / "index.json", dict(unityVersion="2022.3.22f1", cases=[dict(
                 id="prefab", prefabPath="Assets/Avatar 日本語.prefab", status="captured",
                 repeatMatches=True, sourceUnchanged=True, expectedPath="prefab/expected.json",
-                expectedSha256=capture.sha(expected), inputSha256=capture.sha(self.prefab),
+                expectedSha256=capture.sha(expected), repeatSha256=capture.sha(expected), inputSha256=capture.sha(self.prefab),
                 inputSha256After=capture.sha(self.prefab), prefabGuid="b" * 32,
                 dependencyHash="same", dependencyHashAfter="same")]))
         else:
@@ -108,6 +108,7 @@ class PrefabCaptureTests(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertEqual("failed", report["status"])
         self.assertFalse(report["inputAndProjectFilesUnchanged"])
+        self.assertFalse((self.output / "unity/coverage.json").exists())
 
     def test_unity_failure_cleans_up_and_does_not_compare(self):
         code, report = self.run_capture(lambda *a, **k: types.SimpleNamespace(returncode=1))
@@ -115,6 +116,17 @@ class PrefabCaptureTests(unittest.TestCase):
         self.assertEqual("failed", report["captureStatus"])
         self.assertEqual("not-run", report["parityStatus"])
         self.assertEqual([], list((self.project / "Assets").glob("ResoPonReference_*")))
+
+    def test_changed_repeat_capture_cannot_publish_coverage(self):
+        def changed_repeat(command, **kwargs):
+            result = self.run_process(command, **kwargs)
+            if self.called_producer:
+                (self.output / "unity/prefab/repeat.json").write_text("{}")
+            return result
+        code, report = self.run_capture(changed_repeat)
+        self.assertEqual(1, code)
+        self.assertEqual("failed", report["captureStatus"])
+        self.assertFalse((self.output / "unity/coverage.json").exists())
 
     def test_timeout_is_recorded_and_scripts_cleaned_up(self):
         def timeout(command, **kwargs):

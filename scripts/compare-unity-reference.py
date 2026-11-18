@@ -260,8 +260,9 @@ def main(argv=None):
             inputs = {Path(args.expected).resolve(), Path(args.actual).resolve()}
             if Path(args.report).resolve() in inputs:
                 raise ValueError("report must not overwrite an input")
-            Path(args.report).write_text(json.dumps({"equal": not differences,
-                "differences": differences}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            with Path(args.report).open("x", encoding="utf-8") as stream:
+                json.dump({"equal": not differences, "differences": differences}, stream, ensure_ascii=False, indent=2)
+                stream.write("\n")
         if differences:
             print("FAIL: " + str(len(differences)) + " difference(s)")
             for difference in differences:
