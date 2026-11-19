@@ -106,6 +106,17 @@ FBXから読み込んだ骨格下の元メッシュスロット、Prefabから�
 どこから参照されているかと、現在のrendererコンポーネントの有無を合わせて確認する。
 実入力パス、採取結果、修正前後の件数は `.local/avatar-tests.json` とローカル結果に記録する。
 
+Omanekoの余分な骨格には二つの原因があった。ウェイトを持たないFBX末端をPrefab由来の
+新規helperとして重ねて生成する経路と、Unityで髪・耳の親を変更した後も元FBXの未使用の枝を
+残す経路である。前者は完全な元pathを検証して再利用し、後者は実参照とPrefab上の存在を
+保護したうえで骨格参照用templateに限って削除する。単なるSlot数削減を期待条件にしない。
+
+眼球PivotやAligned Handが挿入された部分は名前pathだけの自動照合では未対応になる。
+EyeRotationDriverのRoot、VRIKのhand参照などから補助Slotの用途を確認し、元Transformへの
+対応表を作る。補助Slot自体を元の親へ多対一対応させない。元骨の一意な対応・祖先関係、
+順序付きskin bone接続、Unityにある末端の欠落と重複を確認する。保存Enabledの差は
+実行時driverの値と区別し、補助階層・外観・物理などの未検証項目は報告に残す。
+
 ## ツールの回帰検証
 
 ```powershell

@@ -124,6 +124,9 @@ public sealed class VrchatAvatar
     /// <summary>Saved local poses of unpacked model bones, including unweighted skeleton ancestors.</summary>
     public Dictionary<VrchatBoneTarget, VrchatAuthoredBoneTransform> AuthoredBoneTransforms { get; } = new();
 
+    /// <summary>Imported skeleton nodes verified to exist in the authored prefab, even without pose overrides.</summary>
+    public HashSet<VrchatBoneTarget> AuthoredImportedBones { get; } = new();
+
     /// <summary>
     /// All GameObject names present in the selected prefab's hierarchy. Used to drop imported FBX
     /// meshes that the prefab deleted (avatars built by removing mesh objects from a shared FBX).

@@ -203,6 +203,13 @@ BlendShapeはボーンのあるメッシュに限定せず、morphだけを持�
   primary wrapperとそのRigが既に畳まれている場合はアバターrootにRigを作成して登録を保持する。
   アバター外のboneを含む場合や旧Rigが外部参照されている場合は旧wrapperを保持する。
   名前や空であることだけを条件に、アバター全体のスロットを削除しない。
+  unpack済みPrefabが骨を別の親へ移した場合、骨格参照用FBXの元の枝も残り得る。
+  `RemoveUnusedSkeletonTemplateNodes` は `UninstantiatedFbxGuids` に属する元importだけを対象に、
+  子・component・実参照のないSlotを葉から除く。通常のRigへの登録だけは使用中の証拠とせず、
+  削除時に登録も除く。スキン・BipedRig・物理・Slotのfield参照、Prefabで存在を確認した骨と
+  その祖先は保持する。別componentがRig自体またはそのfieldを参照する場合は登録骨も保持する。
+  実配置されたFBXや新規生成した補助階層は対象外。Omanekoの髪・耳をPhysBone用の親へ移した後の
+  旧FBX枝が回帰例で、眼球PivotやIKのAligned Handは使用中の補助階層として残す。
   外側で追加されたメッシュ用に同じFBXを再importした場合、その骨格が本体とは別に残ることがある。
   `UnityAsset.IsMeshTemplate` を `VrchatFbxAsset` へ引き継ぎ、追加モデルの用途を明示する。
   `RemoveUnusedMeshTemplateModels` はコピーの接続・骨格統合・アバター設定後に、用途がtemplateである
@@ -226,6 +233,10 @@ BlendShapeはボーンのあるメッシュに限定せず、morphだけを持�
   コピーの親がローカル skeleton の骨で、FBX の skin bone と完全な path が一致するときは、
   prefab Transform identity と imported bone target を保持して既存の骨 Slot を使う。
   骨の下に追加された attachment だけを生成し、別の skeleton chain を作らない。
+  ウェイトを持たない末端や中間helperも、元FBXのskin骨の子孫に完全pathが一意に存在し、
+  meshノードでなければ既存Slotを再利用する。名前や `_end` suffixだけでは再利用しない。
+  Unityにだけ追加されたhelperは独立して生成する。`AuthoredImportedBones` にはTRSの上書きが
+  省略された骨も記録し、後段の不要template削除から保護する。
   unpack済み骨格の通常のTransform文書に保存された位置・回転・スケールも保持する。
   PhysBoneやskinから直接参照されないArmatureなどの親を含め、skin骨またはその祖先であることと
   元モデルの完全なpathが一致することを確認して `AuthoredBoneTransforms` に収集する。

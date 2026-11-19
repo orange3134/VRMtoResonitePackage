@@ -1008,6 +1008,19 @@ public static class VrchatAvatarParser
                 bool skeletonMember = boneNames.Contains(bone.Name) || includeSkeletonAncestors &&
                     resolver.NodePathsUnder(0).Any(path => Normalize(path).StartsWith(
                         Normalize(bone.Path) + "/", StringComparison.Ordinal) && boneNames.Contains(path.Split('/')[^1]));
+                // Unweighted ends/helpers still belong to the imported skeleton. Capturing
+                // every PhysBone descendant as a new local object duplicates those nodes
+                // (including identically named *_end siblings). Require an existing, unique
+                // non-mesh node at the full source path below a skin bone; a new attachment
+                // absent from that path must continue to use its authored Transform.
+                if (!skeletonMember && resolver.Hierarchy != null)
+                {
+                    string sourcePath = Normalize(bone.Path);
+                    var matching = resolver.Hierarchy.Where(node => Normalize(node.Path) == sourcePath).ToArray();
+                    skeletonMember = matching.Length == 1 && !matching[0].HasMesh &&
+                        resolver.Hierarchy.Any(node => boneNames.Contains(node.Name) &&
+                            sourcePath.StartsWith(Normalize(node.Path) + "/", StringComparison.Ordinal));
+                }
                 if (skeletonMember &&
                     resolver.NodePathsUnder(0).Count(path => Normalize(path) == Normalize(bone.Path)) == 1)
                 {
@@ -3180,13 +3193,14 @@ public static class VrchatAvatarParser
                 var position = root["m_LocalPosition"];
                 var rotation = root["m_LocalRotation"];
                 var scale = root["m_LocalScale"];
-                if (position == null && rotation == null && scale == null) continue;
                 var placement = new FbxPlacement();
                 CaptureLocalPlacementParents(package, scene, guid, transform.FileId, placement,
                     SelectLocalSkeletonModel(package, scene, avatar.FbxGuid), modelResolvers,
                     includeSkeletonAncestors: true);
                 var imported = placement.ParentTransforms.FirstOrDefault();
                 if (imported?.ImportedBone == null || imported.Key != $"{guid}:{transform.FileId}") continue;
+                avatar.AuthoredImportedBones.Add(imported.ImportedBone);
+                if (position == null && rotation == null && scale == null) continue;
                 avatar.AuthoredBoneTransforms[imported.ImportedBone] = new(
                     position == null ? null : new Vec3(position.Vec("x"), position.Vec("y"), position.Vec("z")),
                     rotation == null ? null : new Quat(rotation.Vec("x"), rotation.Vec("y"), rotation.Vec("z"), rotation.Vec("w", 1)),

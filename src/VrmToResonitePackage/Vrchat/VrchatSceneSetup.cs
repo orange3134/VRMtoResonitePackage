@@ -333,6 +333,47 @@ internal static class VrchatSceneSetup
         }
     }
 
+    public static void RemoveUnusedSkeletonTemplateNodes(Slot root, VrchatAvatar avatar,
+        IReadOnlyDictionary<Slot, string> importedSources, IEnumerable<Slot> authoredSlots)
+    {
+        // An unpacked prefab can reparent/rename entire skin branches. The original
+        // uninstantiated FBX is a template, not another scene instance. Its unused
+        // branches must not survive solely because the import Rig registers them.
+        // Never apply this to real FBX instances, or infer deletion from a bone name.
+        var retained = authoredSlots.Where(slot => slot != null && !slot.IsDestroyed).ToHashSet();
+        retained.Add(root);
+        var components = root.GetComponentsInChildren<Component>().ToArray();
+        var rigs = components.OfType<Rig>().ToArray();
+        var references = new List<IWorldElement>();
+        foreach (var component in components)
+            if (component is not Rig)
+                component.GetReferencedObjects(references, assetRefOnly: false, persistentOnly: false);
+        foreach (var reference in references)
+        {
+            // An explicitly referenced Rig is more than an import registry. Leave
+            // its table and all of its bones intact for that consumer.
+            for (IWorldElement element = reference; element != null; element = element.Parent)
+            {
+                if (element is Rig rig)
+                    foreach (Slot bone in rig.Bones) if (bone != null) retained.Add(bone);
+                if (element is Slot slot) { retained.Add(slot); break; }
+            }
+        }
+        var candidates = importedSources.Where(pair => avatar.UninstantiatedFbxGuids.Contains(pair.Value) &&
+                !pair.Key.IsDestroyed).Select(pair => pair.Key).OrderByDescending(Depth).ToArray();
+        int removed = 0;
+        foreach (Slot slot in candidates)
+        {
+            if (slot.IsDestroyed || retained.Contains(slot) || slot.Children.Count != 0 || slot.ComponentCount != 0) continue;
+            foreach (var rig in rigs)
+                for (int index = rig.Bones.Count - 1; index >= 0; index--)
+                    if (rig.Bones[index] == slot) rig.Bones.RemoveAt(index);
+            slot.Destroy();
+            removed++;
+        }
+        if (removed > 0) UniLog.Log($"Removed {removed} unused imported skeleton template slot(s).");
+    }
+
     public static Slot ResolveImportedTarget(VrchatBoneTarget target, IReadOnlyDictionary<Slot, string> sources,
         IReadOnlyDictionary<Slot, string> paths, IReadOnlyDictionary<string, Slot> prefabSlots = null)
     {
@@ -476,7 +517,8 @@ internal static class VrchatSceneSetup
     public static void RemoveDeletedMeshes(Slot root, VrchatAvatar avatar,
         IReadOnlyDictionary<Slot, string> importedMeshSources,
         IReadOnlyDictionary<string, Slot> authoredObjects = null,
-        IReadOnlyDictionary<Slot, string> importedPaths = null)
+        IReadOnlyDictionary<Slot, string> importedPaths = null,
+        HashSet<Slot> replacedTemplateSlots = null)
     {
         if (avatar.PrefabGameObjectNames.Count == 0 && avatar.PrefabRendererStates.Count == 0 &&
             avatar.RemovedModelRenderers.Count == 0 && avatar.UninstantiatedFbxGuids.Count == 0)
@@ -498,6 +540,13 @@ internal static class VrchatSceneSetup
             UniLog.Log(templateOnly
                 ? $"Removing uninstantiated FBX renderer component: {path ?? slot.Name} (fbx={guid})"
                 : $"Removing prefab-deleted renderer component: {path} (fbx={guid})");
+            // An uninstantiated FBX only supplies geometry/skeleton templates. Its
+            // old renderer owners are not authored Unity GameObjects. Reuse the
+            // reference-aware cleanup after skin/rig/physics setup, while retaining
+            // ordinary instantiated objects whose renderer component was removed.
+            if (templateOnly && importedPaths != null)
+                for (Slot candidate = slot; candidate != null && importedPaths.ContainsKey(candidate); candidate = candidate.Parent)
+                    replacedTemplateSlots?.Add(candidate);
             renderer.Destroy();
             removed++;
         }

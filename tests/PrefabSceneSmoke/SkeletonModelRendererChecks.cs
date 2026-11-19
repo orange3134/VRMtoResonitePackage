@@ -18,7 +18,16 @@ internal static class SkeletonModelRendererChecks
         var attached = bone.AddSlot("Authored attachment").AttachComponent<MeshRenderer>();
         var realInstance = root.AddSlot("Real FBX instance");
         var realRenderer = realInstance.AddSlot("Body").AttachComponent<SkinnedMeshRenderer>();
+        var unused = model.AddSlot("Unused imported renderer");
+        unused.AttachComponent<MeshRenderer>();
+        var referenced = model.AddSlot("Referenced imported renderer");
+        referenced.AttachComponent<MeshRenderer>();
+        root.AttachComponent<ReferenceField<Slot>>().Reference.Target = referenced;
+        var removedComponent = realInstance.AddSlot("Keep authored transform");
+        removedComponent.AttachComponent<MeshRenderer>();
         var sources = VrchatSceneSetup.CaptureImportedObjects(new Dictionary<string, Slot>
+            { ["skeleton-only"] = model, ["real-instance"] = realInstance });
+        var paths = VrchatSceneSetup.CaptureImportedPaths(new Dictionary<string, Slot>
             { ["skeleton-only"] = model, ["real-instance"] = realInstance });
         // Capture happens before authored geometry is added in production. Exclude
         // the attachment from this synthetic capture and retain its exact identity.
@@ -30,15 +39,57 @@ internal static class SkeletonModelRendererChecks
         avatar.PrefabRendererStates[new(null, "Body")] = true;
         avatar.PrefabRendererStates[new(null, "Imported accessory")] = true;
         avatar.PrefabRendererStates[new("real-instance", "Body")] = true;
+        avatar.RemovedModelRenderers.Add(new("real-instance", paths[removedComponent]));
+        var candidates = new HashSet<Slot>();
         VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, sources,
-            new Dictionary<string, Slot> { ["body"] = authored, ["attachment"] = attached.Slot });
+            new Dictionary<string, Slot> { ["body"] = authored, ["attachment"] = attached.Slot }, paths, candidates);
         Require(importedRenderer.IsDestroyed && importedAccessory.IsDestroyed,
             "skeleton-only FBX must not render a second avatar or unplaced accessory");
         Require(!body.IsDestroyed && !bone.IsDestroyed && !field.IsDestroyed && authoredRenderer.Bones[0] == bone,
             "skeleton-only cleanup must retain bones, owners and fields");
         Require(!authoredRenderer.IsDestroyed && !attached.IsDestroyed && !realRenderer.IsDestroyed,
             "authored geometry and a real instance of the model must survive");
+        VrchatSceneSetup.RemoveEmptyMeshTemplates(root, candidates, new[] { authored, attached.Slot });
+        Require(unused.IsDestroyed && !referenced.IsDestroyed && !removedComponent.IsDestroyed,
+            "only unreferenced template owners are pruned; referenced slots and authored component removals survive");
+        Require(!body.IsDestroyed && !bone.IsDestroyed && !field.IsDestroyed && authoredRenderer.Bones[0] == bone,
+            "template cleanup preserves the skin's skeleton, fields and parents");
         Console.WriteLine("PASS: skeleton-only model renderer removal preserves authored meshes, skeleton references and real instances");
+        CheckUnusedBranches(parent);
+    }
+
+    private static void CheckUnusedBranches(Slot parent)
+    {
+        var root = parent.AddSlot("Unused skeleton branches");
+        var model = root.AddSlot("Template");
+        var obsolete = model.AddSlot("Old parent");
+        var obsoleteEnd = obsolete.AddSlot("End");
+        var used = model.AddSlot("Skin bone");
+        var authored = model.AddSlot("Authored unweighted end");
+        var fieldTarget = model.AddSlot("Referenced field owner");
+        root.AttachComponent<ReferenceField<IField>>().Reference.Target = fieldTarget.ActiveSelf_Field;
+        root.AttachComponent<SkinnedMeshRenderer>().Bones.Add(used);
+        var humanoid = model.AddSlot("Humanoid bone");
+        root.AttachComponent<BipedRig>()[Renderite.Shared.BodyNode.Head] = humanoid;
+        var rig = model.AttachComponent<Rig>();
+        foreach (var bone in new[] { obsolete, obsoleteEnd, used, authored, fieldTarget, humanoid }) rig.Bones.Add(bone);
+        var consumedRig = root.AddSlot("Consumed rig").AttachComponent<Rig>();
+        var consumedBone = model.AddSlot("Consumer bone");
+        consumedRig.Bones.Add(consumedBone);
+        root.AttachComponent<ReferenceField<Rig>>().Reference.Target = consumedRig;
+        var real = root.AddSlot("Real instance");
+        var realEnd = real.AddSlot("Unweighted end");
+        var sources = VrchatSceneSetup.CaptureImportedObjects(new Dictionary<string, Slot>
+            { ["template"] = model, ["real"] = real });
+        var avatar = new VrchatAvatar();
+        avatar.UninstantiatedFbxGuids.Add("template");
+        VrchatSceneSetup.RemoveUnusedSkeletonTemplateNodes(root, avatar, sources, new[] { authored });
+        Require(obsolete.IsDestroyed && obsoleteEnd.IsDestroyed && rig.Bones.Count == 4,
+            "unused branches must be pruned bottom-up and removed from the import registry");
+        Require(new[] { used, authored, fieldTarget, humanoid, consumedBone, realEnd }.All(slot => !slot.IsDestroyed),
+            "skin, humanoid, field, authored, consumed Rig and real-instance nodes must survive");
+        Require(rig.Bones.All(bone => bone != null && !bone.IsDestroyed), "registry must not retain destroyed references");
+        Console.WriteLine("PASS: unused skeleton templates are pruned while authored and consumed references survive");
     }
 
     private static void Require(bool condition, string message)

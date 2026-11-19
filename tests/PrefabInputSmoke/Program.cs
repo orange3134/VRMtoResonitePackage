@@ -1393,6 +1393,7 @@ MeshRenderer:
     {
         UnpackedModelRootChecks.Run(asset, File.ReadAllText(model), accessory, guid);
         UnpackedFbxAttachmentChecks.Run(asset, File.ReadAllText(model), accessory, guid);
+        UnweightedSkeletonChecks.Run(asset, File.ReadAllText(model), accessory, guid);
     }
     using var accessoryPackage = UnityPackage.Open(accessoryFile);
     var accessoryScene = accessoryPackage.ReadScene(accessoryPackage.InputPrefab);

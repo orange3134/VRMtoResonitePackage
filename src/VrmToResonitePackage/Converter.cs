@@ -513,7 +513,8 @@ internal static class Converter
                 // Drop meshes the selected prefab deleted from the shared FBX, before any setup runs.
                 // Finish asset reloads first: deleting their last renderer can unload providers.
                 Vrchat.VrchatSceneSetup.RemoveEditorOnlyObjects(avatar, importedMeshSources, importedNodePaths);
-                Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
+                Vrchat.VrchatSceneSetup.RemoveDeletedMeshes(root, avatar, importedMeshSources, authoredObjects,
+                    importedNodePaths, replacedTemplateSlots);
                 // Merge Armature matches effective Unity names (including prefix/suffix
                 // overrides), while import filtering and identity resolution use source paths.
                 Vrchat.VrchatSceneSetup.ApplyModelObjectNames(avatar, importedMeshSources, importedNodePaths);
@@ -582,15 +583,17 @@ internal static class Converter
                 }
                 profile?.Mark("expressions");
 
-                Vrchat.VrchatSceneSetup.RemoveEmptyMeshTemplates(root, replacedTemplateSlots,
-                    prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values)
-                        .Append(descriptorRoot));
+                var retainedAuthoredSlots = prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values).Append(descriptorRoot)
+                        .Concat(avatar.AuthoredImportedBones.Select(target => Vrchat.VrchatSceneSetup.ResolveImportedTarget(
+                            target, importedMeshSources, importedNodePaths, prefabSlots))).ToArray();
+                Vrchat.VrchatSceneSetup.RemoveUnusedSkeletonTemplateNodes(root, avatar, importedMeshSources, retainedAuthoredSlots);
+                Vrchat.VrchatSceneSetup.RemoveEmptyMeshTemplates(root, replacedTemplateSlots, retainedAuthoredSlots);
                 Vrchat.VrchatSceneSetup.RemoveUnusedMeshTemplateModels(root,
                     avatar.AdditionalFbxs.Where(model => model.IsMeshTemplate && model.Guid != avatar.FbxGuid &&
                             importedFbxRoots.ContainsKey(model.Guid))
                         .ToDictionary(model => model.Guid, model => importedFbxRoots[model.Guid]),
                     importedMeshSources, importedNodePaths,
-                    prefabSlots.Values.Concat(authoredObjects.Values).Concat(physicsNodes.Values).Append(descriptorRoot));
+                    retainedAuthoredSlots);
 
                 await MeshLoadingSetup.Apply(root);
                 profile?.Mark("cleanup-and-loading-setup");
