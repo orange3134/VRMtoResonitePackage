@@ -24,6 +24,7 @@ internal sealed class AvatarSetupOptions
 
     /// <summary>Authored viewpoint in world space. Explicit offsets are added without automatic eye offsets.</summary>
     public float3? ViewPosition { get; set; }
+    internal Vrchat.VrchatViewpoint RigViewpoint { get; set; }
 
     /// <summary>AvatarRenderSettings near clip distance. Zero or negative disables the override.</summary>
     public float NearClip { get; set; } = 0.075f;
@@ -327,7 +328,7 @@ internal static class AvatarSetup
     private static float3 ComputeEyePosition(BipedRig rig, VrmModel vrm, float3 up, float3 forward,
         AvatarSetupOptions options)
     {
-        if (options.ViewPosition is float3 authoredPosition)
+        if ((options.RigViewpoint?.Resolve(rig) ?? options.ViewPosition) is float3 authoredPosition)
         {
             return authoredPosition + forward * (options.ViewForward ?? 0f) + up * (options.ViewUp ?? 0f);
         }

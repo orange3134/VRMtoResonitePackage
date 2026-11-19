@@ -559,6 +559,7 @@ internal static class Converter
                         setupOptions.NearClip = options.NearClip.Value;
                     }
                     setupOptions.ViewPosition = viewPosition;
+                    setupOptions.RigViewpoint = avatar.RigViewpoint;
                     AvatarSetup.Build(root, model, setupOptions, faceResolver, physicsNodes);
                     profile?.Mark("avatar-setup");
                     await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths,

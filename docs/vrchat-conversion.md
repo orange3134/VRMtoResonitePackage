@@ -769,6 +769,9 @@ headless meshの生成と描画制御は[共通のFirstPerson処理](avatar-conv
 ## 視点
 
 - Descriptor の `ViewPosition` がある場合は、目ボーンからの推定より優先する。
+  主FBXルートのDescriptorでは、元の人体ボーンと最終リグの姿勢が一様な拡縮・回転・移動で
+  対応するときに、その変換を視点にも適用する。NagiyaRuriのセンタリング後の位置と
+  前後方向を含む比較手順は[視点比較](avatar-viewpoint-tests.md)を参照。
   目ボーンは回転用の支点であり、見えている眼球の中心とは限らない。
 - `ViewPosition` は Descriptor 原点からの、Unityワールド軸に沿ったメートル単位のオフセット。
   SDK 3.10.6 の `VRC_AvatarDescriptor.OnDrawGizmosSelected` は

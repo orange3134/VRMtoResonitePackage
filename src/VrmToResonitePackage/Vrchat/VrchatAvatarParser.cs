@@ -225,6 +225,7 @@ public static partial class VrchatAvatarParser
         ParseHumanoid(package, avatar);
         profile?.Mark("humanoid");
         ParseDescriptor(package, descriptorScene, effectiveDescriptor, avatar, descriptorGuid);
+        avatar.RigViewpoint = VrchatViewpoint.Capture(package, avatar, descriptorRoot.Guid, descriptorRoot.Id);
         ParseRenderers(package, selected.Source.Guid, avatar);
         avatar.RendererMaterials.RemoveAll(renderer => avatar.EditorOnlyFbxGuids.Contains(renderer.FbxGuid ?? ""));
         foreach (string excluded in avatar.EditorOnlyFbxGuids)

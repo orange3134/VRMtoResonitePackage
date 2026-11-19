@@ -56,6 +56,7 @@ public sealed class VrchatAvatar
 
     /// <summary>VRChat ViewPosition: unscaled Unity-world-axis offset from the descriptor origin, in meters.</summary>
     public Vec3? ViewPosition { get; set; }
+    internal VrchatViewpoint RigViewpoint { get; set; }
 
     public string LeftEyeBoneName { get; set; }
     public string RightEyeBoneName { get; set; }
