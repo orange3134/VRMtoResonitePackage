@@ -243,6 +243,17 @@ BlendShapeはボーンのあるメッシュに限定せず、morphだけを持�
   を呼び、Unity由来の子を先に、残る生成Slotを元の相対順で後ろへ配置する。眼球Pivotや
   Aligned Handを挟む場合はその枝ごと並べる。親・TRS・SkinnedMeshRenderer.Bonesは変更しない。
   未解決対象と、複数の元兄弟が同一の枝へ統合されて並べられない群はログに記録する。
+  順序確定後、unpacked配置でprimary FBXが骨格参照用templateである場合に限り、
+  `VrchatHierarchyCleanup` が採取済みのimportルートと選択Prefabルートを葉側から畳む。
+  名前検索で任意の `RootNode` を除去せず、元import pathとモデルID、保持したSlot identityで限定する。
+  正の均一スケールのラッパーだけを対象に、ローカルTRSを子へ合成して兄弟順を保持する。
+  Slot・field・componentへの参照、非アクティブ、tag、動作component、非均一/反転スケール、
+  使用中のmaterial relayがあるラッパーは保持理由を記録して残す。参照されていないRig登録は
+  アバターrootのRigへ移し、スキンのBones配列と元の骨Slotは変更しない。
+  `CenteredRoot` はVRIKのroot基準・身体colliderを持つため対象にしない。Omanekoでは
+  `アバター/CenteredRoot/Prefab名/FBX名/RootNode/アーマチュア/Root/Hips` を
+  `アバター/CenteredRoot/アーマチュア/Root/Hips` に短縮する。
+  絶対パスの変わる処理なので、パス解決・表情構築・並び順適用を終えた保存直前に実行する。
   unpack済み骨格の通常のTransform文書に保存された位置・回転・スケールも保持する。
   PhysBoneやskinから直接参照されないArmatureなどの親を含め、skin骨またはその祖先であることと
   元モデルの完全なpathが一致することを確認して `AuthoredBoneTransforms` に収集する。

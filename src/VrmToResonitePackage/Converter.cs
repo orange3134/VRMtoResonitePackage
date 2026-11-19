@@ -606,6 +606,8 @@ internal static class Converter
                 root.Name = displayName;
                 Console.WriteLine("パッケージを書き出し中...");
                 Vrchat.VrchatSceneSetup.ApplyHierarchyOrder(avatar, importedMeshSources, importedNodePaths, prefabSlots);
+                Vrchat.VrchatHierarchyCleanup.CollapseUnpackedWrappers(root, avatar, descriptorRoot,
+                    importedFbxRoots.GetValueOrDefault(avatar.FbxGuid), importedMeshSources, importedNodePaths);
                 profile?.Mark("settle-updates");
                 await ExportPackage(world, root, outputPath);
                 profile?.Mark("export-package");

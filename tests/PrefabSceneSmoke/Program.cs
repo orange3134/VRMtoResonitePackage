@@ -88,6 +88,7 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
             return;
         }
         SkeletonModelRendererChecks.Run(root);
+        WrapperCleanupChecks.Run(root);
         ViewpointChecks.Run(root);
         await NativeMeshSceneChecks.Run(root, temp);
         await MaterialLayerChecks.Run(assets, temp);

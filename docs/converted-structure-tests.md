@@ -120,6 +120,11 @@ EyeRotationDriverのRoot、VRIKのhand参照などから補助Slotの用途を�
 順序付きskin bone接続、Unityにある末端の欠落と重複を確認する。保存Enabledの差は
 実行時driverの値と区別し、補助階層・外観・物理などの未検証項目は報告に残す。
 
+未使用のラッパーを畳んだ出力では、元Prefabルートの対応先が残る親Slotへ変わり得る。
+古い対応表を流用せず新しいパッケージに対して採取し直す。子のワールド基底、スキンの
+renderer相対基底・bind pose、視点、Root追従、兄弟順を確認する。元ルートのTRS自体は
+子へ合成するため数値一致を求めない。`CenteredRoot` のIK参照とcolliderは保持する。
+
 ## ツールの回帰検証
 
 ```powershell
