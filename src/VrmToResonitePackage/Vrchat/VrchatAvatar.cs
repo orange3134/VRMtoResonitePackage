@@ -127,6 +127,9 @@ public sealed class VrchatAvatar
     /// <summary>Imported skeleton nodes verified to exist in the authored prefab, even without pose overrides.</summary>
     public HashSet<VrchatBoneTarget> AuthoredImportedBones { get; } = new();
 
+    /// <summary>Effective Unity child order, identified by prefab occurrence rather than names.</summary>
+    public List<VrchatHierarchyOrder> HierarchyOrders { get; } = new();
+
     /// <summary>
     /// All GameObject names present in the selected prefab's hierarchy. Used to drop imported FBX
     /// meshes that the prefab deleted (avatars built by removing mesh objects from a shared FBX).
@@ -202,6 +205,8 @@ public sealed class VrchatPhysicsPlacement
 }
 
 public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
+
+public sealed record VrchatHierarchyOrder(VrchatBoneTarget Parent, IReadOnlyList<VrchatBoneTarget> Children);
 
 public readonly record struct VrchatModelScaleOverride(float? X = null, float? Y = null, float? Z = null);
 

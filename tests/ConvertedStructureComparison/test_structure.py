@@ -46,6 +46,18 @@ def fixtures(names=('Bone', 'Mesh')):
     return unity, converted
 
 
+def remap_slots(converted, changes):
+    for slot in converted['slots']:
+        slot['id'] = changes.get(slot['id'], slot['id'])
+        slot['parent'] = changes.get(slot['parent'], slot['parent'])
+        slot['siblingIndex'] = int(slot['id'].split('/')[-1]) if slot['parent'] else 0
+        for index, component in enumerate(slot['components']):
+            component['id'] = slot['id'] + ':' + str(index)
+            for ref in component['slotReferences'] + (component['bones'] or []):
+                ref['target'] = changes.get(ref['target'], ref['target'])
+    converted['slots'].sort(key=lambda slot: tuple(int(i) for i in slot['id'].split('/')[1:]))
+
+
 class ComparisonTests(unittest.TestCase):
     def test_root_requires_reviewed_mapping_and_only_covered_fields_match(self):
         unity, converted = fixtures()
@@ -73,6 +85,34 @@ class ComparisonTests(unittest.TestCase):
         converted['slots'][-1]['components'][0]['bones'].reverse()
         report = comparison.compare(unity, unity, converted, {'r': 'r'})
         self.assertEqual(2, sum(d['kind'] == 'bone-target' for d in report['differences']))
+
+    def test_sibling_order_is_separate_from_skin_indices(self):
+        unity, converted = fixtures()
+        remap_slots(converted, {'r/0': 'r/1', 'r/1': 'r/0'})
+        report = comparison.compare(unity, unity, converted, {'r': 'r'})
+        self.assertEqual(['sibling-order'], [d['kind'] for d in report['differences']])
+        self.assertEqual(['r/1', 'r/0'], report['siblingOrders'][0]['actual'])
+
+    def test_helper_branch_order_and_missing_child(self):
+        unity, converted = fixtures()
+        helper = copy.deepcopy(converted['slots'][1])
+        helper.update(serializedId='helper', path=['Avatar', 'Pivot'])
+        bone = converted['slots'][1]
+        bone.update(id='r/0/0', parent='r/0', path=['Avatar', 'Pivot', 'Bone'], siblingIndex=0)
+        converted['slots'].insert(1, helper)
+        skin = converted['slots'][-1]['components'][0]
+        skin['bones'][0]['target'] = 'r/0/0'
+        skin['slotReferences'][0]['target'] = 'r/0/0'
+        mapping = {'r': 'r', 'r/0': 'r/0/0'}
+        report = comparison.compare(unity, unity, converted, mapping)
+        self.assertEqual('matched', report['siblingOrders'][0]['status'])
+        remap_slots(converted, {'r/0': 'r/2', 'r/0/0': 'r/2/0'})
+        mapping['r/0'] = 'r/2/0'
+        report = comparison.compare(unity, unity, converted, mapping)
+        self.assertEqual('different', report['siblingOrders'][0]['status'])
+        next(s for s in converted['slots'] if s['path'][-1] == 'Mesh')['path'][-1] = 'Unknown'
+        report = comparison.compare(unity, unity, converted, mapping)
+        self.assertEqual('unverified', report['siblingOrders'][0]['status'])
 
     def test_null_and_unresolved_bones_are_distinct(self):
         unity, converted = fixtures()

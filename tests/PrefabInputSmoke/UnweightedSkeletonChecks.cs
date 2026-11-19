@@ -40,7 +40,7 @@ Transform:
   m_LocalScale: {x: 1.1, y: 1.2, z: 1.3}
 """;
         foreach (var (owner, children) in new[] { (120, "{fileID: 151}, {fileID: 301}"),
-                     (140, "{fileID: 311}"), (300, "{fileID: 321}, {fileID: 331}") })
+                     (140, "{fileID: 311}"), (300, "{fileID: 331}, {fileID: 321}") })
             prefab = prefab.Replace($"m_GameObject: {{fileID: {owner}}}\n",
                 $"m_GameObject: {{fileID: {owner}}}\n  m_Children: [{children}]\n");
         int tipStart = prefab.IndexOf("--- !u!4 &321", StringComparison.Ordinal);
@@ -78,6 +78,10 @@ Transform:
         }
         if (!transforms.Any(t => t.Key == $"{prefabGuid}:331" && t.ImportedBone == null && t.LocalPosition.Y == .04f))
             throw new Exception("A newly authored helper absent from the FBX must remain a separate object.");
+        var order = avatar.HierarchyOrders.Single(o => o.Parent.PrefabGuid == prefabGuid && o.Parent.TransformFileId == 301);
+        if (!order.Children.Select(t => t.TransformFileId).SequenceEqual(new long[] { 331, 321 }) ||
+            order.Children[1].Path != "Left/Shared/End/Tip" || order.Children[0].FbxGuid != null)
+            throw new Exception("Child order must retain exact imported/local identities, including absent pose overrides.");
         Console.WriteLine("PASS: unweighted ends and nested helpers reuse exact skeleton paths without duplicating same-named branches");
     }
 }

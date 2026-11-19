@@ -169,6 +169,39 @@ def compare(unity, parser, converted, overrides=None):
                                     'expected': mapping[expected_parent], 'actual': parent})
         elif expected_parent:
             unverified.append({'kind': 'parent', 'sourceId': sid, 'reason': 'source parent is unmapped'})
+    # Compare source siblings by their positions below the mapped source parent.
+    # Helper slots may intervene; their indices are part of the ordering path.
+    # Missing children must not turn a partial match into a successful group.
+    sibling_orders = []
+    source_children = collections.defaultdict(list)
+    for source in sources.values():
+        if source['parent']:
+            source_children[source['parent']].append(source)
+    for parent, children in source_children.items():
+        if len(children) < 2:
+            continue
+        expected = [c['id'] for c in sorted(children, key=lambda c: c['siblingIndex'])]
+        row = {'sourceParent': parent, 'expected': expected, 'status': 'unverified'}
+        sibling_orders.append(row)
+        positions = {}
+        if parent in mapping and all(child in mapping for child in expected):
+            for child in expected:
+                target, indices = mapping[child], []
+                while target and target != mapping[parent]:
+                    indices.append(slots[target]['siblingIndex'])
+                    target = slots[target]['parent']
+                    if target in reverse and target != mapping[parent]:
+                        break
+                if target == mapping[parent] and indices:
+                    positions[child] = tuple(reversed(indices))
+        if len(positions) != len(expected):
+            row['reason'] = 'source parent/child is unmapped or has a different mapped parent'
+            unverified.append({'kind': 'sibling-order', **row})
+            continue
+        actual = sorted(expected, key=lambda child: positions[child])
+        row.update(actual=actual, status='matched' if actual == expected else 'different')
+        if actual != expected:
+            differences.append({'kind': 'sibling-order', **row})
     renderer_rows = []
     for renderer in unity['sections']['renderers']:
         target = mapping.get(renderer['transform'])
@@ -244,7 +277,8 @@ def compare(unity, parser, converted, overrides=None):
                             'Local TRS is captured but not compared across different coordinate spaces/parents.',
                             'Mesh bind poses, vertex weights, rootBone equivalence, physics behavior and visuals are unverified.',
                             'Extra slots can be required converter support; do not delete based on this report alone.'],
-            'transforms': rows, 'renderers': renderer_rows, 'differences': differences, 'unverified': unverified,
+            'transforms': rows, 'siblingOrders': sibling_orders, 'renderers': renderer_rows,
+            'differences': differences, 'unverified': unverified,
             'unmappedSlots': extras, 'unmappedSubtrees': branches, 'unresolvedOrNullBones': unresolved}
 
 

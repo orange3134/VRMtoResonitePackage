@@ -86,6 +86,9 @@ python -B scripts/compare-converted-structure.py unity.json parser.json `
    記録し、比較CLIへ `--mapping mapping.json` を渡す。ハッシュが変わった対応表は拒否する。
    多対一指定は認めず、自動候補との衝突も曖昧として残す。ルートは自動対応しない。
 5. 対応候補上の有効状態、対応した祖先、同型Renderer、順序付きbone接続を比較する。
+   `siblingOrders` は元の兄弟同士の相対順序を比較する。補助階層を経由したSlotの位置も考慮し、
+   未対応の親・子や親関係の不一致がある群は `unverified` にする。差は `sibling-order` として
+   報告する。生成補助Slotを含む絶対indexの一致や、skinのBones配列順とは区別する。
    `differences` と `unverified` を分け、未対応骨をnull一致と見なさない。
    bone数・順序の差にはインポータの未使用骨除去やスキン再構成もあり、差分だけで不具合とは断定しない。
 6. 原因の変換工程を修正し、自作fixtureまたは明示したパッケージ期待条件を回帰検査に追加する。

@@ -374,6 +374,37 @@ internal static class VrchatSceneSetup
         if (removed > 0) UniLog.Log($"Removed {removed} unused imported skeleton template slot(s).");
     }
 
+    public static void ApplyHierarchyOrder(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<Slot, string> paths, IReadOnlyDictionary<string, Slot> prefabSlots)
+    {
+        int applied = 0, unresolved = 0, ambiguous = 0;
+        foreach (var order in avatar.HierarchyOrders)
+        {
+            Slot parent = ResolveImportedTarget(order.Parent, sources, paths, prefabSlots);
+            if (parent == null) { unresolved++; continue; }
+            var branches = new List<Slot>();
+            foreach (var target in order.Children)
+            {
+                Slot branch = ResolveImportedTarget(target, sources, paths, prefabSlots);
+                // Eye/hand setup can insert a wrapper between source parent and
+                // child. Move that branch as a unit without changing its transform.
+                while (branch != null && branch.Parent != parent && branch != parent) branch = branch.Parent;
+                if (branch == null || branch == parent) { unresolved++; continue; }
+                branches.Add(branch);
+            }
+            // Merged source siblings sharing a branch cannot be ordered independently.
+            if (branches.Count != branches.Distinct().Count()) { ambiguous++; continue; }
+            if (branches.Count < 2) continue;
+            // Source children first; keep all remaining generated children stable.
+            var desired = branches.Concat(parent.Children.Where(child => !branches.Contains(child))).ToArray();
+            var ranks = desired.Select((slot, index) => (slot, index)).ToDictionary(pair => pair.slot, pair => pair.index);
+            parent.SortChildren((a, b) => ranks[a].CompareTo(ranks[b]));
+            applied++;
+        }
+        if (avatar.HierarchyOrders.Count > 0)
+            UniLog.Log($"Unity hierarchy order: {applied} parent(s) applied, {unresolved} unresolved target(s), {ambiguous} merged group(s) skipped.");
+    }
+
     public static Slot ResolveImportedTarget(VrchatBoneTarget target, IReadOnlyDictionary<Slot, string> sources,
         IReadOnlyDictionary<Slot, string> paths, IReadOnlyDictionary<string, Slot> prefabSlots = null)
     {

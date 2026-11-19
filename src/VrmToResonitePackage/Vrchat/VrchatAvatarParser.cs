@@ -3206,6 +3206,29 @@ public static class VrchatAvatarParser
                     rotation == null ? null : new Quat(rotation.Vec("x"), rotation.Vec("y"), rotation.Vec("z"), rotation.Vec("w", 1)),
                     scale == null ? null : new Vec3(scale.Vec("x", 1), scale.Vec("y", 1), scale.Vec("z", 1)));
             }
+            // Use the composed Transform child array, never YAML document order or
+            // bone names. Unverified local objects must resolve by prefab identity.
+            var importedTargets = avatar.AuthoredImportedBones.Where(t => t.PrefabGuid == guid)
+                .ToDictionary(t => t.TransformFileId);
+            VrchatBoneTarget OrderTarget(long id)
+            {
+                if (importedTargets.TryGetValue(id, out var imported)) return imported;
+                if (scene.Doc(id)?.Stripped == true)
+                    return ResolveCopiedBoneTarget(package, guid, id, null, modelResolvers, new());
+                return new VrchatBoneTarget(null, null, null, guid, id);
+            }
+            foreach (var transform in scene.Documents.Values.Where(d => d.ClassId == 4 &&
+                         included.Contains(d.Root?["m_GameObject"]?.FileID ?? 0)))
+            {
+                var children = transform.Root?["m_Children"]?.Seq;
+                if (children == null || children.Count < 2) continue;
+                var targets = children.Select(child => scene.Doc(child.FileID ?? 0))
+                    .Where(child => child?.ClassId == 4 &&
+                        child.Root?["m_Father"]?.FileID == transform.FileId &&
+                        included.Contains(child.Root?["m_GameObject"]?.FileID ?? 0))
+                    .Select(child => OrderTarget(child.FileId)).ToArray();
+                if (targets.Length > 1) avatar.HierarchyOrders.Add(new(OrderTarget(transform.FileId), targets));
+            }
         }
         CaptureTargetPlacements(package, sourceGuid, avatar, sourceSubtree, scenes,
             avatar.PhysBones.SelectMany(b => b.IgnoreBoneTargets

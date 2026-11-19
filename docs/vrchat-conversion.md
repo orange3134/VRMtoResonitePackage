@@ -237,6 +237,12 @@ BlendShapeはボーンのあるメッシュに限定せず、morphだけを持�
   meshノードでなければ既存Slotを再利用する。名前や `_end` suffixだけでは再利用しない。
   Unityにだけ追加されたhelperは独立して生成する。`AuthoredImportedBones` にはTRSの上書きが
   省略された骨も記録し、後段の不要template削除から保護する。
+  `HierarchyOrders` には合成後Transformの `m_Children` 順を記録する。YAML文書の列挙順や
+  同名骨の検索順は使わず、Prefab occurrenceとTransform ID、検証済みの元FBX pathで解決する。
+  `ApplyHierarchyOrder` はアバター設定・不要階層削除・更新待ち後の保存直前に `Slot.SortChildren`
+  を呼び、Unity由来の子を先に、残る生成Slotを元の相対順で後ろへ配置する。眼球Pivotや
+  Aligned Handを挟む場合はその枝ごと並べる。親・TRS・SkinnedMeshRenderer.Bonesは変更しない。
+  未解決対象と、複数の元兄弟が同一の枝へ統合されて並べられない群はログに記録する。
   unpack済み骨格の通常のTransform文書に保存された位置・回転・スケールも保持する。
   PhysBoneやskinから直接参照されないArmatureなどの親を含め、skin骨またはその祖先であることと
   元モデルの完全なpathが一致することを確認して `AuthoredBoneTransforms` に収集する。

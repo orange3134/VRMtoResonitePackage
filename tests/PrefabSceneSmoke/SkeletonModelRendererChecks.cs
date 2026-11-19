@@ -56,6 +56,41 @@ internal static class SkeletonModelRendererChecks
             "template cleanup preserves the skin's skeleton, fields and parents");
         Console.WriteLine("PASS: skeleton-only model renderer removal preserves authored meshes, skeleton references and real instances");
         CheckUnusedBranches(parent);
+        CheckHierarchyOrder(parent);
+    }
+
+    private static void CheckHierarchyOrder(Slot parent)
+    {
+        var root = parent.AddSlot("Unity child order");
+        var generated = root.AddSlot("Generated first");
+        var second = root.AddSlot("Same name");
+        var wrapper = root.AddSlot("Eye pivot");
+        var third = wrapper.AddSlot("Eye");
+        var first = root.AddSlot("Same name");
+        var support = root.AddSlot("Generated second");
+        first.LocalPosition = new Elements.Core.float3(1, 2, 3);
+        var skin = root.AttachComponent<SkinnedMeshRenderer>();
+        skin.Bones.Add(second); skin.Bones.Add(first); skin.Bones.Add(third);
+        VrchatBoneTarget Target(long id) => new(null, null, null, "prefab", id);
+        var avatar = new VrchatAvatar();
+        avatar.HierarchyOrders.Add(new(Target(1), new[] { Target(2), Target(3), Target(4), Target(99) }));
+        var slots = new Dictionary<string, Slot> { ["prefab:1"] = root, ["prefab:2"] = first,
+            ["prefab:3"] = second, ["prefab:4"] = third };
+        var empty = new Dictionary<Slot, string>();
+        VrchatSceneSetup.ApplyHierarchyOrder(avatar, empty, empty, slots);
+        var wanted = new[] { first, second, wrapper, generated, support };
+        Require(root.Children.SequenceEqual(wanted), "source siblings must follow Unity order, with stable generated siblings afterward");
+        Require(third.Parent == wrapper && first.LocalPosition == new Elements.Core.float3(1, 2, 3) &&
+            skin.Bones.SequenceEqual(new[] { second, first, third }), "reordering must preserve hierarchy, transforms and skin indices");
+        VrchatSceneSetup.ApplyHierarchyOrder(avatar, empty, empty, slots);
+        Require(root.Children.SequenceEqual(wanted), "ordering must be idempotent");
+        var another = wrapper.AddSlot("Merged source sibling");
+        slots["prefab:5"] = another;
+        avatar.HierarchyOrders.Clear();
+        avatar.HierarchyOrders.Add(new(Target(1), new[] { Target(4), Target(5), Target(2) }));
+        VrchatSceneSetup.ApplyHierarchyOrder(avatar, empty, empty, slots);
+        Require(root.Children.SequenceEqual(wanted), "merged sibling branches must remain explicitly unresolved rather than arbitrarily ordered");
+        Console.WriteLine("PASS: Unity sibling order preserves skin indices, duplicate-name identities, helper branches and generated order");
     }
 
     private static void CheckUnusedBranches(Slot parent)
