@@ -6,6 +6,9 @@
 
 **Unityの期待値を採取できたことと、ResoPonの解析が一致したことは別に記録する。**
 
+`check-prefab-unity.py --viewpoints` ではDescriptorの視点設定とHumanoid基準位置を追加採取できる。
+保存後のHead Proxy／Targetとの照合手順は [視点比較](avatar-viewpoint-tests.md) を参照。
+
 | モード | 形式と対象 | 比較先 |
 | --- | --- | --- |
 | `resolved`（既定） | schemaVersion 2 / `unity-resolved-prefab`。継承解決後の対応フィールド | Unityの再採取JSON、またはResoPonのv2ダンプ（下記の制約あり） |

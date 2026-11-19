@@ -90,8 +90,8 @@ public static class ResoPonReferenceExporter
         if (EditorApplication.isPlayingOrWillChangePlaymode)
             throw new InvalidOperationException("Reference capture requires Edit Mode.");
         if (string.IsNullOrEmpty(projection)) projection = "resolved";
-        if (projection != "resolved" && projection != "authored")
-            throw new InvalidOperationException("Projection must be resolved or authored.");
+        if (projection != "resolved" && projection != "authored" && projection != "viewpoint")
+            throw new InvalidOperationException("Projection must be resolved, authored or viewpoint.");
         if (string.IsNullOrWhiteSpace(prefabPath) || string.IsNullOrWhiteSpace(outputPath))
             throw new InvalidOperationException("Set RESOPON_REFERENCE_PREFAB and RESOPON_REFERENCE_OUT.");
         prefabPath = prefabPath.Replace('\\', '/');
@@ -99,8 +99,8 @@ public static class ResoPonReferenceExporter
         if (!prefabPath.StartsWith("Assets/", StringComparison.Ordinal) ||
             !(prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase) || sceneInput))
             throw new InvalidOperationException("Input must be an Assets/... .prefab or .unity asset path.");
-        if (sceneInput && (projection != "resolved" || string.IsNullOrEmpty(sceneRootPath)))
-            throw new InvalidOperationException("Scene capture requires resolved projection and an exact scene root path.");
+        if (sceneInput && (projection == "authored" || string.IsNullOrEmpty(sceneRootPath)))
+            throw new InvalidOperationException("Scene capture requires resolved/viewpoint projection and an exact scene root path.");
         if (sceneInput && (!Application.isBatchMode || SceneManager.GetSceneByPath(prefabPath).isLoaded))
             throw new InvalidOperationException("Scene capture requires a closed scene in a batch Editor.");
         var prefab = sceneInput ? null : AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
@@ -120,7 +120,7 @@ public static class ResoPonReferenceExporter
             var instance = sceneInput ? SelectSceneRoot(preview, sceneRootPath)
                 : PrefabUtility.InstantiatePrefab(prefab, preview) as GameObject;
             if (instance == null) throw new InvalidOperationException("Prefab instantiation failed.");
-            json = projection == "resolved"
+            json = projection == "viewpoint" ? ResoPonResolvedReference.CaptureViewpoint(instance.transform, guid) : projection == "resolved"
                 ? ResoPonResolvedReference.Capture(instance.transform, guid)
                 : JsonUtility.ToJson(BuildCapture(instance.transform, guid), true) + "\n";
         }

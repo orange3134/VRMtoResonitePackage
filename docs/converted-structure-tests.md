@@ -4,6 +4,9 @@
 同じ入力・選択アバターを変換し、保存済み `.resonitepackage` から階層・骨接続を採取して比較する。
 以下は開発用ツール。配布GUIの通常変換には影響せず、採取JSONや実アバターを配布物に含めない。
 
+視点位置の調査は [DescriptorとHead Proxy／Targetの比較](avatar-viewpoint-tests.md) を使う。
+Unityの設定値と、骨格で座標系を揃えた保存位置を別々に判定する。
+
 ## 一括実行
 
 [Unity参照データ](unity-reference-tests.md)で作った解決済みv2の `coverage.json` を使う。

@@ -178,6 +178,8 @@ def check_registry(args, parser):
                        "--output", str(folder), "--timeout", str(args.timeout)]
             if args.unity:
                 command.extend(["--unity", str(args.unity.resolve())])
+            if args.viewpoints:
+                command.append("--viewpoints")
             result = dict(id=case["id"], inputPath=case["inputPath"], captureStatus="not-captured",
                           parityStatus="not-run", status="failed", logPath=str(output / (case["id"] + ".log")))
             report["cases"].append(result)
@@ -242,6 +244,7 @@ def main(argv=None):
     parser.add_argument("--output", type=Path, help="new result directory; default .local/prefab-reference/<run>")
     parser.add_argument("--case-id", default="prefab", help="ID used in the replayable coverage manifest")
     parser.add_argument("--timeout", type=int, default=1800, help="timeout in seconds for each process")
+    parser.add_argument("--viewpoints", action="store_true", help="also capture descriptor viewpoints and humanoid anchors twice")
     args = parser.parse_args(argv)
     if (args.prefab is None) == (args.registry is None) or (args.case and not args.registry):
         parser.error("Specify one prefab or --registry; --case requires --registry")
@@ -301,6 +304,7 @@ def main(argv=None):
         write(manifest, {"cases": [{"id": args.case_id, "prefabPath": asset_path}]})
         capture = output / "unity"
         env = dict(os.environ, RESOPON_RESOLVED_MANIFEST=str(manifest), RESOPON_RESOLVED_OUT=str(capture))
+        env["RESOPON_REFERENCE_VIEWPOINTS"] = "1" if args.viewpoints else "0"
         command = [str(editor), "-batchmode", "-nographics", "-projectPath", str(project),
                    "-executeMethod", "ResoPonResolvedReferenceBatch.Run", "-logFile", str(output / "unity.log")]
         report["unityCommand"] = command
@@ -318,6 +322,13 @@ def main(argv=None):
                 case["repeatMatches"] and case["sourceUnchanged"]) or case["dependencyHash"] != case["dependencyHashAfter"]:
             raise ValueError("Unity did not capture a stable reference for the selected prefab")
         expected = (capture / case["expectedPath"]).resolve()
+        if args.viewpoints:
+            viewpoint = (capture / case["viewpointPath"]).resolve()
+            if capture not in viewpoint.parents or sha(viewpoint) != case["viewpointSha256"] or (
+                    sha(viewpoint.with_name("viewpoint-repeat.json")) != case["viewpointSha256"]):
+                raise ValueError("Viewpoint capture hashes or paths do not match")
+            report["viewpointPath"] = str(viewpoint)
+            report["viewpointSha256"] = case["viewpointSha256"]
         if capture not in expected.parents or sha(expected) != case["expectedSha256"] or (
                 sha(expected.with_name("repeat.json")) != case["expectedSha256"]):
             raise ValueError("Unity capture hashes or paths do not match")
@@ -359,6 +370,9 @@ def main(argv=None):
                 replay.verify_project_files(accepted_coverage["cases"][0])
                 if any(sha(path) != case["expectedSha256"] for path in (expected, expected.with_name("repeat.json"))):
                     raise ValueError("Unity reference changed during comparison")
+                if args.viewpoints and any(sha(path) != case["viewpointSha256"]
+                                          for path in (viewpoint, viewpoint.with_name("viewpoint-repeat.json"))):
+                    raise ValueError("Unity viewpoint reference changed during comparison")
                 write(capture / "coverage.json", accepted_coverage)
                 report["coveragePath"] = str(capture / "coverage.json")
         except (OSError, ValueError) as error:

@@ -98,6 +98,49 @@ class PrefabCaptureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "dependency changed"):
             capture.load_replay().verify_project_files(case)
 
+    def viewpoint_process(self, command, **kwargs):
+        result = self.run_process(command, **kwargs)
+        if command[0] == str(self.unity):
+            self.assertEqual('1', kwargs['env']['RESOPON_REFERENCE_VIEWPOINTS'])
+            folder = Path(kwargs['env']['RESOPON_RESOLVED_OUT'])
+            point = folder / 'prefab/viewpoint.json'
+            capture.write(point, {'format': 'resopon.unity-avatar-viewpoint', 'descriptors': []})
+            capture.write(point.with_name('viewpoint-repeat.json'), capture.read(point))
+            index = capture.read(folder / 'index.json')
+            index['cases'][0].update(viewpointPath='prefab/viewpoint.json',
+                                     viewpointSha256=capture.sha(point), viewpointRepeatSha256=capture.sha(point))
+            (folder / 'index.json').write_text(json.dumps(index), encoding='utf-8')
+        return result
+
+    def test_viewpoint_capture_records_independent_repeat_hash(self):
+        self.args += ['--viewpoints']
+        code, report = self.run_capture(self.viewpoint_process)
+        self.assertEqual(0, code)
+        self.assertEqual(capture.sha(Path(report['viewpointPath'])), report['viewpointSha256'])
+
+    def test_viewpoint_changed_during_parser_invalidates_capture(self):
+        self.args += ['--viewpoints']
+        def mutate(command, **kwargs):
+            result = self.viewpoint_process(command, **kwargs)
+            if self.called_producer:
+                (self.output / 'unity/prefab/viewpoint.json').write_text('{}')
+            return result
+        code, report = self.run_capture(mutate)
+        self.assertEqual(1, code)
+        self.assertEqual('failed', report['captureStatus'])
+        self.assertFalse((self.output / 'unity/coverage.json').exists())
+
+    def test_viewpoint_false_repeat_claim_is_rejected(self):
+        self.args += ['--viewpoints']
+        def mutate(command, **kwargs):
+            result = self.viewpoint_process(command, **kwargs)
+            if command[0] == str(self.unity):
+                (self.output / 'unity/prefab/viewpoint-repeat.json').write_text('{}')
+            return result
+        code, report = self.run_capture(mutate)
+        self.assertEqual(1, code)
+        self.assertFalse(self.called_producer)
+
     def test_wrong_editor_rejected_before_project_or_output_changes(self):
         self.editor_version.return_value = "2022.3.62f3"
         with mock.patch.object(capture, "invoke") as invoked, contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):

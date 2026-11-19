@@ -5,6 +5,18 @@ using VrmToResonitePackage;
 using VrmToResonitePackage.Unity;
 using VrmToResonitePackage.Vrchat;
 
+if ((args.Length == 3 || args.Length == 5 && args[3] == "--avatar") && args[0] == "--viewpoint")
+{
+    // --viewpoint INPUT OUTPUT [--avatar NAME] does not consume expected values.
+    try
+    {
+        ResoniteLocator.InstallAssemblyResolver(ResoniteLocator.Locate(null));
+        ViewpointSnapshot.Write(args[1], args[2], args.Length == 5 ? args[4] : null);
+        return 0;
+    }
+    catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+}
+
 if (args.Length == 2 && args[0] == "--check-source-transforms")
 {
     try
@@ -52,6 +64,7 @@ bool verifySelection = options.ContainsKey("--verify-selection");
 if (!validOptions)
 {
     Console.Error.WriteLine("Usage: UnityReferenceDump <input.prefab|input.unitypackage> <unity-expected.json> <resopon-actual.json> [--verify-selection <avatar-or-empty-for-default>] [--dependencies <captured-file-hashes.json>]");
+    Console.Error.WriteLine("       UnityReferenceDump --viewpoint <input> <new-output.json> [--avatar <name>]");
     return 2;
 }
 try

@@ -25,6 +25,7 @@ public static class ResoPonResolvedReferenceBatch
         public string id, prefabPath, sceneRootPath, prefabGuid, assetType, status, error;
         public string inputSha256, inputSha256After, dependencyHash, dependencyHashAfter;
         public string expectedPath, expectedSha256, repeatSha256;
+        public string viewpointPath, viewpointSha256, viewpointRepeatSha256;
         public bool repeatMatches, sourceUnchanged;
         public List<DependencyFile> dependencyFiles;
     }
@@ -67,6 +68,18 @@ public static class ResoPonResolvedReferenceBatch
                     string repeat = Path.Combine(folder, "repeat.json");
                     ResoPonReferenceExporter.Export(item.prefabPath, expected, "resolved", item.sceneRootPath);
                     ResoPonReferenceExporter.Export(item.prefabPath, repeat, "resolved", item.sceneRootPath);
+                    if (Environment.GetEnvironmentVariable("RESOPON_REFERENCE_VIEWPOINTS") == "1")
+                    {
+                        result.viewpointPath = item.id + "/viewpoint.json";
+                        string viewpoint = Path.Combine(output, result.viewpointPath);
+                        string viewpointRepeat = Path.Combine(folder, "viewpoint-repeat.json");
+                        ResoPonReferenceExporter.Export(item.prefabPath, viewpoint, "viewpoint", item.sceneRootPath);
+                        ResoPonReferenceExporter.Export(item.prefabPath, viewpointRepeat, "viewpoint", item.sceneRootPath);
+                        result.viewpointSha256 = Hash(viewpoint);
+                        result.viewpointRepeatSha256 = Hash(viewpointRepeat);
+                        if (result.viewpointSha256 != result.viewpointRepeatSha256)
+                            throw new InvalidOperationException("Viewpoint capture changed across instantiations.");
+                    }
                     result.expectedSha256 = Hash(expected);
                     result.repeatSha256 = Hash(repeat);
                     result.inputSha256After = Hash(item.prefabPath);
