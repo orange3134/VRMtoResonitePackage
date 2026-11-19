@@ -43,6 +43,45 @@ coverageの `conversionArguments` は `[]`（本番の既定選択）または `
 
 ## 保存済みパッケージから採取する
 
+登録全件の変換を `scripts/convert-all-local-avatars.py` で完了した後は、
+その実行の `report.json` と隣接する凍結済み `registry.json` を使って一括採取できる。
+
+```powershell
+dotnet build tests/PackageRegressionDump -c Release -o .tmp_verify/structure-tools
+python -B scripts/check-converted-batch.py .tmp_verify/all-avatar-conversions/<run>/report.json `
+  --dump .tmp_verify/structure-tools/PackageRegressionDump.dll `
+  --output .tmp_verify/structure-review/<new-run>
+```
+
+全登録ケースの存在、入力・パッケージ・Unity基準・解析JSON・coverageのハッシュを確認し、
+Prefab入力は採取時のプロジェクト依存ファイルも照合する。変換・inspect済みの全パッケージから
+構造を採取し、Unity基準のないケースも骨参照の `null / unresolved` を記録する。
+ケース別の `converted.json`、比較可能なら `comparison.json`、全件の `report.json` を出力する。
+既存結果や入力は更新せず、実行DLLと変換時commitの識別情報を引き継ぐ。
+
+Unity/parserが外部プロジェクト依存を補って解析したアーカイブは、通常変換のアーカイブ単独入力と
+同一とは扱えない。この場合は `not-compared` にする。古いPrefab基準に依存ハッシュがない場合は、
+`scripts/check-prefab-unity.py` で再採取し、登録済み選択引数を `conversionArguments` に記録した
+coverageで `check-converted-avatar.py` を再実行する。元のバッチ結果は上書きしない。
+終了コード0は比較対象範囲の一致、1は要調査・未比較・失敗を含む結果。
+
+全件の判定では、変換成功数・同一入力での解析一致数・保存構造の比較対象数を別々に集計する。
+次の差分は修正優先度を決めるため追加確認する。
+
+- `activeSelf` は対象の完全なパスと、再読込後の値・driver有無を確認する。
+  Hinaの `FY_Tulip` / `Fyuett_afk_object` のような、Prefabで無効な小物が有効になる事例を
+  rendererの読み込み待ちEnabled差と混同しない。元FBX名だけの非アクティブ指定では、
+  改名・複数インスタンス・別FBX由来の配置を区別できるか確認が必要。
+- `sibling-order` は同じ親の対応済み子同士の順を確認する。Prefabの `m_Children` を
+  復元しても、インポートしたFBX内部の兄弟順まで一致するとは限らない。
+- `bone-count / bone-target` は未使用骨の除去・再index化を含む。
+  配列差だけで誤接続とせず、使用ウェイト・bind pose・骨を動かした追従を別途検証する。
+  null参照は元骨が未対応でも件数を確認する。Ricorineでは尾の5骨がなくなり、複製rendererを
+  含め同じnullが繰り返される事例がある。参照件数と欠落した骨の種類を区別し、保存メッシュの
+  正のウェイトがnullを指すか調べる。ウェイトから使われないnullだけで変形破損と断定しない。
+- 保存時のrenderer Enabled差は、読み込み後のmesh可用性とdriverの値で切り分ける。
+  一つのモデルで正常なdriverを確認しても、他モデル全件の差を自動的に承認しない。
+
 ```powershell
 dotnet build tests/PackageRegressionDump -c Release -o .tmp_verify/structure-tools
 dotnet .tmp_verify/structure-tools/PackageRegressionDump.dll --structure `
