@@ -130,6 +130,9 @@ public sealed class VrchatAvatar
     /// <summary>Effective Unity child order, identified by prefab occurrence rather than names.</summary>
     public List<VrchatHierarchyOrder> HierarchyOrders { get; } = new();
 
+    /// <summary>Effective activeSelf values, scoped by model path or authored prefab occurrence.</summary>
+    public Dictionary<VrchatBoneTarget, bool> HierarchyActiveStates { get; } = new();
+
     /// <summary>
     /// All GameObject names present in the selected prefab's hierarchy. Used to drop imported FBX
     /// meshes that the prefab deleted (avatars built by removing mesh objects from a shared FBX).

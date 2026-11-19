@@ -375,17 +375,21 @@ internal static class VrchatSceneSetup
     }
 
     public static void ApplyHierarchyOrder(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
-        IReadOnlyDictionary<Slot, string> paths, IReadOnlyDictionary<string, Slot> prefabSlots)
+        IReadOnlyDictionary<Slot, string> paths, IReadOnlyDictionary<string, Slot> prefabSlots,
+        IReadOnlyDictionary<string, Slot> modelRoots = null)
     {
+        Slot Resolve(VrchatBoneTarget target) => target?.PrefabGuid == null && target?.Path == "" && target.FbxGuid != null &&
+            modelRoots?.TryGetValue(target.FbxGuid, out Slot modelRoot) == true ? modelRoot :
+            ResolveImportedTarget(target, sources, paths, prefabSlots);
         int applied = 0, unresolved = 0, ambiguous = 0;
         foreach (var order in avatar.HierarchyOrders)
         {
-            Slot parent = ResolveImportedTarget(order.Parent, sources, paths, prefabSlots);
+            Slot parent = Resolve(order.Parent);
             if (parent == null) { unresolved++; continue; }
             var branches = new List<Slot>();
             foreach (var target in order.Children)
             {
-                Slot branch = ResolveImportedTarget(target, sources, paths, prefabSlots);
+                Slot branch = Resolve(target);
                 // Eye/hand setup can insert a wrapper between source parent and
                 // child. Move that branch as a unit without changing its transform.
                 while (branch != null && branch.Parent != parent && branch != parent) branch = branch.Parent;
@@ -533,10 +537,31 @@ internal static class VrchatSceneSetup
     }
 
     public static void Apply(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
-        IReadOnlyDictionary<string, Slot> authoredObjects = null, IReadOnlyDictionary<Slot, string> importedPaths = null)
+        IReadOnlyDictionary<string, Slot> authoredObjects = null, IReadOnlyDictionary<Slot, string> importedPaths = null,
+        IReadOnlyDictionary<string, Slot> prefabSlots = null, IReadOnlyDictionary<string, Slot> modelRoots = null)
     {
         ApplyInactiveStates(root, avatar, sources, importedPaths);
+        ApplyHierarchyActiveStates(avatar, sources, importedPaths, prefabSlots, modelRoots);
         ApplyInitialBlendShapes(root, avatar, sources, authoredObjects, importedPaths);
+    }
+
+    internal static void ApplyHierarchyActiveStates(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<Slot, string> paths, IReadOnlyDictionary<string, Slot> prefabSlots,
+        IReadOnlyDictionary<string, Slot> modelRoots = null)
+    {
+        int applied = 0, unresolved = 0;
+        // Imported overrides are collected first, authored instance values last.
+        // An absent model override is not permission to reset authored/template state.
+        foreach (var (target, active) in avatar.HierarchyActiveStates)
+        {
+            Slot slot = target.PrefabGuid == null && target.Path == "" && target.FbxGuid != null &&
+                modelRoots?.TryGetValue(target.FbxGuid, out Slot modelRoot) == true
+                ? modelRoot : ResolveImportedTarget(target, sources, paths, prefabSlots);
+            if (slot == null) { unresolved++; continue; }
+            slot.ActiveSelf = active;
+            applied++;
+        }
+        UniLog.Log($"Unity hierarchy active state: {applied} object(s) applied, {unresolved} unresolved target(s).");
     }
 
     /// <summary>

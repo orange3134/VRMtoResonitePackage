@@ -57,6 +57,50 @@ internal static class SkeletonModelRendererChecks
         Console.WriteLine("PASS: skeleton-only model renderer removal preserves authored meshes, skeleton references and real instances");
         CheckUnusedBranches(parent);
         CheckHierarchyOrder(parent);
+        CheckHierarchyActiveState(parent);
+    }
+
+    private static void CheckHierarchyActiveState(Slot parent)
+    {
+        var root = parent.AddSlot("Active state identity");
+        var first = root.AddSlot("Renamed");
+        var second = root.AddSlot("Same");
+        var other = root.AddSlot("Same");
+        var authored = root.AddSlot("Same");
+        second.ActiveSelf = false;
+        first.LocalPosition = new Elements.Core.float3(1, 2, 3);
+        var skin = root.AttachComponent<SkinnedMeshRenderer>();
+        skin.Bones.Add(first); skin.Bones.Add(second);
+        var sources = new Dictionary<Slot, string> { [first] = "model", [second] = "model", [other] = "other" };
+        var paths = new Dictionary<Slot, string> { [first] = "RootNode/Left/Same", [second] = "RootNode/Right/Same", [other] = "RootNode/Left/Same" };
+        var avatar = new VrchatAvatar();
+        avatar.HierarchyActiveStates[new("model", "Same", "Left/Same")] = true;
+        avatar.HierarchyActiveStates[new("model", "Same", "Right/Same")] = true;
+        avatar.HierarchyActiveStates[new("model", "Same", "Left/Same", "prefab", 10)] = false;
+        avatar.HierarchyActiveStates[new(null, "Same", null, "prefab", 20)] = false;
+        VrchatSceneSetup.ApplyHierarchyActiveStates(avatar, sources, paths,
+            new Dictionary<string, Slot> { ["prefab:20"] = authored });
+        Require(!first.ActiveSelf && second.ActiveSelf && other.ActiveSelf && !authored.ActiveSelf,
+            "active state must resolve original paths, restore true, retain occurrence isolation and prefer authored identity");
+        Require(first.LocalPosition == new Elements.Core.float3(1, 2, 3) && skin.Bones.SequenceEqual(new[] { first, second }),
+            "active state must not modify skin indices or transforms");
+        var instance = root.AddSlot("Placed accessory");
+        var internalRoot = instance.AddSlot("RootNode");
+        sources[instance] = sources[internalRoot] = "accessory";
+        paths[instance] = ""; paths[internalRoot] = "RootNode";
+        avatar.HierarchyActiveStates[new("accessory", "RootNode", "")] = false;
+        var roots = new Dictionary<string, Slot> { ["accessory"] = instance };
+        VrchatSceneSetup.ApplyHierarchyActiveStates(avatar, sources, paths,
+            new Dictionary<string, Slot> { ["prefab:20"] = authored }, roots);
+        Require(!instance.ActiveSelf && internalRoot.ActiveSelf,
+            "model root state must affect the whole placed accessory, not its internal Assimp node");
+        avatar.HierarchyOrders.Add(new(new(null, null, null, "prefab", 30),
+            new[] { new VrchatBoneTarget("accessory", "RootNode", ""), new("model", "Same", "Right/Same") }));
+        VrchatSceneSetup.ApplyHierarchyOrder(avatar, sources, paths,
+            new Dictionary<string, Slot> { ["prefab:30"] = root }, roots);
+        Require(root.Children[0] == instance && root.Children[1] == second,
+            "a model occurrence participates in its authored parent's child order as a whole branch");
+        Console.WriteLine("PASS: hierarchy active state preserves renamed nodes, authored identity and isolated same-named objects");
     }
 
     private static void CheckHierarchyOrder(Slot parent)

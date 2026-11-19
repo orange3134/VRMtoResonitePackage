@@ -15,16 +15,21 @@ Objects: {
     Model: 100, "Model::End", "Null" { }
     Model: 101, "Model::End", "Null" { }
     Model: 102, "Model::Tip", "Null" { }
+    Model: 103, "Model::Excluded", "Null" { }
 """).Replace("Connections: {", """
 Connections: {
     C: "OO",100,3
     C: "OO",101,4
     C: "OO",102,100
+    C: "OO",103,3
 """);
         asset("Assets/UnweightedEnds.fbx", modelGuid, fbx);
         prefab = prefab.Replace(originalGuid, modelGuid);
+        // A local mesh namesake is not an imported node merely because its path
+        // matches the source mesh. It must resolve through its authored identity.
+        prefab += "\n--- !u!4 &3\nTransform:\n  m_GameObject: {fileID: 1}\n  m_Father: {fileID: 101}\n";
         foreach (var (id, name, parent) in new[] { (300, "End", 121), (310, "End", 141),
-                     (320, "Tip", 301), (330, "NewHelper", 301) })
+                     (320, "Tip", 301), (330, "NewHelper", 301), (340, "Excluded", 121) })
             prefab += $$"""
 
 --- !u!1 &{{id}}
@@ -39,7 +44,7 @@ Transform:
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalScale: {x: 1.1, y: 1.2, z: 1.3}
 """;
-        foreach (var (owner, children) in new[] { (120, "{fileID: 151}, {fileID: 301}"),
+        foreach (var (owner, children) in new[] { (120, "{fileID: 151}, {fileID: 301}, {fileID: 341}"),
                      (140, "{fileID: 311}"), (300, "{fileID: 331}, {fileID: 321}") })
             prefab = prefab.Replace($"m_GameObject: {{fileID: {owner}}}\n",
                 $"m_GameObject: {{fileID: {owner}}}\n  m_Children: [{children}]\n");
@@ -50,6 +55,7 @@ Transform:
         string input = asset("Assets/UnweightedEnds.prefab", prefabGuid, prefab);
         using var package = UnityPackage.Open(input);
         var avatar = new VrchatAvatar { FbxGuid = modelGuid };
+        avatar.EditorOnlyPrefabObjects[prefabGuid] = new() { 340 };
         var copy = new VrchatMeshCopy(modelGuid, "Body", "Body", true, true);
         copy.BoneTargets[0] = new(modelGuid, "Shared", "Left/Shared", prefabGuid, 121);
         copy.BoneTargets[1] = new(modelGuid, "Shared", "Right/Shared", prefabGuid, 141);
@@ -57,6 +63,13 @@ Transform:
         typeof(VrchatAvatarParser).GetMethod("ParsePhysics", BindingFlags.Static | BindingFlags.NonPublic)!
             .Invoke(null, new object[] { package, prefabGuid, avatar, null });
         var transforms = avatar.PhysicsPlacements.SelectMany(p => p.Transforms).ToArray();
+        var localMesh = avatar.HierarchyActiveStates.Single(p => p.Key.PrefabGuid == prefabGuid && p.Key.TransformFileId == 3);
+        if (localMesh.Key.FbxGuid != null)
+            throw new Exception("A local mesh namesake must not override the imported mesh's active state.");
+        if (avatar.HierarchyActiveStates.Keys.Any(t => t.TransformFileId == 341) ||
+            !avatar.HierarchyOrders.Single(o => o.Parent.TransformFileId == 121).Children.Any(t =>
+                t.TransformFileId == 341 && t.Path == "Left/Shared/Excluded"))
+            throw new Exception("An excluded source node may order an existing template slot but must not restore its active state.");
         foreach (var (id, path) in new[] { (301, "Left/Shared/End"), (311, "Right/Shared/End"), (321, "Left/Shared/End/Tip") })
         {
             var entries = transforms.Where(t => t.Key == $"{prefabGuid}:{id}").ToArray();
@@ -66,6 +79,8 @@ Transform:
                     "; source=" + string.Join(", ", package.ModelFileIds(modelGuid).Hierarchy.Select(n => n.Path)));
             if (!avatar.AuthoredImportedBones.Any(target => target.Path == path))
                 throw new Exception("Authored skeleton membership must survive even without pose overrides: " + path);
+            if (avatar.HierarchyActiveStates.Single(p => p.Key.PrefabGuid == prefabGuid && p.Key.TransformFileId == id).Value)
+                throw new Exception("Authored active state must survive without a renderer or pose override: " + path);
             if (id == 321)
             {
                 if (avatar.AuthoredBoneTransforms.Keys.Any(target => target.Path == path))

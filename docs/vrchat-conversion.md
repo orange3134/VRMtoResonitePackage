@@ -243,6 +243,24 @@ BlendShapeはボーンのあるメッシュに限定せず、morphだけを持�
   を呼び、Unity由来の子を先に、残る生成Slotを元の相対順で後ろへ配置する。眼球Pivotや
   Aligned Handを挟む場合はその枝ごと並べる。親・TRS・SkinnedMeshRenderer.Bonesは変更しない。
   未解決対象と、複数の元兄弟が同一の枝へ統合されて並べられない群はログに記録する。
+  FBX内部は `VrchatHierarchyState` が元の階層と `ModelImporter.meshes.sortHierarchyByName`
+  （省略時true）から順序を採取する。falseなら元FBXの順序を保持し、明示的なPrefabの
+  `m_Children` を後から優先する。改名後の表示名で再ソートせず、元pathを照合キーにする。
+  順序指定は既存Slotだけに適用し、除外対象の子を新規生成しない。残っているtemplateの子も、
+  元配列にあれば相対順を復元する。
+  `HierarchyActiveStates` はFBXの明示的な `m_IsActive` 上書きと、合成済みローカルGameObjectの
+  値を保持する。従来の非アクティブ指定の後に適用し、明示的なtrueも復元する。
+  値を持たないstripped参照からtrueを捏造せず、FBXの既定trueでtemplateや配置の状態を戻さない。
+  配置対象のローカルGameObjectは名前だけの非アクティブ指定から除き、Prefab identityで処理する。
+  Nagiya Ruriの無効な `Hair_Odango.L/R` 小物が、同名の有効な髪ボーンを無効化するため。
+  除外されたtemplateの従来の非アクティブ抑制は維持する。
+  ローカル非meshノードは検証済みの一意な元pathを補助キーにできるが、同名のローカルmeshは
+  Prefab identityでのみ解決する。後者を元meshへ誤対応するとLilLeoのCat_Tail等を再有効化してしまう。
+  FBXルートは `importedFbxRoots` の配置先を使い、内部のAssimp RootNodeだけを無効にしない。
+  HinaのTulipやEkuのTaktのような小物は、この配置ルートと内部ノードの区別が必要。
+  `m_Father` のないstripped FBXルートは `m_PrefabInstance` の `m_TransformParent` で親を
+  検証して子配列へ含める。Aizaraのベルト下の追加モデルがこの形式。FBX内部のstripped骨を
+  インスタンス全体の直下の子と誤認しないよう、ルートidentityであることも確認する。
   順序確定後、unpacked配置でprimary FBXが骨格参照用templateである場合に限り、
   `VrchatHierarchyCleanup` が採取済みのimportルートと選択Prefabルートを葉側から畳む。
   名前検索で任意の `RootNode` を除去せず、元import pathとモデルID、保持したSlot identityで限定する。

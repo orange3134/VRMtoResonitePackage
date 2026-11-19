@@ -11,7 +11,7 @@ namespace VrmToResonitePackage.Vrchat;
 /// importer meta), visemes/blink/view position (from the descriptor), spring physics (PhysBones)
 /// and per-renderer material assignments into an engine-independent <see cref="VrchatAvatar"/>.
 /// </summary>
-public static class VrchatAvatarParser
+public static partial class VrchatAvatarParser
 {
     private const string ModularAvatarMergeArmatureScriptGuid = "2df373bf91cf30b4bbd495e11cb1a2ec";
     private const string ModularAvatarBoneProxyScriptGuid = "42581d8044b64899834d3d515ab3a144";
@@ -366,6 +366,13 @@ public static class VrchatAvatarParser
             // Copies and their authored parents already carry per-object active state.
             // A second name-based assignment would also disable an active namesake.
             if (authoredObjects.Contains($"{sceneGuid}:{go.FileId}")) continue;
+            // Ordinary prefab objects receive identity-based state in ParsePhysics.
+            // Their names can also name unrelated imported bones (e.g. a disabled
+            // accessory and an active hair bone). Keep the legacy suppression only
+            // for excluded template objects which have no authored placement.
+            if (scene.TransformOfGameObject(go.FileId) != null &&
+                !(avatar.EditorOnlyPrefabObjects.TryGetValue(sceneGuid ?? "", out var excluded) && excluded.Contains(go.FileId)))
+                continue;
             if ((go.Root?["m_IsActive"]?.AsInt(1) ?? 1) == 0)
             {
                 string name = go.Root?["m_Name"]?.AsString();
@@ -3173,6 +3180,7 @@ public static class VrchatAvatarParser
             ParsePhysics(view, sourceGuid, avatar);
             return;
         }
+        ParseModelHierarchyState(package, avatar);
         var scenes = package.PrefabGraph.Scenes.ToList();
         var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);
         var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
@@ -3215,17 +3223,35 @@ public static class VrchatAvatarParser
                 if (importedTargets.TryGetValue(id, out var imported)) return imported;
                 if (scene.Doc(id)?.Stripped == true)
                     return ResolveCopiedBoneTarget(package, guid, id, null, modelResolvers, new());
+                var candidate = ResolveCopiedBoneTarget(package, guid, id, avatar.FbxGuid, modelResolvers, new());
+                if (candidate?.FbxGuid != null && candidate.Path != null &&
+                    package.ModelFileIds(candidate.FbxGuid).Hierarchy?.Count(node =>
+                        !node.HasMesh && UnityModelPath.Normalize(node.Path) == UnityModelPath.Normalize(candidate.Path)) == 1)
+                    return candidate;
                 return new VrchatBoneTarget(null, null, null, guid, id);
+            }
+            bool ChildOf(YamlDocument child, long parentId)
+            {
+                if (child?.ClassId != 4) return false;
+                if (child.Root?["m_Father"] is {} father) return father.FileID == parentId;
+                // An FBX instance root is often only a stripped alias. Its parent
+                // is on PrefabInstance, not on that Transform document.
+                if (!child.Stripped || OrderTarget(child.FileId)?.Path != "") return false;
+                var instance = scene.Doc(child.Root?["m_PrefabInstance"]?.FileID ?? 0);
+                return instance?.Root?["m_Modification"]?["m_TransformParent"]?.FileID == parentId;
             }
             foreach (var transform in scene.Documents.Values.Where(d => d.ClassId == 4 &&
                          included.Contains(d.Root?["m_GameObject"]?.FileID ?? 0)))
             {
+                var target = OrderTarget(transform.FileId);
+                // A stripped alias has no authored activeSelf. Its value belongs to
+                // the source model and must not reset a resolved override to true.
+                if (target != null && !transform.Stripped)
+                    avatar.HierarchyActiveStates[target] = scene.OwnerGameObject(transform)?.Root?["m_IsActive"]?.AsBool(true) ?? true;
                 var children = transform.Root?["m_Children"]?.Seq;
                 if (children == null || children.Count < 2) continue;
                 var targets = children.Select(child => scene.Doc(child.FileID ?? 0))
-                    .Where(child => child?.ClassId == 4 &&
-                        child.Root?["m_Father"]?.FileID == transform.FileId &&
-                        included.Contains(child.Root?["m_GameObject"]?.FileID ?? 0))
+                    .Where(child => ChildOf(child, transform.FileId))
                     .Select(child => OrderTarget(child.FileId)).ToArray();
                 if (targets.Length > 1) avatar.HierarchyOrders.Add(new(OrderTarget(transform.FileId), targets));
             }

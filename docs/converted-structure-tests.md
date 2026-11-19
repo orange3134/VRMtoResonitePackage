@@ -135,6 +135,10 @@ python -B scripts/compare-converted-structure.py unity.json parser.json `
    スキン変更は[保存スキンの追従試験](local-avatar-tests.md)、外観と装着はクライアントで確認する。
 
 完全に一意な名前対応も出典を証明するものではなく `unique-path-candidate` と表記する。
+Modular Avatarで移動した子が、削除された別の同名オブジェクトの元pathを占める場合もある。
+Legniaの `PBcollider_chest` はこの判別が必要で、元の無効な本体側オブジェクトと、髪側の
+有効なcolliderを同じものと見なさない。元Prefab occurrence/Transform ID、除外指定、
+配置・Merge Armatureの情報で出典を確認し、候補pathだけで有効状態を戻さない。
 変換後のTRSは階層・単位・座標軸が異なるため、そのままUnityと数値一致判定しない。
 RootBone相当、bind pose、頂点ウェイト、物理の挙動、実行時のEnabledを駆動するリンクも別検証。
 補助階層を含む実アバターでは `needs-review` が通常であり、これはダンプ実行失敗とは別。

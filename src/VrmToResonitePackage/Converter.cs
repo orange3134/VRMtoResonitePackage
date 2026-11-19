@@ -570,7 +570,7 @@ internal static class Converter
                 }
 
                 // Reflect prefab-authored scene state (inactive GameObjects, initial blendshape weights).
-                Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources, authoredObjects, importedNodePaths);
+                Vrchat.VrchatSceneSetup.Apply(root, avatar, importedMeshSources, authoredObjects, importedNodePaths, prefabSlots, importedFbxRoots);
                 faceResolver.ApplyInitialOverrides(faceInitialValues);
                 profile?.Mark("physics-and-scene-state");
 
@@ -605,7 +605,7 @@ internal static class Converter
 
                 root.Name = displayName;
                 Console.WriteLine("パッケージを書き出し中...");
-                Vrchat.VrchatSceneSetup.ApplyHierarchyOrder(avatar, importedMeshSources, importedNodePaths, prefabSlots);
+                Vrchat.VrchatSceneSetup.ApplyHierarchyOrder(avatar, importedMeshSources, importedNodePaths, prefabSlots, importedFbxRoots);
                 Vrchat.VrchatHierarchyCleanup.CollapseUnpackedWrappers(root, avatar, descriptorRoot,
                     importedFbxRoots.GetValueOrDefault(avatar.FbxGuid), importedMeshSources, importedNodePaths);
                 profile?.Mark("settle-updates");
