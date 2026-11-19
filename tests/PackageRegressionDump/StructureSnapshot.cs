@@ -1,14 +1,19 @@
 using Elements.Core;
+using Elements.Assets;
 using System.Globalization;
 using System.Text.Json;
 
 internal static class StructureSnapshot
 {
-    public static void Write(DataTreeDictionary root, string[] types, string hash, string output)
+    public static void Write(DataTreeDictionary root, string[] types, string hash, string output,
+        RecordPackage package = null, DataTreeNode assets = null)
     {
         var nodes = new List<(DataTreeDictionary Data, string Id, string Parent, int Index, string[] Path, bool Active)>();
         var ids = new Dictionary<string, string>(StringComparer.Ordinal);
-        Index(root, "r", null, 0, System.Array.Empty<string>(), true);
+        var world = new Dictionary<string, float4x4>();
+        var meshes = new Dictionary<string, string>();
+        Index(root, "r", null, 0, System.Array.Empty<string>(), true, float4x4.Identity);
+        foreach (var asset in Array(assets).OfType<DataTreeDictionary>()) IndexMesh(asset);
         var slots = nodes.Select(n => new
         {
             id = n.Id, parent = n.Parent, siblingIndex = n.Index, path = n.Path,
@@ -30,17 +35,26 @@ internal static class StructureSnapshot
         file.Write(json);
         Console.WriteLine($"Captured structure: {slots.Length} slots; package SHA-256 {hash}");
 
-        void Index(DataTreeDictionary data, string id, string parent, int index, string[] parentPath, bool active)
+        void Index(DataTreeDictionary data, string id, string parent, int index, string[] parentPath, bool active, float4x4 parentWorld)
         {
             string[] path = parentPath.Append(Scalar(data.TryGetNode("Name")) ?? "").ToArray();
             active &= Value<bool>(data.TryGetNode("Active"));
             nodes.Add((data, id, parent, index, path, active));
-            ids.Add(Scalar(data.TryGetNode("ID")) ?? throw new InvalidDataException("Missing slot ID."), id);
+            string serialized = Scalar(data.TryGetNode("ID")) ?? throw new InvalidDataException("Missing slot ID.");
+            ids.Add(serialized, id);
+            var pos = Vector(data, "Position", 3);
+            var rot = Vector(data, "Rotation", 4);
+            var scale = Vector(data, "Scale", 3);
+            var frame = parentWorld * float4x4.Translation(new float3(pos[0], pos[1], pos[2]))
+                * float4x4.Rotation(new floatQ(rot[0], rot[1], rot[2], rot[3]))
+                * float4x4.Scale(new float3(scale[0], scale[1], scale[2]));
+            world.Add(serialized, frame);
+            foreach (var component in Array(data.TryGetNode("Components")).OfType<DataTreeDictionary>()) IndexMesh(component);
             int childIndex = 0;
             foreach (var child in Array(data.TryGetNode("Children")))
             {
                 if (child is not DataTreeDictionary dictionary) throw new InvalidDataException("Invalid child slot.");
-                Index(dictionary, id + "/" + childIndex, id, childIndex++, path, active);
+                Index(dictionary, id + "/" + childIndex, id, childIndex++, path, active, frame);
             }
         }
 
@@ -55,14 +69,7 @@ internal static class StructureSnapshot
         {
             if (node is not DataTreeDictionary component || component.TryGetNode("Data") is not DataTreeDictionary data)
                 throw new InvalidDataException("Invalid component.");
-            object typeValue = Value<object>(component.TryGetNode("Type"));
-            string type = typeValue switch
-            {
-                int i when i >= 0 && i < types.Length => types[i],
-                long i when i >= 0 && i < types.Length => types[(int)i],
-                string s => s,
-                _ => throw new InvalidDataException("Invalid component type.")
-            };
+            string type = TypeName(component);
             bool skin = type == "[FrooxEngine]FrooxEngine.SkinnedMeshRenderer";
             bool rig = type == "[FrooxEngine]FrooxEngine.BipedRig";
             var references = new List<object>();
@@ -79,6 +86,9 @@ internal static class StructureSnapshot
                 id = slotId + ":" + index, type,
                 enabled = data.TryGetNode("Enabled") is {} enabled ? (bool?)Value<bool>(enabled) : null,
                 bones = skin ? Array(data.TryGetNode("Bones")).Select(Reference).ToArray() : null,
+                skinSize = skin && package != null ? SkinSize.Measure(package,
+                    meshes.GetValueOrDefault(Scalar(data.TryGetNode("Mesh")) ?? ""),
+                    Array(data.TryGetNode("Bones")).Select(Scalar).ToArray(), world) : null,
                 rigBones = rig ? rigBones : null,
                 blendShapeWeights = skin ? Array(data.TryGetNode("BlendShapeWeights")).Select(Value<float>).ToArray() : null,
                 slotReferences = references
@@ -104,6 +114,24 @@ internal static class StructureSnapshot
                          ids.TryGetValue(Convert.ToString(value.Value, CultureInfo.InvariantCulture), out string target))
                     references.Add(new { field = path, target });
             }
+        }
+
+        string TypeName(DataTreeDictionary component)
+        {
+            return Value<object>(component.TryGetNode("Type")) switch
+            {
+                int i when i >= 0 && i < types.Length => types[i],
+                long i when i >= 0 && i < types.Length => types[(int)i],
+                string s => s,
+                _ => throw new InvalidDataException("Invalid component type.")
+            };
+        }
+
+        void IndexMesh(DataTreeDictionary component)
+        {
+            if (TypeName(component) != "[FrooxEngine]FrooxEngine.StaticMesh") return;
+            if (component.TryGetNode("Data") is DataTreeDictionary data)
+                meshes.Add(Scalar(data.TryGetNode("ID")), Scalar(data.TryGetNode("URL")));
         }
     }
 

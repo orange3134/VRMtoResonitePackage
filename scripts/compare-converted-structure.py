@@ -102,13 +102,46 @@ def validate_structure(data):
     return slots
 
 
+def compare_skin_size(source, saved):
+    def extent(record, unity):
+        if not record or record.get('reason'):
+            return None
+        count = record.get('weightedVertices')
+        require(type(count) is int and count > 0, 'invalid skin vertex count')
+        size = record.get('sizeMeters')
+        if unity and isinstance(size, dict) and set(size) == set('xyz'):
+            size = [size[axis] for axis in 'xyz']
+        require(isinstance(size, list) and len(size) == 3 and
+                all(type(x) in (int, float) and math.isfinite(x) and x >= 0 for x in size),
+                'invalid skinned extent')
+        return size
+
+    expected, actual = extent(source, True), extent(saved, False)
+    result = {'unitySizeMeters': expected, 'convertedSizeMeters': actual}
+    if expected is None or actual is None:
+        return dict(result, status='unverified',
+                    unityReason=(source or {}).get('reason') or ('not captured' if expected is None else None),
+                    convertedReason=(saved or {}).get('reason') or ('not captured' if actual is None else None))
+    # Any oriented AABB bounds the actual point-cloud diameter between its longest
+    # side and its diagonal. Only flag a size change proved even after rotation.
+    if max(actual) > 2 * math.hypot(*expected) + .001:
+        return dict(result, status='expanded')
+    if max(expected) > 2 * math.hypot(*actual) + .001:
+        return dict(result, status='shrunk')
+    if not max(expected) or not max(actual):
+        return dict(result, status='unverified', reason='degenerate extent')
+    return dict(result, status='no-scale-outlier')
+
+
 def compare(unity, parser, converted, overrides=None):
     unity_compare.validate_snapshot(unity)
-    unity_compare.validate_snapshot(parser)
-    require(unity['schemaVersion'] == parser['schemaVersion'] == 2, 'resolved v2 references required')
-    require(unity['prefabGuid'] == parser['prefabGuid'], 'selected prefab mismatch')
+    require(unity['schemaVersion'] == 2, 'resolved v2 reference required')
+    if parser is not None:
+        unity_compare.validate_snapshot(parser)
+        require(parser['schemaVersion'] == 2 and unity['prefabGuid'] == parser['prefabGuid'],
+                'selected prefab or schema mismatch')
     slots = validate_structure(converted)
-    before_diffs = unity_compare.compare(unity, parser)
+    before_diffs = unity_compare.compare(unity, parser) if parser is not None else None
     sources = {t['id']: t for t in unity['sections']['transforms']}
     source_paths = {}
 
@@ -203,6 +236,13 @@ def compare(unity, parser, converted, overrides=None):
         if actual != expected:
             differences.append({'kind': 'sibling-order', **row})
     renderer_rows = []
+    sizes = {}
+    source_skins = {r['id'] for r in unity['sections']['renderers'] if r['type'] == 'UnityEngine.SkinnedMeshRenderer'}
+    for size in unity.get('skinSizes', []):
+        require(isinstance(size, dict) and size.get('rendererId') in source_skins and
+                size['rendererId'] not in sizes, 'unknown or duplicate skin size record')
+        sizes[size['rendererId']] = size
+    skin_counts = collections.Counter()
     for renderer in unity['sections']['renderers']:
         target = mapping.get(renderer['transform'])
         kind = '[FrooxEngine]FrooxEngine.' + renderer['type'].split('.')[-1]
@@ -210,6 +250,18 @@ def compare(unity, parser, converted, overrides=None):
         row = {'sourceId': renderer['id'], 'targetSlot': target, 'sourceBones': renderer.get('bones'),
                'sourceRootBone': renderer.get('rootBone'), 'status': 'unverified'}
         renderer_rows.append(row)
+        if renderer['id'] in source_skins:
+            saved = (candidates[0].get('skinSize') if len(candidates) == 1 else
+                     {'reason': 'renderer missing or ambiguous on mapped slot'})
+            scale = compare_skin_size(sizes.get(renderer['id']), saved)
+            row['skinScale'] = scale
+            skin_counts[scale['status']] += 1
+            issue = {'kind': 'skin-scale', 'sourceId': renderer['id'], 'path': renderer['path'],
+                     'target': target, **scale}
+            if scale['status'] == 'unverified':
+                unverified.append(issue)
+            elif scale['status'] in ('expanded', 'shrunk'):
+                differences.append(issue)
         if len(candidates) != 1:
             row.update(reason='renderer missing or ambiguous on mapped slot', candidateCount=len(candidates))
             unverified.append({'kind': 'renderer', **row})
@@ -265,11 +317,11 @@ def compare(unity, parser, converted, overrides=None):
                          'referencedSlotCount': sum(bool(s['referencedBy']) for s in descendants),
                          'componentCounts': dict(collections.Counter(t for s in descendants for t in s['componentTypes']))})
     unmatched_sources = [r for r in rows if r['target'] is None]
-    review = bool(before_diffs or differences or unverified or extras or unmatched_sources or unresolved)
+    review = parser is None or bool(before_diffs or differences or unverified or extras or unmatched_sources or unresolved)
     return {'format': 'resopon.structure-comparison', 'schemaVersion': 1,
             'status': 'needs-review' if review else 'matched-covered-fields',
-            'parserParity': {'status': 'different' if before_diffs else 'matched', 'differences': before_diffs},
-            'summary': {'unityTransforms': len(sources), 'convertedSlots': len(slots),
+            'parserParity': {'status': 'unverified' if parser is None else 'different' if before_diffs else 'matched', 'differences': before_diffs},
+            'summary': {'skinScale': dict(skin_counts), 'unityTransforms': len(sources), 'convertedSlots': len(slots),
                         'mappingCandidates': len(mapping), 'unmappedSources': len(unmatched_sources),
                         'unmappedSlots': len(extras), 'differences': len(differences),
                         'unverified': len(unverified), 'unresolvedOrNullBones': len(unresolved)},
@@ -285,14 +337,14 @@ def compare(unity, parser, converted, overrides=None):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('unity', type=Path)
-    ap.add_argument('parser', type=Path)
+    ap.add_argument('parser', type=Path, nargs='?', help='optional pre-conversion snapshot')
     ap.add_argument('converted', type=Path)
     ap.add_argument('--report', type=Path, required=True)
     ap.add_argument('--mapping', type=Path, help='reviewed mapping bound to unitySha256 and packageSha256')
     args = ap.parse_args(argv)
     try:
         unity = unity_compare.load_snapshot(args.unity)
-        parser = unity_compare.load_snapshot(args.parser)
+        parser = unity_compare.load_snapshot(args.parser) if args.parser else None
         converted = snapshot_check.load(args.converted)
         overrides = None
         if args.mapping:
@@ -302,7 +354,7 @@ def main(argv=None):
             overrides = mapping['transforms']
         report = compare(unity, parser, converted, overrides)
         report['inputs'] = {key: {'path': str(path.resolve()), 'sha256': sha256(path)} for key, path in
-                            [('unity', args.unity), ('parser', args.parser), ('converted', args.converted)]}
+                            [('unity', args.unity), ('parser', args.parser), ('converted', args.converted)] if path is not None}
         report['packageSha256'] = converted['packageSha256']
         if args.mapping:
             report['inputs']['mapping'] = {'path': str(args.mapping.resolve()), 'sha256': sha256(args.mapping)}

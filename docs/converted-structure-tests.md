@@ -44,6 +44,30 @@ coverageの `conversionArguments` は `[]`（本番の既定選択）または `
 入力不整合では停止する。終了コードは、比較対象範囲の一致0、要調査・工程失敗1、事前条件不備2。
 `captured` や `inspect=passed` は階層の正しさを保証しない。runnerはUnity基準を再採取しない。
 
+## スキンの巨大化・縮小を検出する
+
+Unityの解決済み解析には各SkinnedMeshRendererの `skinSizes` が含まれる。
+Unityと保存パッケージの両方で、元頂点にbind pose・各骨のワールド行列・ウェイトを適用し、
+初期骨格で変形させた頂点の外接箱の幅・高さ・奥行きをメートルで記録する。
+非アクティブな衣装も対象にする。比較を骨格の影響に限定するため、両側ともモーフ適用前を測る。
+保存側はアーカイブ内のStaticMeshをデコードするため、エンジンの起動は不要。
+
+通常の `comparison.json` の `summary.skinScale` と各Rendererの `skinScale` で判定を確認する。
+向き補正により外接箱の各辺は変わるが、点群の直径は常に最長辺以上、対角線以下である。
+一方の最長辺が他方の対角線の2倍を1 mm超えて上回る場合だけ `expanded`／`shrunk` とし、
+`differences` に `skin-scale` を追加する。`no-scale-outlier` はこの閾値での判定で、
+小さな形状差、位置だけのずれ、モーフや動作中の破綻は検出対象外。
+旧基準の寸法欠落、ウェイト付き骨の欠落、比較先が曖昧なケースは `unverified` にする。
+旧Unityデータには `scripts/check-prefab-unity.py` での再採取が必要。
+
+MANUKA DR_05 Variant 1では、修正前の下着2件で巨大化を検出し、修正後はどちらも閾値内となった。
+変換前解析を作成できない場合も、同じ入力・選択アバターであることを確認したUnity基準と
+保存構造を次のように直接比較できる。この場合の `parserParity` は `unverified` となる。
+
+```powershell
+python -B scripts/compare-converted-structure.py unity.json converted.json --report comparison.json
+```
+
 ## 保存済みパッケージから採取する
 
 登録全件の変換を `scripts/convert-all-local-avatars.py` で完了した後は、

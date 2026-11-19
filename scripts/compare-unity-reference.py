@@ -233,8 +233,13 @@ def compare(expected, actual, abs_tol=1e-6, rel_tol=1e-6):
                 differences.append(f"{path}: expected {left!r}, actual {right!r}")
         elif type(left) is not type(right) or left != right:
             differences.append(f"{path}: expected {left!r}, actual {right!r}")
-    walk({k: v for k, v in expected.items() if k != "sections"},
-         {k: v for k, v in actual.items() if k != "sections"}, "$")
+    # Unity alone can measure posed vertices. Repeated captures may compare the
+    # measurement, while parser parity covers only their common projection.
+    excluded = {"sections"}
+    if expected["schemaVersion"] == 2 and ("skinSizes" not in expected or "skinSizes" not in actual):
+        excluded.add("skinSizes")
+    walk({k: v for k, v in expected.items() if k not in excluded},
+         {k: v for k, v in actual.items() if k not in excluded}, "$")
     for section in expected["sections"]:
         left = {r["id"]: r for r in expected["sections"][section]}
         right = {r["id"]: r for r in actual["sections"][section]}

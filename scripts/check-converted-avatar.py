@@ -146,14 +146,16 @@ def main(argv=None):
                     stream.write('\t'.join([slot['id'], slot['parent'] or '', str(slot['activeInHierarchy']),
                                             json.dumps(slot['path'], ensure_ascii=False),
                                             json.dumps([c['type'] for c in slot['components']], ensure_ascii=False)]) + '\n')
-            if report['stages'].get('parserParity') in ('matched', 'different'):
-                result = comparison.compare(unity, parser, structure)
-                result['inputs'] = {name: {'path': str(path), 'sha256': comparison.sha256(path)} for name, path in
-                                    [('unity', expected), ('parser', actual), ('converted', structure_path)]}
-                result['packageSha256'] = structure['packageSha256']
-                replay.write_json(output / 'comparison.json', result)
-                report['stages']['structureComparison'] = result['status']
-                report['summary'] = result['summary']
+            if report['stages']['parserParity'] == 'failed':
+                parser = None
+            result = comparison.compare(unity, parser, structure)
+            result['inputs'] = {name: {'path': str(path), 'sha256': comparison.sha256(path)} for name, path in
+                                [('unity', expected), ('parser', actual), ('converted', structure_path)]
+                                if name != 'parser' or parser is not None}
+            result['packageSha256'] = structure['packageSha256']
+            replay.write_json(output / 'comparison.json', result)
+            report['stages']['structureComparison'] = result['status']
+            report['summary'] = result['summary']
         verify()
         if report['stages'].get('structureComparison') == 'matched-covered-fields' and not report['errors']:
             report['status'] = 'matched-covered-fields'

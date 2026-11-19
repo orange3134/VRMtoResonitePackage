@@ -41,7 +41,7 @@ static void Dump(string input, string output, bool structure)
     if (root.TryGetNode("Object") is not DataTreeDictionary objectRoot) throw new InvalidDataException("Missing object root.");
     if (structure)
     {
-        StructureSnapshot.Write(objectRoot, types, hash, output);
+        StructureSnapshot.Write(objectRoot, types, hash, output, package, root.TryGetNode("Assets"));
         return;
     }
     var slots = new List<object>();

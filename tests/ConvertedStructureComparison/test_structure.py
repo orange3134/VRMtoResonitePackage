@@ -43,6 +43,8 @@ def fixtures(names=('Bone', 'Mesh')):
     unity = dict(format='resopon.unity-reference', schemaVersion=2, projection='unity-resolved-prefab',
                  prefabGuid='b' * 32, sections=dict(transforms=transforms, renderers=[renderer], physBones=[], colliders=[]))
     converted = dict(format='resopon.converted-structure', schemaVersion=1, packageSha256='a' * 64, slots=slots)
+    unity['skinSizes'] = [dict(rendererId=renderer['id'], weightedVertices=3, sizeMeters=dict(x=.3, y=.1, z=.2))]
+    slots[-1]['components'][0]['skinSize'] = dict(weightedVertices=4, sizeMeters=[.1, .2, .3])
     return unity, converted
 
 
@@ -65,6 +67,31 @@ class ComparisonTests(unittest.TestCase):
         report = comparison.compare(unity, unity, converted, {'r': 'r'})
         self.assertEqual('matched-covered-fields', report['status'])
         self.assertIn('not compared', report['limitations'][1])
+
+    def test_scale_detects_explosion_with_identical_bones(self):
+        unity, converted = fixtures()
+        parser = copy.deepcopy(unity)
+        del parser['skinSizes']
+        component = converted['slots'][-1]['components'][0]
+        for size, status in (([20, 8, 3], 'expanded'), ([.001] * 3, 'shrunk'),
+                             ([.1, .2, .3], 'no-scale-outlier')):
+            component['skinSize']['sizeMeters'] = size
+            report = comparison.compare(unity, parser, converted, {'r': 'r'})
+            self.assertEqual('matched', report['parserParity']['status'])
+            self.assertEqual({status: 1}, report['summary']['skinScale'])
+            self.assertEqual([] if status == 'no-scale-outlier' else ['skin-scale'],
+                             [diff['kind'] for diff in report['differences']])
+        for missing in ('unity', 'converted', 'weighted bone'):
+            u, c = fixtures()
+            if missing == 'unity':
+                del u['skinSizes']
+            elif missing == 'converted':
+                del c['slots'][-1]['components'][0]['skinSize']
+            else:
+                c['slots'][-1]['components'][0]['skinSize']['reason'] = 'missing weighted bone'
+            report = comparison.compare(u, parser, c, {'r': 'r'})
+            self.assertEqual({'unverified': 1}, report['summary']['skinScale'])
+            self.assertEqual('needs-review', report['status'])
 
     def test_duplicate_source_names_are_not_matched(self):
         unity, converted = fixtures(('Twin', 'Twin'))
@@ -232,7 +259,8 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual('failed', report['status'])
         self.assertEqual('failed', report['stages']['parserParity'])
         self.assertEqual('captured', report['stages']['capture'])
-        self.assertEqual('not-run', report['stages']['structureComparison'])
+        self.assertEqual('needs-review', report['stages']['structureComparison'])
+        self.assertEqual({'no-scale-outlier': 1}, report['summary']['skinScale'])
         self.assertTrue(any('--inspect' in command for command in calls))
 
     def test_input_changes_during_conversion_invalidate_successful_stages(self):
