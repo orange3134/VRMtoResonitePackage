@@ -290,6 +290,12 @@ BlendShapeはボーンのあるメッシュに限定せず、morphだけを持�
   コピーの skin bone は全 renderer と親 Slot の生成後に prefab Transform identity を優先して解決する。
   unpack 後に改名されたローカル骨の path が FBX と一致せず、対応する authored Slot もない場合は、
   元の skin binding を保持して警告する。別名の骨を名前だけで推測しない。
+  改名後のPrefab骨が実在する場合は、そのTransformへ接続する。元のbind poseが出力する
+  骨ローカル座標に、メッシュの取り込み単位を接続先の単位で割った倍率を3軸とも適用する。
+  接続先の単位は最も近いimport済み祖先のモデルから取り、モデル外では1 mとする。
+  作者が設定した骨のスケールはこの比に含めない。Merge Armatureによる骨の置換行列を左から
+  合成し、各renderer専用のmeshに一度だけ保存する。MANUKA DR_05の追加下着は、
+  センチメートル単位のFBXと、Prefabで改名されたメートル単位の`Armature.1`を持つ回帰例。
   unpack時にFBXの単一コンテナがPrefabルートへ置き換わる場合は、モデル側で確認したコンテナ名を
   最初の子のpathへ補う。対象はTRSがidentityで、meshもskin boneとしての使用もない単一の直下ノード。
   既存の完全一致を優先し、任意の祖先名を削るsuffix照合には広げない。子孫も元モデルの完全なpathで照合する。

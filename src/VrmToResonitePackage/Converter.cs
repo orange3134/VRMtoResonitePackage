@@ -467,7 +467,7 @@ internal static class Converter
                 await Vrchat.VrchatGeneratedMeshes.AddTemplates(importRoot, assetsSlot, avatar, importedMeshSources, importedNodePaths);
 
                 var replacedTemplateSlots = new HashSet<Slot>();
-                Slot descriptorRoot = ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots,
+                var (descriptorRoot, skins) = ApplyVrchatPrefabHierarchy(importRoot, avatar, importedFbxRoots,
                     importedMeshSources, importedNodePaths, out var authoredObjects, out var prefabSlots,
                     replacedTemplateSlots);
                 var alignmentNodes = model.HumanBones.Values.Distinct().Where(model.NodeTargets.ContainsKey)
@@ -533,7 +533,7 @@ internal static class Converter
                 faceResolver.ApplyInitialOverrides(avatar.BlinkInitialValues, updateBaseline: true);
                 await Vrchat.VrchatSceneSetup.ApplyModularAvatar(root, avatar, physicsNodes,
                     target => Vrchat.VrchatSceneSetup.ResolveImportedTarget(target, importedMeshSources,
-                        importedNodePaths, prefabSlots), descriptorRoot is { IsDestroyed: false } ? descriptorRoot : root);
+                        importedNodePaths, prefabSlots), descriptorRoot is { IsDestroyed: false } ? descriptorRoot : root, skins);
                 profile?.Mark("scene-and-modular-avatar");
 
                 if (options.NoAvatar)
@@ -645,7 +645,7 @@ internal static class Converter
         return outputPath;
     }
 
-    private static Slot ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
+    private static (Slot DescriptorRoot, Vrchat.VrchatSkinRetargeter Skins) ApplyVrchatPrefabHierarchy(Slot importRoot, Vrchat.VrchatAvatar avatar,
         Dictionary<string, Slot> importedFbxRoots, Dictionary<Slot, string> importedMeshSources,
         Dictionary<Slot, string> importedNodePaths, out Dictionary<string, Slot> authoredObjects,
         out Dictionary<string, Slot> prefabSlots, HashSet<Slot> replacedTemplateSlots = null)
@@ -728,17 +728,18 @@ internal static class Converter
         foreach (var placement in avatar.PhysicsPlacements)
             ResolvePrefabParent(importRoot, placement.ParentFbxGuid, placement.ParentName, placement.Transforms,
                 importedFbxRoots, slots, importedMeshSources, importedNodePaths, ImportUnits(placement.ParentFbxGuid));
-        meshBuild.Bind();
+        var skins = meshBuild.Bind();
         // Placement may reset an additional model's single payload. Override only
         // afterward, with Assimp helpers folded but primary placement/unit factors
         // still on its wrapper. A later override would erase those folded factors.
         CollapseAssimpFbxTransformBones(importRoot);
         Vrchat.VrchatSceneSetup.ApplyModelObjectScales(avatar, importedMeshSources, importedNodePaths);
         Vrchat.VrchatSceneSetup.ApplyAuthoredBoneTransforms(avatar, importedMeshSources, importedNodePaths);
-        return authoredObjects.GetValueOrDefault(avatar.DescriptorRootKey ?? "") ??
+        Slot descriptorRoot = authoredObjects.GetValueOrDefault(avatar.DescriptorRootKey ?? "") ??
             avatar.MeshCopies.SelectMany(copy => copy.ParentTransforms).Where(t => t.GameObjectKey == avatar.DescriptorRootKey)
                 .Select(t => slots.GetValueOrDefault(t.Key)).FirstOrDefault(slot => slot != null) ??
             Vrchat.VrchatSceneSetup.ResolveImportedTarget(avatar.DescriptorRootTarget, importedMeshSources, importedNodePaths, slots);
+        return (descriptorRoot, skins);
     }
 
     private static bool IsUnityRootNode(string nodeName)

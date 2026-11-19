@@ -87,6 +87,7 @@ internal static class MixedScaleSkinChecks
                   sourceChest.LocalScale == new float3(1, .93f, 1.02f) &&
                   unscaled.Zip(Vertices(renderer)).Any(p => MathX.Distance(p.First, p.Second) > .00001f),
                 "Authored bone scale deforms the skin, retains unspecified axes and rejects missing paths");
+            await CheckPrefabBoneUnits(root, renderer, sourceHip, targetHip);
             float3[] before = Vertices(renderer);
             float3[] otherBefore = Vertices(untouched);
             float3 helperPosition = helper.GlobalPosition;
@@ -96,7 +97,7 @@ internal static class MixedScaleSkinChecks
             avatar.ModularMergeArmatures.Add(new() { SourceName = "Target", TargetName = "Final" });
             var method = typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Vrchat.VrchatSceneSetup")!
                 .GetMethod("ApplyModularAvatar", BindingFlags.Public | BindingFlags.Static)!;
-            await (Task)method.Invoke(null, new object[] { root, avatar, null, null, null })!;
+            await (Task)method.Invoke(null, new object[] { root, avatar, null, null, null, null })!;
             Check(source.IsDestroyed && target.IsDestroyed && renderer.Bones[0] == finalHip &&
                   renderer.Bones[1] == finalChest && renderer.Bones[2] == helper,
                 "Successive merges retain the surviving skin and helper identities");
@@ -111,6 +112,36 @@ internal static class MixedScaleSkinChecks
                 "Retargeting preserves shared source assets and initial expression weights");
             root.Destroy();
         }
+    }
+
+    private static async Task CheckPrefabBoneUnits(Slot root, SkinnedMeshRenderer source, Slot sourceHip, Slot authoredHip)
+    {
+        var avatar = new VrchatAvatar { FbxGuid = "clothing", FbxImportScale = .01f };
+        var copy = new VrchatMeshCopy("clothing", source.Slot.Name, "Copied clothing", true, true)
+            { Transform = new VrchatPrefabTransform() };
+        // A renamed prefab armature has an explicit identity but no matching FBX path.
+        copy.BoneTargets[0] = new("clothing", authoredHip.Name, "Renamed/Hips", "prefab", 1);
+        avatar.MeshCopies.Add(copy);
+        var sources = new Dictionary<Slot, string> { [source.Slot] = "clothing", [sourceHip] = "clothing" };
+        var slots = new Dictionary<string, Slot> { ["prefab:1"] = authoredHip };
+        var build = VrchatSceneSetup.InstantiateMeshCopies(avatar, sources, _ => root,
+            new Dictionary<Slot, string>(), slots);
+        var skins = build.Bind();
+
+        var renderer = root.FindChild(copy.Name).GetComponent<SkinnedMeshRenderer>();
+        renderer.BlendShapeWeights[0] = source.BlendShapeWeights[0];
+        await skins.SaveMeshes();
+        var original = source.Mesh.Asset.Data;
+        var raw = original.GetPosition(0) + original.BlendShapes.First().Frames.First().GetPositionDelta(0)
+            * source.BlendShapeWeights[0];
+        var expected = authoredHip.LocalPointToGlobal(original.GetBone(0).BindPose.TransformPoint3x4(raw) * .01f);
+        var vertices = Vertices(renderer);
+        float untouchedError = vertices.Skip(1).Zip(Vertices(source).Skip(1))
+            .Max(pair => MathX.Distance(pair.First, pair.Second));
+        Check(renderer.Bones[0] == authoredHip && MathX.Distance(expected, vertices[0]) < .00001f &&
+              untouchedError < .00001f && renderer.BlendShapeWeights[0] == source.BlendShapeWeights[0],
+            $"Prefab skin bind units: vertex={vertices[0]}, expected={expected}, untouched error={untouchedError}");
+        renderer.Slot.Destroy();
     }
 
     private static void CheckPrimaryScaleOverrides(Slot parent)

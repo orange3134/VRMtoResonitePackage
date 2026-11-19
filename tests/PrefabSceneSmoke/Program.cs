@@ -129,7 +129,7 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
             var placementSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", roots);
             var paths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", roots);
             object[] placementHierarchyArgs = { exportRoot, placementAvatar, roots, placementSources, paths, null, null, null };
-            var descriptorRoot = (Slot)typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
+            var (descriptorRoot, _) = ((Slot, VrchatSkinRetargeter))typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
                 .GetMethod("ApplyVrchatPrefabHierarchy", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, placementHierarchyArgs);
             var slots = (Dictionary<string, Slot>)placementHierarchyArgs[6];
             Check(Math.Abs(bodyBone.GlobalPosition.y - 2.66f) < .00001f &&

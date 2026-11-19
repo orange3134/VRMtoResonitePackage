@@ -45,19 +45,19 @@ internal static class VrchatSceneSetup
 
     internal sealed class MeshCopyBuild
     {
-        private Action _bind;
+        private Func<VrchatSkinRetargeter> _bind;
         public Dictionary<string, Slot> AuthoredObjects { get; }
-        internal MeshCopyBuild(Dictionary<string, Slot> objects, Action bind)
+        internal MeshCopyBuild(Dictionary<string, Slot> objects, Func<VrchatSkinRetargeter> bind)
         {
             AuthoredObjects = objects;
             _bind = bind;
         }
 
-        public void Bind()
+        public VrchatSkinRetargeter Bind()
         {
             var bind = _bind ?? throw new InvalidOperationException("Mesh copies have already been bound.");
             _bind = null;
-            bind();
+            return bind();
         }
     }
 
@@ -168,8 +168,9 @@ internal static class VrchatSceneSetup
         // all remaining authored hierarchy, then explicitly finishes the binding phase.
         return new MeshCopyBuild(authoredObjects, Bind);
 
-        void Bind()
+        VrchatSkinRetargeter Bind()
         {
+            var skins = new VrchatSkinRetargeter();
             var capturedSources = importedSources.ToDictionary(entry => entry.Key, entry => entry.Value);
             foreach (var (copy, slot) in copies)
             {
@@ -186,6 +187,22 @@ internal static class VrchatSceneSetup
                     Slot bone = ResolveImportedTarget(target, capturedSources, importedPaths, prefabSlots);
                     if (bone != null)
                     {
+                        // Bind poses produce points in the source bone's local units.
+                        // An authored bone inherits the units of its nearest imported
+                        // ancestor (or meters outside a model), even when its prefab
+                        // name/path differs from the original FBX skeleton.
+                        if (bone != renderer.Bones[i])
+                        {
+                            Slot ancestor = bone;
+                            while (ancestor != null && !capturedSources.ContainsKey(ancestor))
+                                ancestor = ancestor.Parent;
+                            float targetUnits = ancestor == null ? 1f : ImportScale(capturedSources[ancestor]);
+                            float ratio = ImportScale(copy.FbxGuid) / targetUnits;
+                            if (!float.IsFinite(ratio) || ratio <= 0)
+                                throw new InvalidDataException($"Invalid prefab skin import scale: {copy.Name} / {bone.Name}");
+                            if (ratio != 1f)
+                                skins.CorrectBindPose(renderer, i, float4x4.Scale(float3.One * ratio));
+                        }
                         renderer.Bones[i] = bone;
                         continue;
                     }
@@ -216,6 +233,7 @@ internal static class VrchatSceneSetup
                     replacedTemplateSlots?.Add(slot);
                 renderer.Destroy();
             }
+            return skins;
         }
 
         float ImportScale(string guid) => guid == null ? 1f : guid == avatar.FbxGuid ? avatar.FbxImportScale :
@@ -675,14 +693,14 @@ internal static class VrchatSceneSetup
     }
 
     public static async Task ApplyModularAvatar(Slot root, VrchatAvatar avatar, IDictionary<int, Slot> physicsNodes = null,
-        Func<VrchatBoneTarget, Slot> resolveTarget = null, Slot descriptorRoot = null)
+        Func<VrchatBoneTarget, Slot> resolveTarget = null, Slot descriptorRoot = null, VrchatSkinRetargeter skins = null)
     {
         // Capture identities before any merge destroys their original slots.
         var mergeTargets = avatar.ModularMergeArmatures
             .SelectMany(m => new[] { m.SourceBoneTarget, m.TargetBoneTarget })
             .Concat(avatar.ModularBoneProxies.SelectMany(p => new[] { p.SourceBoneTarget, p.TargetBoneTarget }))
             .Where(t => t != null).Distinct().ToDictionary(t => t, t => resolveTarget?.Invoke(t));
-        var skins = new VrchatSkinRetargeter();
+        skins ??= new VrchatSkinRetargeter();
         int merged = 0;
         foreach (VrchatModularMergeArmature merge in avatar.ModularMergeArmatures)
         {
