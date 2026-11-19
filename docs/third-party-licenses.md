@@ -87,6 +87,12 @@ RecordPackage/DataTree APIを呼び出す。FrooxEngine 2026.11.16.1330のCollid
 開発用ツール・実アバター由来の期待条件・採取データは製品EXEへ同梱しない。
 新しい外部コード・配布依存・通知対象は追加しない。
 
+変換後の階層採取と三段階比較runnerも同じ範囲の独立実装。インストール済みElements.Coreの
+DataTree公開APIを反射で確認し、保存済みローカルパッケージで参照形式を検証する。
+骨接続の比較テストには自作のJSON・DataTreeだけを使い、Omaneko v1.1の既存の利用条件確認を
+引き継ぐ実変換は非公開のローカル検証に限る。外部ソースの転載、素材の同梱、追加依存はない。
+開発用ツールは製品EXEへ含めず、THIRD-PARTY-NOTICESの追加対象はない。
+
 EkuのRenderTexture判定とNagmaのFBX骨階層採取の修正、保存スキンの追従テストは、既存の
 本リポジトリ実装とUnity 2022.3.22f1・インストール済みFrooxEngineのAPIを用いた独立実装。
 Unity側の骨行列・bind pose・ウェイト採取にも外部サンプルのコピーはない。

@@ -1,5 +1,8 @@
 # ローカルアバター回帰テスト
 
+変換後に骨・スロットが増える問題は、[変換後の階層比較](converted-structure-tests.md)の
+一括runnerでUnity・変換前解析・保存パッケージを照合する。解析一致と変換後の一致は別に記録する。
+
 Unityで継承を解決して採取したv2基準値は、[Unity参照データの直接比較](unity-reference-tests.md#resopon解析との直接比較v2)
 で再検証する。`.local/avatar-tests.json` の `unityResolvedParity` に比較レポートへのパス、状態、
 入力・期待値・実値のハッシュを追記できる。採取状態の `unityResolvedCollection` や既存の

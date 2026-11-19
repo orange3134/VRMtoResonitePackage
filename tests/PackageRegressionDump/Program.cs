@@ -5,21 +5,27 @@ using Elements.Assets;
 using Elements.Core;
 using VrmToResonitePackage;
 
-if (args.Length != 2)
+bool structure = args.Length == 3 && args[0] == "--structure";
+bool checkStructure = args.Length == 2 && args[0] == "--check-structure";
+if (args.Length != 2 && !structure)
 {
-    Console.Error.WriteLine("Usage: PackageRegressionDump input.resonitepackage new-snapshot.json");
+    Console.Error.WriteLine("Usage: PackageRegressionDump [--structure] input.resonitepackage new-snapshot.json | --check-structure new-snapshot.json");
     return 2;
 }
 try
 {
     ResoniteLocator.InstallAssemblyResolver(ResoniteLocator.Locate(null));
-    Dump(Path.GetFullPath(args[0]), Path.GetFullPath(args[1]));
+    if (checkStructure) { CheckStructure(Path.GetFullPath(args[1])); return 0; }
+    Dump(Path.GetFullPath(args[structure ? 1 : 0]), Path.GetFullPath(args[structure ? 2 : 1]), structure);
     return 0;
 }
-catch (Exception error) { Console.Error.WriteLine(error.Message); return 1; }
+catch (Exception error) { Console.Error.WriteLine(error); return 1; }
 
 [MethodImpl(MethodImplOptions.NoInlining)]
-static void Dump(string input, string output)
+static void CheckStructure(string output) => StructureSnapshotChecks.Run(output);
+
+[MethodImpl(MethodImplOptions.NoInlining)]
+static void Dump(string input, string output, bool structure)
 {
     // This is a developer tool: decode saved data without starting FrooxEngine or
     // loading user components. Never overwrite an avatar, reference or earlier run.
@@ -33,6 +39,11 @@ static void Dump(string input, string output)
     var root = DataTreeConverter.LoadAuto(memory) ?? throw new InvalidDataException("Invalid main asset.");
     var types = List(root.TryGetNode("Types")).Select(n => Value<string>(n)).ToArray();
     if (root.TryGetNode("Object") is not DataTreeDictionary objectRoot) throw new InvalidDataException("Missing object root.");
+    if (structure)
+    {
+        StructureSnapshot.Write(objectRoot, types, hash, output);
+        return;
+    }
     var slots = new List<object>();
     Walk(objectRoot, "r", Array.Empty<string>(), true);
     var snapshot = new { format = "resopon.package-snapshot", schemaVersion = 1, packageSha256 = hash, slots };
