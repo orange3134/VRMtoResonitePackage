@@ -18,6 +18,8 @@ import subprocess
 import sys
 import uuid
 
+import avatar_registry
+
 REPO = Path(__file__).resolve().parents[1]
 EXPORTERS = REPO / "tools/unity/Editor"
 
@@ -143,9 +145,8 @@ def check_registry(args, parser):
         if args.timeout <= 0 or args.case_id != "prefab" or output.exists():
             raise ValueError("Use a positive timeout, a new output directory and --case (not --case-id)")
         for case in selected:
-            path = Path(case["inputPath"])
-            # Registry paths can be relative to the registry file, not the shell cwd.
-            case["inputPath"] = str((path if path.is_absolute() else registry.parent / path).resolve())
+            case["inputPath"] = str(avatar_registry.input_path(registry, case))
+            case["selectedAvatar"] = avatar_registry.selected_avatar(case.get("arguments", []))
             try:
                 project, _ = locate_project(Path(case["inputPath"]))
             except (OSError, ValueError):
@@ -180,6 +181,9 @@ def check_registry(args, parser):
                 command.extend(["--unity", str(args.unity.resolve())])
             if args.viewpoints:
                 command.append("--viewpoints")
+            avatar = case["selectedAvatar"]
+            if avatar is not None:
+                command.append("--avatar=" + avatar)
             result = dict(id=case["id"], inputPath=case["inputPath"], captureStatus="not-captured",
                           parityStatus="not-run", status="failed", logPath=str(output / (case["id"] + ".log")))
             report["cases"].append(result)
@@ -243,12 +247,17 @@ def main(argv=None):
     parser.add_argument("--reference-dump", type=Path, help="prebuilt UnityReferenceDump.dll; otherwise build it")
     parser.add_argument("--output", type=Path, help="new result directory; default .local/prefab-reference/<run>")
     parser.add_argument("--case-id", default="prefab", help="ID used in the replayable coverage manifest")
+    parser.add_argument("--avatar", help="verify and record this conversion selection for a direct prefab")
     parser.add_argument("--timeout", type=int, default=1800, help="timeout in seconds for each process")
     parser.add_argument("--viewpoints", action="store_true", help="also capture descriptor viewpoints and humanoid anchors twice")
     args = parser.parse_args(argv)
+    if args.avatar == "":
+        parser.error("--avatar requires a nonempty name")
     if (args.prefab is None) == (args.registry is None) or (args.case and not args.registry):
         parser.error("Specify one prefab or --registry; --case requires --registry")
     if args.registry:
+        if args.avatar is not None:
+            parser.error("Registry captures use each case's registered --avatar")
         return check_registry(args, parser)
     token = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8]
     output = (args.output or REPO / ".local/prefab-reference" / token).resolve()
@@ -279,7 +288,7 @@ def main(argv=None):
                   projectUnityVersion=version, status="failed", captureStatus="not-run", parityStatus="not-run",
                   beforeFiles=before, installedExporters=installed, workPath=str(work),
                   sourceFiles={str(p.relative_to(REPO)): sha(p) for p in
-                               [Path(__file__), REPO / "scripts/test-unity-resolved.py",
+                               [Path(__file__), Path(avatar_registry.__file__), REPO / "scripts/test-unity-resolved.py",
                                 REPO / "scripts/compare-unity-reference.py", *sorted(EXPORTERS.glob("*.cs"))]})
     folder = project / "Assets" / ("ResoPonReference_" + uuid.uuid4().hex)
     copied = {}
@@ -343,6 +352,7 @@ def main(argv=None):
         coverage = work / "coverage.json"
         accepted_coverage = dict(format="resopon.unity-resolved-coverage", schemaVersion=1, cases=[dict(
             id=args.case_id, status="captured", inputPath=str(prefab), inputSha256=case["inputSha256"],
+            conversionArguments=["--avatar", args.avatar] if args.avatar is not None else [],
             projectFiles={path: digest for path, digest in before.items() if path != str(prefab)},
             dependencyFiles={entry["path"]: entry["sha256"] for entry in case["dependencyFiles"]},
             prefabGuid=case["prefabGuid"], expectedPath=str(expected), expectedSha256=case["expectedSha256"])])

@@ -3,6 +3,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import sys
 from pathlib import Path
 import tempfile
 import types
@@ -11,6 +12,7 @@ from unittest import mock
 from test_resolved import snapshot
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "scripts"))
 spec = importlib.util.spec_from_file_location("replay", REPO / "scripts/test-unity-resolved.py")
 replay = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(replay)

@@ -22,13 +22,11 @@ public static partial class VrchatAvatarParser
             var unique = hierarchy.GroupBy(n => n.Path).Where(g => g.Count() == 1)
                 .ToDictionary(g => g.Key, g => g.Single());
             VrchatBoneTarget Target(UnityModelNode node) => new(guid, node.Name, node.Path);
-            foreach (var node in unique.Values)
+            var childrenByParent = UnityModelNode.ChildrenByParent(hierarchy.Where(n => unique.ContainsKey(n.Path)), sortNames);
+            foreach (var (parentPath, children) in childrenByParent)
             {
-                IEnumerable<UnityModelNode> children = hierarchy.Where(n => n.ParentPath == node.Path && unique.ContainsKey(n.Path));
-                if (sortNames) children = children.OrderBy(n => n.Name.ToLowerInvariant(), StringComparer.Ordinal)
-                    .ThenBy(n => n.Name, StringComparer.Ordinal);
-                var targets = children.Select(Target).ToArray();
-                if (targets.Length > 1) avatar.HierarchyOrders.Add(new(Target(node), targets));
+                if (children.Length > 1 && unique.TryGetValue(parentPath, out var parent))
+                    avatar.HierarchyOrders.Add(new(Target(parent), children.Select(Target).ToArray()));
             }
             foreach (var modification in package.PrefabGraph.Modifications.Where(m => m.Target.Occurrence == guid &&
                          m.Value["propertyPath"]?.AsString() == "m_IsActive"))

@@ -32,7 +32,7 @@ def write(path, value):
         stream.write('\n')
 
 
-def check_case(case, directory, dump, timeout):
+def check_case(case, directory, dump, timeout, mapping_path=None):
     result = {'caseId': case['caseId'], 'conversionStatus': case['status'],
               'parserStatus': case.get('unityComparison', {}).get('status', 'not-run'),
               'captureStatus': 'not-run', 'status': 'not-compared'}
@@ -82,11 +82,9 @@ def check_case(case, directory, dump, timeout):
             replay.verify_project_files(records[0])
 
         verify()
-        report = comparison.compare(comparison.unity_compare.load_snapshot(expected),
-                                    comparison.unity_compare.load_snapshot(actual), converted)
-        report['inputs'] = {name: {'path': str(path), 'sha256': comparison.sha256(path)} for name, path in
-                           [('unity', expected), ('parser', actual), ('converted', snapshot)]}
-        report['packageSha256'] = converted['packageSha256']
+        report = comparison.compare_captures(comparison.unity_compare.load_snapshot(expected),
+            comparison.unity_compare.load_snapshot(actual), converted,
+            {'unity': expected, 'parser': actual, 'converted': snapshot}, mapping_path)
         verify()
         require(comparison.sha256(package) == case['packageSha256'], 'Package changed during comparison')
         target = directory / 'comparison.json'
@@ -105,6 +103,8 @@ def main():
     parser.add_argument('--dump', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--timeout', type=int, default=180)
+    parser.add_argument('--mapping', nargs=2, action='append', default=[], metavar=('CASE', 'FILE'),
+                        help='reviewed mapping for this case and package; repeat for other cases')
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
     output, batch_path, dump = args.output.resolve(), args.batch_report.resolve(), args.dump.resolve()
@@ -119,6 +119,9 @@ def main():
         parser.error('A completed batch with every registered case and unchanged registry is required')
     if repo / '.tmp_verify' not in output.parents or output.exists() or not dump.is_file() or args.timeout <= 0:
         parser.error('Specify an existing dump tool, positive timeout and new output under .tmp_verify')
+    mappings = {case_id: Path(path).resolve() for case_id, path in args.mapping}
+    if len(mappings) != len(args.mapping) or any(key not in ids or not path.is_file() for key, path in mappings.items()):
+        parser.error('Each mapping requires a distinct registered case ID and an existing file')
     output.mkdir(parents=True)
     report = {'format': 'resopon.converted-batch-review', 'schemaVersion': 1, 'status': 'running',
               'batchPath': str(batch_path), 'batchSha256': comparison.sha256(batch_path),
@@ -129,7 +132,7 @@ def main():
                               'Saved Enabled, skin bone pruning, merged hierarchies and unsupported fields need review.',
                               'World pose, bind poses, visuals and runtime behavior need separate checks.']}
     for case in batch['cases']:
-        result = check_case(case, output / case['caseId'], dump, args.timeout)
+        result = check_case(case, output / case['caseId'], dump, args.timeout, mappings.get(case['caseId']))
         report['cases'].append(result)
         write(output / (case['caseId'] + '.result.json'), result)
         print(case['caseId'] + ': ' + result['status'], flush=True)

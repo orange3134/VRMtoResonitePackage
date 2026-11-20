@@ -45,6 +45,10 @@ Unityは通常のimportとプロジェクト内のEditorコードを実行する
 
 - `unity/<case-id>/expected.json` と `repeat.json`: Unityで2回採取した解決済みv2データ。
 - `unity/coverage.json`: 同じPrefab入力で後から再比較できるmanifest。
+  `conversionArguments` には選択引数を保存する。直接指定の既定値は `[]`、
+  `--avatar NAME` または登録ケースのアバター指定がある場合は `["--avatar", "NAME"]`。
+  再比較時に本番パーサが選ぶPrefabを検証し、[変換後の階層比較](converted-structure-tests.md)にも
+  同じmanifestを渡せる。材質など選択以外の登録オプションを使った変換は全件バッチで行う。
 - `parity/`: ResoPon解析JSON、項目ごとの差分、比較ログ。
 - `report.json`: 採取状態と比較状態、Unity版、Prefabとmeta・プロジェクト設定の前後ハッシュ、
   Unityの採取前後の依存ハッシュ、採取コードのハッシュ。ビルド・Unityログも同じ出力先に保存する。

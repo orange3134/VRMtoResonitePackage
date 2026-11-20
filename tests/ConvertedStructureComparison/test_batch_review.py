@@ -50,6 +50,35 @@ class BatchReviewTests(unittest.TestCase):
         self.assertEqual('needs-review', result['status'])
         self.assertEqual(1, result['summary']['unmappedSources'])
 
+    def test_batch_cli_applies_mapping_only_to_the_named_case(self):
+        other = dict(self.case, caseId='other')
+        # Both registered cases select the same input. Only the first mapping was reviewed.
+        records = batch.comparison.snapshot_check.load(self.coverage)['cases']
+        combined = self.root / 'both.json'
+        batch.write(combined, dict(cases=records + [dict(records[0], id='other')]))
+        self.case['unityComparison'].update(sourceCoveragePath=str(combined),
+                                            sourceCoverageSha256=batch.comparison.sha256(combined))
+        registry = self.root / 'registry.json'
+        batch.write(registry, dict(cases=[dict(id=key) for key in ('example', 'other')]))
+        source_report = self.root / 'batch.json'
+        batch.write(source_report, dict(status='passed', cases=[self.case, other], gitHead='test', converterSha256='test',
+                                        registrySha256=batch.comparison.sha256(registry)))
+        mapping = self.root / 'mapping.json'
+        batch.write(mapping, dict(unitySha256=batch.comparison.sha256(self.expected),
+                                  packageSha256=self.case['packageSha256'], transforms={'r': 'r'}))
+        dump = self.root / 'dump.dll'
+        dump.touch()
+        output = self.root / 'review'
+        args = ['batch', str(source_report), '--output', str(output), '--dump', str(dump),
+                '--mapping', 'example', str(mapping)]
+        def capture(command, **kwargs):
+            batch.write(Path(command[-1]), self.converted)
+            return subprocess.CompletedProcess(command, 0)
+        with mock.patch('sys.argv', args), mock.patch.object(batch.subprocess, 'run', side_effect=capture):
+            self.assertEqual(1, batch.main())
+        report = batch.comparison.snapshot_check.load(output / 'report.json')
+        self.assertEqual(['matched-covered-fields', 'needs-review'], [c['status'] for c in report['cases']])
+
     def test_uncaptured_unity_still_dumps_but_never_matches(self):
         self.case['unityComparison'] = dict(status='not-captured', reason='Missing script')
         result = self.check()

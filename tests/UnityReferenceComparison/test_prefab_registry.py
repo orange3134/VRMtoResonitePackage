@@ -16,7 +16,7 @@ class RegistryTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.registry = self.root / "avatar-tests.json"
         capture.write(self.registry, dict(version=1, cases=[
-            dict(id="first", inputPath="missing project/first.prefab"),
+            dict(id="first", inputPath="missing project/first.prefab", arguments=["--avatar", "First Variant"]),
             dict(id="package", inputPath="avatar.unitypackage"),
             dict(id="second", inputPath="missing project/second.prefab")]))
         self.original = self.registry.read_bytes()
@@ -33,6 +33,8 @@ class RegistryTests(unittest.TestCase):
             self.builds += 1
             return 0
         key = command[command.index("--case-id") + 1]
+        self.assertEqual(["--avatar=First Variant"] if key == "first" else [],
+                         [arg for arg in command if arg.startswith("--avatar=")])
         self.invoked.append(key)
         outcome = self.outcomes.get(key, "matched")
         if outcome == "preflight-failed":

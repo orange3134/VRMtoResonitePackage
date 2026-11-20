@@ -5,11 +5,13 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "scripts"))
 spec = importlib.util.spec_from_file_location("avatar_batch", REPO / "scripts/convert-all-local-avatars.py")
 batch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(batch)
@@ -25,7 +27,7 @@ class BatchFixture:
         (self.repo / ".local").mkdir(parents=True)
         self.caller = self.root / "caller"
         self.caller.mkdir()
-        self.input = self.caller / "avatar with spaces 日本語.vrm"
+        self.input = self.repo / ".local" / "avatar with spaces 日本語.vrm"
         self.input.write_bytes(b"self-authored fixture")
         self.converted = []
 
@@ -68,7 +70,8 @@ class BatchFixture:
 
 
 class BatchInputTests(BatchFixture, unittest.TestCase):
-    def test_relative_input_uses_caller_directory_for_hash_and_conversion(self):
+    def test_relative_input_uses_registry_directory_for_hash_and_conversion(self):
+        (self.caller / self.input.name).write_bytes(b"different avatar at the same relative path")
         code, report = self.run_batch([self.input.name])
         self.assertEqual(0, code)
         self.assertEqual([str(self.input)], self.converted)
@@ -98,6 +101,7 @@ class UnityBatchTests(BatchFixture, unittest.TestCase):
         self.coverage = self.root / "coverage.json"
         self.reference = {"id": "case-0", "inputPath": str(self.input), "status": "captured"}
         self.parity = "matched"
+        self.replay_metadata = {}
         self.replayed = []
 
     def invoke(self, command, *, cwd, **kwargs):
@@ -109,7 +113,8 @@ class UnityBatchTests(BatchFixture, unittest.TestCase):
             binary = Path(command[command.index("--reference-dump") + 1])
             batch.write_json(output / "report.json", {
                 "converterSha256": batch.sha256(binary.with_name("ResoPon.dll")),
-                "cases": [{"id": "case-0", "status": self.parity, "differences": int(self.parity == "different")}]})
+                "cases": [{"id": "case-0", "status": self.parity, "differences": int(self.parity == "different"),
+                           **self.replay_metadata}]})
             return subprocess.CompletedProcess(command, int(self.parity != "matched"))
         return super().invoke(command, cwd=cwd, **kwargs)
 
@@ -136,6 +141,15 @@ class UnityBatchTests(BatchFixture, unittest.TestCase):
         self.assertEqual("passed", report["conversionStatus"])
         self.assertEqual("failed", report["status"])
         self.assertTrue(Path(report["cases"][0]["outputPackage"]).is_file())
+
+    def test_external_dependency_match_is_incomplete_for_the_converted_archive(self):
+        self.replay_metadata["dependencyScope"] = "archive plus captured project dependencies"
+        code, report = self.compare()
+        self.assertEqual(1, code)
+        self.assertEqual("incomplete", report["status"])
+        self.assertEqual("passed", report["conversionStatus"])
+        self.assertEqual({"matched": 1}, report["unityComparisonSummary"])
+        self.assertEqual({"incomplete": 1}, report["validationSummary"])
 
     def test_missing_capture_is_incomplete(self):
         self.reference.update(status="failed", reason="Missing script")

@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import types
 import unittest
@@ -12,6 +13,7 @@ from unittest import mock
 from test_resolved import snapshot
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "scripts"))
 spec = importlib.util.spec_from_file_location("prefab_capture", REPO / "scripts/check-prefab-unity.py")
 capture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(capture)
@@ -66,7 +68,9 @@ class PrefabCaptureTests(unittest.TestCase):
             value = snapshot()
             if self.different:
                 value["sections"]["renderers"][0]["enabled"] = False
-            capture.write(Path(command[-1]), value)
+            self.assertEqual(["--verify-selection", self.args[self.args.index("--avatar") + 1]
+                              if "--avatar" in self.args else ""], command[5:])
+            capture.write(Path(command[4]), value)
             if self.mutate:
                 self.prefab.write_text("changed source")
         return types.SimpleNamespace(returncode=0)
@@ -93,10 +97,18 @@ class PrefabCaptureTests(unittest.TestCase):
         self.assertEqual([], list((self.project / "Assets").glob("ResoPonReference_*")))
         case = capture.read(self.output / "unity/coverage.json")["cases"][0]
         self.assertEqual(str(self.prefab), case["inputPath"])
+        self.assertEqual([], case["conversionArguments"])
         self.assertEqual(capture.sha(self.model_meta), case["dependencyFiles"][str(self.model_meta)])
         self.model_meta.write_text("importBlendShapes: 0")
         with self.assertRaisesRegex(ValueError, "dependency changed"):
             capture.load_replay().verify_project_files(case)
+
+    def test_explicit_selection_is_verified_and_saved(self):
+        self.args.extend(["--avatar", "Variant with spaces"])
+        code, _ = self.run_capture()
+        self.assertEqual(0, code)
+        case, = capture.read(self.output / "unity/coverage.json")["cases"]
+        self.assertEqual(["--avatar", "Variant with spaces"], case["conversionArguments"])
 
     def viewpoint_process(self, command, **kwargs):
         result = self.run_process(command, **kwargs)

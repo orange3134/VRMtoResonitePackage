@@ -14,6 +14,8 @@ import subprocess
 import sys
 import uuid
 
+import avatar_registry
+
 
 def sha256(path):
     with path.open("rb") as stream:
@@ -75,9 +77,12 @@ def compare_unity(case, input_path, directory, build, repo, timeout):
         return dict(provenance, status="failed", error=str(error))
 
 
-def validation_status(conversion, unity):
+def validation_status(conversion, comparison):
+    unity = comparison["status"]
     if conversion == "failed" or unity in ("different", "failed", "producer-failed", "missing-dependency", "selection-mismatch"):
         return "failed"
+    if comparison.get("dependencyScope"):
+        return "incomplete"
     return "passed" if unity in ("matched", "not-applicable") else "incomplete"
 
 
@@ -150,7 +155,7 @@ def main():
 
         print(f"Starting {case_id}", flush=True)
         try:
-            input_path = Path(case["inputPath"]).resolve()
+            input_path = avatar_registry.input_path(registry_path, case)
             item["inputPath"] = str(input_path)
             item["inputSha256"] = sha256(input_path)
             item["unityComparison"] = compare_unity(case, input_path, directory, build, repo, args.timeout)
@@ -175,7 +180,7 @@ def main():
                         packageBytes=target.stat().st_size)
         except Exception as error:
             item.update(status="failed", error=str(error))
-        item["validationStatus"] = validation_status(item["status"], item["unityComparison"]["status"])
+        item["validationStatus"] = validation_status(item["status"], item["unityComparison"])
         item["finishedUtc"] = datetime.now(timezone.utc).isoformat()
         write_json(directory / "result.json", item)
         print(f"{item['status']}: {case_id}", flush=True)

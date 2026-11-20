@@ -20,6 +20,7 @@ python -B scripts/check-converted-avatar.py .local/unity-resolved/<collection>/c
 出力先は `.tmp_verify/` 以下の新規ディレクトリ。入力・期待値のSHA-256、選択Prefab GUID、
 Prefab入力の依存ファイルと設定を検査する。既存の期待値やローカル登録一覧を上書きしない。
 coverageの `conversionArguments` は `[]`（本番の既定選択）または `['--avatar', '名前']` が必須。
+`check-prefab-unity.py` の新しい採取結果には選択引数が入る。項目のない旧Prefab基準は再採取する。
 アーカイブ外の依存を補完したUnity基準は、通常変換と入力が異なるためこのrunnerでは拒否する。
 その場合は依存が揃ったプロジェクト内Prefabで再採取する。
 
@@ -88,8 +89,8 @@ Prefab入力は採取時のプロジェクト依存ファイルも照合する�
 
 Unity/parserが外部プロジェクト依存を補って解析したアーカイブは、通常変換のアーカイブ単独入力と
 同一とは扱えない。この場合は `not-compared` にする。古いPrefab基準に依存ハッシュがない場合は、
-`scripts/check-prefab-unity.py` で再採取し、登録済み選択引数を `conversionArguments` に記録した
-coverageで `check-converted-avatar.py` を再実行する。元のバッチ結果は上書きしない。
+`scripts/check-prefab-unity.py` で再採取し、出力されたcoverageで `check-converted-avatar.py` を再実行する。
+元のバッチ結果は上書きしない。
 終了コード0は比較対象範囲の一致、1は要調査・未比較・失敗を含む結果。
 
 全件の判定では、変換成功数・同一入力での解析一致数・保存構造の比較対象数を別々に集計する。
@@ -151,7 +152,14 @@ python -B scripts/compare-converted-structure.py unity.json parser.json `
    ファイルには `unitySha256`、`packageSha256`、`transforms`（Unity Transform ID→変換後Slot ID）を
    記録し、比較CLIへ `--mapping mapping.json` を渡す。ハッシュが変わった対応表は拒否する。
    多対一指定は認めず、自動候補との衝突も曖昧として残す。ルートは自動対応しない。
+   単体runnerにも `--mapping FILE` を指定できる。初回の生成物を見て対応を確認したら、
+   同じcoverage・ケースに `--review-run 初回の出力ディレクトリ --mapping FILE` を追加し、
+   `--output` に新しいディレクトリを指定する。元の変換・inspect・採取の完了と入力・パッケージ・
+   比較用JSONのハッシュを検査し、そのパッケージを再ビルドや再変換なしで照合する。
+   全件runnerは `--mapping ケースID FILE` を必要なケースごとに指定する。
 5. 対応候補上の有効状態、対応した祖先、同型Renderer、順序付きbone接続を比較する。
+   対応先ごとにMeshRendererとSkinnedMeshRendererの数を双方向に照合し、増減を
+   `renderer-count` として記録する。骨・有効状態の個別照合は同型が両側で一つずつの場合に行う。
    `siblingOrders` は元の兄弟同士の相対順序を比較する。補助階層を経由したSlotの位置も考慮し、
    未対応の親・子や親関係の不一致がある群は `unverified` にする。差は `sibling-order` として
    報告する。生成補助Slotを含む絶対indexの一致や、skinのBones配列順とは区別する。

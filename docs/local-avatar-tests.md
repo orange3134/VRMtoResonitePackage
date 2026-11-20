@@ -103,8 +103,10 @@ Unity参照との一致も[採取対象のフィールド](unity-reference-tests
 ### 登録アバターをすべて変換して一か所へ集約する
 
 Python 3.11以降で、登録済みの `arguments` を保った通常変換を全件実行する。
-相対 `inputPath` はスクリプトを起動した作業ディレクトリを基準に絶対パスへ解決し、
-入力ハッシュ・変換引数・結果の記録に同じパスを使う。ケースごとの作業ディレクトリには依存しない。
+相対 `inputPath` は登録ファイルの親ディレクトリを基準にする。Prefab採取、全件変換、
+PowerShellの単体検証は同じ絶対パスでハッシュ計算と実行を行う。
+以前の全件変換でリポジトリ直下を基準に登録した相対パスは、`.local/avatar-tests.json` から
+見たパス（例 `../Assets/A.prefab`）または絶対パスへ更新する。
 
 ```powershell
 python -B scripts/convert-all-local-avatars.py --jobs 3
@@ -132,7 +134,9 @@ python -B scripts/convert-all-local-avatars.py --jobs 3
 3. `unityComparison` に一致・不一致・未採取・未対応・再採取必要・失敗とレポートを保存する。
    差分があっても残りの比較・変換・inspectは続行し、手動確認用のパッケージも集約する。
 4. `conversionStatus` と `unityComparisonSummary` を分け、全体の `status` は不一致・失敗が
-   あれば `failed`、未採取・未対応・再採取必要なら `incomplete` とする。どちらも終了コード1。
+   あれば `failed`、未採取・未対応・再採取必要なら `incomplete` とする。アーカイブ外の依存を
+   補って解析が一致した場合も、`unityComparison.status=matched` と `dependencyScope` を記録し、
+   アーカイブ単独で実行した変換の `validationStatus` は `incomplete` とする。どちらも終了コード1。
    VRMはUnity Prefab投影の対象外として `not-applicable` を理由付きで記録し、一致件数に含めない。
    対象ケースの比較と全変換が成功した場合だけ `passed`・終了コード0になる。
 

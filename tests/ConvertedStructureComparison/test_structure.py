@@ -1,7 +1,9 @@
 """Synthetic structures only; no avatar assets or engine required."""
 import copy
+import hashlib
 import importlib.util
 import json
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -9,6 +11,7 @@ from unittest import mock
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
 spec = importlib.util.spec_from_file_location('structure', ROOT / 'scripts/compare-converted-structure.py')
 comparison = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(comparison)
@@ -97,6 +100,25 @@ class ComparisonTests(unittest.TestCase):
         unity, converted = fixtures(('Twin', 'Twin'))
         report = comparison.compare(unity, unity, converted)
         self.assertEqual(['ambiguous', 'ambiguous'], [r['status'] for r in report['transforms'][1:]])
+
+    def test_unexpected_saved_renderer_on_mapped_bone_needs_review(self):
+        unity, converted = fixtures()
+        converted['slots'][1]['components'].append(dict(id='r/0:0', type='[FrooxEngine]FrooxEngine.MeshRenderer',
+            enabled=True, bones=None, rigBones=None, blendShapeWeights=None, slotReferences=[]))
+        report = comparison.compare(unity, unity, converted, {'r': 'r'})
+        self.assertEqual('needs-review', report['status'])
+        issue, = report['differences']
+        self.assertEqual(('renderer-count', 'r/0', 0, 1, ['r/0:0']),
+                         (issue['kind'], issue['target'], issue['expected'], issue['actual'], issue['convertedComponents']))
+
+    def test_two_source_renderers_cannot_claim_one_saved_component(self):
+        unity, converted = fixtures()
+        renderer = unity['sections']['renderers'][0]
+        unity['sections']['renderers'].append(dict(renderer, id=renderer['id'][:-1] + '1'))
+        report = comparison.compare(unity, unity, converted, {'r': 'r'})
+        self.assertEqual('needs-review', report['status'])
+        self.assertEqual(['unverified', 'unverified'], [r['status'] for r in report['renderers']])
+        self.assertEqual(['renderer-count'], [issue['kind'] for issue in report['differences']])
 
     def test_duplicate_output_names_are_not_first_match(self):
         unity, converted = fixtures()
@@ -250,7 +272,23 @@ class RunnerTests(unittest.TestCase):
 
             with mock.patch.object(runner.subprocess, 'run', side_effect=execute), \
                     mock.patch.object(runner.subprocess, 'check_output', return_value='synthetic-head\n'):
-                code = runner.main([str(coverage), '--case', 'synthetic', '--output', str(output)])
+                args = [str(coverage), '--case', 'synthetic', '--output', str(output)]
+                if scenario in ('mapped', 'stale', 'review', 'tampered'):
+                    mapping = work / 'mapping.json'
+                    mapping.write_text(json.dumps(dict(unitySha256=comparison.sha256(expected),
+                        packageSha256='0' * 64 if scenario == 'stale' else hashlib.sha256(b'converted package').hexdigest(),
+                        transforms={'r': 'r'})), encoding='utf-8')
+                    if scenario in ('review', 'tampered'):
+                        self.assertEqual(1, runner.main(args))
+                        if scenario == 'tampered':
+                            (output / 'converted.json').write_text('{}')
+                        reviewed = work / 'reviewed'
+                        args[-1] = str(reviewed)
+                        args += ['--review-run', str(output)]
+                        output = reviewed
+                        calls.clear()
+                    args += ['--mapping', str(mapping)]
+                code = runner.main(args)
             return code, json.loads((output / 'report.json').read_text(encoding='utf-8')), calls
 
     def test_parser_failure_still_captures_but_never_passes(self):
@@ -262,6 +300,21 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual('needs-review', report['stages']['structureComparison'])
         self.assertEqual({'no-scale-outlier': 1}, report['summary']['skinScale'])
         self.assertTrue(any('--inspect' in command for command in calls))
+
+    def test_reviewed_mapping_allows_match_and_stale_mapping_fails(self):
+        code, report, _ = self.run_case('mapped')
+        self.assertEqual((0, 'matched-covered-fields'), (code, report['status']))
+        code, report, _ = self.run_case('stale')
+        self.assertEqual((1, 'failed'), (code, report['status']))
+        self.assertIn('stale mapping hashes', report['errors'])
+
+    def test_review_saved_package_uses_original_capture_and_checks_its_hash(self):
+        code, report, calls = self.run_case('review')
+        self.assertEqual((0, 'matched-covered-fields', []), (code, report['status'], calls))
+        self.assertIn('previousRun', report)
+        code, report, calls = self.run_case('tampered')
+        self.assertEqual((1, 'failed', []), (code, report['status'], calls))
+        self.assertIn('Saved comparison input changed', report['errors'])
 
     def test_input_changes_during_conversion_invalidate_successful_stages(self):
         code, report, _ = self.run_case('input-changed')

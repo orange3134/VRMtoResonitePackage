@@ -111,14 +111,13 @@ internal sealed class ModelSnapshot
         var meshes = importer?["meshes"];
         bool useFileUnits = meshes?["useFileUnits"]?.AsBool(meshes?["useFileScale"]?.AsBool(true) ?? true) ?? true;
         float units = (meshes?["globalScale"]?.AsFloat(1) ?? 1) * (useFileUnits ? FbxUnits.MetersPerUnit(asset.DiskPath) : 1);
+        var childrenByParent = UnityModelNode.ChildrenByParent(hierarchy, meshes?["sortHierarchyByName"]?.AsBool(true) ?? true);
+        var nodesByName = hierarchy.ToLookup(n => n.Name, StringComparer.Ordinal);
         foreach (var node in hierarchy)
         {
             long go = Identity(node.Path, 1), transform = Identity(node.Path, 4);
             bool root = node == hierarchy[0];
-            IEnumerable<UnityModelNode> children = hierarchy.Where(n => n.ParentPath == node.Path);
-            if (meshes?["sortHierarchyByName"]?.AsBool(true) ?? true)
-                children = children.OrderBy(n => n.Name.ToLowerInvariant(), StringComparer.Ordinal)
-                    .ThenBy(n => n.Name, StringComparer.Ordinal);
+            var children = childrenByParent.GetValueOrDefault(node.Path, Array.Empty<UnityModelNode>());
             var components = new List<YamlNode> { Map(("component", Ref(transform))) };
             if (node.HasMesh)
             {
@@ -134,8 +133,8 @@ internal sealed class ModelSnapshot
                 var bonePaths = connected != null && connected.Select(p => p.Split('/')[^1]).SequenceEqual(boneNames)
                     ? connected : boneNames.Select(name =>
                 {
-                    var matches = hierarchy.Where(n => n.Name == name).ToArray();
-                    return matches.Length == 1 ? matches[0].Path : throw new InvalidDataException("Ambiguous FBX skin bone: " + name);
+                    var matches = nodesByName[name];
+                    return matches.Count() == 1 ? matches.First().Path : throw new InvalidDataException("Ambiguous FBX skin bone: " + name);
                 }).ToArray();
                 string rootBone = CommonAncestor(bonePaths);
                 // Unity uses the last connected cluster when the shared ancestor is not

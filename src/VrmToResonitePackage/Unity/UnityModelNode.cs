@@ -8,6 +8,13 @@ internal sealed record UnityModelNode(string Path, string ParentPath, string Nam
     System.Numerics.Vector3 Position, System.Numerics.Quaternion Rotation, System.Numerics.Vector3 Scale,
     bool HasMesh, bool Skinned, string[] MaterialNames)
 {
+    internal static Dictionary<string, UnityModelNode[]> ChildrenByParent(IEnumerable<UnityModelNode> nodes, bool sortByName)
+        => nodes.GroupBy(node => node.ParentPath, StringComparer.Ordinal).ToDictionary(group => group.Key,
+            group => sortByName
+                ? group.OrderBy(node => node.Name.ToLowerInvariant(), StringComparer.Ordinal)
+                    .ThenBy(node => node.Name, StringComparer.Ordinal).ToArray()
+                : group.ToArray(), StringComparer.Ordinal);
+
     internal static IReadOnlyList<UnityModelNode> Capture(Scene scene, bool importBlendShapes = true,
         IReadOnlyDictionary<string, System.Numerics.Matrix4x4> sourceTransforms = null)
     {

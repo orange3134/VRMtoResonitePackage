@@ -16,6 +16,8 @@ import re
 import subprocess
 import sys
 
+import avatar_registry
+
 
 def sha256(path):
     with path.open("rb") as stream:
@@ -118,13 +120,7 @@ def main(argv=None):
                           inputPath=str(input_path), inputSha256=case["inputSha256"])
             command = ["dotnet", str(binary), str(input_path), str(expected_path), str(actual_path)]
             if "conversionArguments" in case:
-                arguments = case["conversionArguments"]
-                if not isinstance(arguments, list) or any(not isinstance(a, str) for a in arguments):
-                    raise ValueError("Invalid conversion arguments")
-                selected = [i for i, a in enumerate(arguments) if a == "--avatar"]
-                if len(selected) > 1 or (selected and selected[0] + 1 >= len(arguments)):
-                    raise ValueError("Invalid avatar selection arguments")
-                command += ["--verify-selection", arguments[selected[0] + 1] if selected else ""]
+                command += ["--verify-selection", avatar_registry.selected_avatar(case["conversionArguments"]) or ""]
             if case.get("dependencyFiles") and input_path.suffix.lower() == ".unitypackage":
                 dependencies = directory / "dependencies.json"
                 write_json(dependencies, case["dependencyFiles"])
@@ -158,7 +154,7 @@ def main(argv=None):
             result.update(status="failed", error=str(error))
         write_json(directory / "result.json", result)
         print(case["id"] + ": " + result["status"], flush=True)
-    source_paths = [Path(__file__), Path(__file__).with_name("compare-unity-reference.py"),
+    source_paths = [Path(__file__), Path(avatar_registry.__file__), Path(__file__).with_name("compare-unity-reference.py"),
                     *sorted((repo / "tests/UnityReferenceDump").glob("*.cs"))]
     report = {"format": "resopon.unity-resolved-parity", "schemaVersion": 1,
               "finishedUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),

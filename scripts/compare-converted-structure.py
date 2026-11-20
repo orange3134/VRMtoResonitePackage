@@ -243,15 +243,27 @@ def compare(unity, parser, converted, overrides=None):
                 size['rendererId'] not in sizes, 'unknown or duplicate skin size record')
         sizes[size['rendererId']] = size
     skin_counts = collections.Counter()
+    supported_renderers = {'UnityEngine.MeshRenderer': '[FrooxEngine]FrooxEngine.MeshRenderer',
+                           'UnityEngine.SkinnedMeshRenderer': '[FrooxEngine]FrooxEngine.SkinnedMeshRenderer'}
+    expected_counts = collections.Counter((r['transform'], supported_renderers[r['type']])
+                                          for r in unity['sections']['renderers'] if r['type'] in supported_renderers)
+    for sid, target in mapping.items():
+        for kind in supported_renderers.values():
+            saved_ids = [c['id'] for c in slots[target]['components'] if c['type'] == kind]
+            count = expected_counts[sid, kind]
+            if len(saved_ids) != count:
+                differences.append({'kind': 'renderer-count', 'sourceId': sid, 'target': target, 'type': kind,
+                                    'expected': count, 'actual': len(saved_ids), 'convertedComponents': saved_ids})
     for renderer in unity['sections']['renderers']:
         target = mapping.get(renderer['transform'])
-        kind = '[FrooxEngine]FrooxEngine.' + renderer['type'].split('.')[-1]
+        kind = supported_renderers.get(renderer['type'])
         candidates = [c for c in slots[target]['components'] if c['type'] == kind] if target else []
+        unique_pair = len(candidates) == 1 and expected_counts[renderer['transform'], kind] == 1
         row = {'sourceId': renderer['id'], 'targetSlot': target, 'sourceBones': renderer.get('bones'),
                'sourceRootBone': renderer.get('rootBone'), 'status': 'unverified'}
         renderer_rows.append(row)
         if renderer['id'] in source_skins:
-            saved = (candidates[0].get('skinSize') if len(candidates) == 1 else
+            saved = (candidates[0].get('skinSize') if unique_pair else
                      {'reason': 'renderer missing or ambiguous on mapped slot'})
             scale = compare_skin_size(sizes.get(renderer['id']), saved)
             row['skinScale'] = scale
@@ -262,7 +274,7 @@ def compare(unity, parser, converted, overrides=None):
                 unverified.append(issue)
             elif scale['status'] in ('expanded', 'shrunk'):
                 differences.append(issue)
-        if len(candidates) != 1:
+        if not unique_pair:
             row.update(reason='renderer missing or ambiguous on mapped slot', candidateCount=len(candidates))
             unverified.append({'kind': 'renderer', **row})
             continue
@@ -334,6 +346,23 @@ def compare(unity, parser, converted, overrides=None):
             'unmappedSlots': extras, 'unmappedSubtrees': branches, 'unresolvedOrNullBones': unresolved}
 
 
+def compare_captures(unity, parser, converted, paths, mapping_path=None):
+    inputs = {name: {'path': str(path.resolve()), 'sha256': sha256(path)} for name, path in paths.items()}
+    overrides = None
+    if mapping_path is not None:
+        digest = sha256(mapping_path)
+        mapping = snapshot_check.load(mapping_path)
+        require(mapping['unitySha256'] == inputs['unity']['sha256'] and
+                mapping['packageSha256'] == converted['packageSha256'], 'stale mapping hashes')
+        overrides = mapping['transforms']
+        require(isinstance(overrides, dict), 'mapping transforms must be an object')
+        require(sha256(mapping_path) == digest, 'mapping changed during comparison')
+        inputs['mapping'] = {'path': str(mapping_path.resolve()), 'sha256': digest}
+    report = compare(unity, parser, converted, overrides)
+    report.update(inputs=inputs, packageSha256=converted['packageSha256'])
+    return report
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('unity', type=Path)
@@ -346,18 +375,10 @@ def main(argv=None):
         unity = unity_compare.load_snapshot(args.unity)
         parser = unity_compare.load_snapshot(args.parser) if args.parser else None
         converted = snapshot_check.load(args.converted)
-        overrides = None
-        if args.mapping:
-            mapping = snapshot_check.load(args.mapping)
-            require(mapping['unitySha256'] == sha256(args.unity) and
-                    mapping['packageSha256'] == converted['packageSha256'], 'stale mapping hashes')
-            overrides = mapping['transforms']
-        report = compare(unity, parser, converted, overrides)
-        report['inputs'] = {key: {'path': str(path.resolve()), 'sha256': sha256(path)} for key, path in
-                            [('unity', args.unity), ('parser', args.parser), ('converted', args.converted)] if path is not None}
-        report['packageSha256'] = converted['packageSha256']
-        if args.mapping:
-            report['inputs']['mapping'] = {'path': str(args.mapping.resolve()), 'sha256': sha256(args.mapping)}
+        paths = {'unity': args.unity, 'converted': args.converted}
+        if args.parser:
+            paths['parser'] = args.parser
+        report = compare_captures(unity, parser, converted, paths, args.mapping)
         with args.report.open('x', encoding='utf-8') as stream:
             json.dump(report, stream, ensure_ascii=False, indent=2, allow_nan=False)
         print(json.dumps(report['summary']))
