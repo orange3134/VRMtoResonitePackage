@@ -278,6 +278,9 @@ public static class VrchatAnimatorFaceParser
         {
             if (unsupportedVisemes.Contains(index) || !visemes.TryGetValue(index, out var candidates) || candidates.Count != 1) continue;
             Shape shape = candidates.Single();
+            // A proven FX binding is the effective assignment for this phoneme.
+            // Keep the descriptor connection for phonemes with no driven pose.
+            avatar.Visemes.RemoveAll(v => v.ResonitePreset == preset);
             avatar.Visemes.Add(new VrchatViseme { ResonitePreset = preset, MeshGameObjectPath = shape.Renderer,
                 MeshGameObjectName = shape.Renderer.Split('/').Last(), BlendShapeName = shape.Name });
         }

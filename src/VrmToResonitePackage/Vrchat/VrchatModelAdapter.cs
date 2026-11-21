@@ -87,7 +87,8 @@ public static class VrchatModelAdapter
             int morphIndex = targetNames.Count;
             targetNames.Add(viseme.BlendShapeName);
             var expression = new VrmExpression { Preset = viseme.ResonitePreset, Name = viseme.ResonitePreset };
-            expression.Binds.Add(new VrmExpressionBind { MeshIndex = meshIndex, MorphIndex = morphIndex, Weight = 1f });
+            expression.Binds.Add(new VrmExpressionBind { MeshIndex = meshIndex, MorphIndex = morphIndex, Weight = 1f,
+                RequiredRendererName = viseme.RequireNamedRenderer ? viseme.MeshGameObjectName : null });
             model.Expressions.Add(expression);
         }
 

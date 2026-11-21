@@ -1882,7 +1882,7 @@ public static partial class VrchatAvatarParser
             avatar.ViewPosition = new Vec3(view.Vec("x"), view.Vec("y"), view.Vec("z"));
         }
 
-        // Visemes: only when the descriptor uses VisemeBlendShape lip sync (lipSync == 3).
+        // Preserve explicit connections even when the parameter-driven FX pose is neutral.
         int lipSync = d?["lipSync"]?.AsInt(-1) ?? -1;
         YamlNode visemeShapes = d?["VisemeBlendShapes"];
         // Variant descriptors often reference a local stripped renderer; follow it to the source
@@ -1900,7 +1900,8 @@ public static partial class VrchatAvatarParser
             foreach (var shape in visemeShapes?.Seq ?? new())
                 if (!string.IsNullOrEmpty(shape.AsString())) avatar.ExpressionVisemeNames.Add(shape.AsString());
         // Explicit null is authored intent, not a failed lookup eligible for global fallback.
-        if (lipSync == 3 && visemeShapes?.Seq != null && d?["VisemeSkinnedMesh"]?.FileID != 0)
+        bool namedFallback = lipSync == 4 && (visemeTarget != null || !string.IsNullOrEmpty(visemeMesh));
+        if ((lipSync == 3 || namedFallback) && visemeShapes?.Seq != null && (d?["VisemeSkinnedMesh"]?.FileID ?? 0) != 0)
         {
             foreach ((string preset, int idx) in VrchatConstants.VisemeToVrcSlot())
             {
@@ -1919,6 +1920,7 @@ public static partial class VrchatAvatarParser
                     BlendShapeName = shape,
                     MeshGameObjectName = visemeMesh,
                     MeshTarget = visemeTarget,
+                    RequireNamedRenderer = namedFallback && visemeTarget == null,
                 });
             }
         }

@@ -291,6 +291,7 @@ public sealed record VrchatAvatarChoice(
 
 public sealed class VrchatViseme
 {
+    public bool RequireNamedRenderer { get; set; }
     public VrchatBoneTarget MeshTarget { get; set; }
     public string MeshGameObjectPath { get; set; }
     public string ResonitePreset { get; set; } // aa / ih / ou / ee / oh

@@ -39,8 +39,8 @@ internal static class VoiceVisemeChecks
         clips[403] = Clip(3);
         if (Read() != null) throw new Exception("Missing non-looping playback settings");
 
-        // A selectable submachine has only five nonzero poses. The declaration
-        // still lists fifteen shapes; it must never create the other ten bindings.
+        // The FX sampler reports the five nonzero poses. The descriptor supplies
+        // the other ten connections separately when its renderer has those shapes.
         string nested = "--- !u!1107 &2\nAnimatorStateMachine:\n  m_EntryTransitions:\n  - {fileID: 90}\n" +
             "--- !u!1109 &90\nAnimatorTransition:\n  m_DstStateMachine: {fileID: 1}\n  m_Conditions:\n" +
             "  - m_ConditionMode: 6\n    m_ConditionEvent: SpeakerMode\n    m_EventTreshold: 2\n";

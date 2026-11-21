@@ -151,6 +151,7 @@ AnimationClip:
     {
         var descriptor = UnityYaml.ParseFlatDocument($"lipSync: 4\nbaseAnimationLayers:\n- type: 5\n  isDefault: 0\n  animatorController: {{fileID: 91, guid: {controllerGuid}}}\n");
         var face = new VrchatAvatar();
+        face.Visemes.Add(new VrchatViseme { ResonitePreset = "PP", BlendShapeName = "oldPP", MeshGameObjectName = "Body" });
         VrchatAnimatorFaceParser.Apply(package, descriptor, face);
         Check(face.Visemes.Count == 15 && face.Visemes.All(v => v.MeshGameObjectName == "Body"),
             "Animator visemes resolve all fifteen shapes through negative state and transition IDs");
@@ -948,6 +949,15 @@ Transform:
   m_GameObject: {fileID: 902}
 """;
     var face = Read(settings + localObjects);
+    string parameterOnly = settings + Change("lipSync", "4") + Change("VisemeBlendShapes.Array.size", "3")
+        + Change("VisemeBlendShapes.Array.data[2]", "-none-");
+    var declared = Read(parameterOnly + localObjects).Visemes;
+    Check(declared.Count == 2 && declared.All(v => v.MeshGameObjectName == "VariantFace") &&
+          declared.Any(v => v.ResonitePreset == "sil" && v.BlendShapeName == "silence") &&
+          declared.Any(v => v.ResonitePreset == "PP" && v.BlendShapeName == "mouth"),
+        "Parameter-only lip sync preserves assigned channels even without a driven pose");
+    Check(Read(parameterOnly + Change("VisemeSkinnedMesh", "{fileID: 0}", true) + localObjects).Visemes.Count == 0,
+        "Parameter-only lip sync requires the assigned renderer for descriptor connections");
     Check(face.ViewPosition?.X == 0.25f && face.ViewPosition?.Y == 1.6f && face.ViewPosition?.Z == -0.1f &&
           face.Visemes.Count == 2 && face.Visemes.Single(v => v.ResonitePreset == "PP").BlendShapeName == "mouth" &&
           face.Visemes.All(v => v.MeshGameObjectName == "VariantFace"),

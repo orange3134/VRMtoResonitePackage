@@ -95,7 +95,9 @@ Voice=1 で1秒評価したとき、その音素だけで100になる shape を�
   期待値は Unity 等から得た音素名と shape 名の JSON オブジェクトで指定する。
 - Ricorine は Descriptor の宣言配列が空でも FX を評価すると15音素が得られる。
   Bel Albino は `MouthMode=2`、`CN_MOUTH_MORPH_CANCEL_ENABLE=true`、`Voice=1` で
-  5母音の独立した応答を確認できる。既定状態だけで応答がない場合は、測定した条件を記録する。
+  5母音の独立した応答を確認できる。接続の比較には FX で観測した対応を優先し、残りの音素は
+  Descriptor の指定先 Renderer に存在する宣言名で照合する。Bel Albino の接続期待数は15。
+  レポートの `declaredFallbacks` は宣言から補った数で、FX の測定条件と結果は別に記録する。
 - VRM 0.x は入力の母音プリセットから対象メッシュとモーフ添字を引き、保存先の Renderer・
   shape 名と比較する。AvatarSample_C は5母音が比較対象になる。
 

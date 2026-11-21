@@ -110,10 +110,24 @@ def compare_visemes(unity, converted, slots, transforms):
     if len(descriptors) != 1:
         return {'status': 'unverified', 'reason': 'Expected one selected avatar descriptor'}
     descriptor, = descriptors
-    if descriptor.get('reason'):
+    reason = descriptor.get('reason')
+    if reason and descriptor['mode'] != 4:
         return {'status': 'unverified', 'reason': descriptor['reason']}
     phonemes = ('Silence', 'PP', 'FF', 'TH', 'DD', 'kk', 'CH', 'SS', 'nn', 'RR', 'aa', 'E', 'ih', 'oh', 'ou')
     skins = {s['id']: s for s in unity['sections']['renderers'] if s['type'] == 'UnityEngine.SkinnedMeshRenderer'}
+    source_bindings = list(descriptor['bindings'])
+    sampled = {b['phoneme'] for b in source_bindings}
+    declared = []
+    if descriptor['mode'] == 4:
+        skin = skins.get(descriptor.get('renderer'))
+        if skin:
+            names = {b['name'] for b in skin['blendShapes']}
+            for index, name in enumerate(descriptor.get('declaredShapes', [])[:len(phonemes)]):
+                if index not in sampled and name and name != '-none-' and name in names:
+                    declared.append(dict(phoneme=index, renderer=skin['id'], shape=name))
+        source_bindings.extend(declared)
+        if reason and not source_bindings:
+            return {'status': 'unverified', 'reason': reason}
     owners = {t['sourceId']: t for t in transforms}
     actual = collections.Counter()
     for driver in drivers:
@@ -121,7 +135,7 @@ def compare_visemes(unity, converted, slots, transforms):
             actual[(b['phoneme'], b['renderer'], b['shape'])] += 1
     expected = collections.Counter()
     unknown = []
-    for b in descriptor['bindings']:
+    for b in source_bindings:
         skin = skins[b['renderer']]
         owner = owners[skin['transform']]
         # Generated expression controls may share a name with the mesh. Resolve only if
@@ -138,12 +152,13 @@ def compare_visemes(unity, converted, slots, transforms):
         return [dict(phoneme=p, renderer=r, shape=s) for p, r, s in counter.elements()]
     invalid = [d['component'] for d in drivers if not d['enabled'] or not d['analyzer']]
     missing, extra = bindings(expected - actual), bindings(actual - expected)
-    incomplete = descriptor['mode'] == 4 and {b['phoneme'] for b in descriptor['bindings']} != set(range(15))
+    incomplete = descriptor['mode'] == 4 and {b['phoneme'] for b in source_bindings} != set(range(len(phonemes)))
     status = ('different' if missing or invalid or (extra and not unknown and not incomplete) else
               'unverified' if unknown or incomplete else 'matched')
-    return dict(status=status, mode=descriptor['mode'], expected=len(descriptor['bindings']),
+    return dict(status=status, mode=descriptor['mode'], expected=len(source_bindings),
                 matched=sum((expected & actual).values()), missing=missing, extra=extra, invalidDrivers=invalid,
-                unmapped=unknown, incompleteSampling=incomplete)
+                unmapped=unknown, incompleteSampling=descriptor['mode'] == 4 and len(sampled) < len(phonemes),
+                declaredFallbacks=len(declared), samplingReason=reason)
 
 
 def compare_skin_size(source, saved):
