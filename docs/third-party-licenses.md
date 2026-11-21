@@ -40,6 +40,9 @@ vrctomのコード、依存物、アバター素材、取得済みの期待値�
 `.tmp_verify/` に保持する。検証専用にPython公式のembeddable packageを展開する場合も、
 同梱の `LICENSE.txt`（PSF Licenseと内包コードの通知）を残し、版と入手元をローカルに記録する。
 これらを製品・リポジトリへ取り込まない検証では、配布用の第三者通知の追加対象にはしない。
+共有口形の合成は実行環境の `DirectVisemeDriver`、`ValueInput`、`ValueMaxMulti`、
+`ValueFieldDrive` の公開フィールドを接続する独立実装。FX の回帰テストは自作 YAML を使い、
+実アバターのコントローラーやクリップ、Resonite のコンポーネント実装は配布物に取り込まない。
 規約PDFのローカル確認に使うpypdf等の補助ツールも同様に、取得版・出典・ハッシュと
 同梱ライセンスをローカルに保持する。再検査スクリプトはPython標準ライブラリだけを使い、
 規約確認用ライブラリを製品依存やテストの必須依存へ追加しない。
@@ -85,6 +88,11 @@ Unity採取値を本リポジトリや配布EXEへ取り込まないため、THI
 RecordPackage/DataTree APIを呼び出す。FrooxEngine 2026.11.16.1330のCollider調査は
 インストール済みDLLの型・フィールドの反射確認のみで、逆コンパイル実装のコピーはない。
 開発用ツール・実アバター由来の期待条件・採取データは製品EXEへ同梱しない。
+
+口パク照合では Unity 2022.3.22f1 と VRChat Avatars SDK 3.10.6 のローカル環境で
+Descriptor の公開シリアライズ項目と FX の評価結果を参照した。保存側は既存の
+RecordPackage と MeshX API でフィールド参照と形状名を読む。Voice 駆動 FX の変換と
+テストは独立実装で、SDK や Resonite の実装、入力アバターのクリップ・素材は取り込まない。
 新しい外部コード・配布依存・通知対象は追加しない。
 
 変換後の階層採取と三段階比較runnerも同じ範囲の独立実装。インストール済みElements.Coreの

@@ -133,6 +133,8 @@ public sealed class VrmExpression
 
 public sealed class VrmExpressionBind
 {
+    /// <summary>Exact renderer name for an explicit VRChat connection lacking a resolved transform identity.</summary>
+    public string RequiredRendererName { get; set; }
     /// <summary>glTF mesh index the morph target lives on (resolved for both VRM versions).</summary>
     public int MeshIndex { get; set; }
 

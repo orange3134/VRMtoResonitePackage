@@ -4,7 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEditor;
+using UnityEditor.Animations;
 using UnityEngine;
+using UnityEngine.Animations;
+using UnityEngine.Playables;
 
 public static class ResoPonResolvedReference
 {
@@ -74,6 +77,7 @@ public static class ResoPonResolvedReference
         public string prefabGuid;
         public Sections sections = new Sections();
         public List<SkinSize> skinSizes = new List<SkinSize>();
+        public List<LipSyncRecord> lipSync = new List<LipSyncRecord>();
     }
     [Serializable] private sealed class Sections
     {
@@ -160,6 +164,153 @@ public static class ResoPonResolvedReference
     }
 
     [Serializable] private sealed class Weight { public int index; public string name; public float weight; }
+    [Serializable] private sealed class LipSyncRecord
+    {
+        public string descriptor, renderer, reason, fxController, sampledSwitch;
+        public bool sampledSwitchValue;
+        public int mode;
+        public List<string> declaredShapes = new List<string>();
+        public List<LipShape> bindings = new List<LipShape>();
+    }
+    [Serializable] private sealed class LipShape { public int phoneme; public string renderer, shape; }
+
+    private static LipSyncRecord ReadLipSync(Component descriptor, Dictionary<UnityEngine.Object, string> ids)
+    {
+        var data = new SerializedObject(descriptor);
+        var skin = Required(data, "VisemeSkinnedMesh", SerializedPropertyType.ObjectReference).objectReferenceValue as SkinnedMeshRenderer;
+        var record = new LipSyncRecord { descriptor = ids[descriptor], renderer = Ref(skin, ids),
+            mode = data.FindProperty("lipSync").intValue };
+        var names = data.FindProperty("VisemeBlendShapes");
+        for (int i = 0; i < names.arraySize; i++) record.declaredShapes.Add(names.GetArrayElementAtIndex(i).stringValue);
+        if (record.mode == 3)
+        {
+            for (int i = 0; i < Math.Min(15, record.declaredShapes.Count); i++)
+            {
+                if (string.IsNullOrEmpty(record.declaredShapes[i])) continue;
+                if (skin != null && skin.sharedMesh != null && skin.sharedMesh.GetBlendShapeIndex(record.declaredShapes[i]) >= 0)
+                    record.bindings.Add(new LipShape { phoneme = i, renderer = ids[skin], shape = record.declaredShapes[i] });
+                else record.reason = "Configured viseme renderer, mesh or shape unavailable";
+            }
+        }
+        else if (record.mode == 4)
+        {
+            var layers = data.FindProperty("baseAnimationLayers");
+            RuntimeAnimatorController fx = null;
+            for (int i = 0; i < layers.arraySize; i++)
+            {
+                var layer = layers.GetArrayElementAtIndex(i);
+                if (layer.FindPropertyRelative("type").intValue == 5 && !layer.FindPropertyRelative("isDefault").boolValue)
+                    fx = layer.FindPropertyRelative("animatorController").objectReferenceValue as RuntimeAnimatorController;
+            }
+            if (fx == null) record.reason = "No custom FX controller to sample";
+            else
+            {
+                record.fxController = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(fx));
+                SampleVisemeParameter(descriptor.transform, ids, fx, record, null, false);
+                // A boolean Any State transition can park the entire viseme layer in an
+                // off state. Probe its other setting separately and record that condition.
+                if (record.bindings.Count == 0 && fx is AnimatorController controller)
+                {
+                    var switches = new HashSet<string>();
+                    foreach (var layer in controller.layers)
+                    {
+                        var machine = layer.stateMachine;
+                        if (!System.Array.Exists(machine.entryTransitions, t =>
+                            System.Array.Exists(t.conditions, c => c.parameter == "Viseme"))) continue;
+                        foreach (var transition in machine.anyStateTransitions)
+                        foreach (var c in transition.conditions)
+                            if (c.mode == AnimatorConditionMode.If || c.mode == AnimatorConditionMode.IfNot) switches.Add(c.parameter);
+                    }
+                    if (switches.Count == 1)
+                        foreach (var p in controller.parameters)
+                            if (switches.Contains(p.name) && p.type == AnimatorControllerParameterType.Bool)
+                            {
+                                record.sampledSwitch = p.name;
+                                record.sampledSwitchValue = !p.defaultBool;
+                                SampleVisemeParameter(descriptor.transform, ids, fx, record, p.name, !p.defaultBool);
+                            }
+                }
+            }
+        }
+        else record.reason = "Lip sync mode outside blendshape comparison";
+        return record;
+    }
+
+    // Evaluate the selected FX controller on a mesh-only hierarchy. No avatar behaviours run
+    // and no curves are evaluated on the source prefab. Keep the other FX parameters at startup defaults.
+    private static void SampleVisemeParameter(Transform root, Dictionary<UnityEngine.Object, string> ids,
+        RuntimeAnimatorController fx, LipSyncRecord record, string switchName, bool switchValue)
+    {
+        var preview = UnityEditor.SceneManagement.EditorSceneManager.NewPreviewScene();
+        try
+        {
+            var proxy = new GameObject("Viseme sample");
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(proxy, preview);
+            var animator = proxy.AddComponent<Animator>();
+            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            var transforms = new Dictionary<Transform, Transform> { [root] = proxy.transform };
+            Transform CopyPath(Transform original)
+            {
+                if (transforms.TryGetValue(original, out var target)) return target;
+                var parent = CopyPath(original.parent);
+                target = new GameObject(original.name).transform;
+                target.SetParent(parent, false);
+                transforms.Add(original, target);
+                return target;
+            }
+            var samples = new List<(SkinnedMeshRenderer original, SkinnedMeshRenderer copy, float[,] weights)>();
+            foreach (var original in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                if (original.sharedMesh == null || original.sharedMesh.blendShapeCount == 0) continue;
+                var copy = CopyPath(original.transform).gameObject.AddComponent<SkinnedMeshRenderer>();
+                copy.sharedMesh = original.sharedMesh;
+                samples.Add((original, copy, new float[15, copy.sharedMesh.blendShapeCount]));
+            }
+            for (int phoneme = 0; phoneme < 15; phoneme++)
+            {
+                foreach (var s in samples)
+                    for (int j = 0; j < s.weights.GetLength(1); j++) s.copy.SetBlendShapeWeight(j, s.original.GetBlendShapeWeight(j));
+                var graph = PlayableGraph.Create("Viseme FX");
+                try
+                {
+                    graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
+                    var controller = AnimatorControllerPlayable.Create(graph, fx);
+                    AnimationPlayableOutput.Create(graph, "FX", animator).SetSourcePlayable(controller);
+                    graph.Play();
+                    graph.Evaluate(0);
+                    bool viseme = false;
+                    for (int k = 0; k < controller.GetParameterCount(); k++)
+                    {
+                        var p = controller.GetParameter(k);
+                        if (p.name == "Viseme" && p.type == AnimatorControllerParameterType.Int)
+                        { controller.SetInteger(p.nameHash, phoneme); viseme = true; }
+                        if (p.name == "Voice" && p.type == AnimatorControllerParameterType.Float) controller.SetFloat(p.nameHash, 1);
+                    }
+                    if (!viseme) { record.reason = "FX has no integer Viseme parameter"; return; }
+                    if (switchName != null) controller.SetBool(switchName, switchValue);
+                    for (int step = 0; step < 60; step++) graph.Evaluate(1f / 60f);
+                    foreach (var s in samples)
+                        for (int j = 0; j < s.weights.GetLength(1); j++) s.weights[phoneme, j] = s.copy.GetBlendShapeWeight(j);
+                }
+                finally { graph.Destroy(); }
+            }
+            foreach (var s in samples)
+                for (int j = 0; j < s.weights.GetLength(1); j++)
+                {
+                    int active = -1;
+                    for (int i = 0; i < 15; i++)
+                    {
+                        if (Mathf.Abs(s.weights[i, j]) < 0.01f) continue;
+                        if (active >= 0 || Mathf.Abs(s.weights[i, j] - 100) >= 0.01f) { active = -1; break; }
+                        active = i;
+                    }
+                    if (active >= 0) record.bindings.Add(new LipShape { phoneme = active, renderer = ids[s.original],
+                        shape = s.copy.sharedMesh.GetBlendShapeName(j) });
+                }
+            record.reason = record.bindings.Count == 0 ? "No independent full-weight shape observed at full Voice" : "";
+        }
+        finally { UnityEditor.SceneManagement.EditorSceneManager.ClosePreviewScene(preview); }
+    }
     [Serializable] private sealed class Number { public string name; public float value; }
     [Serializable] private sealed class PhysicsRecord : Identity
     {
@@ -215,6 +366,7 @@ public static class ResoPonResolvedReference
                     snapshot.sections.renderers.Add(r);
                 }
                 string type = component.GetType().FullName;
+                if (type == "VRC.SDK3.Avatars.Components.VRCAvatarDescriptor") snapshot.lipSync.Add(ReadLipSync(component, ids));
                 if (type != BoneType && type != ColliderType) continue;
                 var serialized = new SerializedObject(component);
                 var rootProperty = Required(serialized, "rootTransform", SerializedPropertyType.ObjectReference);

@@ -431,6 +431,24 @@ BlendShapeはボーンのあるメッシュに限定せず、morphだけを持�
   assumed redundant across Animator states. Reject multi-curve viseme and legacy blink motions conservatively: a single-shape driver
   cannot also clear another authored shape, even when its required value is zero.
 
+  Clonka の FX は `VisemeParameterOnly` を使い、Entry で15音素を選んで有声音のクリップ時刻を
+  `Voice` で駆動する。各クリップが同じ15項目のうち1個を開き、残り14個をゼロに戻す場合、
+  ResoPon はこの対応からネイティブの `DirectVisemeDriver` を設定する。口パク停止用の状態を
+  持つ場合は、全15項目を消すクリップと逆のスイッチ条件で無音へ復帰する遷移も確認する。
+  変換するのは口パク有効時の割当で、VRChat のキャンセルスイッチと音量カーブは再生しない。
+  クリップが衣装など別の項目もリセットする場合は、この推定の対象外となる。
+
+  Ricorine は14個の明示的な Entry とデフォルトの無音状態を持つ。音素に応じて選ばれる
+  非ループクリップの最終ポーズを使う。後段の表情レイヤーは、通常の待機状態で口形を
+  上書きするかも確認する。Bel Albino は話者モードの分岐先で、顔の Renderer に対する
+  各音素のクリップを読む。このモードでウェイトが上がるのは5母音だが、Descriptor は顔の
+  Renderer に15音素を割り当てている。FX から接続先が確定した音素はその結果を優先する。
+  残りは指定 Renderer に実在する宣言名を使い、ウェイトがゼロでも接続を保存する。
+
+  FBX 取り込みで省略された無変形の口形は、その Renderer の元 FBX にある名前を照合して
+  空のチャンネルを復元する。複数の音素が同じ口形を使う場合は、それぞれを独立した入力に
+  接続し、最大値で一つのウェイトを駆動する。通常の一対一の口形は直接接続する。
+
 ### 主モデルと骨格の統合
 
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。

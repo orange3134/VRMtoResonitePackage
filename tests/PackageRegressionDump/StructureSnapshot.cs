@@ -28,12 +28,106 @@ internal static class StructureSnapshot
         {
             format = "resopon.converted-structure", schemaVersion = 1, packageSha256 = hash,
             coordinateSystem = "Resonite saved local TRS; quaternion xyzw; no Unity-space normalization",
-            slots
+            slots, visemeDrivers = VisemeDrivers()
         };
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(snapshot, new JsonSerializerOptions { WriteIndented = true });
         using var file = new FileStream(output, FileMode.CreateNew);
         file.Write(json);
         Console.WriteLine($"Captured structure: {slots.Length} slots; package SHA-256 {hash}");
+
+        object[] VisemeDrivers()
+        {
+            var weights = new Dictionary<string, (string Renderer, int Index, string Mesh)>();
+            var analyzers = new Dictionary<string, string>();
+            var drivers = new List<(string Id, DataTreeDictionary Data)>();
+            var inputFields = new Dictionary<string, string>();
+            var maxima = new Dictionary<string, string[]>();
+            var outputs = new Dictionary<string, string>();
+            var proxies = new List<(string Node, string Target)>();
+            foreach (var slot in nodes)
+            {
+                int index = 0;
+                foreach (var component in Array(slot.Data.TryGetNode("Components")).Cast<DataTreeDictionary>())
+                {
+                    string id = slot.Id + ":" + index++;
+                    var data = (DataTreeDictionary)component.TryGetNode("Data");
+                    switch (TypeName(component))
+                    {
+                        case "[ProtoFluxBindings]FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<float>":
+                            if (data.TryGetNode("Value") is DataTreeDictionary input &&
+                                Scalar(input.TryGetNode("ID")) is string inputField)
+                                inputFields.Add(Scalar(data.TryGetNode("ID")), inputField);
+                            break;
+                        case "[ProtoFluxBindings]FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Math.ValueMaxMulti<float>":
+                            maxima.Add(Scalar(data.TryGetNode("ID")), Array(data.TryGetNode("Operands")).Select(Scalar).ToArray());
+                            break;
+                        case "[ProtoFluxBindings]FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>":
+                            if (Scalar(data.TryGetNode("Value")) is string value)
+                                outputs.Add(Scalar(data.TryGetNode("ID")), value);
+                            break;
+                        case "[FrooxEngine]FrooxEngine.ProtoFlux.CoreNodes.FieldDriveBase<float>+Proxy":
+                            if (Scalar(data.TryGetNode("Node")) is string node && Scalar(data.TryGetNode("Drive")) is string drive &&
+                                Value<bool>(data.TryGetNode("Enabled")) && !Array(data.TryGetNode("Path")).Any())
+                                proxies.Add((node, drive));
+                            break;
+                        case "[FrooxEngine]FrooxEngine.VisemeAnalyzer":
+                            analyzers.Add(Scalar(data.TryGetNode("ID")), id);
+                            break;
+                        case "[FrooxEngine]FrooxEngine.DirectVisemeDriver":
+                            drivers.Add((id, data));
+                            break;
+                        case "[FrooxEngine]FrooxEngine.SkinnedMeshRenderer":
+                            string mesh = Scalar(data.TryGetNode("Mesh"));
+                            int channel = 0;
+                            foreach (var weight in Array(data.TryGetNode("BlendShapeWeights")))
+                            {
+                                if (weight is DataTreeDictionary field && Scalar(field.TryGetNode("ID")) is string fieldId)
+                                    weights.Add(fieldId, (id, channel, mesh));
+                                channel++;
+                            }
+                            break;
+                    }
+                }
+            }
+            // Follow serialized references from each driven input through Max and
+            // the field-drive proxy to the actual renderer weight. Slot names are irrelevant.
+            var mixedTargets = (from p in proxies where outputs.TryGetValue(p.Node, out _)
+                                let max = outputs[p.Node] where maxima.ContainsKey(max) && weights.ContainsKey(p.Target)
+                                from operand in maxima[max] where operand != null && inputFields.ContainsKey(operand)
+                                group p.Target by inputFields[operand]).ToDictionary(g => g.Key, g => g.Distinct().ToArray());
+            var channels = new Dictionary<string, string[]>();
+            string[] ShapeNames(string mesh)
+            {
+                if (mesh == null || package == null || !meshes.TryGetValue(mesh, out string url) ||
+                    !Uri.TryCreate(url?.TrimStart('@'), UriKind.Absolute, out var uri) || uri.Scheme != "packdb") return null;
+                if (channels.TryGetValue(url, out var names)) return names;
+                using var source = package.ReadAsset(RecordPackage.GetAssetSignature(uri));
+                using var buffer = new MemoryStream();
+                source.CopyTo(buffer); buffer.Position = 0;
+                var geometry = new MeshX();
+                geometry.Decode(buffer);
+                return channels[url] = geometry.BlendShapes.Select(s => s.Name).ToArray();
+            }
+            string[] phonemes = { "Silence", "PP", "FF", "TH", "DD", "kk", "CH", "SS", "nn", "RR", "aa", "E", "ih", "oh", "ou" };
+            return drivers.Select(d =>
+            {
+                string source = Scalar(d.Data.TryGetNode("Source"));
+                var bindings = new List<object>();
+                foreach (string phoneme in phonemes)
+                {
+                    string field = Scalar(d.Data.TryGetNode(phoneme));
+                    if (field == null) continue;
+                    string[] mixed = mixedTargets.GetValueOrDefault(field);
+                    string weightField = mixed is { Length: 1 } ? mixed[0] : field;
+                    bool found = weights.TryGetValue(weightField, out var target);
+                    var names = found ? ShapeNames(target.Mesh) : null;
+                    bindings.Add(new { phoneme, field, weightField, renderer = target.Renderer, index = found ? (int?)target.Index : null,
+                        shape = names != null && target.Index < names.Length ? names[target.Index] : null });
+                }
+                return (object)new { component = d.Id, enabled = Value<bool>(d.Data.TryGetNode("Enabled")), source,
+                    analyzer = source == null ? null : analyzers.GetValueOrDefault(source), bindings };
+            }).ToArray();
+        }
 
         void Index(DataTreeDictionary data, string id, string parent, int index, string[] parentPath, bool active, float4x4 parentWorld)
         {

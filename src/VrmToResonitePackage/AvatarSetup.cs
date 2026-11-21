@@ -755,7 +755,7 @@ internal static class AvatarSetup
     /// </summary>
     private static void SetupVisemesFromVrm(Slot root, VrmModel vrm, BlendshapeResolver resolver)
     {
-        var drivers = new List<DirectVisemeDriver>();
+        var bindings = new List<(Viseme Viseme, SkinnedMeshRenderer Skin, IField<float> Weight)>();
 
         foreach ((string preset, Viseme viseme) in VisemePresets)
         {
@@ -772,18 +772,11 @@ internal static class AvatarSetup
                 {
                     continue;
                 }
-                DirectVisemeDriver driver = skin.Slot.GetComponent<DirectVisemeDriver>()
-                                            ?? skin.Slot.AttachComponent<DirectVisemeDriver>();
-                driver[viseme].ForceLink(field);
-                UniLog.Log($"DirectVisemeDriver: {skin.Slot.Name} / {viseme} -> {field.Name}");
-                if (!drivers.Contains(driver))
-                {
-                    drivers.Add(driver);
-                }
+                bindings.Add((viseme, skin, field));
                 break; // primary bind only per viseme
             }
         }
-        if (drivers.Count == 0)
+        if (bindings.Count == 0)
         {
             return;
         }
@@ -795,14 +788,37 @@ internal static class AvatarSetup
             analyzer = head.AttachComponent<VisemeAnalyzer>();
             head.AttachComponent<AvatarVoiceSourceAssigner>().TargetReference.Target = analyzer.Source;
         }
-        foreach (DirectVisemeDriver driver in drivers)
+        foreach (var skin in bindings.GroupBy(b => b.Skin))
         {
+            var driver = skin.Key.Slot.GetComponentOrAttach<DirectVisemeDriver>();
             if (driver.Source.Target == null)
             {
                 driver.Source.Target = analyzer;
             }
+            foreach (var target in skin.GroupBy(b => b.Weight))
+            {
+                var phonemes = target.Select(b => b.Viseme).Distinct().ToArray();
+                if (phonemes.Length == 1)
+                {
+                    driver[phonemes[0]].ForceLink(target.Key);
+                    continue;
+                }
+                // A field can have only one writer. Keep each phoneme live and
+                // drive the shared mouth shape with the strongest current weight.
+                var mixer = skin.Key.Slot.AddSlot("Visemes " + string.Join(" ", phonemes));
+                var max = mixer.AttachComponent<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Math.ValueMaxMulti<float>>();
+                foreach (var phoneme in phonemes)
+                {
+                    var input = mixer.AttachComponent<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueInput<float>>();
+                    driver[phoneme].ForceLink(input.Value);
+                    max.Operands.Add(input);
+                }
+                var output = mixer.AttachComponent<FrooxEngine.FrooxEngine.ProtoFlux.CoreNodes.ValueFieldDrive<float>>();
+                output.Value.Target = max;
+                output.GetRootProxy(addIfMissing: true).Drive.Target = target.Key;
+            }
         }
-        UniLog.Log($"表情からビセームを設定しました ({drivers.Count} ドライバー)。");
+        UniLog.Log($"表情からビセームを設定しました ({bindings.Select(b => b.Skin).Distinct().Count()} ドライバー)。");
     }
 
     // ---------------------------------------------------------------- misc avatar bits
@@ -1490,7 +1506,7 @@ internal sealed class BlendshapeResolver
         {
             // Animator morph indices address the synthetic name table, not the FBX's
             // shape order. A missing named shape cannot safely fall back to that index.
-            if (targetName != null && (_vrm.MeshBindingPaths.ContainsKey(bind.MeshIndex) ||
+            if (targetName != null && (bind.RequiredRendererName != null || _vrm.MeshBindingPaths.ContainsKey(bind.MeshIndex) ||
                 (_vrm.MeshToNodes.TryGetValue(bind.MeshIndex, out var targetNodes) &&
                  targetNodes.Any(_vrm.NodeTargets.ContainsKey)))) break;
             if (bind.MorphIndex >= 0 && bind.MorphIndex < skin.MeshBlendshapeCount)
@@ -1504,6 +1520,12 @@ internal sealed class BlendshapeResolver
 
     private IEnumerable<SkinnedMeshRenderer> EnumerateCandidates(VrmExpressionBind bind)
     {
+        if (bind.RequiredRendererName != null)
+        {
+            var matches = _renderers.Where(r => r.Slot.Name == bind.RequiredRendererName).ToArray();
+            if (matches.Length == 1) yield return matches[0];
+            yield break;
+        }
         if (_vrm.MeshToNodes.TryGetValue(bind.MeshIndex, out var identityNodes) &&
             identityNodes.Any(_vrm.NodeTargets.ContainsKey))
         {

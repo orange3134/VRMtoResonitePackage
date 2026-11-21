@@ -17,6 +17,7 @@ public sealed class VrchatAvatar
     public bool HasUnpackedRootPlacement { get; set; }
     public string ExpressionFacePath { get; set; }
     public HashSet<string> ExpressionVisemeNames { get; } = new(StringComparer.Ordinal);
+    public string VisemeRendererName { get; set; }
     public List<VrchatPhysicsPlacement> PhysicsPlacements { get; } = new();
     /// <summary>Root prefab GameObject name (also the avatar/display name).</summary>
     public string Name { get; set; }
@@ -290,6 +291,7 @@ public sealed record VrchatAvatarChoice(
 
 public sealed class VrchatViseme
 {
+    public bool RequireNamedRenderer { get; set; }
     public VrchatBoneTarget MeshTarget { get; set; }
     public string MeshGameObjectPath { get; set; }
     public string ResonitePreset { get; set; } // aa / ih / ou / ee / oh

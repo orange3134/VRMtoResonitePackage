@@ -102,6 +102,65 @@ def validate_structure(data):
     return slots
 
 
+def compare_visemes(unity, converted, slots, transforms):
+    descriptors = unity.get('lipSync')
+    drivers = converted.get('visemeDrivers')
+    if descriptors is None or drivers is None:
+        return {'status': 'unverified', 'reason': 'Viseme capture missing; recapture both sides'}
+    if len(descriptors) != 1:
+        return {'status': 'unverified', 'reason': 'Expected one selected avatar descriptor'}
+    descriptor, = descriptors
+    reason = descriptor.get('reason')
+    if reason and descriptor['mode'] != 4:
+        return {'status': 'unverified', 'reason': descriptor['reason']}
+    phonemes = ('Silence', 'PP', 'FF', 'TH', 'DD', 'kk', 'CH', 'SS', 'nn', 'RR', 'aa', 'E', 'ih', 'oh', 'ou')
+    skins = {s['id']: s for s in unity['sections']['renderers'] if s['type'] == 'UnityEngine.SkinnedMeshRenderer'}
+    source_bindings = list(descriptor['bindings'])
+    sampled = {b['phoneme'] for b in source_bindings}
+    declared = []
+    if descriptor['mode'] == 4:
+        skin = skins.get(descriptor.get('renderer'))
+        if skin:
+            names = {b['name'] for b in skin['blendShapes']}
+            for index, name in enumerate(descriptor.get('declaredShapes', [])[:len(phonemes)]):
+                if index not in sampled and name and name != '-none-' and name in names:
+                    declared.append(dict(phoneme=index, renderer=skin['id'], shape=name))
+        source_bindings.extend(declared)
+        if reason and not source_bindings:
+            return {'status': 'unverified', 'reason': reason}
+    owners = {t['sourceId']: t for t in transforms}
+    actual = collections.Counter()
+    for driver in drivers:
+        for b in driver['bindings']:
+            actual[(b['phoneme'], b['renderer'], b['shape'])] += 1
+    expected = collections.Counter()
+    unknown = []
+    for b in source_bindings:
+        skin = skins[b['renderer']]
+        owner = owners[skin['transform']]
+        # Generated expression controls may share a name with the mesh. Resolve only if
+        # exactly one candidate has a skin, independently of whether it has a viseme driver.
+        candidates = [owner['target']] if owner['target'] else owner['candidates']
+        matches = [c['id'] for sid in candidates for c in slots[sid]['components']
+                   if c['type'] == '[FrooxEngine]FrooxEngine.SkinnedMeshRenderer']
+        if len(matches) != 1 or sum(s['path'] == skin['path'] for s in skins.values()) != 1:
+            unknown.append(b)
+        else:
+            require(type(b['phoneme']) is int and 0 <= b['phoneme'] < len(phonemes), 'invalid Unity phoneme')
+            expected[(phonemes[b['phoneme']], matches[0], b['shape'])] += 1
+    def bindings(counter):
+        return [dict(phoneme=p, renderer=r, shape=s) for p, r, s in counter.elements()]
+    invalid = [d['component'] for d in drivers if not d['enabled'] or not d['analyzer']]
+    missing, extra = bindings(expected - actual), bindings(actual - expected)
+    incomplete = descriptor['mode'] == 4 and {b['phoneme'] for b in source_bindings} != set(range(len(phonemes)))
+    status = ('different' if missing or invalid or (extra and not unknown and not incomplete) else
+              'unverified' if unknown or incomplete else 'matched')
+    return dict(status=status, mode=descriptor['mode'], expected=len(source_bindings),
+                matched=sum((expected & actual).values()), missing=missing, extra=extra, invalidDrivers=invalid,
+                unmapped=unknown, incompleteSampling=descriptor['mode'] == 4 and len(sampled) < len(phonemes),
+                declaredFallbacks=len(declared), samplingReason=reason)
+
+
 def compare_skin_size(source, saved):
     def extent(record, unity):
         if not record or record.get('reason'):
@@ -340,11 +399,18 @@ def compare(unity, parser, converted, overrides=None):
                          'referencedSlotCount': sum(bool(s['referencedBy']) for s in descendants),
                          'componentCounts': dict(collections.Counter(t for s in descendants for t in s['componentTypes']))})
     unmatched_sources = [r for r in rows if r['target'] is None]
+    visemes = compare_visemes(unity, converted, slots, rows)
+    if visemes['status'] == 'different':
+        differences.append({'kind': 'viseme-bindings', **visemes})
+    elif visemes['status'] == 'unverified' and 'lipSync' in unity:
+        unverified.append({'kind': 'viseme-bindings', **visemes})
     review = parser is None or bool(before_diffs or differences or unverified or extras or unmatched_sources or unresolved)
     return {'format': 'resopon.structure-comparison', 'schemaVersion': 1,
             'status': 'needs-review' if review else 'matched-covered-fields',
             'parserParity': {'status': 'unverified' if parser is None else 'different' if before_diffs else 'matched', 'differences': before_diffs},
-            'summary': {'skinScale': dict(skin_counts), 'unityTransforms': len(sources), 'convertedSlots': len(slots),
+            'visemes': visemes,
+            'summary': {'visemeStatus': visemes['status'], 'skinScale': dict(skin_counts),
+                        'unityTransforms': len(sources), 'convertedSlots': len(slots),
                         'mappingCandidates': len(mapping), 'unmappedSources': len(unmatched_sources),
                         'unmappedSlots': len(extras), 'differences': len(differences),
                         'unverified': len(unverified), 'unresolvedOrNullBones': len(unresolved)},

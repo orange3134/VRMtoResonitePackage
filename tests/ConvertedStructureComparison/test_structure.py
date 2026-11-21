@@ -64,6 +64,51 @@ def remap_slots(converted, changes):
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_viseme_compares_the_field_owner_and_saved_mesh_channel(self):
+        unity, converted = fixtures()
+        renderer = unity['sections']['renderers'][0]['id']
+        unity['lipSync'] = [dict(mode=3, bindings=[dict(phoneme=10, renderer=renderer, shape='Open')])]
+        saved = dict(phoneme='aa', renderer='r/1:0', index=4, shape='Open')
+        driver = dict(component='r/1:1', enabled=True, analyzer='r/0:2', bindings=[saved])
+        converted['visemeDrivers'] = []
+        def check():
+            return comparison.compare(unity, unity, converted)['visemes']
+        self.assertEqual('different', check()['status'])
+        converted['visemeDrivers'].append(driver)
+        self.assertEqual('matched', check()['status'])
+        for field, wrong in [('renderer', 'r/0:0'), ('shape', 'Blink'), ('phoneme', 'PP')]:
+            with self.subTest(field=field), mock.patch.dict(saved, {field: wrong}):
+                self.assertEqual('different', check()['status'])
+        with mock.patch.dict(driver, analyzer=None):
+            self.assertEqual('different', check()['status'])
+        del converted['visemeDrivers']
+        self.assertEqual('unverified', check()['status'])
+
+    def test_parameter_only_fills_unsampled_slots_from_the_declared_mesh(self):
+        unity, converted = fixtures()
+        skin, = unity['sections']['renderers']
+        names = ['shape' + str(i) for i in range(15)]
+        skin['blendShapes'] = [dict(index=i, name=n, weight=0.) for i, n in enumerate(names)]
+        descriptor = dict(mode=4, renderer=skin['id'], declaredShapes=names.copy(),
+                          bindings=[], reason='No independent full-weight shape observed at full Voice')
+        unity['lipSync'] = [descriptor]
+        phonemes = 'Silence PP FF TH DD kk CH SS nn RR aa E ih oh ou'.split()
+        saved = [dict(phoneme=p, renderer='r/1:0', index=i, shape=n)
+                 for i, (p, n) in enumerate(zip(phonemes, names))]
+        converted['visemeDrivers'] = [dict(component='r/1:1', enabled=True, analyzer='r/0:2', bindings=saved)]
+        def check():
+            return comparison.compare(unity, unity, converted)['visemes']
+        self.assertEqual(('matched', 15), (check()['status'], check()['declaredFallbacks']))
+        saved.pop()
+        self.assertEqual('different', check()['status'])
+        descriptor['bindings'] = [dict(phoneme=0, renderer=skin['id'], shape=names[0])]
+        descriptor['declaredShapes'][0] = names[1]
+        descriptor['declaredShapes'][-3:] = ['', '-none-', 'unknown']
+        result = check()
+        self.assertEqual(('unverified', 11, 12), (result['status'], result['declaredFallbacks'], result['matched']))
+        descriptor['renderer'] = 'missing'
+        self.assertEqual(0, check()['declaredFallbacks'])
+
     def test_root_requires_reviewed_mapping_and_only_covered_fields_match(self):
         unity, converted = fixtures()
         self.assertEqual('needs-review', comparison.compare(unity, unity, converted)['status'])

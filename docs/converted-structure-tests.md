@@ -71,6 +71,36 @@ python -B scripts/compare-converted-structure.py unity.json converted.json --rep
 
 ## 保存済みパッケージから採取する
 
+Unity の新しい v2 採取には `lipSync` が入る。Descriptor の方式、参照 Renderer、宣言した
+shape 配列を記録する。パラメーター方式では独立したプレビュー階層で FX に音素0〜14を入力し、
+Voice=1 で1秒評価したとき、その音素だけで100になる shape を測る。既定状態で反応がなく、
+音素レイヤーの Any State に単一の真偽スイッチがある場合は、その反対値も測定して条件を残す。
+これらは指定条件での割当であり、動作中の音量曲線や表情の全組合せは測定しない。
+
+保存側は `PackageRegressionDump --structure` の `visemeDrivers` に、有効状態、Analyzer の接続先、
+各音素のフィールド参照、その所有 Renderer、ウェイト添字、埋め込みメッシュの shape 名を保存する。
+上記の一括実行または `compare-converted-structure.py` が `comparison.json` の `visemes` に
+一致数・欠落・余分な割当を出す。名前が同じ表情制御用 Slot もあるため、対象 Renderer を
+一意に識別できないときや、旧データに採取項目がないときは未検証になる。
+
+口形を全件照合するときは、次の回帰ケースを区別する。
+
+- GameVketChan は FBX インポーターが省略する `Silence` を含む。復元したチャンネル名と
+  保存後のドライバーの接続先をセットで確認する。
+- アイザラ、Omaneko、Tolass は複数の音素に同じ shape を指定する。期待値は
+  Renderer・音素・shape の組で数える。ユニークな shape 数だけを比較すると欠落を見逃す。
+  保存データでは `field` が音素の直結先、`weightField` が最大値を合成した後のメッシュの接続先。
+  `PrefabSceneSmoke --viseme-package <package> <expectations.json>` はヘッドレスエンジンに
+  パッケージを読み戻し、ドライバー出力に個別・同時入力・ゼロを与えて各 shape の応答を確認する。
+  期待値は Unity 等から得た音素名と shape 名の JSON オブジェクトで指定する。
+- Ricorine は Descriptor の宣言配列が空でも FX を評価すると15音素が得られる。
+  Bel Albino は `MouthMode=2`、`CN_MOUTH_MORPH_CANCEL_ENABLE=true`、`Voice=1` で
+  5母音の独立した応答を確認できる。接続の比較には FX で観測した対応を優先し、残りの音素は
+  Descriptor の指定先 Renderer に存在する宣言名で照合する。Bel Albino の接続期待数は15。
+  レポートの `declaredFallbacks` は宣言から補った数で、FX の測定条件と結果は別に記録する。
+- VRM 0.x は入力の母音プリセットから対象メッシュとモーフ添字を引き、保存先の Renderer・
+  shape 名と比較する。AvatarSample_C は5母音が比較対象になる。
+
 登録全件の変換を `scripts/convert-all-local-avatars.py` で完了した後は、
 その実行の `report.json` と隣接する凍結済み `registry.json` を使って一括採取できる。
 

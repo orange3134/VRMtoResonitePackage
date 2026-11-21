@@ -66,7 +66,17 @@ public static class VrchatAnimatorFaceParser
                 // its startup default is enabled. Reject such layers conservatively.
                 bool gated = reachable.Any(id => (controller.Doc(id)?.Root?["m_Conditions"]?.Seq ?? new())
                     .Any(condition => condition["m_ConditionEvent"]?.AsString() != "Viseme"));
-                if (descriptor["lipSync"]?.AsInt() == 4 && !gated)
+                var voiceChannels = descriptor["lipSync"]?.AsInt() == 4
+                    ? VrchatVoiceVisemes.Read(controller, animatorLayer, Clip, avatar.VisemeRendererName,
+                        descriptor["VisemeBlendShapes"]?.Seq?.Select(v => v.AsString()).ToArray(), reachable) : null;
+                if (voiceChannels != null && !Enumerable.Range(layerIndex, animatorLayers.Count - layerIndex)
+                    .Any(i => OverridesVoice(i, voiceChannels)))
+                {
+                    for (int i = 0; i < voiceChannels.Length; i++)
+                        if (voiceChannels[i] != default)
+                            RecordViseme(i, new() { new Shape(voiceChannels[i].Path, voiceChannels[i].Name, 100) });
+                }
+                else if (descriptor["lipSync"]?.AsInt() == 4 && !gated)
                 {
                     foreach (long id in reachable)
                     {
@@ -207,6 +217,19 @@ public static class VrchatAnimatorFaceParser
 
             }
 
+            bool OverridesVoice(int index, (string Path, string Name)[] channels)
+            {
+                if (!channels.Any(layerBindings[index].Contains)) return false;
+                long machine = animatorLayers[index]["m_StateMachine"]?.FileID ?? 0;
+                // An expression may replace the mouth while selected. An empty
+                // resting pose leaves the voice bank active during ordinary speech.
+                if (!initialStates.TryGetValue(machine, out var state) || Clip(state?["m_Motion"]) == null ||
+                    graph.Reachable(machine).Any(id => controller.Doc(id)?.Root?["m_Conditions"]?.Seq?.Any(
+                        c => c["m_ConditionEvent"]?.AsString() is "Voice" or "Viseme") == true)) return true;
+                var resting = MotionBindings(state["m_Motion"], out bool complete);
+                return !complete || channels.Any(resting.Contains);
+            }
+
             HashSet<(string, string)> LayerBindings(YamlNode animatorLayer)
             {
                 var bindings = new HashSet<(string, string)>();
@@ -255,6 +278,9 @@ public static class VrchatAnimatorFaceParser
         {
             if (unsupportedVisemes.Contains(index) || !visemes.TryGetValue(index, out var candidates) || candidates.Count != 1) continue;
             Shape shape = candidates.Single();
+            // A proven FX binding is the effective assignment for this phoneme.
+            // Keep the descriptor connection for phonemes with no driven pose.
+            avatar.Visemes.RemoveAll(v => v.ResonitePreset == preset);
             avatar.Visemes.Add(new VrchatViseme { ResonitePreset = preset, MeshGameObjectPath = shape.Renderer,
                 MeshGameObjectName = shape.Renderer.Split('/').Last(), BlendShapeName = shape.Name });
         }
