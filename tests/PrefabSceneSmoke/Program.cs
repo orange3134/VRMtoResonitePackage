@@ -11,12 +11,15 @@ bool nativePackage = args.Length == 3 && args[0] == "--native-package";
 bool primarySkinPackage = args.Length == 4 && args[0] == "--primary-skin-package";
 bool skinPackage = args.Length == 4 && args[0] == "--skin-package" || primarySkinPackage;
 bool uprightPackage = args.Length == 3 && args[0] == "--upright-package";
+bool skinMotionPackage = args.Length == 3 && args[0] == "--skin-motion-package";
 nativePackage |= skinPackage;
-if (args.Length != 2 && !nativePackage && !uprightPackage) throw new ArgumentException("Usage: PrefabSceneSmoke <FBX path> <skinned renderer with blendshapes> | --native-package <prefab> <package> | --skin-package <input> <package> <avatar> | --primary-skin-package <input> <package> <avatar> | --upright-package <package> <viewHeight>");
-string fbxPath = nativePackage || uprightPackage ? null : Path.GetFullPath(args[0]);
+if (args.Length != 2 && !nativePackage && !uprightPackage && !skinMotionPackage) throw new ArgumentException("Usage: PrefabSceneSmoke <FBX path> <skinned renderer with blendshapes> | --native-package <prefab> <package> | --skin-package <input> <package> <avatar> | --primary-skin-package <input> <package> <avatar> | --upright-package <package> <viewHeight> | --skin-motion-package <package> <expectations.json>");
+string fbxPath = nativePackage || uprightPackage || skinMotionPackage ? null : Path.GetFullPath(args[0]);
 string nativePrefab = nativePackage ? Path.GetFullPath(args[1]) : null;
 string nativeOutput = nativePackage ? Path.GetFullPath(args[2]) : null;
 string uprightOutput = uprightPackage ? Path.GetFullPath(args[1]) : null;
+string motionOutput = skinMotionPackage ? Path.GetFullPath(args[1]) : null;
+string motionExpectations = skinMotionPackage ? Path.GetFullPath(args[2]) : null;
 string resonite = Environment.GetEnvironmentVariable("RESONITE_PATH")
     ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite";
 typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.ResoniteLocator")!
@@ -26,7 +29,8 @@ try
 {
     await Run(fbxPath, args[1], nativePrefab, nativeOutput, skinPackage ? args[3] : null,
         uprightOutput,
-        uprightPackage ? float.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture) : 0, primarySkinPackage);
+        uprightPackage ? float.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture) : 0, primarySkinPackage,
+        motionOutput, motionExpectations);
     Console.WriteLine("Prefab scene smoke checks passed.");
     // This is a standalone test process; do not run the engine's asynchronous shutdown
     // callbacks after disposing its services (headless shutdown can throw on background threads).
@@ -40,7 +44,7 @@ catch (Exception error)
 
 [MethodImpl(MethodImplOptions.NoInlining)]
 static async Task Run(string fbxPath, string rendererName, string nativePrefab, string nativeOutput, string avatarName,
-    string uprightPackage, float viewHeight, bool primarySkinPackage)
+    string uprightPackage, float viewHeight, bool primarySkinPackage, string motionPackage, string motionExpectations)
 {
     string temp = Path.Combine(Path.GetTempPath(), "ResoPonSceneSmoke", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(Path.Combine(temp, "Assets"));
@@ -68,6 +72,11 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
     {
         await default(ToWorld);
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
+        if (motionPackage != null)
+        {
+            await SkinMotionChecks.CheckPackage(root, motionPackage, motionExpectations);
+            return;
+        }
         if (uprightPackage != null)
         {
             await ViewpointChecks.CheckPackage(root, uprightPackage, viewHeight);
@@ -78,6 +87,8 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
             await NativeMeshSceneChecks.CheckReal(root, nativePrefab, nativeOutput, avatarName, primarySkinPackage);
             return;
         }
+        SkeletonModelRendererChecks.Run(root);
+        WrapperCleanupChecks.Run(root);
         ViewpointChecks.Run(root);
         await NativeMeshSceneChecks.Run(root, temp);
         await MaterialLayerChecks.Run(assets, temp);
@@ -118,7 +129,7 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
             var placementSources = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedObjects", roots);
             var paths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", roots);
             object[] placementHierarchyArgs = { exportRoot, placementAvatar, roots, placementSources, paths, null, null, null };
-            var descriptorRoot = (Slot)typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
+            var (descriptorRoot, _) = ((Slot, VrchatSkinRetargeter))typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Converter")!
                 .GetMethod("ApplyVrchatPrefabHierarchy", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, placementHierarchyArgs);
             var slots = (Dictionary<string, Slot>)placementHierarchyArgs[6];
             Check(Math.Abs(bodyBone.GlobalPosition.y - 2.66f) < .00001f &&
@@ -180,7 +191,23 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
         var wrapperPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", wrapperRoots);
         Call("VrmToResonitePackage.Converter", "CollapsePrimaryFbxWrapper", alignment, wrapperAvatar, wrapperRoots,
             wrapperSources, wrapperPaths);
-        Call("VrmToResonitePackage.Converter", "RemoveImportAlignment", alignment, root, wrapperSources, wrapperPaths);
+        Call("VrmToResonitePackage.Converter", "RemoveImportAlignment", alignment, root, wrapperRoots, wrapperSources, wrapperPaths);
+        Check(wrapperRoots["wrapped"] == root && wrapperRoots["other"] == otherWrapper,
+            "Hierarchy overrides resolve to the surviving model roots after removing the alignment");
+        Slot hiddenAlignment = root.AddSlot("Alignment"), hiddenModel = hiddenAlignment.AddSlot("Hidden FBX");
+        var hiddenRoots = new Dictionary<string, Slot> { ["hidden"] = hiddenModel };
+        var hiddenSources = new Dictionary<Slot, string> { [hiddenModel] = "hidden" };
+        var hiddenPaths = new Dictionary<Slot, string> { [hiddenModel] = "" };
+        var hiddenAvatar = new VrchatAvatar { FbxGuid = "hidden" };
+        hiddenAvatar.HierarchyActiveStates[new("hidden", "RootNode", "")] = false;
+        Call("VrmToResonitePackage.Converter", "CollapsePrimaryFbxWrapper", hiddenAlignment, hiddenAvatar,
+            hiddenRoots, hiddenSources, hiddenPaths);
+        Call("VrmToResonitePackage.Converter", "RemoveImportAlignment", hiddenAlignment, root,
+            hiddenRoots, hiddenSources, hiddenPaths);
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyHierarchyActiveStates", hiddenAvatar,
+            hiddenSources, hiddenPaths, null, hiddenRoots);
+        Check(!hiddenModel.IsDestroyed && !hiddenModel.ActiveSelf && hiddenModel.Parent == root && root.ActiveSelf,
+            "Disabling the primary model preserves its avatar parent and siblings");
         Check((Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
                 new VrchatBoneTarget("wrapped", "RootNode", ""), wrapperSources, wrapperPaths) == root,
             "Model-root physics references survive both wrapper and alignment collapse");
@@ -204,7 +231,7 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
             Call("VrmToResonitePackage.Converter", "CollapsePrimaryFbxWrapper", primaryAlignment,
                 new VrchatAvatar { FbxGuid = "primary-node" }, primaryRoots, primarySources, primaryPaths);
             CheckRoot();
-            Call("VrmToResonitePackage.Converter", "RemoveImportAlignment", primaryAlignment, root, primarySources, primaryPaths);
+            Call("VrmToResonitePackage.Converter", "RemoveImportAlignment", primaryAlignment, root, primaryRoots, primarySources, primaryPaths);
             CheckRoot();
             primaryNode.Destroy();
         }
@@ -1153,7 +1180,7 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
             "Removed renderer leaves its authored object and child placement intact and cannot reappear as an imported template");
     });
 
-    if (nativePrefab != null || uprightPackage != null) return;
+    if (nativePrefab != null || uprightPackage != null || motionPackage != null) return;
 
     // Exercise the production parser/importer/exporter in this isolated engine instance.
     // No Unity Editor, generated Library folder, or user application data is required.
@@ -1264,6 +1291,24 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
     var afterRemoval = CountRendererObjects(removedTree);
     Check(beforeRemoval.Renderers > 0 && afterRemoval.Renderers == 0 && afterRemoval.Objects == beforeRemoval.Objects,
         "Production conversion honors a direct FBX renderer removal while the saved package retains its GameObject");
+
+    File.AppendAllText(modelPath + ".meta", "\nModelImporter:\n  meshes:\n    importBlendShapes: 0\n");
+    optionsType.GetProperty("OutputDirectory")!.SetValue(options, Path.Combine(temp, "NoMorphOutput"));
+    string noMorphOutput = await (Task<string>)Call("VrmToResonitePackage.Converter", "ConvertVrchat", world, basePath, options);
+    await world.Coroutines.StartTask(async () =>
+    {
+        await default(ToWorld);
+        var reloaded = world.AddSlot("Verify disabled blendshapes");
+        await PackageImporter.ImportPackage(noMorphOutput, reloaded);
+        await default(ToWorld);
+        var skins = reloaded.GetComponentsInChildren<SkinnedMeshRenderer>().ToArray();
+        for (int frame = 0; frame < 7200 && skins.Any(r => !r.Mesh.IsAssetAvailable); frame++)
+            await default(NextUpdate);
+        Check(skins.Any(r => r.Slot.Name == rendererName && r.Bones.Count > 0 && r.Mesh.Asset?.Data?.HasBoneBindings == true) &&
+              skins.All(r => r.Mesh.Asset?.Data?.BlendShapeCount == 0 && r.BlendShapeWeights.Count == 0),
+            "Disabling FBX blendshapes preserves skin bindings and saves zero mesh channels and renderer weights");
+        reloaded.Destroy();
+    });
 }
 
 static object Call(string type, string method, params object[] args)

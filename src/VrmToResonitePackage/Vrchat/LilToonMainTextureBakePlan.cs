@@ -13,13 +13,25 @@ public sealed record LilToonMainTextureBakePlan(bool Main, bool Main2nd, bool Ma
     public Vector4 MaterialColorAfterBake(Vector4 color) => new(
         Color ? Vector3.One : new Vector3(color.X, color.Y, color.Z), Required ? 1f : color.W);
 
-    public static LilToonMainTextureBakePlan Create(LilToonInfo info, Func<string, bool> textureExists = null)
+    public static LilToonMainTextureBakePlan Create(LilToonInfo info, Func<string, bool> textureExists = null,
+        Func<string, bool> isRenderTexture = null)
     {
         var warnings = new List<string>();
         if (!info.IsLilToon) return new(false, false, false, false, warnings);
+        bool Dynamic(string role, string guid)
+        {
+            if (string.IsNullOrEmpty(guid) || textureExists?.Invoke(guid) == false ||
+                isRenderTexture?.Invoke(guid) != true) return false;
+            warnings.Add($"{role} uses a RenderTexture; runtime camera/render output cannot be baked into a static image.");
+            return true;
+        }
+        // A dynamic base affects every stage. Additional layers are independent
+        // unsupported stages, just like view-dependent layers below.
+        if (Dynamic("Main texture", info.MainTexGuid)) return new(false, false, false, false, warnings);
         bool Layer(string name, LilToonMainLayer layer)
         {
             if (!layer.Enabled) return false;
+            if (Dynamic(name + " texture", layer.TextureGuid) || Dynamic(name + " mask", layer.MaskGuid)) return false;
             // The UV selector has no effect on a missing texture: lilToon's default
             // is white, so a color-only layer (and its UV0 blend mask) can still bake.
             if (!string.IsNullOrEmpty(layer.TextureGuid) && textureExists?.Invoke(layer.TextureGuid) != false && layer.UVMode != 0)
@@ -38,8 +50,11 @@ public sealed record LilToonMainTextureBakePlan(bool Main, bool Main2nd, bool Ma
             return true;
         }
         bool main = info.MainTexHSVG != new Vector4(0, 1, 1, 1) || info.MainGradationStrength != 0;
+        if (main && (Dynamic("Main adjustment mask", info.MainColorAdjustMaskGuid) ||
+            (info.MainGradationStrength != 0 && Dynamic("Main gradation texture", info.MainGradationTexGuid)))) main = false;
         bool second = Layer("2nd", info.Main2nd), third = Layer("3rd", info.Main3rd);
         bool alpha = info.AlphaMaskMode != 0 && !string.IsNullOrEmpty(info.AlphaMaskGuid);
+        if (alpha && Dynamic("Alpha mask", info.AlphaMaskGuid)) alpha = false;
         if (alpha && textureExists?.Invoke(info.AlphaMaskGuid) == false)
         {
             // A dangling Unity reference is null to Material.GetTexture. It must not

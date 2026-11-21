@@ -40,6 +40,7 @@ static void Run()
         Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite",
         "runtimes", "win-x64", "native", "assimp.dll"));
     FbxMorphSeamChecks.Run();
+    ModelHierarchyChecks.Run();
     BlendShapeNormalChecks.Run();
     OutlineExclusionChecks.Run();
     NativeAssetChecks.Run();
@@ -283,6 +284,10 @@ AnimatorState:
     {
         Check(package.InputPrefab == null, "Unitypackage remains unscoped");
         Check(VrchatAvatarParser.ListAvatars(package).Single().Name == "Selected", "Unitypackage avatar selection regression");
+        package.SetViewAsset(new UnityAsset { Guid = otherGuid, LogicalPath = "Assets/Other.prefab",
+            DiskPath = Path.Combine(root, "Assets", "Other.prefab"), IsReferenceOnly = true });
+        Check(package.ByGuid(otherGuid)?.HasContent == true && VrchatAvatarParser.SelectAvatar(package, "Other").SourceGuid == selectedGuid,
+            "A captured dependency can supply a prefab but cannot become the selected archive avatar");
         extracted = package.ByGuid(selectedGuid).DiskPath;
     }
     Check(!File.Exists(extracted) && File.Exists(archive), "Only extracted temporary files are cleaned up");
@@ -405,6 +410,27 @@ MonoBehaviour:
             "Regular prefab excludes an EditorOnly descendant while retaining Body");
         Check(avatar.RendererMaterials.All(r => r.RendererGameObjectName != "Preview") && avatar.PhysBones.Count == 0,
             "Regular prefab excludes EditorOnly renderer materials and PhysBones");
+    }
+    string twin = Asset("Assets/Twin.prefab", "bb003200000000000000000000000001", File.ReadAllText(regular) + """
+
+--- !u!114 &40
+MonoBehaviour:
+  m_GameObject: {fileID: 10}
+  m_Script: {fileID: 11500000, guid: 67cc4cb7839cd3741b63733d5adf0442}
+--- !u!114 &41
+MonoBehaviour:
+  m_GameObject: {fileID: 30}
+  m_Script: {fileID: 11500000, guid: 67cc4cb7839cd3741b63733d5adf0442}
+""");
+    using (var package = UnityPackage.Open(twin))
+    {
+        foreach (var (name, rootId) in new[] { ("Body", 10L), ("Preview", 30L) })
+        {
+            var selection = VrchatAvatarParser.SelectAvatar(package, name);
+            using var view = selection.CreateView(package);
+            Check(selection.PrefabChildId == rootId && view.PrefabGraph.Scene(selection.SourceGuid).GameObjects.Single().FileId == rootId,
+                "Unity capture and parser view select the same child: " + name);
+        }
     }
     string copySource = Asset("Assets/CopySource.fbx", "88000000000000000000000000000001", "");
     File.AppendAllText(copySource + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: -1079801745714767569\n    second: Body_Base\n");
@@ -1342,6 +1368,7 @@ PolygonVertexIndex: *6 { a: 0,1,-3,0,1,-3 }
     var resolver = new UnityModelFileIdResolver(package.ByGuid(guid));
     if (!multipleMaterials && !transformHelpers) ModelObjectNameChecks.Run(asset, guid);
     if (!multipleMaterials && !transformHelpers) ModelObjectScaleChecks.Run(asset, guid);
+    if (!multipleMaterials && !transformHelpers) HierarchyStateChecks.Run(asset, guid);
     if (!multipleMaterials && !transformHelpers) ModelRootPlacementChecks.Run(asset, guid);
     if (transformHelpers)
     {
@@ -1392,6 +1419,7 @@ MeshRenderer:
     {
         UnpackedModelRootChecks.Run(asset, File.ReadAllText(model), accessory, guid);
         UnpackedFbxAttachmentChecks.Run(asset, File.ReadAllText(model), accessory, guid);
+        UnweightedSkeletonChecks.Run(asset, File.ReadAllText(model), accessory, guid);
     }
     using var accessoryPackage = UnityPackage.Open(accessoryFile);
     var accessoryScene = accessoryPackage.ReadScene(accessoryPackage.InputPrefab);
@@ -1407,6 +1435,22 @@ MeshRenderer:
     Check((string)placementType.GetField("ParentFbxGuid")!.GetValue(placement)! == guid,
         "Imported bone parent carries its model identity for static import scale correction");
     Check(!parents[0].Active, "Imported bone parent preserves authored inactive state");
+    foreach (bool removed in new[] { false, true })
+    {
+        var skinAvatar = new VrchatAvatar { FbxGuid = guid };
+        var skinCopy = new VrchatMeshCopy(guid, "Body", "Clothing", true, true) { RendererRemoved = removed };
+        skinCopy.BoneTargets[0] = new(guid, "Attachment", "Left/Shared/Attachment", accessoryPackage.InputPrefab.Guid, 151);
+        skinAvatar.MeshCopies.Add(skinCopy); // FBX source, no GeneratedMesh and no PhysBone.
+        typeof(VrchatAvatarParser).GetMethod("ParsePhysics", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, new object[] { accessoryPackage, accessoryPackage.InputPrefab.Guid, skinAvatar, null });
+        var skinPlacement = skinAvatar.PhysicsPlacements.SingleOrDefault(p =>
+            p.Transforms.LastOrDefault()?.Key == $"{accessoryPackage.InputPrefab.Guid}:151");
+        Check(removed ? skinPlacement == null : skinPlacement != null &&
+              skinPlacement.Transforms.First().ImportedBone?.Path == "Left/Shared" &&
+              skinPlacement.Transforms.Last().ImportedBone == null,
+            removed ? "Removed FBX renderer does not create otherwise unused skin bones" :
+                "FBX skin creates its authored bone below the exact imported parent without physics");
+    }
     var authoredAvatar = new VrchatAvatar { FbxGuid = guid };
     typeof(VrchatAvatarParser).GetMethod("ParsePhysics", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
         .Invoke(null, new object[] { accessoryPackage, accessoryPackage.InputPrefab.Guid, authoredAvatar, null });
@@ -1788,11 +1832,18 @@ PrefabInstance:
         Check(parsed.FbxGuid == modelGuid && parsed.MeshCopies.Single().Name == "Body_Base" &&
               parsed.PrefabGameObjectNames.Contains("Body_Base"),
             "Named descriptor wrapper imports nested authored geometry and retains its renderer");
+        Check(parsed.UninstantiatedFbxGuids.Contains(modelGuid),
+            "Unpacked body model is used only as a renderer/skeleton template");
     }
     File.WriteAllText(input, wrapper.Replace(nestedGuid, modelGuid));
     using (var package = UnityPackage.Open(input))
-        Check(VrchatAvatarParser.Parse(package).FbxGuid == modelGuid,
+    {
+        var parsed = VrchatAvatarParser.Parse(package);
+        Check(parsed.FbxGuid == modelGuid,
             "Named descriptor wrapper also imports a direct nested FBX instance");
+        Check(!parsed.UninstantiatedFbxGuids.Contains(modelGuid),
+            "A real nested FBX instance retains its imported renderers");
+    }
     const string accessoryGuid = "53535353535353535353535353535353";
     string accessory = asset("Assets/WrapperBadge.fbx", accessoryGuid, "");
     File.AppendAllText(accessory + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: 4300000\n    second: Badge\n");
@@ -1906,6 +1957,8 @@ SkinnedMeshRenderer:
             Check(parsed.MeshCopies.Count == 2 && parsed.MeshCopies.Select(c => c.FbxGuid).Distinct().Count() == 2 &&
                   parsed.MeshCopies.Count(c => c.Enabled) == 1,
                 "Repeated nested prefab retains independent renderer overrides and source identities");
+        Check(parsed.UninstantiatedFbxGuids.Count == (geometry == nestedGuid ? 2 : 0),
+            "Repeated model occurrences distinguish authored templates from real FBX instances");
         Check(ReferenceEquals(originalScene, package.ReadScene(package.InputPrefab)) &&
               originalScene.Doc(5).Root["m_SourcePrefab"].Guid == geometry &&
               VrchatAvatarParser.Parse(package).AdditionalFbxs.Single().Guid == parsed.AdditionalFbxs.Single().Guid,

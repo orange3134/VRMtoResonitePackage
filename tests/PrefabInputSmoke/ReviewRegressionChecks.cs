@@ -142,6 +142,55 @@ internal static class ReviewRegressionChecks
             }
         });
         Case("FBX default weights preserve renderer ownership through parsing", () => DefaultBlendShapeChecks.Run(asset));
+        Case("implicit model owners retain default PhysBone roots and collider space", () =>
+        {
+            const string guid = "ab120000000000000000000000000019";
+            long left = UnityModelFileIdResolver.Compute("GameObject", "//RootNode/Left/Shared", 0);
+            long right = UnityModelFileIdResolver.Compute("GameObject", "//RootNode/Right/Shared", 0);
+            string file = asset("Assets/ImplicitModelPhysics.prefab", guid, $$"""
+--- !u!1 &1
+GameObject:
+  m_Name: Wrapper
+--- !u!4 &2
+Transform:
+  m_GameObject: {fileID: 1}
+  m_Father: {fileID: 0}
+--- !u!1001 &100
+PrefabInstance:
+  m_SourcePrefab: {guid: {{branchesGuid}}}
+  m_Modification:
+    m_TransformParent: {fileID: 2}
+--- !u!1 &11 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: {{left}}, guid: {{branchesGuid}}}
+  m_PrefabInstance: {fileID: 100}
+--- !u!1 &12 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: {{right}}, guid: {{branchesGuid}}}
+  m_PrefabInstance: {fileID: 100}
+--- !u!114 &20
+MonoBehaviour:
+  m_GameObject: {fileID: 11}
+  m_Script: {fileID: 1661641543, guid: 2a2c05204084d904aa4945ccff20d8e5}
+  rootTransform: {fileID: 0}
+  colliders:
+  - {fileID: 21}
+--- !u!114 &21
+MonoBehaviour:
+  m_GameObject: {fileID: 12}
+  m_Script: {fileID: -1631200402, guid: 2a2c05204084d904aa4945ccff20d8e5}
+  rootTransform: {fileID: 0}
+  position: {x: 0, y: 0.25, z: 0}
+  radius: 0.1
+""");
+            using var package = UnityPackage.Open(file);
+            var avatar = new VrchatAvatar { FbxGuid = branchesGuid };
+            Call("ParsePhysics", package, guid, avatar, null);
+            var bone = avatar.PhysBones.Single();
+            Require(bone.RootBoneTarget.Path == "RootNode/Left/Shared");
+            var collider = bone.Colliders.Single();
+            Require(collider.AttachBoneTarget.Path == "RootNode/Right/Shared" && MathF.Abs(collider.Offset.Y - .25f) < 1e-6f);
+        });
         Case("humanoid bones retain primary model identity through adaptation", () =>
         {
             using var source = UnityPackage.Open(baseFile);

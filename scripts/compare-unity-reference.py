@@ -205,6 +205,13 @@ def compare(expected, actual, abs_tol=1e-6, rel_tol=1e-6):
         raise ValueError("cannot compare authored and resolved projections")
     differences = []
     def walk(left, right, path):
+        # q and -q encode the same rotation. Importers may choose opposite signs;
+        # retain component-wise tolerances and never normalize a different rotation.
+        if (expected["schemaVersion"] == 2 and path.startswith("$.sections.transforms.")
+                and path.endswith(".localRotation") and isinstance(left, dict) and isinstance(right, dict)
+                and set(left) == set(right) == set("xyzw")
+                and all(math.isclose(left[k], -right[k], rel_tol=rel_tol, abs_tol=abs_tol) for k in left)):
+            return
         if isinstance(left, dict) and isinstance(right, dict):
             for key in sorted(left.keys() - right.keys()):
                 differences.append(f"{path}.{key}: missing in actual")
@@ -226,8 +233,13 @@ def compare(expected, actual, abs_tol=1e-6, rel_tol=1e-6):
                 differences.append(f"{path}: expected {left!r}, actual {right!r}")
         elif type(left) is not type(right) or left != right:
             differences.append(f"{path}: expected {left!r}, actual {right!r}")
-    walk({k: v for k, v in expected.items() if k != "sections"},
-         {k: v for k, v in actual.items() if k != "sections"}, "$")
+    # Unity alone can measure posed vertices. Repeated captures may compare the
+    # measurement, while parser parity covers only their common projection.
+    excluded = {"sections"}
+    if expected["schemaVersion"] == 2 and ("skinSizes" not in expected or "skinSizes" not in actual):
+        excluded.add("skinSizes")
+    walk({k: v for k, v in expected.items() if k not in excluded},
+         {k: v for k, v in actual.items() if k not in excluded}, "$")
     for section in expected["sections"]:
         left = {r["id"]: r for r in expected["sections"][section]}
         right = {r["id"]: r for r in actual["sections"][section]}
@@ -253,8 +265,9 @@ def main(argv=None):
             inputs = {Path(args.expected).resolve(), Path(args.actual).resolve()}
             if Path(args.report).resolve() in inputs:
                 raise ValueError("report must not overwrite an input")
-            Path(args.report).write_text(json.dumps({"equal": not differences,
-                "differences": differences}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            with Path(args.report).open("x", encoding="utf-8") as stream:
+                json.dump({"equal": not differences, "differences": differences}, stream, ensure_ascii=False, indent=2)
+                stream.write("\n")
         if differences:
             print("FAIL: " + str(len(differences)) + " difference(s)")
             for difference in differences:

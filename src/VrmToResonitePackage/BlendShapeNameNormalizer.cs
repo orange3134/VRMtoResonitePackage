@@ -23,8 +23,14 @@ internal static class BlendShapeNameNormalizer
         IEnumerable<(string Channel, string Shape)> channels)
     {
         var imported = importedNames.GroupBy(n => n, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count());
-        var source = channels.Where(c => !string.IsNullOrEmpty(c.Channel)).Select(c =>
-            (Channel: CollapseRepeatedName(c.Channel), Shape: CollapseRepeatedName(c.Shape))).ToArray();
+        var source = channels.Where(c => !string.IsNullOrEmpty(c.Channel) || !string.IsNullOrEmpty(c.Shape)).Select(c =>
+        {
+            // For an unnamed FBX channel with one connected shape, Unity exposes
+            // the geometry name. Assimp can synthesize a SubDeformer::. prefix.
+            if (string.IsNullOrEmpty(c.Channel))
+                return (Channel: c.Shape, Shape: "SubDeformer::." + c.Shape);
+            return (Channel: CollapseRepeatedName(c.Channel), Shape: CollapseRepeatedName(c.Shape));
+        }).ToArray();
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (name, count) in imported)
         {

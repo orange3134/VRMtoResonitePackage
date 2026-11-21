@@ -7,7 +7,6 @@ Never updates expectations. Exit 0 means all selected captured cases matched;
 import argparse
 import collections
 import datetime
-import hashlib
 import importlib.util
 import json
 import os
@@ -16,10 +15,8 @@ import re
 import subprocess
 import sys
 
-
-def sha256(path):
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+import avatar_registry
+from avatar_registry import RecaptureRequired, sha256, verify_project_files
 
 
 def write_json(path, value):
@@ -87,6 +84,7 @@ def main(argv=None):
         input_path = Path(case["inputPath"]).resolve()
         actual_path = directory / "actual.json"
         try:
+            verify_project_files(case)
             if sha256(expected_path) != case["expectedSha256"]:
                 raise ValueError("Unity baseline checksum mismatch")
             if sha256(input_path) != case["inputSha256"]:
@@ -97,15 +95,25 @@ def main(argv=None):
             result.update(expectedPath=str(expected_path), expectedSha256=case["expectedSha256"],
                           inputPath=str(input_path), inputSha256=case["inputSha256"])
             command = ["dotnet", str(binary), str(input_path), str(expected_path), str(actual_path)]
+            if "conversionArguments" in case:
+                command += ["--verify-selection", avatar_registry.selected_avatar(case["conversionArguments"]) or ""]
+            if case.get("dependencyFiles") and input_path.suffix.lower() == ".unitypackage":
+                dependencies = directory / "dependencies.json"
+                write_json(dependencies, case["dependencyFiles"])
+                command += ["--dependencies", str(dependencies)]
+                result["dependencyScope"] = "archive plus captured Unity project dependencies; archive assets take precedence"
             env = dict(os.environ, RESOPON_NOPAUSE="1", TEMP=str(temporary), TMP=str(temporary))
             with (directory / "producer.log").open("xb") as log:
                 run = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, env=env, cwd=repo,
                                      timeout=args.timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             result["exitCode"] = run.returncode
+            verify_project_files(case)
             if run.returncode:
                 log = (directory / "producer.log").read_text(encoding="utf-8-sig", errors="replace")
-                status = "unsupported" if "UNSUPPORTED_MODEL_HIERARCHY:" in log else (
-                    "missing-dependency" if "MISSING_PREFAB_SOURCE:" in log else "producer-failed")
+                status = next((name for marker, name in (
+                    ("SELECTION_MISMATCH:", "selection-mismatch"),
+                    ("UNSUPPORTED_MODEL_HIERARCHY:", "unsupported"),
+                    ("MISSING_PREFAB_SOURCE:", "missing-dependency")) if marker in log), "producer-failed")
                 result.update(status=status,
                               error=log.strip().splitlines()[-1] if log.strip() else "No producer diagnostic")
             else:
@@ -116,11 +124,13 @@ def main(argv=None):
                               actualPath=str(actual_path), actualSha256=sha256(actual_path))
             if sha256(expected_path) != case["expectedSha256"] or sha256(input_path) != case["inputSha256"]:
                 raise ValueError("Baseline/input changed during replay")
+        except RecaptureRequired as error:
+            result.update(status="recapture-required", error=str(error))
         except (ValueError, OSError, subprocess.TimeoutExpired) as error:
             result.update(status="failed", error=str(error))
         write_json(directory / "result.json", result)
         print(case["id"] + ": " + result["status"], flush=True)
-    source_paths = [Path(__file__), Path(__file__).with_name("compare-unity-reference.py"),
+    source_paths = [Path(__file__), Path(avatar_registry.__file__), Path(__file__).with_name("compare-unity-reference.py"),
                     *sorted((repo / "tests/UnityReferenceDump").glob("*.cs"))]
     report = {"format": "resopon.unity-resolved-parity", "schemaVersion": 1,
               "finishedUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),

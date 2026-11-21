@@ -11,7 +11,7 @@ namespace VrmToResonitePackage.Vrchat;
 /// importer meta), visemes/blink/view position (from the descriptor), spring physics (PhysBones)
 /// and per-renderer material assignments into an engine-independent <see cref="VrchatAvatar"/>.
 /// </summary>
-public static class VrchatAvatarParser
+public static partial class VrchatAvatarParser
 {
     private const string ModularAvatarMergeArmatureScriptGuid = "2df373bf91cf30b4bbd495e11cb1a2ec";
     private const string ModularAvatarBoneProxyScriptGuid = "42581d8044b64899834d3d515ab3a144";
@@ -60,6 +60,14 @@ public static class VrchatAvatarParser
         /// <summary>A prefab variant whose hierarchy lives in an FBX (descriptor added on a stripped root).</summary>
         public bool IsVariantOfFbx => FbxGuidOverrides?.Count > 0;
         public int Size => IsVariantOfFbx ? FbxGuidOverrides.Count : Subtree?.Count ?? 0;
+
+        public AvatarSelection Selection()
+        {
+            var transform = Root == null ? null : Scene.TransformOfGameObject(Root.FileId);
+            long? childId = Source.Extension == ".prefab" && transform?.Root["m_Father"]?.FileID is long parent && parent != 0
+                ? Root.FileId : null;
+            return new(Source.Guid, Root != null ? Subtree : null, SceneInstanceId, childId);
+        }
     }
 
     private sealed class FbxPlacement
@@ -106,11 +114,19 @@ public static class VrchatAvatarParser
     public static VrchatAvatar Parse(UnityPackage package, string avatarOverride = null)
         => Parse(package, avatarOverride, false);
 
-    private static VrchatAvatar Parse(UnityPackage package, string avatarOverride, bool instanceView)
+    internal sealed record AvatarSelection(string SourceGuid, HashSet<long> Subtree, long SceneInstanceId, long? PrefabChildId)
     {
-        using var profile = ConversionProfile.Start(instanceView ? "parse-view" : "parse-input");
+        public UnityPackage CreateView(UnityPackage package) => SceneInstanceId != 0
+            ? UnityPrefabInstances.CreateSceneInstanceView(package, SourceGuid, SceneInstanceId)
+            : UnityPrefabInstances.CreateView(package, SourceGuid, Subtree);
+    }
+
+    internal static AvatarSelection SelectAvatar(UnityPackage package, string avatarOverride)
+        => SelectCandidate(package, avatarOverride).Selected.Selection();
+
+    private static (List<Candidate> Candidates, Candidate Selected) SelectCandidate(UnityPackage package, string avatarOverride)
+    {
         List<Candidate> candidates = FindCandidates(package);
-        profile?.Mark("find-candidates");
         if (package.InputPrefab != null && candidates.Count == 0)
         {
             Candidate composed = TryCreateComposedCandidate(package, package.InputPrefab);
@@ -124,14 +140,19 @@ public static class VrchatAvatarParser
                 "（prefab/シーンを走査しましたが、VRCAvatarDescriptorコンポーネントを検出できませんでした）");
         }
 
-        Candidate selected = SelectPrimary(candidates, avatarOverride);
+        return (candidates, SelectPrimary(candidates, avatarOverride));
+    }
+
+    private static VrchatAvatar Parse(UnityPackage package, string avatarOverride, bool instanceView)
+    {
+        using var profile = ConversionProfile.Start(instanceView ? "parse-view" : "parse-input");
+        var (candidates, selected) = SelectCandidate(package, avatarOverride);
+        profile?.Mark("find-candidates");
         if (!instanceView)
         {
             // All collectors must see the same selected hierarchy and instance identities.
             // Re-discover the descriptor in the view so inherited references use its scenes too.
-            using var view = selected.SceneInstanceId != 0
-                ? UnityPrefabInstances.CreateSceneInstanceView(package, selected.Source.Guid, selected.SceneInstanceId)
-                : UnityPrefabInstances.CreateView(package, selected.Source.Guid, selected.Root != null ? selected.Subtree : null);
+            using var view = selected.Selection().CreateView(package);
             profile?.Mark("create-view");
             return Parse(view, selected.Name, true);
         }
@@ -210,6 +231,7 @@ public static class VrchatAvatarParser
         ParseHumanoid(package, avatar);
         profile?.Mark("humanoid");
         ParseDescriptor(package, descriptorScene, effectiveDescriptor, avatar, descriptorGuid);
+        avatar.RigViewpoint = VrchatViewpoint.Capture(package, avatar, descriptorRoot.Guid, descriptorRoot.Id);
         ParseRenderers(package, selected.Source.Guid, avatar);
         avatar.RendererMaterials.RemoveAll(renderer => avatar.EditorOnlyFbxGuids.Contains(renderer.FbxGuid ?? ""));
         foreach (string excluded in avatar.EditorOnlyFbxGuids)
@@ -268,6 +290,7 @@ public static class VrchatAvatarParser
                 continue;
             }
             var resolver = package.ModelFileIds(guid);
+            if (!resolver.ImportBlendShapes) avatar.ModelsWithoutBlendShapes.Add(guid);
             foreach ((string rendererName, IReadOnlyList<string> names) in resolver.BlendShapeNames)
             {
                 avatar.FbxBlendShapeNames.TryAdd(rendererName, names);
@@ -351,6 +374,13 @@ public static class VrchatAvatarParser
             // Copies and their authored parents already carry per-object active state.
             // A second name-based assignment would also disable an active namesake.
             if (authoredObjects.Contains($"{sceneGuid}:{go.FileId}")) continue;
+            // Ordinary prefab objects receive identity-based state in ParsePhysics.
+            // Their names can also name unrelated imported bones (e.g. a disabled
+            // accessory and an active hair bone). Keep the legacy suppression only
+            // for excluded template objects which have no authored placement.
+            if (scene.TransformOfGameObject(go.FileId) != null &&
+                !(avatar.EditorOnlyPrefabObjects.TryGetValue(sceneGuid ?? "", out var excluded) && excluded.Contains(go.FileId)))
+                continue;
             if ((go.Root?["m_IsActive"]?.AsInt(1) ?? 1) == 0)
             {
                 string name = go.Root?["m_Name"]?.AsString();
@@ -993,6 +1023,19 @@ public static class VrchatAvatarParser
                 bool skeletonMember = boneNames.Contains(bone.Name) || includeSkeletonAncestors &&
                     resolver.NodePathsUnder(0).Any(path => Normalize(path).StartsWith(
                         Normalize(bone.Path) + "/", StringComparison.Ordinal) && boneNames.Contains(path.Split('/')[^1]));
+                // Unweighted ends/helpers still belong to the imported skeleton. Capturing
+                // every PhysBone descendant as a new local object duplicates those nodes
+                // (including identically named *_end siblings). Require an existing, unique
+                // non-mesh node at the full source path below a skin bone; a new attachment
+                // absent from that path must continue to use its authored Transform.
+                if (!skeletonMember && resolver.Hierarchy != null)
+                {
+                    string sourcePath = Normalize(bone.Path);
+                    var matching = resolver.Hierarchy.Where(node => Normalize(node.Path) == sourcePath).ToArray();
+                    skeletonMember = matching.Length == 1 && !matching[0].HasMesh &&
+                        resolver.Hierarchy.Any(node => boneNames.Contains(node.Name) &&
+                            sourcePath.StartsWith(Normalize(node.Path) + "/", StringComparison.Ordinal));
+                }
                 if (skeletonMember &&
                     resolver.NodePathsUnder(0).Count(path => Normalize(path) == Normalize(bone.Path)) == 1)
                 {
@@ -1752,7 +1795,7 @@ public static class VrchatAvatarParser
         return Vec3.One;
     }
 
-    private static void ParseFbxMaterialMappings(UnityPackage package, UnityAsset fbx, YamlNode meta,
+    internal static void ParseFbxMaterialMappings(UnityPackage package, UnityAsset fbx, YamlNode meta,
         Dictionary<string, string> materialGuids)
     {
         YamlNode externalObjects = meta?["ModelImporter"]?["externalObjects"];
@@ -2247,6 +2290,12 @@ public static class VrchatAvatarParser
             .Select(document => document.Root?["m_SourcePrefab"]?.Guid)
             .Where(guid => package.ByGuid(guid)?.Extension == ".fbx")
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Animator.m_Avatar can require a model's skeleton even when every authored
+        // renderer uses a standalone Mesh asset. Importing that FBX must not revive
+        // its original geometry. Occurrence IDs also distinguish real sibling instances.
+        avatar.UninstantiatedFbxGuids.UnionWith(new[] { avatar.FbxGuid }
+            .Concat(avatar.AdditionalFbxs.Select(model => model.Guid))
+            .Where(guid => !string.IsNullOrEmpty(guid) && !instantiatedModels.Contains(guid)));
         foreach ((string sceneGuid, UnityScene scene) in inheritedScenes)
         {
             foreach (YamlDocument smr in scene.MeshRenderers)
@@ -3139,6 +3188,7 @@ public static class VrchatAvatarParser
             ParsePhysics(view, sourceGuid, avatar);
             return;
         }
+        ParseModelHierarchyState(package, avatar);
         var scenes = package.PrefabGraph.Scenes.ToList();
         var modelResolvers = new Dictionary<string, UnityModelFileIdResolver>(StringComparer.OrdinalIgnoreCase);
         var prefabScenes = new Dictionary<string, UnityScene>(StringComparer.OrdinalIgnoreCase);
@@ -3149,6 +3199,7 @@ public static class VrchatAvatarParser
             var included = IncludedPrefabObjects(package, guid, scene, avatar, modelResolvers, prefabScenes);
             if (guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
             ParsePhysBones(scene, included, avatar, guid, package);
+            string skeletonModel = SelectLocalSkeletonModel(package, scene, avatar.FbxGuid);
             // A saved unpacked rig carries its pose in ordinary Transform documents,
             // not FBX property modifications. Collect all verified skeleton nodes,
             // even when no renderer, PhysBone or eye directly references them.
@@ -3159,24 +3210,69 @@ public static class VrchatAvatarParser
                 var position = root["m_LocalPosition"];
                 var rotation = root["m_LocalRotation"];
                 var scale = root["m_LocalScale"];
-                if (position == null && rotation == null && scale == null) continue;
                 var placement = new FbxPlacement();
                 CaptureLocalPlacementParents(package, scene, guid, transform.FileId, placement,
-                    SelectLocalSkeletonModel(package, scene, avatar.FbxGuid), modelResolvers,
+                    skeletonModel, modelResolvers,
                     includeSkeletonAncestors: true);
                 var imported = placement.ParentTransforms.FirstOrDefault();
                 if (imported?.ImportedBone == null || imported.Key != $"{guid}:{transform.FileId}") continue;
+                avatar.AuthoredImportedBones.Add(imported.ImportedBone);
+                if (position == null && rotation == null && scale == null) continue;
                 avatar.AuthoredBoneTransforms[imported.ImportedBone] = new(
                     position == null ? null : new Vec3(position.Vec("x"), position.Vec("y"), position.Vec("z")),
                     rotation == null ? null : new Quat(rotation.Vec("x"), rotation.Vec("y"), rotation.Vec("z"), rotation.Vec("w", 1)),
                     scale == null ? null : new Vec3(scale.Vec("x", 1), scale.Vec("y", 1), scale.Vec("z", 1)));
+            }
+            // Use the composed Transform child array, never YAML document order or
+            // bone names. Unverified local objects must resolve by prefab identity.
+            var importedTargets = avatar.AuthoredImportedBones.Where(t => t.PrefabGuid == guid)
+                .ToDictionary(t => t.TransformFileId);
+            VrchatBoneTarget OrderTarget(long id)
+            {
+                if (importedTargets.TryGetValue(id, out var imported)) return imported;
+                if (scene.Doc(id)?.Stripped == true)
+                    return ResolveCopiedBoneTarget(package, guid, id, null, modelResolvers, new());
+                var candidate = ResolveCopiedBoneTarget(package, guid, id, avatar.FbxGuid, modelResolvers, new());
+                if (candidate?.FbxGuid != null && candidate.Path != null &&
+                    package.ModelFileIds(candidate.FbxGuid).Hierarchy?.Count(node =>
+                        !node.HasMesh && UnityModelPath.Normalize(node.Path) == UnityModelPath.Normalize(candidate.Path)) == 1)
+                    return candidate;
+                return new VrchatBoneTarget(null, null, null, guid, id);
+            }
+            bool ChildOf(YamlDocument child, long parentId)
+            {
+                if (child?.ClassId != 4) return false;
+                if (child.Root?["m_Father"] is {} father) return father.FileID == parentId;
+                // An FBX instance root is often only a stripped alias. Its parent
+                // is on PrefabInstance, not on that Transform document.
+                if (!child.Stripped || OrderTarget(child.FileId)?.Path != "") return false;
+                var instance = scene.Doc(child.Root?["m_PrefabInstance"]?.FileID ?? 0);
+                return instance?.Root?["m_Modification"]?["m_TransformParent"]?.FileID == parentId;
+            }
+            foreach (var transform in scene.Documents.Values.Where(d => d.ClassId == 4 &&
+                         included.Contains(d.Root?["m_GameObject"]?.FileID ?? 0)))
+            {
+                var target = OrderTarget(transform.FileId);
+                // A stripped alias has no authored activeSelf. Its value belongs to
+                // the source model and must not reset a resolved override to true.
+                if (target != null && !transform.Stripped)
+                    avatar.HierarchyActiveStates[target] = scene.OwnerGameObject(transform)?.Root?["m_IsActive"]?.AsBool(true) ?? true;
+                var children = transform.Root?["m_Children"]?.Seq;
+                if (children == null || children.Count < 2) continue;
+                var targets = children.Select(child => scene.Doc(child.FileID ?? 0))
+                    .Where(child => ChildOf(child, transform.FileId))
+                    .Select(child => OrderTarget(child.FileId)).ToArray();
+                if (targets.Length > 1) avatar.HierarchyOrders.Add(new(OrderTarget(transform.FileId), targets));
             }
         }
         CaptureTargetPlacements(package, sourceGuid, avatar, sourceSubtree, scenes,
             avatar.PhysBones.SelectMany(b => b.IgnoreBoneTargets
                 .Concat(b.Colliders.Select(c => c.AttachBoneTarget)).Append(b.RootBoneTarget))
                 .Concat(new[] { avatar.LeftEyeBoneTarget, avatar.RightEyeBoneTarget })
-                .Concat(avatar.MeshCopies.Where(c => c.GeneratedMesh != null).SelectMany(c => c.BoneTargets.Values)));
+                // FBX-backed skins also reference locally authored bones. Capturing
+                // only generated-mesh targets leaves manually attached clothing on
+                // its unused imported armature instead of the avatar's hierarchy.
+                .Concat(avatar.MeshCopies.Where(c => !c.RendererRemoved).SelectMany(c => c.BoneTargets.Values)));
     }
 
     private static void CaptureTargetPlacements(UnityPackage package, string sourceGuid, VrchatAvatar avatar,
@@ -3263,20 +3359,13 @@ public static class VrchatAvatarParser
         // Baked Mesh assets no longer reference their source FBX. The root Animator's
         // Avatar still identifies that skeleton, even when accessory FBXs
         // are the only models referenced directly by the prefab's renderers.
-        var animatorModels = scene.RootGameObjects().SelectMany(scene.ComponentsOf)
-            .Where(component => component.ClassId == 95)
-            .Select(component => component.Root?["m_Avatar"]?.Guid)
-            .Where(g => package.ByGuid(g)?.Extension == ".fbx").ToArray();
-        var models = scene.MeshRenderers.Select(r => scene.RendererMesh(r)?.Guid)
-            .Where(g => package.ByGuid(g)?.Extension == ".fbx")
-            .Concat(animatorModels)
-            .Distinct().ToArray();
+        var (animatorModels, models) = package.SceneFbxReferences(scene);
         // A physics/eye reference by itself does not prove which of several skins
         // owns it. Only an explicit Animator permits retaining the preferred model.
         if (requireUnique && !animatorModels.Contains(primaryGuid))
-            return models.Length == 1 ? models[0] : null;
-        return models.Length == 0 || models.Contains(primaryGuid) ? primaryGuid :
-            models.Length == 1 ? models[0] : null;
+            return models.Count == 1 ? models.First() : null;
+        return models.Count == 0 || models.Contains(primaryGuid) ? primaryGuid :
+            models.Count == 1 ? models.First() : null;
     }
 
     private static VrchatBoneTarget ResolvePhysicsTarget(UnityPackage package, string guid, long id, string primaryGuid)
@@ -3318,8 +3407,11 @@ public static class VrchatAvatarParser
             }
             YamlNode r = pb.Root;
             long rootId = r?["rootTransform"]?.FileID ?? 0;
-            var rootTarget = ResolvePhysicsTarget(package, rootId != 0 ? r["rootTransform"].Guid ?? sceneGuid : sceneGuid,
-                rootId != 0 ? rootId : scene.TransformOfGameObject(r?["m_GameObject"]?.FileID ?? 0)?.FileId ?? 0,
+            var owner = r?["m_GameObject"];
+            // A component added to an FBX object can serialize only its stripped
+            // GameObject. The model's implicit Transform has no local YAML record.
+            var rootTarget = ResolvePhysicsTarget(package, rootId != 0 ? r["rootTransform"].Guid ?? sceneGuid : owner?.Guid ?? sceneGuid,
+                rootId != 0 ? rootId : scene.TransformOfGameObject(owner?.FileID ?? 0)?.FileId ?? owner?.FileID ?? 0,
                 avatar.FbxGuid);
             string rootBone = rootTarget?.Name;
             if (string.IsNullOrEmpty(rootBone))
@@ -3426,11 +3518,22 @@ public static class VrchatAvatarParser
             UnityScene.LocalTransform local = ownerGo != null ? scene.GetLocalTransform(ownerGo.FileId) : default;
             if (!local.Found)
             {
-                return null;
+                var ownerRef = r?["m_GameObject"];
+                var identity = ResolveObjectIdentity(package, ownerRef?.Guid ?? sceneGuid, ownerRef?.FileID ?? 0);
+                if (package.ByGuid(identity.Guid)?.Extension != ".fbx") return null;
+                attachTarget = ResolvePhysicsTarget(package, identity.Guid, identity.Id, null);
+                // Attach directly to the implicit model transform. The collider's
+                // center/orientation already use this local space; do not fold it twice.
+                attachBone = attachTarget?.Name;
+                center = position;
+                orient = rotation;
             }
-            attachBone = attachTarget?.Name ?? local.ParentName;
-            center = local.Position + Vec3.Transform(position * local.Scale, local.Rotation);
-            orient = local.Rotation * rotation;
+            else
+            {
+                attachBone = attachTarget?.Name ?? local.ParentName;
+                center = local.Position + Vec3.Transform(position * local.Scale, local.Rotation);
+                orient = local.Rotation * rotation;
+            }
         }
         if (string.IsNullOrEmpty(attachBone))
         {

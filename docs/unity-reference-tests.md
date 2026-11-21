@@ -6,12 +6,123 @@
 
 **Unityの期待値を採取できたことと、ResoPonの解析が一致したことは別に記録する。**
 
+`check-prefab-unity.py --viewpoints` ではDescriptorの視点設定とHumanoid基準位置を追加採取できる。
+保存後のHead Proxy／Targetとの照合手順は [視点比較](avatar-viewpoint-tests.md) を参照。
+
 | モード | 形式と対象 | 比較先 |
 | --- | --- | --- |
 | `resolved`（既定） | schemaVersion 2 / `unity-resolved-prefab`。継承解決後の対応フィールド | Unityの再採取JSON、またはResoPonのv2ダンプ（下記の制約あり） |
 | `authored` | schemaVersion 1 / `selected-prefab-authored-components`。通常Prefab自身の対応コンポーネント | `tests/UnityReferenceDump` のResoPon解析JSON |
 
 ## 解決済みデータの採取（v2）
+
+### プロジェクト内Prefabから採取と比較を一括実行する
+
+`scripts/check-prefab-unity.py` に保存済みPrefabを渡すと、そのプロジェクトでUnity参照値を採取し、
+同じ `.prefab` をResoPonの本番パーサで読み込んで比較する。Python 3.11以降・.NET 10 SDK・
+Resonite、およびプロジェクトと同じ版のUnity Editorが必要。対象プロジェクトのEditorは閉じておく。
+依存物と利用条件を確認済みの信頼できるプロジェクトで実行する。
+
+```powershell
+python scripts/check-prefab-unity.py "D:\Unity\Project\ResoPonTest\Assets\Unan\12B\12B.prefab" `
+  --case-id 12b-100
+```
+
+Prefabからプロジェクトを特定し、`ProjectVersion.txt` と同じ版をUnity Hubの標準インストール先から探す。
+別の場所にある場合は `--unity "D:\Unity\2022.3.22f1\Editor\Unity.exe"` で同じ版を指定する。
+採取コマンドはプロジェクトを開く前に、選択した実行ファイルの製品バージョンを照合する。
+`--reference-dump <UnityReferenceDump.dll>` を省略すると比較用ビルドを自動作成する。
+`--output <new-directory>` を省略すると `.local/prefab-reference/<日時と識別子>/` に保存する。
+出力先は新規ディレクトリに限り、Unityプロジェクト内には作成しない。一時ビルドは `.tmp_verify/` に置く。
+
+採取スクリプトが未導入なら、その実行専用の `Assets/ResoPonReference_<識別子>/Editor/` に一時配置し、
+終了後に自分が配置した未変更のファイルだけを除去する。同一内容の導入済みスクリプトは再利用する。
+別版や重複がある場合は上書きせず停止するため、診断に示された既存スクリプトを明示的に更新する。
+Unityは通常のimportとプロジェクト内のEditorコードを実行する。アセットの再保存は要求しないが、
+インポーターによる更新まで禁止する機能ではない。
+
+保存内容:
+
+- `unity/<case-id>/expected.json` と `repeat.json`: Unityで2回採取した解決済みv2データ。
+- `unity/coverage.json`: 同じPrefab入力で後から再比較できるmanifest。
+  `conversionArguments` には選択引数を保存する。直接指定の既定値は `[]`、
+  `--avatar NAME` または登録ケースのアバター指定がある場合は `["--avatar", "NAME"]`。
+  採取前に本番と共通の候補選択を行い、Prefab内の子が選ばれた場合はそのGameObjectの
+  fileIDをUnityに渡す。UnityはPrefabのGUIDとfileIDで対象を特定し、その部分木を2回採取する。
+  再比較は元入力と選択引数から部分木を選び直す。旧基準がPrefab全体を含む場合は再採取する。
+  [変換後の階層比較](converted-structure-tests.md)にも
+  同じmanifestを渡せる。材質など選択以外の登録オプションを使った変換は全件バッチで行う。
+- `parity/`: ResoPon解析JSON、項目ごとの差分、比較ログ。
+- `report.json`: 採取状態と比較状態、Unity版、Prefabとmeta・プロジェクト設定の前後ハッシュ、
+  Unityの採取前後の依存ハッシュ、採取コードのハッシュ。ビルド・Unityログも同じ出力先に保存する。
+
+終了コードは一致0、差分または実行失敗1、引数・事前条件の不備2。
+`captureStatus=captured` は採取成功だけを意味し、`parityStatus=matched` とは区別する。
+比較中に入力や監視対象の設定ファイルが変わった場合は全体を失敗にする。
+Unityの依存ハッシュは実体化の前後を検査するもので、Editor起動前の全依存アセットの不変性を保証しない。
+登録一覧や過去の期待値は更新しない。必要なケースへ結果の参照先を別途記録する。
+これは開発用の採取・解析比較コマンドで、配布GUIの通常変換や `.resonitepackage` の生成は実行しない。
+
+### 登録済みのPrefabをまとめて検証する
+
+同じコマンドの `--registry` にテストアバター一覧を渡すと、入力の拡張子が `.prefab` のケースを
+自動選択する。`--case` で特定の登録IDだけを選択することもできる。
+
+```powershell
+python scripts/check-prefab-unity.py --registry .local/avatar-tests.json
+python scripts/check-prefab-unity.py --registry .local/avatar-tests.json --case my-prefab
+```
+
+比較用ビルドは一度だけ作成し、同じUnityプロジェクトを同時に開かないよう順番に実行する。
+一件が採取・解析に失敗しても残りを続行し、各ケースのログと `report.json` を保存する。
+最上位の `report.json` は採取状態・比較状態・差分数・エラーを一覧化する。
+全選択ケースが一致した場合だけ終了コード0、差分・実行失敗が一件でもあれば1、
+未知のIDやPrefab以外の明示選択などの引数不備は2になる。
+相対入力パスは登録ファイルのディレクトリを基準にする。登録一覧自体は変更しない。
+
+最上位の `coverage.json` には採取できた期待値への参照と、採取できなかったケースの理由を記録する。
+ResoPonの解析処理を修正した後は、このファイルでUnityを起動せず再比較できる。
+
+```powershell
+python scripts/test-unity-resolved.py .local/prefab-reference/<run>/coverage.json `
+  --reference-dump .tmp_verify/my-build/UnityReferenceDump.dll `
+  --output .local/prefab-parity/new-run --work .tmp_verify/prefab-parity/new-run
+```
+
+再比較は採取済みケースのみを判定し、未採取は `not-captured` として別集計する。
+全登録ケースの検証完了を判断するときは、比較の終了コードだけでなく未採取件数も確認する。
+
+個別Prefabの再比較用coverageは、採取時のPrefab・期待値のSHA-256と、終了時の入力・設定の
+不変性を確認してから保存する。Unityが列挙した継承元Prefab、FBX、マテリアルなどの再帰的な依存ファイルと
+各 `.meta` をSHA-256で記録し、ProjectVersion、package manifest・lockとともに再比較の前後に照合する。
+パッケージ依存は実ファイルのパスで記録する。依存ファイルが変化した場合や、旧形式のPrefab採取に
+依存一覧がない場合は `recapture-required` になる。同じPrefabを採取コマンドで再実行し、新しいcoverageを使う。
+単一の `.unitypackage` を入力とする既存のcoverageは引き続きアーカイブのSHA-256で照合する。
+アーカイブに含まれないPrefab等を採取元プロジェクトから補う診断では、coverageへ
+`dependencyFiles`（絶対パス→SHA-256）を明示して保存する。再比較は `--dependencies` で
+その一覧だけを渡し、アーカイブにないGUIDを補完する。アバター候補はアーカイブ内のPrefab・シーンに
+限定し、候補の継承元やFBXの解決には補完したアセットも使う。
+一覧の全ファイルを前後に照合し、変更時は `recapture-required` とする。
+レポートの `dependencyScope` は補完を明記する。この一致は「アーカイブ＋採取時の依存」の
+解析結果であり、アーカイブ単体の依存充足や通常の変換出力まで証明するものではない。
+比較CLIの `--report` には新しいファイル名を指定する。
+
+### シーン内アバターの採取
+
+Prefabではなく `.unity` に選択対象がある場合は、バッチmanifestの `prefabPath` にシーンを、
+`sceneRootPath` に対象のルートからの名前パスを指定する（例: `yuzuki`）。
+個別採取では `RESOPON_REFERENCE_SCENE_ROOT` が同じ指定になる。
+`resolved`・batch mode専用で、既に開いているシーン、存在しないパス、同名による曖昧なパスは拒否する。
+シーンを加算で開き、指定した部分木だけを採取して保存せず閉じる。
+シーン自身のオブジェクトのsource参照は空、ネストPrefab由来のsource参照はPrefabを指す。
+
+再比較の入力は元の `.unitypackage` とし、coverageの `conversionArguments` に登録済みの
+`--avatar` 指定を保持する。診断側は `--verify-selection` を必須とし、本番と共通の候補選択・
+シーン配置の合成処理を通す。Yuzuki 2.1.1はこの経路で2回採取し、シーンのハッシュ不変と
+採取結果の一致を確認した。FaceEmoのテンプレートPrefabはアーカイブ外にあるため、上記の
+明示的な依存補完を用いた比較として記録する。
+
+### Unityから個別に採取する
 
 アバターと同梱依存物の利用条件を確認し、VRChat SDK・シェーダー等を揃えた信頼できる
 プロジェクトを使う。導入済みの依存物を旧版で上書きしない。
@@ -121,19 +232,48 @@ dotnet .tmp_verify/unity-reference/bin/UnityReferenceDump.dll input.unitypackage
 python scripts/compare-unity-reference.py expected.json actual.json --report difference.json
 ```
 
-現在のv2出力は、**YAMLとして階層とコンポーネントが存在する**通常Prefab・Variant・ネストPrefabに
-対応する。削除、追加、同一Prefabの複数配置、兄弟順、参照の上書きを合成した後に比較する。
-FBXをメッシュ資産として参照するRendererのBlendShape名は、本番のFBX fileID resolverから取得する。
+v2出力は通常Prefab・Variant・ネストPrefabと、**FBX由来の暗黙のTransform・Renderer**に対応する。
+削除、追加、同一Prefabの複数配置、兄弟順、参照の上書きを合成した後に比較する。
+FBXの階層・材質スロットは本番のfileID resolverと同じAssimp importから取得し、
+姿勢は対応するバイナリFBXのProperties70から元の局所行列を復元する。未対応の形式・幾何変換では
+従来のimport行列を使う。材質の外部参照と名前による検索は本番の材質マッピング処理を共有する。
+skinの接続先はFBXのcluster接続から完全なパスとして取得する。同名のメッシュやボーンを名前だけで選ばない。
+BlendShape名・初期ウェイトも既存の本番メタデータから取得する。ボーンのないmorph専用メッシュも対象とする。
+Unityで生成された `.asset` のMeshは、YAML・バイナリともGUIDとfileIDを指定して本番の
+`ReadAssetDocument` で取得する。バイナリのシーン一覧はMesh payloadを列挙しないため、
+`ReadScene(...).Doc(...)` では代用できない。同一ファイル内の複数Meshと符号付きfileIDを区別し、
+BlendShapeの名前・順序・初期ウェイトを比較する。存在しない参照やMesh以外の型はエラーにする。
 FBX全体の走査でBlendShapeがないことを証明できれば、メッシュノードのpathが曖昧でも空配列を出せる。
 走査失敗や形状を持つメッシュの曖昧なpathを、空配列として成功させない。
 
-**FBXのPrefabInstanceから暗黙に生成されるTransform・Rendererのv2出力は未対応**。
-これはUnity採取の制約でも、Variant全体の制約でもない。本番のPrefab graphが保持するYAMLと、
-モデルインポート時に生成する階層を結ぶ出力処理が別途必要なため、ダンプは
-`UNSUPPORTED_MODEL_HIERARCHY` で失敗する。未出力の階層を省略したJSONで一致判定しない。
-この検証基盤の導入と、暗黙のモデル階層の出力・変換後パッケージとの比較は段階を分ける。
+モデル内の補助ノードの姿勢を合成し、ModelImporterの単位・globalScale・fileID世代・既存ID表・
+`sortHierarchyByName` を反映する。モデル内のroot表現は元Prefabの参照IDと照合し、
+合成済みのプロパティ上書き・削除をモデルのレコードへ適用する。
+これは解析段階の診断用投影であり、Resoniteへインポートした後の状態や全ModelImporter設定を保証しない。
+最適化されたGameObject階層、参照がなくroot表現を決められないモデル、曖昧な同名skin接続などは失敗させる。
+未出力の階層を省略して一致扱いにしない。変換後パッケージとの比較は別途必要である。
+
+Quaternionは `q` と `-q` が同じ回転を表すため、v2の `localRotation` では符号反転も比較する。
+それ以外の数値差に対する既定の許容差（絶対・相対とも `1e-6`）は維持する。
+実アバターの局所的な姿勢の差を一律に丸めたり、許容差を広げて一致に変更したりしない。
 
 ### 収集済みケースの一括再検証
+
+登録一覧のPrefab入力は、その元プロジェクトで直接採取できる。別のテストプロジェクトへ未導入でも、
+元プロジェクトの依存関係が揃っていれば採取対象から除外しない。
+LilLeo・ClonkaのVariantとNDMF Bake済みMANUKAで、Unity 2022.3.22f1による2回採取の一致、
+Prefab・meta・監視対象のプロジェクト設定の前後ハッシュ一致を確認した。
+
+この3件の比較結果には次の制約が残る。
+
+- 空名のFBX BlendShapeChannelにAssimpが `SubDeformer::.` を付ける場合は、
+  同じRendererで一意に接続されたShapeの名前と照合する。既存名との衝突や複数候補があれば元の名前を保持する。
+- Clonkaはv2出力に成功するが、Transformの回転・スケール19成分に数値差がある。
+- 生成 `.asset` のMeshで比較用 `ResolvedSnapshot` が `Unsupported native mesh metadata` となる
+  問題は、上記のfileID指定による取得に修正した。本番変換の処理は変更しない。
+
+上記の差を一致や無害とは扱わない。採取済み件数と比較成功件数を分け、元の登録入力と
+過去の結果を保持したまま `prefabUnityCheck` と統合coverageへ最新の参照先を記録する。
 
 ```powershell
 python scripts/test-unity-resolved.py .local/unity-resolved/collection/coverage.json `
@@ -151,6 +291,13 @@ Unity未採取の登録ケースは `not-captured` として別集計する。�
 一致した場合だけ終了コード0、それ以外は1。未採取を含む登録全体の網羅を意味しない。
 各結果は入力・期待値・実値のハッシュ、実行したダンプと本番DLL・比較ソースのハッシュを保持する。
 
+網羅テストの `convert-all-local-avatars.py` はこの比較を各ケースの変換前に必ず実行する。
+登録coverageのケースを複製して `conversionArguments` を付け、`UnityReferenceDump` の
+`--verify-selection` で本番パーサの選択PrefabがUnity参照と一致することも確認する。
+指定名がない場合も既定選択を検査し、別Prefabなら `selection-mismatch` で失敗する。
+採取済み参照の更新や追加採取は行わず、未採取・再採取必要は網羅テストの未完了として報告する。
+詳細は[全アバター変換の検証フロー](local-avatar-tests.md#登録アバターをすべて変換して一か所へ集約する)を参照。
+
 ### Unity由来の自作Variantによる統合検証
 
 `ResoPonResolvedReferenceSmoke` が作る `variant.prefab` と `first.json` を使う。
@@ -166,22 +313,85 @@ python scripts/test-unity-reference-producer.py path/to/variant.prefab path/to/f
 全項目一致に加え、期待値の数値を意図的に変えても実値JSONが変わらないこと、変更した期待値は
 不一致になること、既存出力・期待値の上書き拒否、入力資産の不変を検査する。
 
+FBXを含むfixtureは、既存のAssimpライブラリで自作三角形モデルを書き出してからUnityへ読み込む。
+
+```powershell
+dotnet .tmp_verify/unity-reference/bin/UnityReferenceDump.dll --write-fbx-fixture .tmp_verify/unity-reference/source.fbx
+$env:RESOPON_FBX_SMOKE_SOURCE = 'C:\work\ResoPon\.tmp_verify\unity-reference\source.fbx'
+$env:RESOPON_REFERENCE_SMOKE_OUT = 'C:\work\ResoPon\.tmp_verify\unity-reference\fbx-capture'
+```
+
+`tools/unity/Tests/ResoPonFbxReferenceSmoke.cs` を指定プロジェクトの `Assets/Editor/` に置き、
+同じEditor起動手順で `-executeMethod ResoPonFbxReferenceSmoke.Run` を実行する。
+日本語名・大小文字・アンダースコアを含むモデルを2個配置し、Variant、非アクティブ状態、
+FBX RendererとGameObjectの削除、通常GameObjectの追加、別配置へのPhysBone参照を採取する。
+出力の `prefab-path.txt` と `first.json` を上記のproducer統合チェックへ渡す。
+モデル・採取結果はローカルに保持し、配布しない。
+
 ### 再利用する回帰事例
 
+- FBX内の別枝にある同名Rendererが同じMesh subassetを共有する場合、MeshのfileIDから
+  Rendererパスへの対応は一対多になる。v2生成では全パスを保持し、表情メタデータは
+  Rendererの出典を使って選ぶ。`m_Mesh` が上書きされている場合は、元Rendererのパスを
+  無条件で流用しない。Rendererの文脈がない参照は、候補すべての表情チャンネル名・順序が
+  一致する場合に限り共有する。異なる候補を先勝ちで選ばない。
+  `UnityReferenceDump --check-shared-mesh <新規ディレクトリ>` は自作FBXで、共有ID、
+  別々のRenderer識別子、Rendererごとの表情ウェイト上書き、文脈付きパス解決を検証する。
 - Variantで `m_AddedGameObjects` の `insertIndex: -1` が複数ある場合、配列に記録された順に
   末尾へ追加する。Prefab graphのscene列挙順で追加すると、継承元・ネスト側が先に現れ、
   追加した通常GameObjectと兄弟順が入れ替わる。
 - UnityのPrefabルート名と、YAMLのルート `m_Name` が違う入力がある。
   Omanekoの例では、Prefabファイル名とUnity採取値にない末尾の ` 1` がYAMLとResoPon解析値に残る。
-  全体の一致判定から名前だけを除外して隠さず、命名差として記録する。これだけでskinや物理の
-  不具合とは判断しない。
+  Unityはアセットを読み込む段階でファイル名をルート名として公開する。v2出力も選択Prefabの
+  ファイル名を使う。子オブジェクトの名前や上書きは維持し、名前比較は除外しない。
+  自作VariantのYAMLに古いルート名を残す統合テストで確認する。
 - Unityプロジェクトで解決できても、元unitypackageに外部Prefabが同梱されない入力がある。
   12Bの例ではFaceEmo側のPrefab依存が不足する。Unity採取済みという理由で元入力単独の
   解決可能性を仮定せず、依存不足として残す。別プロジェクトから黙って依存を補完しない。
   FaceEmoを導入済みのプロジェクト内の12B Prefabを入力にすれば、この依存は解決できる。
   パッケージ単独の結果を保持し、プロジェクト入力・依存パッケージの版とハッシュを別に記録する。
-  その場合もv2出力は12Bの暗黙のFBX階層で未対応になるため、依存解決や通常解析の正常終了を
-  Unityとの全項目一致として扱わない。12B自体を検証対象から除外する必要はない。
+  プロジェクト入力ではFBX階層を含むv2出力が可能。依存解決や通常解析の正常終了を
+  Unityとの全項目一致として扱わない。元の登録入力を置換せず、比較用manifestで入力種別を明記する。
+- `sortHierarchyByName: 0` ではFBXの元順序を保持する。1では小文字化した名前のordinal順で
+  比較する。`OrdinalIgnoreCase` は大文字を基準に比較するため、アンダースコアと英字の相対順が
+  Unityと異なる。Marycia・Sanatiaの順序設定、Lina・Milfyのアンダースコアで検出できる。
+- Siskaのように現在のMeshより長い `m_BlendShapeWeights` が残る場合、Unityは現在のMeshの
+  チャンネル数までを公開する。余剰の保存値を新しいチャンネルとみなさない。
+  Linaの `importBlendShapeDeformPercent: 0` は、元FBXの非ゼロ値を初期ウェイトへ取り込まない設定。
+  Unityで同じFBXの別コピーの設定を切り替えると、Body・socksの初期値が0/100へ変わる。
+  本番のfileID resolverもこの設定を反映し、チャンネル名・順序は維持する。
+- 姿勢差は成分差に加えて位置距離・最短回転角・スケール差を集計する。回転角の診断では
+  quaternionを正規化するが、一致判定の値や許容差は変えない。
+  FyuettのPointesは回転した非均一スケール、SanatiaはQuaternionの一部成分だけの上書き、
+  NagiyaはZ-upと負のCoordAxisSignを含むモデルであり、単なる丸め差ではない。
+  行列をSystem.Numericsの行ベクトル形式へ転置し、軸・左右手系変換後に分解して投影する。
+  q/-qが同じ回転でも、一部成分の上書き前には符号を任意に選べない。
+- 12Bでは暗黙のFBX Transformを持つGameObjectへPhysBoneを追加している。
+  `rootTransform: 0` の所有GameObjectに対応するTransformのYAMLがない場合も、FBX出典から
+  所有Transformを解決する。v2で参照が一致しても本番解析や生成物で欠落し得るため、実変換・inspectも行う。
+
+再採取で残差を調べるときは、旧期待値を上書きせず、新しい採取先で同じPrefabを2回取得する。
+元入力・依存ハッシュ・Unity版と、旧採取値に対するバイト一致を確認してからResoPonと比較する。
+Fyuett・Pilica・Sanatia・12B・Lina・NagiyaはUnity 2022.3.22f1で再採取しても旧期待値と
+バイト一致し、微小な局所Transformの数値差が再現した。採取の揺らぎで消える差ではない。
+当初、残差のある13件・181成分について `originalSource` のGUID/fileIDから元FBXのTransformを
+Unityで直接読み直すと、すべてPrefab採取値と一致した。差はPrefab合成前のFBXインポート時点に
+存在した。追加調査では、元の `PreRotation` の微小角度と `Lcl Scaling` の1付近の値が
+Assimpの行列ではidentityへ省略されることを確認した。Plumの約-0.000162度のPreRotationや
+Kipfelの約1.00001526のスケールも、バイナリFBXから読むと値が残っている。
+`UnityFbxLocalTransform` はFBXの回転順序・pre/post回転・pivot/offsetを含む局所行列を
+独立に復元し、既存の座標系変換と分解へ渡す。モデル別の補正値や許容差の拡大は使わない。
+修正後、アーカイブの依存が揃った元の不一致12件は既存のUnity期待値と一致した。
+
+AizaraのPAWSはskinのない末端Meshでrotation/scaling pivotを共有し、Unityはpivotを
+オブジェクト原点として残す。skinのcluster接続があるMeshへこの原点補正を適用しない。
+爪Meshのように共通祖先がskinの骨配列に含まれない場合、UnityのrootBoneは最後のclusterの骨になる。
+共通祖先が骨配列に含まれる場合はその祖先を使う。自作FBXをUnityへ読み込む
+`ResoPonSkinRootSmoke` で、cluster順序の反転と祖先を含む場合を別々に検証する。
+バイナリFBX 7400/7500の微小TRS・static/skinのpivot・全6回転順序・未対応形式のfallbackは
+`UnityReferenceDump --check-source-transforms <新規ディレクトリ>` で検証する。
+一般条件を含む[生成パッケージの構造検査](local-avatar-tests.md#保存パッケージの構造を自動検査する)と、
+Unityとの解析値比較、実クライアントの外観・動作確認は別の結果として保存する。
 
 ## 従来のResoPon解析との照合（v1）
 

@@ -5,9 +5,68 @@ using VrmToResonitePackage;
 using VrmToResonitePackage.Unity;
 using VrmToResonitePackage.Vrchat;
 
-if (args.Length != 3)
+if ((args.Length == 3 || args.Length == 5 && args[3] == "--avatar") && args[0] is "--viewpoint" or "--prefab-root")
 {
-    Console.Error.WriteLine("Usage: UnityReferenceDump <input.prefab|input.unitypackage> <unity-expected.json> <resopon-actual.json>");
+    try
+    {
+        ResoniteLocator.InstallAssemblyResolver(ResoniteLocator.Locate(null));
+        string avatarName = args.Length == 5 ? args[4] : null;
+        if (args[0] == "--prefab-root") WritePrefabRoot(args[1], args[2], avatarName);
+        else ViewpointSnapshot.Write(args[1], args[2], avatarName);
+        return 0;
+    }
+    catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+}
+
+if (args.Length == 2 && args[0] == "--check-source-transforms")
+{
+    try
+    {
+        ResoniteLocator.InstallAssemblyResolver(ResoniteLocator.Locate(null));
+        CheckSourceTransforms(Path.GetFullPath(args[1])); return 0;
+    }
+    catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+}
+
+if (args.Length == 2 && args[0] == "--check-native-metadata")
+{
+    try { NativeMetadataChecks.Run(Path.GetFullPath(args[1])); return 0; }
+    catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+}
+
+if (args.Length == 2 && args[0] == "--check-shared-mesh")
+{
+    try
+    {
+        ResoniteLocator.InstallAssemblyResolver(ResoniteLocator.Locate(null));
+        SharedMeshChecks.Run(Path.GetFullPath(args[1]));
+        return 0;
+    }
+    catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+}
+
+if (args.Length == 2 && args[0] is "--write-fbx-fixture" or "--write-skin-root-fixture")
+{
+    try
+    {
+        ResoniteLocator.InstallAssemblyResolver(ResoniteLocator.Locate(null));
+        if (args[0] == "--write-skin-root-fixture") FbxReferenceFixture.WriteSkinRoots(Path.GetFullPath(args[1]));
+        else FbxReferenceFixture.Write(Path.GetFullPath(args[1]));
+        return 0;
+    }
+    catch (Exception error) { Console.Error.WriteLine(error.Message); return 1; }
+}
+
+var options = new Dictionary<string, string>();
+bool validOptions = args.Length >= 3 && (args.Length - 3) % 2 == 0;
+for (int i = 3; validOptions && i < args.Length; i += 2)
+    validOptions = (args[i] is "--verify-selection" or "--dependencies") && options.TryAdd(args[i], args[i + 1]);
+bool verifySelection = options.ContainsKey("--verify-selection");
+if (!validOptions)
+{
+    Console.Error.WriteLine("Usage: UnityReferenceDump <input.prefab|input.unitypackage> <unity-expected.json> <resopon-actual.json> [--verify-selection <avatar-or-empty-for-default>] [--dependencies <captured-file-hashes.json>]");
+    Console.Error.WriteLine("       UnityReferenceDump --viewpoint <input> <new-output.json> [--avatar <name>]");
+    Console.Error.WriteLine("       UnityReferenceDump --prefab-root <input.prefab> <new-output.json> [--avatar <name>]");
     return 2;
 }
 try
@@ -29,7 +88,8 @@ try
     if (guid?.Length != 32 || !guid.All(Uri.IsHexDigit))
         throw new InvalidDataException("Missing or invalid prefab GUID in the Unity reference.");
     ResoniteLocator.InstallAssemblyResolver(ResoniteLocator.Locate(null));
-    Run(input, guid.ToLowerInvariant(), output, version);
+    Run(input, guid.ToLowerInvariant(), output, version, verifySelection, options.GetValueOrDefault("--verify-selection"),
+        options.GetValueOrDefault("--dependencies"));
     return 0;
 }
 catch (Exception error)
@@ -39,16 +99,36 @@ catch (Exception error)
 }
 
 [MethodImpl(MethodImplOptions.NoInlining)]
-static void Run(string input, string guid, string output, int version)
+static void CheckSourceTransforms(string directory) => SourceTransformChecks.Run(directory);
+
+[MethodImpl(MethodImplOptions.NoInlining)]
+static void WritePrefabRoot(string input, string output, string avatarName)
+{
+    using var source = UnityPackage.Open(input);
+    if (source.InputPrefab == null) throw new InvalidDataException("--prefab-root requires a project prefab.");
+    var selection = VrchatAvatarParser.SelectAvatar(source, avatarName);
+    using var file = new FileStream(output, FileMode.CreateNew, FileAccess.Write);
+    JsonSerializer.Serialize(file, new { prefabGuid = selection.SourceGuid,
+        prefabChildId = selection.PrefabChildId?.ToString(CultureInfo.InvariantCulture) });
+}
+
+[MethodImpl(MethodImplOptions.NoInlining)]
+static void Run(string input, string guid, string output, int version, bool verifySelection, string avatarName, string dependencies)
 {
     using var source = UnityPackage.Open(input);
     if (source.InputPrefab != null && !string.Equals(source.InputPrefab.Guid, guid, StringComparison.OrdinalIgnoreCase))
         throw new InvalidDataException("Selected prefab does not match the Unity reference GUID.");
     UnityAsset selected = source.ByGuid(guid);
-    if (selected?.HasContent != true || selected.Extension != ".prefab")
+    if (selected?.HasContent != true || selected.Extension is not (".prefab" or ".unity"))
         throw new InvalidDataException($"Expected prefab {guid} is not present in the input.");
-    using var view = UnityPrefabInstances.CreateView(source, guid, null);
-    var snapshot = version == 2 ? ResolvedSnapshot.Capture(view, guid) : ReferenceSnapshot.Capture(view, guid);
+    if (selected.Extension == ".unity" && (!verifySelection || version != 2))
+        throw new InvalidDataException("Scene projection requires v2 and --verify-selection.");
+    if (dependencies != null) AddCapturedDependencies(source, dependencies);
+    var selection = verifySelection ? VrchatAvatarParser.SelectAvatar(source, avatarName) : null;
+    if (selection != null && !string.Equals(selection.SourceGuid, guid, StringComparison.OrdinalIgnoreCase))
+        throw new InvalidDataException($"SELECTION_MISMATCH: conversion selects {source.ByGuid(selection.SourceGuid).LogicalPath}, Unity reference selects {selected.LogicalPath}");
+    using var view = selection != null ? selection.CreateView(source) : UnityPrefabInstances.CreateView(source, guid, null);
+    var snapshot = version == 2 ? ResolvedSnapshot.Capture(view, guid, selection?.PrefabChildId != null) : ReferenceSnapshot.Capture(view, guid);
     // CreateNew protects captured expectations and previous test outputs, even when paths
     // alias one another via links or differ only in spelling on the current filesystem.
     byte[] json = JsonSerializer.SerializeToUtf8Bytes(snapshot, new JsonSerializerOptions
@@ -59,6 +139,26 @@ static void Run(string input, string guid, string output, int version)
     using var file = new FileStream(output, FileMode.CreateNew, FileAccess.Write);
     file.Write(json);
     file.WriteByte((byte)'\n');
+}
+
+static void AddCapturedDependencies(UnityPackage source, string manifest)
+{
+    var files = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(manifest));
+    foreach (var (path, hash) in files)
+    {
+        string actual = File.Exists(path) ? Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))) : "";
+        if (actual != hash) throw new InvalidDataException("Captured dependency changed: " + path);
+    }
+    foreach (string meta in files.Keys.Where(p => p.EndsWith(".meta", StringComparison.OrdinalIgnoreCase) && File.Exists(p)))
+    {
+        string assetPath = meta[..^5];
+        if (!files.ContainsKey(assetPath) || !File.Exists(assetPath)) continue;
+        string id = File.ReadLines(meta).FirstOrDefault(line => line.StartsWith("guid: ", StringComparison.Ordinal))?[6..].Trim();
+        if (id?.Length != 32 || !id.All(Uri.IsHexDigit) || source.ByGuid(id) != null) continue;
+        // Dependencies supply only missing GUIDs. They cannot replace the tested archive's assets.
+        source.SetViewAsset(new UnityAsset { Guid = id, DiskPath = assetPath, MetaPath = meta, IsReferenceOnly = true,
+            LogicalPath = "CapturedDependencies/" + Path.GetFileName(assetPath) });
+    }
 }
 
 internal sealed record AssetReference(string Guid, string FileId);

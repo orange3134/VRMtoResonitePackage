@@ -29,6 +29,7 @@ internal static class ViewpointChecks
 
     public static void Run(Slot root)
     {
+        CheckRigViewpoint();
         var assembly = typeof(VrchatAvatar).Assembly;
         var resolve = assembly.GetType("VrmToResonitePackage.Vrchat.VrchatSceneSetup")!
             .GetMethod("ResolveViewPosition", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -90,6 +91,20 @@ internal static class ViewpointChecks
         avatar.ViewPosition = new System.Numerics.Vector3(float.NaN, 1, 0);
         Check(Resolve(parent) == null, "Nonfinite authored viewpoints retain fallback");
         alignment.Destroy();
+    }
+
+    private static void CheckRigViewpoint()
+    {
+        System.Numerics.Vector3[] unityBones = { new(0, 1, 0), new(0, 1.5f, 0),
+            new(-.2f, 1.3f, 0), new(.2f, 1.3f, 0) };
+        var source = new VrchatViewpoint(new(0, 1.6f, .1f), unityBones);
+        // 180-degree yaw, double size and an off-centre package root.
+        var savedBones = unityBones.Select(p => new System.Numerics.Vector3(
+            3 - 2 * p.X, 2 * p.Y, 1 - 2 * p.Z)).ToArray();
+        Near(source.Map(savedBones), new float3(3, 3.2f, .8f),
+            "Descriptor viewpoint follows the scaled, rotated and translated skeleton");
+        savedBones[3].Z += .1f;
+        Check(source.Map(savedBones) == null, "Incompatible initial poses retain the fallback viewpoint");
     }
 
     private static void Near(float3? actual, float3 expected, string label) =>

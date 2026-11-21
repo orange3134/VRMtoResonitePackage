@@ -1,20 +1,32 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using Elements.Core;
 
 namespace VrmToResonitePackage.Unity;
 
-/// <summary>Preserves morph seams through Assimp's base-pose-only vertex welding.</summary>
+/// <summary>Applies the model's morph import policy before Assimp welds vertices and chooses renderer types.</summary>
 internal static class UnityFbxMorphSeams
 {
-    public static string Prepare(string path)
+    public static string Prepare(string path, bool importBlendShapes = true)
     {
         byte[] bytes = File.ReadAllBytes(path);
-        if (bytes.Length < 27 || !Encoding.ASCII.GetString(bytes, 0, 23).StartsWith("Kaydara FBX Binary", StringComparison.Ordinal)) return path;
-        var document = new Document(bytes);
+        if (bytes.Length < 27 || !bytes.AsSpan().StartsWith("Kaydara FBX Binary"u8))
+            return importBlendShapes ? path : DisconnectAsciiBlendShapes(path, bytes);
+        var document = new Document(bytes, importBlendShapes);
         var objects = document.Roots.FirstOrDefault(n => n.Name == "Objects")?.Children;
         var connections = document.Roots.FirstOrDefault(n => n.Name == "Connections")?.Children;
         if (objects == null || connections == null) return path;
+        if (!importBlendShapes)
+        {
+            var deformers = objects.Where(n => n.Name == "Deformer" && n.Values is [int or long, _, "BlendShape", ..])
+                .Select(n => Convert.ToInt64(n.Values[0])).ToHashSet();
+            if (connections.RemoveAll(n => n.Name == "C" && n.Values is ["OO", int or long, ..] &&
+                    deformers.Contains(Convert.ToInt64(n.Values[1]))) == 0) return path;
+            string filtered = Path.ChangeExtension(path, ".no-morphs.fbx");
+            document.Save(filtered);
+            return filtered;
+        }
         // Only Geometry and Deformer objects participate in Shape -> Channel ->
         // BlendShape -> Mesh traversal. Some exporters repeat unrelated Texture IDs
         // (e.g. Nagma); leave those records intact without indexing them here.
@@ -79,6 +91,81 @@ internal static class UnityFbxMorphSeams
     }
 
     private static bool IsGeometry(Node n, string kind) => n.Name == "Geometry" && n.Values.Length >= 3 && n.Values[2] as string == kind;
+
+    private static string DisconnectAsciiBlendShapes(string path, byte[] bytes)
+    {
+        // Latin-1 keeps character offsets identical to byte offsets, including in UTF-8
+        // names. Edit only the BlendShape -> mesh connections in the temporary file.
+        string text = Encoding.Latin1.GetString(bytes);
+        var deformers = new HashSet<long>();
+        var connections = new List<(long Source, int Start, int End)>();
+        int depth = 0, cursor = 0;
+        bool objects = false, links = false;
+        while (cursor < text.Length)
+        {
+            var token = Next(ref cursor);
+            if (token.SequenceEqual("{")) { depth++; continue; }
+            if (token.SequenceEqual("}")) { depth--; continue; }
+            if (depth == 0 && !token.SequenceEqual(":"))
+            {
+                objects = token.SequenceEqual("Objects");
+                links = token.SequenceEqual("Connections");
+            }
+            if (depth != 1) continue;
+            int start = cursor - token.Length, end = cursor;
+            if (objects && token.SequenceEqual("Deformer") && Next(ref end).SequenceEqual(":"))
+            {
+                var id = Next(ref end);
+                if (!Next(ref end).SequenceEqual(",")) continue;
+                Next(ref end); // Object name.
+                if (Next(ref end).SequenceEqual(",") && Next(ref end).SequenceEqual("\"BlendShape\"") &&
+                    long.TryParse(id, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out long deformerId))
+                    deformers.Add(deformerId);
+            }
+            if (links && token.SequenceEqual("C") && Next(ref end).SequenceEqual(":") &&
+                Next(ref end).SequenceEqual("\"OO\"") && Next(ref end).SequenceEqual(","))
+            {
+                var source = Next(ref end);
+                if (!Next(ref end).SequenceEqual(",")) continue;
+                Next(ref end); // Destination object ID.
+                if (long.TryParse(source, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out long sourceId))
+                    connections.Add((sourceId, start, end));
+            }
+        }
+        bool changed = false;
+        foreach (var connection in connections)
+            if (deformers.Contains(connection.Source))
+            {
+                bytes.AsSpan(connection.Start, connection.End - connection.Start).Fill((byte)' ');
+                changed = true;
+            }
+        if (!changed) return path;
+        string output = Path.ChangeExtension(path, ".no-morphs.fbx");
+        File.WriteAllBytes(output, bytes);
+        return output;
+
+        ReadOnlySpan<char> Next(ref int i)
+        {
+            while (i < text.Length)
+            {
+                if (char.IsWhiteSpace(text[i])) { i++; continue; }
+                if (text[i] != ';') break;
+                while (i < text.Length && text[i] != '\n' && text[i] != '\r') i++;
+            }
+            int start = i;
+            if (i < text.Length)
+            {
+                char first = text[i++];
+                if (first == '"')
+                {
+                    while (i < text.Length && text[i++] != '"') { }
+                }
+                else if (first is not (':' or ',' or '{' or '}'))
+                    while (i < text.Length && !char.IsWhiteSpace(text[i]) && text[i] is not (':' or ',' or '{' or '}' or ';' or '"')) i++;
+            }
+            return text.AsSpan(start, i - start);
+        }
+    }
     private static T[] Array<T>(Node n, string name) => n.Children.FirstOrDefault(c => c.Name == name)?.Values.FirstOrDefault() as T[];
     private static bool HasMorphSeam(Node shape, int[][] groups, int vertexCount)
     {
@@ -129,11 +216,13 @@ internal static class UnityFbxMorphSeams
     {
         private readonly byte[] _bytes;
         private readonly bool _wide;
+        private readonly bool _readMeshData;
         private readonly long _footer;
         public List<Node> Roots = new();
         private int HeaderSize => _wide ? 25 : 13;
-        public Document(byte[] bytes)
+        public Document(byte[] bytes, bool readMeshData)
         {
+            _readMeshData = readMeshData;
             _bytes = bytes; _wide = BitConverter.ToInt32(bytes, 23) >= 7500;
             using var reader = new BinaryReader(new MemoryStream(bytes), Encoding.UTF8);
             reader.BaseStream.Position = 27;
@@ -156,7 +245,9 @@ internal static class UnityFbxMorphSeams
                 throw new InvalidDataException("Invalid FBX node bounds.");
             string name = Encoding.UTF8.GetString(reader.ReadBytes(nameLength));
             byte[] raw = reader.ReadBytes((int)length);
-            var values = new object[(int)count];
+            // Disconnecting morphs needs only object IDs and links. Preserve the
+            // original property bytes without inflating vertex and shape arrays.
+            var values = _readMeshData || name is "Deformer" or "C" ? new object[(int)count] : [];
             using (var props = new BinaryReader(new MemoryStream(raw), Encoding.UTF8))
                 for (int i = 0; i < values.Length; i++) values[i] = ReadProperty(props);
             var node = new Node { Name = name, Properties = raw, PropertyCount = (int)count, Values = values };

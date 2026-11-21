@@ -45,19 +45,19 @@ internal static class VrchatSceneSetup
 
     internal sealed class MeshCopyBuild
     {
-        private Action _bind;
+        private Func<VrchatSkinRetargeter> _bind;
         public Dictionary<string, Slot> AuthoredObjects { get; }
-        internal MeshCopyBuild(Dictionary<string, Slot> objects, Action bind)
+        internal MeshCopyBuild(Dictionary<string, Slot> objects, Func<VrchatSkinRetargeter> bind)
         {
             AuthoredObjects = objects;
             _bind = bind;
         }
 
-        public void Bind()
+        public VrchatSkinRetargeter Bind()
         {
             var bind = _bind ?? throw new InvalidOperationException("Mesh copies have already been bound.");
             _bind = null;
-            bind();
+            return bind();
         }
     }
 
@@ -168,8 +168,9 @@ internal static class VrchatSceneSetup
         // all remaining authored hierarchy, then explicitly finishes the binding phase.
         return new MeshCopyBuild(authoredObjects, Bind);
 
-        void Bind()
+        VrchatSkinRetargeter Bind()
         {
+            var skins = new VrchatSkinRetargeter();
             var capturedSources = importedSources.ToDictionary(entry => entry.Key, entry => entry.Value);
             foreach (var (copy, slot) in copies)
             {
@@ -186,6 +187,22 @@ internal static class VrchatSceneSetup
                     Slot bone = ResolveImportedTarget(target, capturedSources, importedPaths, prefabSlots);
                     if (bone != null)
                     {
+                        // Bind poses produce points in the source bone's local units.
+                        // An authored bone inherits the units of its nearest imported
+                        // ancestor (or meters outside a model), even when its prefab
+                        // name/path differs from the original FBX skeleton.
+                        if (bone != renderer.Bones[i])
+                        {
+                            Slot ancestor = bone;
+                            while (ancestor != null && !capturedSources.ContainsKey(ancestor))
+                                ancestor = ancestor.Parent;
+                            float targetUnits = ancestor == null ? 1f : ImportScale(capturedSources[ancestor]);
+                            float ratio = ImportScale(copy.FbxGuid) / targetUnits;
+                            if (!float.IsFinite(ratio) || ratio <= 0)
+                                throw new InvalidDataException($"Invalid prefab skin import scale: {copy.Name} / {bone.Name}");
+                            if (ratio != 1f)
+                                skins.CorrectBindPose(renderer, i, float4x4.Scale(float3.One * ratio));
+                        }
                         renderer.Bones[i] = bone;
                         continue;
                     }
@@ -216,6 +233,7 @@ internal static class VrchatSceneSetup
                     replacedTemplateSlots?.Add(slot);
                 renderer.Destroy();
             }
+            return skins;
         }
 
         float ImportScale(string guid) => guid == null ? 1f : guid == avatar.FbxGuid ? avatar.FbxImportScale :
@@ -333,6 +351,82 @@ internal static class VrchatSceneSetup
         }
     }
 
+    public static void RemoveUnusedSkeletonTemplateNodes(Slot root, VrchatAvatar avatar,
+        IReadOnlyDictionary<Slot, string> importedSources, IEnumerable<Slot> authoredSlots)
+    {
+        // An unpacked prefab can reparent/rename entire skin branches. The original
+        // uninstantiated FBX is a template, not another scene instance. Its unused
+        // branches must not survive solely because the import Rig registers them.
+        // Never apply this to real FBX instances, or infer deletion from a bone name.
+        var retained = authoredSlots.Where(slot => slot != null && !slot.IsDestroyed).ToHashSet();
+        retained.Add(root);
+        var components = root.GetComponentsInChildren<Component>().ToArray();
+        var rigs = components.OfType<Rig>().ToArray();
+        var references = new List<IWorldElement>();
+        foreach (var component in components)
+            if (component is not Rig)
+                component.GetReferencedObjects(references, assetRefOnly: false, persistentOnly: false);
+        foreach (var reference in references)
+        {
+            // An explicitly referenced Rig is more than an import registry. Leave
+            // its table and all of its bones intact for that consumer.
+            for (IWorldElement element = reference; element != null; element = element.Parent)
+            {
+                if (element is Rig rig)
+                    foreach (Slot bone in rig.Bones) if (bone != null) retained.Add(bone);
+                if (element is Slot slot) { retained.Add(slot); break; }
+            }
+        }
+        var candidates = importedSources.Where(pair => avatar.UninstantiatedFbxGuids.Contains(pair.Value) &&
+                !pair.Key.IsDestroyed).Select(pair => pair.Key).OrderByDescending(Depth).ToArray();
+        int removed = 0;
+        foreach (Slot slot in candidates)
+        {
+            if (slot.IsDestroyed || retained.Contains(slot) || slot.Children.Count != 0 || slot.ComponentCount != 0) continue;
+            foreach (var rig in rigs)
+                for (int index = rig.Bones.Count - 1; index >= 0; index--)
+                    if (rig.Bones[index] == slot) rig.Bones.RemoveAt(index);
+            slot.Destroy();
+            removed++;
+        }
+        if (removed > 0) UniLog.Log($"Removed {removed} unused imported skeleton template slot(s).");
+    }
+
+    public static void ApplyHierarchyOrder(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<Slot, string> paths, IReadOnlyDictionary<string, Slot> prefabSlots,
+        IReadOnlyDictionary<string, Slot> modelRoots = null)
+    {
+        Slot Resolve(VrchatBoneTarget target) => target?.PrefabGuid == null && target?.Path == "" && target.FbxGuid != null &&
+            modelRoots?.TryGetValue(target.FbxGuid, out Slot modelRoot) == true ? modelRoot :
+            ResolveImportedTarget(target, sources, paths, prefabSlots);
+        int applied = 0, unresolved = 0, ambiguous = 0;
+        foreach (var order in avatar.HierarchyOrders)
+        {
+            Slot parent = Resolve(order.Parent);
+            if (parent == null) { unresolved++; continue; }
+            var branches = new List<Slot>();
+            foreach (var target in order.Children)
+            {
+                Slot branch = Resolve(target);
+                // Eye/hand setup can insert a wrapper between source parent and
+                // child. Move that branch as a unit without changing its transform.
+                while (branch != null && branch.Parent != parent && branch != parent) branch = branch.Parent;
+                if (branch == null || branch == parent) { unresolved++; continue; }
+                branches.Add(branch);
+            }
+            // Merged source siblings sharing a branch cannot be ordered independently.
+            if (branches.Count != branches.Distinct().Count()) { ambiguous++; continue; }
+            if (branches.Count < 2) continue;
+            // Source children first; keep all remaining generated children stable.
+            var desired = branches.Concat(parent.Children.Where(child => !branches.Contains(child))).ToArray();
+            var ranks = desired.Select((slot, index) => (slot, index)).ToDictionary(pair => pair.slot, pair => pair.index);
+            parent.SortChildren((a, b) => ranks[a].CompareTo(ranks[b]));
+            applied++;
+        }
+        if (avatar.HierarchyOrders.Count > 0)
+            UniLog.Log($"Unity hierarchy order: {applied} parent(s) applied, {unresolved} unresolved target(s), {ambiguous} merged group(s) skipped.");
+    }
+
     public static Slot ResolveImportedTarget(VrchatBoneTarget target, IReadOnlyDictionary<Slot, string> sources,
         IReadOnlyDictionary<Slot, string> paths, IReadOnlyDictionary<string, Slot> prefabSlots = null)
     {
@@ -438,9 +532,11 @@ internal static class VrchatSceneSetup
         }
     }
 
-    public static void RemapImportedRoot(Slot source, Slot target, Dictionary<Slot, string> sources,
-        Dictionary<Slot, string> paths)
+    public static void RemapImportedRoot(Slot source, Slot target, Dictionary<string, Slot> modelRoots,
+        Dictionary<Slot, string> sources, Dictionary<Slot, string> paths)
     {
+        foreach (var guidKey in modelRoots.Where(entry => entry.Value == source).Select(entry => entry.Key).ToArray())
+            modelRoots[guidKey] = target;
         if (sources.Remove(source, out string guid)) sources[target] = guid;
         if (paths.Remove(source, out string path)) paths[target] = path;
     }
@@ -461,10 +557,31 @@ internal static class VrchatSceneSetup
     }
 
     public static void Apply(Slot root, VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
-        IReadOnlyDictionary<string, Slot> authoredObjects = null, IReadOnlyDictionary<Slot, string> importedPaths = null)
+        IReadOnlyDictionary<string, Slot> authoredObjects = null, IReadOnlyDictionary<Slot, string> importedPaths = null,
+        IReadOnlyDictionary<string, Slot> prefabSlots = null, IReadOnlyDictionary<string, Slot> modelRoots = null)
     {
         ApplyInactiveStates(root, avatar, sources, importedPaths);
+        ApplyHierarchyActiveStates(avatar, sources, importedPaths, prefabSlots, modelRoots);
         ApplyInitialBlendShapes(root, avatar, sources, authoredObjects, importedPaths);
+    }
+
+    internal static void ApplyHierarchyActiveStates(VrchatAvatar avatar, IReadOnlyDictionary<Slot, string> sources,
+        IReadOnlyDictionary<Slot, string> paths, IReadOnlyDictionary<string, Slot> prefabSlots,
+        IReadOnlyDictionary<string, Slot> modelRoots = null)
+    {
+        int applied = 0, unresolved = 0;
+        // Imported overrides are collected first, authored instance values last.
+        // An absent model override is not permission to reset authored/template state.
+        foreach (var (target, active) in avatar.HierarchyActiveStates)
+        {
+            Slot slot = target.PrefabGuid == null && target.Path == "" && target.FbxGuid != null &&
+                modelRoots?.TryGetValue(target.FbxGuid, out Slot modelRoot) == true
+                ? modelRoot : ResolveImportedTarget(target, sources, paths, prefabSlots);
+            if (slot == null) { unresolved++; continue; }
+            slot.ActiveSelf = active;
+            applied++;
+        }
+        UniLog.Log($"Unity hierarchy active state: {applied} object(s) applied, {unresolved} unresolved target(s).");
     }
 
     /// <summary>
@@ -476,10 +593,11 @@ internal static class VrchatSceneSetup
     public static void RemoveDeletedMeshes(Slot root, VrchatAvatar avatar,
         IReadOnlyDictionary<Slot, string> importedMeshSources,
         IReadOnlyDictionary<string, Slot> authoredObjects = null,
-        IReadOnlyDictionary<Slot, string> importedPaths = null)
+        IReadOnlyDictionary<Slot, string> importedPaths = null,
+        HashSet<Slot> replacedTemplateSlots = null)
     {
         if (avatar.PrefabGameObjectNames.Count == 0 && avatar.PrefabRendererStates.Count == 0 &&
-            avatar.RemovedModelRenderers.Count == 0)
+            avatar.RemovedModelRenderers.Count == 0 && avatar.UninstantiatedFbxGuids.Count == 0)
         {
             return;
         }
@@ -490,12 +608,21 @@ internal static class VrchatSceneSetup
         foreach (MeshRenderer renderer in root.GetComponentsInChildren<MeshRenderer>())
         {
             Slot slot = renderer.Slot;
-            if (authoredSlots.Contains(slot) || importedPaths == null ||
-                !importedPaths.TryGetValue(slot, out string path) ||
-                !importedMeshSources.TryGetValue(slot, out string guid) ||
-                !avatar.RemovedModelRenderers.Contains(new(guid, path))) continue;
+            if (authoredSlots.Contains(slot) || !importedMeshSources.TryGetValue(slot, out string guid)) continue;
+            string path = importedPaths?.GetValueOrDefault(slot);
+            bool templateOnly = avatar.UninstantiatedFbxGuids.Contains(guid);
+            if (!templateOnly && (path == null || !avatar.RemovedModelRenderers.Contains(new(guid, path)))) continue;
             // Component removal leaves the Transform, bones, attachments and child renderers alive.
-            UniLog.Log($"Removing prefab-deleted renderer component: {path} (fbx={guid})");
+            UniLog.Log(templateOnly
+                ? $"Removing uninstantiated FBX renderer component: {path ?? slot.Name} (fbx={guid})"
+                : $"Removing prefab-deleted renderer component: {path} (fbx={guid})");
+            // An uninstantiated FBX only supplies geometry/skeleton templates. Its
+            // old renderer owners are not authored Unity GameObjects. Reuse the
+            // reference-aware cleanup after skin/rig/physics setup, while retaining
+            // ordinary instantiated objects whose renderer component was removed.
+            if (templateOnly && importedPaths != null)
+                for (Slot candidate = slot; candidate != null && importedPaths.ContainsKey(candidate); candidate = candidate.Parent)
+                    replacedTemplateSlots?.Add(candidate);
             renderer.Destroy();
             removed++;
         }
@@ -568,14 +695,14 @@ internal static class VrchatSceneSetup
     }
 
     public static async Task ApplyModularAvatar(Slot root, VrchatAvatar avatar, IDictionary<int, Slot> physicsNodes = null,
-        Func<VrchatBoneTarget, Slot> resolveTarget = null, Slot descriptorRoot = null)
+        Func<VrchatBoneTarget, Slot> resolveTarget = null, Slot descriptorRoot = null, VrchatSkinRetargeter skins = null)
     {
         // Capture identities before any merge destroys their original slots.
         var mergeTargets = avatar.ModularMergeArmatures
             .SelectMany(m => new[] { m.SourceBoneTarget, m.TargetBoneTarget })
             .Concat(avatar.ModularBoneProxies.SelectMany(p => new[] { p.SourceBoneTarget, p.TargetBoneTarget }))
             .Where(t => t != null).Distinct().ToDictionary(t => t, t => resolveTarget?.Invoke(t));
-        var skins = new VrchatSkinRetargeter();
+        skins ??= new VrchatSkinRetargeter();
         int merged = 0;
         foreach (VrchatModularMergeArmature merge in avatar.ModularMergeArmatures)
         {

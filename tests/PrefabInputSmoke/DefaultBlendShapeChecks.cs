@@ -8,12 +8,18 @@ internal static class DefaultBlendShapeChecks
     public static void Run(Func<string, string, string, string> asset)
     {
         CheckChannelNames(asset);
+        CheckDisabledDefaults(asset);
         const string modelGuid = "adef0000000000000000000000000001";
         string model = asset("Assets/DefaultWeightChannels.fbx", modelGuid, "");
         foreach (bool reverse in new[] { false, true })
         {
             WriteFbx(model, reverse);
-            var channels = UnityFbxBlendShapeDefaults.Read(model);
+            var channels = UnityFbxBlendShapeDefaults.Read(model, out var skinPaths);
+            var expectedSkin = new[] { "RootNode/Left/Joint", "RootNode/Right/Joint" };
+            if (reverse) Array.Reverse(expectedSkin);
+            Require(skinPaths["RootNode/Left/Body"].SequenceEqual(expectedSkin) &&
+                    skinPaths["RootNode/Twin/Body"].SequenceEqual(expectedSkin),
+                "FBX skin connections distinguish same-named joints and preserve cluster connection order");
             Require(channels.Count == 3 && channels.Single(c => c.RendererPath == "RootNode/Left/Body").Weight == 25 &&
                 channels.Single(c => c.RendererPath == "RootNode/Right/Body").Weight == 75 &&
                 channels.Single(c => c.RendererPath == "RootNode/Twin/Body").Weight == 25,
@@ -75,6 +81,30 @@ internal static class DefaultBlendShapeChecks
         }
     }
 
+    private static void CheckDisabledDefaults(Func<string, string, string, string> asset)
+    {
+        string path = asset("Assets/DefaultImportSettings.asset", "adef0000000000000000000000000003", "fixture");
+        foreach (string setting in new[] { "", "  importBlendShapeDeformPercent: 1\n", "  importBlendShapeDeformPercent: 0\n" })
+        {
+            File.WriteAllText(path + ".meta", "ModelImporter:\n" + setting);
+            var resolver = new UnityModelFileIdResolver(new UnityAsset
+                { LogicalPath = "Assets/DefaultImportSettings.asset", DiskPath = path, MetaPath = path + ".meta" });
+            typeof(UnityModelFileIdResolver).GetField("_defaultWeightChannels", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .SetValue(resolver, new[] { new UnityFbxBlendShapeDefaults.Channel("Smile", 75, "RootNode/Body") });
+            var scene = new Assimp.Scene();
+            var mesh = new Assimp.Mesh();
+            mesh.MeshAnimationAttachments.Add(new Assimp.MeshAnimationAttachment { Name = "Smile" });
+            scene.Meshes.Add(mesh);
+            var node = new Assimp.Node("Body"); node.MeshIndices.Add(0);
+            typeof(UnityModelFileIdResolver).GetMethod("AddBlendShapeNames", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .Invoke(resolver, new object[] { scene, node, "RootNode/Body" });
+            Require(resolver.BlendShapeNamesByPath["RootNode/Body"].Single() == "Smile", "disabled DeformPercent import retains shape identity");
+            Require(setting.Contains(": 0") ? resolver.BlendShapeDefaultWeightsByPath.Count == 0 :
+                resolver.BlendShapeDefaultWeightsByPath["RootNode/Body"].Single() == 75,
+                "ModelImporter DeformPercent setting controls defaults; omitted setting preserves legacy behavior");
+        }
+    }
+
     private static void CheckChannelNames(Func<string, string, string, string> asset)
     {
         string path = asset("Assets/ChannelNames.fbx", "adef0000000000000000000000000003", "");
@@ -109,6 +139,12 @@ internal static class DefaultBlendShapeChecks
         Dictionary<string, string> Map(string[] imported, params (string, string)[] channels) =>
             VrmToResonitePackage.BlendShapeNameNormalizer.ChannelAliases(imported, channels);
         Require(Map(new[] { "Smile" }, ("eye.Smile", "Smile"))["Smile"] == "eye.Smile", "connected channel alias restored");
+        Require(Map(new[] { "SubDeformer::.Smile" }, ("", "Smile"))["SubDeformer::.Smile"] == "Smile",
+            "Unnamed channel uses its single connected geometry name");
+        Require(Map(new[] { "SubDeformer::.Smile" }, ("", "Smile"), ("", "Smile")).Count == 0 &&
+                Map(new[] { "SubDeformer::.Smile", "Smile" }, ("", "Smile")).Count == 0 &&
+                Map(new[] { "SubDeformer::.Smile" }, ("", null)).Count == 0,
+            "Missing, ambiguous and colliding unnamed channel aliases remain unresolved");
         Require(Map(new[] { "Smile" }, ("eye.Smile", null)).Count == 0, "dotted suffix alone never establishes identity");
         Require(Map(new[] { "Smile" }, ("eye.Smile", "Smile"), ("mouth.Smile", "Smile")).Count == 0, "ambiguous geometry alias rejected");
         Require(Map(new[] { "Smile", "eye.Smile" }, ("eye.Smile", "Smile")).Count == 0, "existing channel name is not overwritten");
@@ -144,6 +180,14 @@ internal static class DefaultBlendShapeChecks
             objects.Add(new("Geometry", new object[] { id + 5, "Smile\0\u0001Geometry", "Shape" }));
             Connect(id + 5, id + 4);
         }
+        objects.Add(new("Model", new object[] { 100L, "Joint\0\u0001Model", "LimbNode" }));
+        objects.Add(new("Model", new object[] { 101L, "Joint\0\u0001Model", "LimbNode" }));
+        objects.Add(new("Deformer", new object[] { 102L, "Skin\0\u0001Deformer", "Skin" }));
+        objects.Add(new("Deformer", new object[] { 103L, "Cluster\0\u0001Deformer", "Cluster" }));
+        objects.Add(new("Deformer", new object[] { 104L, "Cluster\0\u0001Deformer", "Cluster" }));
+        Connect(100, 10); Connect(101, 20); Connect(102, 12);
+        Connect(104, 999); // An unrelated earlier connection must not reorder skin 102.
+        Connect(103, 102); Connect(104, 102); Connect(100, 103); Connect(101, 104);
         if (reverse) { objects.Reverse(); connections.Reverse(); }
         using var stream = File.Create(path);
         using var writer = new BinaryWriter(stream);

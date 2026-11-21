@@ -11,6 +11,61 @@ public static class ResoPonResolvedReference
     private const string BoneType = "VRC.SDK3.Dynamics.PhysBone.Components.VRCPhysBone";
     private const string ColliderType = "VRC.SDK3.Dynamics.PhysBone.Components.VRCPhysBoneCollider";
 
+    [Serializable] private sealed class ViewpointSnapshot
+    {
+        public string format = "resopon.unity-avatar-viewpoint";
+        public int schemaVersion = 1;
+        public string prefabGuid, unityVersion = Application.unityVersion;
+        public string coordinateSystem = "Unity world metres; descriptor.position + ViewPosition";
+        public List<DescriptorRecord> descriptors = new List<DescriptorRecord>();
+    }
+    [Serializable] private sealed class DescriptorRecord : Identity
+    {
+        public string transform;
+        public Vector3 viewPosition, descriptorWorldPosition, viewWorldPosition;
+        public Vector3 descriptorWorldScale;
+        public Quaternion descriptorWorldRotation;
+        public List<ViewpointAnchor> anchors = new List<ViewpointAnchor>();
+    }
+    [Serializable] private sealed class ViewpointAnchor
+    {
+        public string bone, transform, path;
+        public Vector3 worldPosition;
+    }
+
+    // A separate projection keeps older hierarchy captures explicitly viewpoint-unverified.
+    // SDK settings are read via SerializedObject; no SDK implementation is copied or bundled.
+    public static string CaptureViewpoint(Transform root, string guid)
+    {
+        var snapshot = new ViewpointSnapshot { prefabGuid = guid };
+        var ids = new Dictionary<UnityEngine.Object, string>();
+        var ordered = new List<Transform>();
+        Index(root, "r", ids, ordered);
+        foreach (Transform transform in ordered)
+        foreach (Component component in transform.GetComponents<Component>())
+        {
+            if (component.GetType().FullName != "VRC.SDK3.Avatars.Components.VRCAvatarDescriptor") continue;
+            var serialized = new SerializedObject(component);
+            Vector3 view = Required(serialized, "ViewPosition", SerializedPropertyType.Vector3).vector3Value;
+            var record = new DescriptorRecord { transform = ids[transform], viewPosition = view,
+                descriptorWorldPosition = transform.position, viewWorldPosition = transform.position + view,
+                descriptorWorldRotation = transform.rotation, descriptorWorldScale = transform.lossyScale };
+            Identify(record, component, root, ids);
+            var animator = transform.GetComponent<Animator>();
+            if (animator != null && animator.avatar != null && animator.avatar.isHuman)
+                foreach (HumanBodyBones bone in new[] { HumanBodyBones.Hips, HumanBodyBones.Head,
+                             HumanBodyBones.LeftUpperArm, HumanBodyBones.RightUpperArm })
+                {
+                    Transform target = animator.GetBoneTransform(bone);
+                    if (target == null) continue;
+                    record.anchors.Add(new ViewpointAnchor { bone = bone.ToString(), transform = Ref(target, ids),
+                        path = AnimationUtility.CalculateTransformPath(target, root), worldPosition = target.position });
+                }
+            snapshot.descriptors.Add(record);
+        }
+        return JsonUtility.ToJson(snapshot, true) + "\n";
+    }
+
     [Serializable] private sealed class Snapshot
     {
         public string format = "resopon.unity-reference";
@@ -18,6 +73,7 @@ public static class ResoPonResolvedReference
         public string projection = "unity-resolved-prefab";
         public string prefabGuid;
         public Sections sections = new Sections();
+        public List<SkinSize> skinSizes = new List<SkinSize>();
     }
     [Serializable] private sealed class Sections
     {
@@ -49,6 +105,60 @@ public static class ResoPonResolvedReference
         public List<string> bones = new List<string>();
         public List<Weight> blendShapes = new List<Weight>();
     }
+    [Serializable] private sealed class SkinSize
+    {
+        public string rendererId, reason;
+        public Vector3 sizeMeters;
+        public int weightedVertices;
+    }
+
+    // Both projections measure the base mesh in its authored skeletal pose, before morphs.
+    // Renderer bounds can be authored/cached, and include neither the saved binding nor its error.
+    private static SkinSize MeasureSkin(SkinnedMeshRenderer skin, string rendererId)
+    {
+        var result = new SkinSize { rendererId = rendererId };
+        try
+        {
+            var mesh = skin.sharedMesh;
+            if (mesh == null) throw new InvalidOperationException("missing mesh");
+            var bones = skin.bones;
+            var poses = mesh.bindposes;
+            var frames = new Matrix4x4[poses.Length];
+            for (int i = 0; i < poses.Length && i < bones.Length; i++)
+                if (bones[i] != null) frames[i] = bones[i].localToWorldMatrix * poses[i];
+            var points = mesh.vertices;
+            var counts = mesh.GetBonesPerVertex();
+            var weights = mesh.GetAllBoneWeights();
+            if (counts.Length != points.Length) throw new InvalidOperationException("missing vertex weights");
+            var bounds = new Bounds();
+            int index = 0;
+            for (int v = 0; v < points.Length; v++)
+            {
+                Vector3 point = Vector3.zero;
+                float sum = 0;
+                for (int j = 0; j < counts[v]; j++)
+                {
+                    var binding = weights[index++];
+                    if (binding.weight == 0) continue;
+                    int i = binding.boneIndex;
+                    if (i < 0 || i >= frames.Length || i >= bones.Length || bones[i] == null)
+                        throw new InvalidOperationException("missing weighted bone");
+                    point += frames[i].MultiplyPoint3x4(points[v]) * binding.weight;
+                    sum += binding.weight;
+                }
+                if (sum == 0) continue;
+                if (float.IsNaN(point.sqrMagnitude) || float.IsInfinity(point.sqrMagnitude))
+                    throw new InvalidOperationException("nonfinite vertex");
+                if (result.weightedVertices++ == 0) bounds = new Bounds(point, Vector3.zero);
+                else bounds.Encapsulate(point);
+            }
+            if (result.weightedVertices == 0) throw new InvalidOperationException("no weighted vertices");
+            result.sizeMeters = bounds.size;
+        }
+        catch (Exception e) { result.reason = e.Message; }
+        return result;
+    }
+
     [Serializable] private sealed class Weight { public int index; public string name; public float weight; }
     [Serializable] private sealed class Number { public string name; public float value; }
     [Serializable] private sealed class PhysicsRecord : Identity
@@ -96,6 +206,7 @@ public static class ResoPonResolvedReference
                     foreach (var material in renderer.sharedMaterials) r.materials.Add(Asset(material));
                     if (skin != null)
                     {
+                        snapshot.skinSizes.Add(MeasureSkin(skin, r.id));
                         foreach (var bone in skin.bones) r.bones.Add(Ref(bone, ids));
                         if (mesh != null)
                             for (int i = 0; i < mesh.blendShapeCount; ++i)

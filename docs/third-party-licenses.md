@@ -17,7 +17,7 @@
 | Modular Avatar for Resonite | AvatarSetup の識別グラフ、SpringBoneSetup、MeshLoadingSetup、LoadingStandInSetup、LoadingFallback.png、UnityNativeMeshのMeshX変換規約。構成・設定の移植と素材の再利用 |
 | AssetsTools.NET | UnitySerializedAssetsのバイナリSerializedFile・type tree読み取り。NuGet 3.0.5を同梱しMIT通知と内包LZ4のBSD-2-Clause通知を保持 |
 | .NET | native application host。SelfContained=false でもEXEに含む。[公式ホストパッケージ](https://www.nuget.org/packages/Microsoft.NETCore.App.Host.win-x64/10.0.8)のMIT表示を確認 |
-| xxHash | UnityModelFileIdResolver.XxHash64 の round・merge・avalanche。Unity互換の符号付き4バイト末尾処理を持つ。参照実装のBSD-2-Clause通知を保持 |
+| xxHash | UnityModelFileIdResolver.XxHash64 の round・merge・avalanche。4バイト末尾は符号なしで扱い、UTF-8名での符号拡張を防ぐ。参照実装のBSD-2-Clause通知を保持 |
 
 `LoadingFallback.png` は modular-avatar-resonite の
 `Resonite~/ResoniteHook/MA.Gadgets/resources/loading_standin.resonitepackage` 内の画像とバイト一致する。
@@ -52,8 +52,99 @@ Variantのスモークテスト用メッシュ・材質・Prefabもテスト内�
 ResoPon側のv2ダンプ・再検証runnerも独立実装で、本リポジトリのPrefab graphと既存の
 FBXメタデータ解析APIを呼ぶ。外部の実装コードや採取したアバターデータをソースへ取り込まない。
 既存参照のAssimpNet等は引き続き利用者のResoniteからロードし、新しい配布依存は追加しない。
-この変更は開発用ツール・資料のみで配布物の依存は増えず、追加の第三者通知対象はない。
+FBX診断用の階層・skin接続情報は既存の本番解析から取得する独立実装で、fileIDの修正も含め
+新しい外部依存・コピーした外部コードはない。自作FBX fixtureの書き出しにも既存参照のAssimpを使う。
+採取・比較ツールは開発専用で配布EXEへ含めない。追加の第三者通知対象はない。
+Prefab入力から採取・比較を起動する `check-prefab-unity.py` も、本リポジトリの既存採取ツールと
+Python標準ライブラリによる独立実装。Unityプロジェクトへ一時配置するのは本リポジトリの
+採取コードだけであり、新たな外部コード・配布依存・通知対象は追加しない。
+登録一覧の一括検証もPython標準ライブラリだけで実装する。生成Meshの比較は既存の
+`ReadAssetDocument` を呼び出し、回帰用のバイナリtype treeは既存テストと同様に
+AssetsTools.NETで自作する。新たな外部コード・モデルデータ・配布依存は追加しない。
+ModelImporterのDeformPercent設定、Prefabのルート命名、座標軸・行列分解、暗黙の物理rootの修正は、
+インストール済みUnityでの実測と既存の自作fixtureに基づく独立実装。外部ソースのコピーはない。
+依存ファイルのハッシュ採取、Editor実行ファイルの版照合、BlendShapeインポート設定の解析も
+既存のUnity Editor API、OSのバージョン情報、リポジトリ内のFBXパーサを使用し、配布依存や第三者通知の追加はない。
 実アバターのローカル採取では、素材ごとの版・作者・利用条件と導入範囲を `.local/` に記録する。
+
+FBX局所行列の復元は、[Autodesk FBX Developer Help 2020の変換行列の説明](https://help.autodesk.com/cloudhelp/2020/ENU/FBX-Developer-Help/files/nodes_and_scene_graph/fbx_nodes/FBX_Developer_Help_nodes_and_scene_graph_fbx_nodes_computing_transformation_matrix_html.html)
+の数式を仕様として参照した独立実装。SDKの実装やサンプルコードをコピー・翻訳・同梱しない。
+微小TRSのバイナリfixtureとskin rootの三角形モデルは自作で、既存のAssimpとUnity 2022.3.22f1で検証する。
+シーン採取と依存補完も本リポジトリの既存APIによる独立実装で、新しい配布依存・通知対象はない。
+ローカルのAizara再採取にはユーザー導入済みAvatarMenuCreatorForMA 1.39.0
+（Narazaka、Zlib、同梱LICENSEを確認）を使用した。Yuzukiの隔離プロジェクトには既存の
+FaceEmo 1.7.0（Copyright (c) 2023 suzuryg、MIT、内包コードの表示を含むLICENSE.md）を
+通知ごと保持し、参照するテンプレートもローカル検証に限る。両パッケージのコード・アセット・
+Unity採取値を本リポジトリや配布EXEへ取り込まないため、THIRD-PARTY-NOTICESの追加は不要。
+
+共有Meshのv2回帰検査は自作の最小FBX・Prefabを既存のAssimpとパーサで読み取る。
+一括変換の相対パス回帰検査もPython標準ライブラリと自作データのみを使う。
+外部コード・素材の取り込み、新しい配布依存・第三者通知の追加はない。
+
+保存パッケージの `PackageRegressionDump` とPython比較器も独立実装で、既存の
+RecordPackage/DataTree APIを呼び出す。FrooxEngine 2026.11.16.1330のCollider調査は
+インストール済みDLLの型・フィールドの反射確認のみで、逆コンパイル実装のコピーはない。
+開発用ツール・実アバター由来の期待条件・採取データは製品EXEへ同梱しない。
+新しい外部コード・配布依存・通知対象は追加しない。
+
+変換後の階層採取と三段階比較runnerも同じ範囲の独立実装。インストール済みElements.Coreの
+DataTree公開APIを反射で確認し、保存済みローカルパッケージで参照形式を検証する。
+骨接続の比較テストには自作のJSON・DataTreeだけを使い、Omaneko v1.1の既存の利用条件確認を
+引き継ぐ実変換は非公開のローカル検証に限る。外部ソースの転載、素材の同梱、追加依存はない。
+開発用ツールは製品EXEへ含めず、THIRD-PARTY-NOTICESの追加対象はない。
+
+EkuのRenderTexture判定とNagmaのFBX骨階層採取の修正、保存スキンの追従テストは、既存の
+本リポジトリ実装とUnity 2022.3.22f1・インストール済みFrooxEngineのAPIを用いた独立実装。
+Unity側の骨行列・bind pose・ウェイト採取にも外部サンプルのコピーはない。
+素材ごとの既存の利用条件確認を引き継いでローカル検証だけに利用し、新たな配布物や通知対象は増えない。
+
+骨格参照用FBXの余分なrendererを除く修正は既存Prefab解析・FrooxEngine APIによる独立実装。
+回帰シーンはテスト内で自作し、Omanekoの利用条件確認済みデータはローカル検証だけに使う。
+外部コード・素材・配布依存の追加はなく、既存の第三者通知を保持する。
+ウェイトのない末端の再利用と未使用の骨格template枝の削除も同じ範囲の独立実装。
+既存のModelImporter逆コンパイル資料は設定の意味の調査だけに参照し、実装の転載・移植はない。
+blendshape無効化では、実行対象のFrooxEngine.dllでModelImportSettingsの公開フィールドを確認した。
+一時FBXの接続編集とASCII・バイナリの回帰fixtureはリポジトリ内で実装し、配布依存や通知の追加はない。
+ASCII接続IDの数値照合、Prefab部分木の採取、参照専用アセットの選択除外も既存コードと
+自作テストだけを使う。Unity側の確認にはインストール済みEditor 2022.3.22f1を使用した。
+最終確認はインストール済みFrooxEngine 2026.11.16.1330を参照したビルド・実変換で行う。
+自作ASCII FBX・Prefabと生成シーンを回帰テストに使い、Omaneko v1.1およびNoraMiaree v1.0.0の
+既存の利用条件確認を引き継ぐ実検証は非公開ローカルに限る。新しい通知対象・配布素材はない。
+兄弟順序の復元・比較も既存の合成Prefab解析とインストール済みFrooxEngineの公開
+`Slot.SortChildren` APIを利用した独立実装。既存の逆コンパイル資料はAPI名の探索のみで、
+並べ替え実装のコピーはない。自作のPrefab・シーン・JSONで回帰検証し、追加の通知対象はない。
+未使用ラッパーの短縮も、既存の元モデル識別と公開Slot/Rig APIによる独立実装。
+TRS合成・参照保護のテストは自作シーンで行い、Omanekoの既存許諾の範囲内で非公開検証する。
+外部コード・素材・依存の追加や第三者通知の変更はない。
+
+全アバター変換のUnity比較工程は、既存の参照採取・比較ツールをPython標準ライブラリで
+接続した独立実装。回帰テストの入力は自作で、実データは既存の利用条件確認済みローカル参照のみ。
+登録パス・選択引数の共通処理、確認済み対応表とRendererの比較、FBX親子索引の変更も
+リポジトリ内の既存形式・実装を参照し、Python標準ライブラリと.NETのLINQを使う。
+新たな外部コード・素材・依存の取り込みや配布範囲の変更はなく、通知対象は増えない。
+
+全件の保存構造照合runnerとその回帰テストも、既存比較器・自作JSON fixture・Python標準
+ライブラリによる独立実装。参照範囲は本リポジトリの採取形式とインストール済みエンジンAPIで、
+外部サンプルの転載・移植はない。登録済みアバターは既存の利用条件確認を引き継ぎ、
+Unity再採取と実行時状態の調査を非公開ローカルで行う。入力・解析JSON・生成パッケージは
+配布せず、製品依存と通知対象は増えない。
+
+全件比較で見つかったFBX兄弟順・有効状態の修正は、本リポジトリのモデル階層・Prefab graphと
+インストール済みFrooxEngineのSlot APIを使う独立実装。`sortHierarchyByName` の扱いは既存の
+Unity参照比較実装とローカルUnity採取結果を照合し、外部実装は取り込まない。回帰fixtureは自作し、
+登録済みの実アバターは従来の許諾範囲で非公開検証する。追加の外部依存・通知対象はない。
+
+Descriptor視点の採取・比較はUnity 2022.3.22f1のSerializedObject/Animator API、ローカルの
+VRChat SDK Base/Avatars 3.10.6の公開設定項目、既存の保存Slot採取形式を参照する独立実装。
+SDKのlicense.txtが示す利用条件の下で導入された検証用プロジェクトを使用し、SDKコード・DLL・
+実アバター・採取結果は転載も同梱もしない。人体の直交座標系による位置合わせと回帰JSONは自作。
+製品コード・配布依存・THIRD-PARTY-NOTICESの通知対象は変更しない。
+
+Prefabのスキニング単位補正は既存のモデル取り込み倍率とFrooxEngineの行列APIを使う独立実装。
+MANUKA DR_05の指定Prefabと衣装FBXは非公開のローカル比較に使用し、コード・モデル・
+計測した頂点は取り込まない。配布する回帰テストは自作の骨と頂点を使い、追加の通知対象はない。
+比較ツールの寸法計測はUnity 2022.3のMesh APIと既存Resonite DLLのMeshX・行列APIを用いる
+独立実装。実アバターの検証結果はローカルに置き、配布EXEには計測コードや素材を追加しない。
 
 同梱規約の探索はunitypackage直下だけでなく、その商品のダウンロードディレクトリ内の
 Readme・Licenseフォルダーと `.url` も対象にする。リンク先は作者の公式販売ページと照合する。

@@ -13,6 +13,10 @@ if (!(Test-Path -LiteralPath $registryPath -PathType Leaf)) {
 }
 $registry = Get-Content -LiteralPath $registryPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($registry.version -ne 1) { throw 'Unsupported local case registry version.' }
+$registryDirectory = Split-Path -Parent $registryPath
+foreach ($entry in $registry.cases) {
+    $entry.inputPath = [IO.Path]::GetFullPath([IO.Path]::Combine($registryDirectory, $entry.inputPath))
+}
 if ($List) {
     $registry.cases | Select-Object id, tags, inputPath, @{Name='Exists';Expression={
         Test-Path -LiteralPath $_.inputPath -PathType Leaf

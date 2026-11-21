@@ -11,6 +11,12 @@ namespace VrmToResonitePackage.Unity;
 public sealed class UnityModelFileIdResolver
 {
     private readonly Dictionary<long, string> _names = new();
+    internal bool ImportBlendShapes { get; private set; } = true;
+    private bool _importBlendShapeDeformPercent = true;
+    private readonly Dictionary<long, int> _classes = new();
+    internal int ClassId(long fileId) => _classes.GetValueOrDefault(fileId);
+    internal IReadOnlyList<UnityModelNode> Hierarchy { get; private set; }
+    internal IReadOnlyDictionary<string, string[]> SourceSkinBonePaths { get; private set; }
     private string _authoredRootPath;
     private string _unpackedRootPath;
     private readonly Dictionary<long, HashSet<string>> _nodePathsById = new();
@@ -145,6 +151,8 @@ public sealed class UnityModelFileIdResolver
             return;
         }
         YamlNode importer = UnityYaml.ParseFlatDocument(File.ReadAllText(model.MetaPath))?["ModelImporter"];
+        ImportBlendShapes = importer?["meshes"]?["importBlendShapes"]?.AsBool(true) ?? true;
+        _importBlendShapeDeformPercent = importer?["importBlendShapeDeformPercent"]?.AsBool(true) ?? true;
         YamlNode table = importer?["internalIDToNameTable"];
         if (table?.Seq != null)
         {
@@ -158,6 +166,7 @@ public sealed class UnityModelFileIdResolver
                     if (int.TryParse(entry["first"].Map.Keys.FirstOrDefault(), out int classId) &&
                         classId is 23 or 33 or 137)
                         _rendererComponentIds.Add(fileId);
+                    if (int.TryParse(entry["first"].Map.Keys.FirstOrDefault(), out classId)) _classes[fileId] = classId;
                 }
             }
         }
@@ -171,6 +180,7 @@ public sealed class UnityModelFileIdResolver
                         System.Globalization.CultureInfo.InvariantCulture, out long fileId))
                 {
                     _names[fileId] = NormalizeName(value.AsString());
+                    _classes[fileId] = (int)(fileId / 100000);
                     // Legacy imported file IDs encode the class in their leading digits.
                     if (fileId / 100000 is 23 or 33 or 137) _rendererComponentIds.Add(fileId);
                 }
@@ -191,7 +201,8 @@ public sealed class UnityModelFileIdResolver
                 importPath = temporaryPath;
             }
             using var context = new AssimpContext();
-            _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath);
+            _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath, out var sourceSkinPaths, out var sourceTransforms);
+            SourceSkinBonePaths = sourceSkinPaths;
             Scene scene = context.ImportFile(importPath, PostProcessSteps.None);
             if (scene?.RootNode == null)
             {
@@ -289,11 +300,10 @@ public sealed class UnityModelFileIdResolver
                     // both possible renderer component types as candidates.
                     AddPathVariants("SkinnedMeshRenderer", nodePath, node.Name);
                     AddPathVariants("MeshRenderer", nodePath, node.Name);
-                    if (skinned)
-                    {
-                        AddBlendShapeNames(scene, node, string.Join("/", nodePath.Select(NormalizeName)));
-                    }
-                    else
+                    // A morph-only mesh is also a SkinnedMeshRenderer in Unity even
+                    // when it has no skin clusters. Its channels must remain visible.
+                    AddBlendShapeNames(scene, node, string.Join("/", nodePath.Select(NormalizeName)));
+                    if (!skinned)
                     {
                         AddPathVariants("MeshFilter", nodePath, node.Name);
                     }
@@ -301,12 +311,12 @@ public sealed class UnityModelFileIdResolver
             }
             // A conservative superset across every mesh/submesh and source channel. Publish only
             // after successful import so callers can prove that an animation target is absent.
-            var possibleShapes = scene.Meshes.SelectMany(mesh => mesh.MeshAnimationAttachments)
+            PossibleBlendShapeNames = ImportBlendShapes ? scene.Meshes.SelectMany(mesh => mesh.MeshAnimationAttachments)
                 .SelectMany(shape => new[] { shape.Name, BlendShapeNameNormalizer.CollapseRepeatedName(shape.Name ?? "") })
                 .Concat(_defaultWeightChannels.SelectMany(channel => new[] { channel.Name, channel.ShapeName }))
                 .Concat(_blendShapeNamesByPath.Values.SelectMany(names => names))
-                .Where(name => !string.IsNullOrEmpty(name)).ToHashSet(StringComparer.Ordinal);
-            PossibleBlendShapeNames = possibleShapes;
+                .Where(name => !string.IsNullOrEmpty(name)).ToHashSet(StringComparer.Ordinal) : new HashSet<string>(StringComparer.Ordinal);
+            Hierarchy = UnityModelNode.Capture(scene, ImportBlendShapes, sourceTransforms);
         }
         catch (Exception ex)
         {
@@ -324,6 +334,7 @@ public sealed class UnityModelFileIdResolver
 
     private void AddBlendShapeNames(Scene scene, Node node, string path)
     {
+        if (!ImportBlendShapes) return;
         Mesh mesh = node.MeshIndices
             .Where(index => index >= 0 && index < scene.MeshCount)
             .Select(index => scene.Meshes[index])
@@ -351,11 +362,11 @@ public sealed class UnityModelFileIdResolver
         _blendShapeNames.TryAdd(node.Name, names);
         _blendShapeNamesByPath[path] = names;
         var defaults = new float[names.Count];
-        for (int i = 0; i < names.Count; i++)
+        for (int i = 0; _importBlendShapeDeformPercent && i < names.Count; i++)
         {
             string attachmentName = names[i];
             var channels = _defaultWeightChannels.Where(channel => channel.RendererPath == path &&
-                (string.Equals(attachmentName, channel.Name, StringComparison.Ordinal) ||
+                (string.Equals(attachmentName, string.IsNullOrEmpty(channel.Name) ? channel.ShapeName : channel.Name, StringComparison.Ordinal) ||
                  string.Equals(attachmentName, $"{channel.Name}.{channel.Name}", StringComparison.Ordinal))).ToArray();
             // A channel belongs to a connected model object, not to the next same-named
             // attachment visited by Assimp. Ambiguous ownership must not select a neighbor.
@@ -438,6 +449,8 @@ public sealed class UnityModelFileIdResolver
     {
         byte[] bytes = encoding.GetBytes($"Type:{type}->{objectPath}{suffix}");
         long fileId = unchecked((long)XxHash64(bytes));
+        _classes.TryAdd(fileId, type switch { "GameObject" => 1, "Transform" => 4, "MeshRenderer" => 23,
+            "MeshFilter" => 33, "Mesh" => 43, "SkinnedMeshRenderer" => 137, _ => 0 });
         if (type is "MeshRenderer" or "SkinnedMeshRenderer" or "MeshFilter")
             _rendererComponentIds.Add(fileId);
         _names.TryAdd(fileId, NormalizeName(name));
@@ -524,8 +537,8 @@ public sealed class UnityModelFileIdResolver
         }
         if (offset <= data.Length - 4)
         {
-            long lane = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(data[offset..]);
-            hash ^= unchecked((ulong)(lane * unchecked((long)p1)));
+            ulong lane = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(data[offset..]);
+            hash ^= lane * p1;
             hash = System.Numerics.BitOperations.RotateLeft(hash, 23) * p2 + p3;
             offset += 4;
         }

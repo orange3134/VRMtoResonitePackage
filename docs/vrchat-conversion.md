@@ -147,6 +147,11 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
 - `fileIdsGeneration=1`: 型とobject名を使うxxHash64候補を生成する。
 - `fileIdsGeneration=2`: `//RootNode` からのhierarchy pathとcomponent typeを使う。
 - GameObjectのhash pathには `/GameObject` を付けず、componentだけ型名を付ける。
+- xxHash64の4バイト末尾は符号なし32bitとして読む。符号拡張するとUTF-8の非ASCII名で
+  fileIDが変わる。`Mesh` の `髪`、`頭アクセサリ`、`服` はUnityから取得したIDで回帰検証する。
+  Omanekoの `ねこじゃらし` もこの修正でMesh copyの参照を解決できるようになる。
+  非アクティブな親 `catToy` はcopyの親Transformに状態を保持するため、名前ベースの
+  `InactiveGameObjects` からは除外される。診断件数の減少だけで状態喪失と判断せず、親の `Active` も確認する。
 - serialized stripped documentがない参照は、prefab instance fileIDとのXORからsource fileID候補を復元する。
 - Assimpの人工root配下に実mesh nodeが1つある場合、Unityのsynthetic `//RootNode/root` pathを実childへ割り当てる。
 - A real top-level child named `root` takes precedence over the synthetic lowercase-root
@@ -154,6 +159,17 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   exclusion and physics references; sibling branches remain part of the model.
 
 ## FBXの選択と合成
+
+fileID resolverは同じAssimp importから `UnityModelNode` の読み取り専用メタデータも保持する。
+補助ノードを畳んだローカル姿勢・完全なpath・材質スロットをv2診断出力で使い、モデルの配置ごとに
+元のメタデータを書き換えない。Assimpの列ベクトル行列をSystem.Numericsの行ベクトル形式へ転置し、
+Translation→PreRotationの鎖で親の平行移動を回してしまわないようテストする。
+モデルの直下へFBXのCoord/Up/Front軸変換を一度適用し、X反転による左右手系変換後に分解する。
+回転済みの非均一スケールを行方向から取り出すと軸が入れ替わる。Quaternionも分解後の成分反転だけでは
+Unityと符号の選び方が異なり、一部成分だけのPrefab上書きで別の回転になる。
+この姿勢メタデータはv2診断用であり、本番のModelImporterによる頂点・skin変換を置換しない。
+FBXのskin接続はclusterの接続順で読み、同名Jointでも完全なパスで区別する。
+BlendShapeはボーンのあるメッシュに限定せず、morphだけを持つメッシュでも取得する。
 
 ### 配置の識別と不要なテンプレートの除去
 
@@ -170,6 +186,14 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   書き換える。元の package のアセット・キャッシュ・Unity プロジェクトは変更しない。
 - 循環参照は祖先経路で検出する。兄弟の同一アセットを循環として除外しない。
 - unpacked prefabのFBXはメッシュのテンプレートとして扱い、複製後に元rendererを除く。
+  Animatorの `m_Avatar` だけから骨格を取得するFBXも、実際のPrefabInstanceがなければ
+  元rendererを出力しない。`UninstantiatedFbxGuids` は選択済みモデルの配置IDと
+  合成済みPrefabInstanceを照合して保持し、生成コピーの接続後に元rendererのcomponentだけを除く。
+  bone・Transform・field参照は保持し、別配置の実FBXやPrefab由来のrendererは対象外とする。
+  Omaneko v1.1の本体16メッシュは独立した `.asset` から生成するため、同名のFBXメッシュを
+  名前ベースの保持リストだけで残すと二重描画になる。保存パッケージはUnity採取値にある
+  各本体名のSkinnedMeshRendererが1個であることを検査する。空の元SlotやFirstPerson用の
+  `_headless_` rendererはこの重複判定に含めない。
   置換したrendererの元スロットとimport側の祖先を記録し、アバター設定後に子・componentが
   なくなったものだけを葉から削除する。Prefab由来のobjectやcomponentから参照されるSlot・
   Slotのfieldは保持する。Revan underwearのように骨格統合後に空になるimport階層も対象となる。
@@ -179,6 +203,13 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   primary wrapperとそのRigが既に畳まれている場合はアバターrootにRigを作成して登録を保持する。
   アバター外のboneを含む場合や旧Rigが外部参照されている場合は旧wrapperを保持する。
   名前や空であることだけを条件に、アバター全体のスロットを削除しない。
+  unpack済みPrefabが骨を別の親へ移した場合、骨格参照用FBXの元の枝も残り得る。
+  `RemoveUnusedSkeletonTemplateNodes` は `UninstantiatedFbxGuids` に属する元importだけを対象に、
+  子・component・実参照のないSlotを葉から除く。通常のRigへの登録だけは使用中の証拠とせず、
+  削除時に登録も除く。スキン・BipedRig・物理・Slotのfield参照、Prefabで存在を確認した骨と
+  その祖先は保持する。別componentがRig自体またはそのfieldを参照する場合は登録骨も保持する。
+  実配置されたFBXや新規生成した補助階層は対象外。Omanekoの髪・耳をPhysBone用の親へ移した後の
+  旧FBX枝が回帰例で、眼球PivotやIKのAligned Handは使用中の補助階層として残す。
   外側で追加されたメッシュ用に同じFBXを再importした場合、その骨格が本体とは別に残ることがある。
   `UnityAsset.IsMeshTemplate` を `VrchatFbxAsset` へ引き継ぎ、追加モデルの用途を明示する。
   `RemoveUnusedMeshTemplateModels` はコピーの接続・骨格統合・アバター設定後に、用途がtemplateである
@@ -202,9 +233,50 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   コピーの親がローカル skeleton の骨で、FBX の skin bone と完全な path が一致するときは、
   prefab Transform identity と imported bone target を保持して既存の骨 Slot を使う。
   骨の下に追加された attachment だけを生成し、別の skeleton chain を作らない。
+  ウェイトを持たない末端や中間helperも、元FBXのskin骨の子孫に完全pathが一意に存在し、
+  meshノードでなければ既存Slotを再利用する。名前や `_end` suffixだけでは再利用しない。
+  Unityにだけ追加されたhelperは独立して生成する。`AuthoredImportedBones` にはTRSの上書きが
+  省略された骨も記録し、後段の不要template削除から保護する。
+  `HierarchyOrders` には合成後Transformの `m_Children` 順を記録する。YAML文書の列挙順や
+  同名骨の検索順は使わず、Prefab occurrenceとTransform ID、検証済みの元FBX pathで解決する。
+  `ApplyHierarchyOrder` はアバター設定・不要階層削除・更新待ち後の保存直前に `Slot.SortChildren`
+  を呼び、Unity由来の子を先に、残る生成Slotを元の相対順で後ろへ配置する。眼球Pivotや
+  Aligned Handを挟む場合はその枝ごと並べる。親・TRS・SkinnedMeshRenderer.Bonesは変更しない。
+  未解決対象と、複数の元兄弟が同一の枝へ統合されて並べられない群はログに記録する。
+  FBX内部は `VrchatHierarchyState` が元の階層と `ModelImporter.meshes.sortHierarchyByName`
+  （省略時true）から順序を採取する。falseなら元FBXの順序を保持し、明示的なPrefabの
+  `m_Children` を後から優先する。改名後の表示名で再ソートせず、元pathを照合キーにする。
+  順序指定は既存Slotだけに適用し、除外対象の子を新規生成しない。残っているtemplateの子も、
+  元配列にあれば相対順を復元する。
+  `HierarchyActiveStates` はFBXの明示的な `m_IsActive` 上書きと、合成済みローカルGameObjectの
+  値を保持する。従来の非アクティブ指定の後に適用し、明示的なtrueも復元する。
+  値を持たないstripped参照からtrueを捏造せず、FBXの既定trueでtemplateや配置の状態を戻さない。
+  配置対象のローカルGameObjectは名前だけの非アクティブ指定から除き、Prefab identityで処理する。
+  Nagiya Ruriの無効な `Hair_Odango.L/R` 小物が、同名の有効な髪ボーンを無効化するため。
+  除外されたtemplateの従来の非アクティブ抑制は維持する。
+  ローカル非meshノードは検証済みの一意な元pathを補助キーにできるが、同名のローカルmeshは
+  Prefab identityでのみ解決する。後者を元meshへ誤対応するとLilLeoのCat_Tail等を再有効化してしまう。
+  FBXルートは `importedFbxRoots` の配置先を使い、内部のAssimp RootNodeだけを無効にしない。
+  HinaのTulipやEkuのTaktのような小物は、この配置ルートと内部ノードの区別が必要。
+  `m_Father` のないstripped FBXルートは `m_PrefabInstance` の `m_TransformParent` で親を
+  検証して子配列へ含める。Aizaraのベルト下の追加モデルがこの形式。FBX内部のstripped骨を
+  インスタンス全体の直下の子と誤認しないよう、ルートidentityであることも確認する。
+  順序確定後、unpacked配置でprimary FBXが骨格参照用templateである場合に限り、
+  `VrchatHierarchyCleanup` が採取済みのimportルートと選択Prefabルートを葉側から畳む。
+  名前検索で任意の `RootNode` を除去せず、元import pathとモデルID、保持したSlot identityで限定する。
+  正の均一スケールのラッパーだけを対象に、ローカルTRSを子へ合成して兄弟順を保持する。
+  Slot・field・componentへの参照、非アクティブ、tag、動作component、非均一/反転スケール、
+  使用中のmaterial relayがあるラッパーは保持理由を記録して残す。参照されていないRig登録は
+  アバターrootのRigへ移し、スキンのBones配列と元の骨Slotは変更しない。
+  `CenteredRoot` はVRIKのroot基準・身体colliderを持つため対象にしない。Omanekoでは
+  `アバター/CenteredRoot/Prefab名/FBX名/RootNode/アーマチュア/Root/Hips` を
+  `アバター/CenteredRoot/アーマチュア/Root/Hips` に短縮する。
+  絶対パスの変わる処理なので、パス解決・表情構築・並び順適用を終えた保存直前に実行する。
   unpack済み骨格の通常のTransform文書に保存された位置・回転・スケールも保持する。
   PhysBoneやskinから直接参照されないArmatureなどの親を含め、skin骨またはその祖先であることと
   元モデルの完全なpathが一致することを確認して `AuthoredBoneTransforms` に収集する。
+  骨格モデルの候補は合成済みシーンごとにroot AnimatorとrendererのFBX参照から一度だけ収集し、
+  子のTransformや別Prefabの祖先をたどる際も、そのシーンを所有するビューの候補を使う。
   合成済みPrefabを読むため、Variantの上書きも反映し、省略フィールドはimport値を残す。
   Assimp補助ノードの折り畳みと配置の完了後、primary wrapperの折り畳み・MA統合・IK設定の前に適用する。
   FBXのmesh・bindposeを元の単位で保持するため、位置だけをそのモデルのimport scaleで割り、
@@ -220,6 +292,12 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   コピーの skin bone は全 renderer と親 Slot の生成後に prefab Transform identity を優先して解決する。
   unpack 後に改名されたローカル骨の path が FBX と一致せず、対応する authored Slot もない場合は、
   元の skin binding を保持して警告する。別名の骨を名前だけで推測しない。
+  改名後のPrefab骨が実在する場合は、そのTransformへ接続する。元のbind poseが出力する
+  骨ローカル座標に、メッシュの取り込み単位を接続先の単位で割った倍率を3軸とも適用する。
+  接続先の単位は最も近いimport済み祖先のモデルから取り、モデル外では1 mとする。
+  作者が設定した骨のスケールはこの比に含めない。Merge Armatureによる骨の置換行列を左から
+  合成し、各renderer専用のmeshに一度だけ保存する。MANUKA DR_05の追加下着は、
+  センチメートル単位のFBXと、Prefabで改名されたメートル単位の`Armature.1`を持つ回帰例。
   unpack時にFBXの単一コンテナがPrefabルートへ置き換わる場合は、モデル側で確認したコンテナ名を
   最初の子のpathへ補う。対象はTRSがidentityで、meshもskin boneとしての使用もない単一の直下ノード。
   既存の完全一致を優先し、任意の祖先名を削るsuffix照合には広げない。子孫も元モデルの完全なpathで照合する。
@@ -263,7 +341,8 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   Merge Armature前にSlotを解決し、各mergeのskin用bone mappingでphysics参照も更新する。
   破棄後のsource identity検索や名前fallbackでは、移動先や別instanceを正しく区別できない。
   FBX rootを指す空pathも保持する。primary wrapperとimport alignmentを畳むときは、
-  捕捉済みのGUID/pathを順に生存する親Slotへ移し、physics解決時の参照切れを防ぐ。
+  捕捉済みのGUID/pathとモデルルート表を生存する親Slotへ移し、physics・並び順・有効状態の参照を維持する。
+  主FBXのルートに無効化指定がある場合は専用Slotを残し、アバター全体や兄弟モデルへの波及を防ぐ。
   additional wrapper を畳む場合も、生存する source root へ GUID/空path と import root 表を移す。
   When a captured `RootNode` survives beneath the primary wrapper, root references
   prefer that node over the wrapper's empty-path identity, including after wrapper
@@ -435,7 +514,7 @@ Unity参照はGUIDとlocal fileIDの組で解決する。stripped objectは
   全Proxyの接続先を移動前に確定する。明示参照やpathの解決失敗時は同名の別objectへfallbackしない。
   rendererやPhysBoneのない所有objectも配置を生成し、物理と共有する同一配置は重複記録しない。
   boneReferenceの番号は[Unity HumanBodyBones](https://github.com/Unity-Technologies/UnityCsReference/blob/master/Modules/Animation/ScriptBindings/Avatar.bindings.cs)に従い、親指は既存のVRM 1命名へ正規化する。
-- primaryを含むimport wrapperは最終階層に残さない。
+- primaryを含むimport wrapperは、モデル単位の無効化を保持する場合を除いて最終階層から取り除く。
 
 ## FBXの単位と軸
 
@@ -561,9 +640,16 @@ Import / None / 指定なしにはこの再計算を適用しない。共有mesh
 Resoniteは空または微小なshapeを除去するため、Unityのindex参照がずれる場合がある。
 
 - FBX内の元shape順を記録する。
+- ModelImporterの `meshes.importBlendShapes: 0` では、FBX由来のshape名・既定weight・
+  アニメーション候補を解析結果から除く。主FBXと追加FBXの設定を個別に保持し、Resoniteが読む
+  一時FBXでBlendShapeデフォーマからメッシュへの接続を外す。バイナリ・ASCIIともに
+  スキンとボーンの接続は維持され、保存メッシュのshape数とrendererのweight数は0になる。
+  ASCII FBXの接続元は符号付き64ビット整数として照合する。宣言の `30` と接続の `030` は同じIDを指す。
 - blinkやprefab weightが数値参照する最大indexまで、欠落shapeを空frameとして復元する。
 - 名前参照だけのrendererは大量の空frameを復元しない。
-- FBX `BlendShapeChannel.DeformPercent` をモデルprefabの既定weightとして読み込む。
+- FBX `BlendShapeChannel.DeformPercent` はModelImporterの `importBlendShapeDeformPercent` が
+  有効な場合だけモデルprefabの既定weightとして読み込む。明示的な0では取り込まず、設定省略時は従来どおり有効。
+  無効でもチャンネル名・順序・aliasは保持し、Prefabの明示的なweightは通常どおり適用する。
 - Scope FBX default weights by model occurrence and renderer name, and fill missing
   weights on every corresponding renderer record. Explicit zero overrides remain authoritative.
 - 明示的なprefab `m_BlendShapeWeights` は0を含めて既定値より優先する。
@@ -639,7 +725,9 @@ SNIFF CONTROLの到達可能motionには同じbindingがあるが、初期状態
 LinaのFBXには両目用 `まばたき` の `DeformPercent=100` がある。
 従来はこの値が初期weightと表情出力のBaseに残り、保存パッケージのBodyもweight=1となっていた。
 ループの0指定を初期値と表情解除時のBaseへ反映することで、左右の瞬きを追加した後も残る閉眼を防ぐ。
-衣服の調整shapeなど、瞬きと関係しないFBX既定値は維持する。
+Unity参照との照合で、LinaのModelImporterには `importBlendShapeDeformPercent: 0` があり、
+Bodyの `まばたき` とsocksの `調整用` はモデルを読み込んだ直後も0になることを確認した。
+本番解析もこの設定を尊重する。瞬きの初期リセットは保持し、他のアバターで設定が有効なFBX既定値は維持する。
 
 Shipilka 1.02はDescriptorの瞬き設定が空で、初期 `Default Shape / ShapeDefault` のループが
 Bodyの `まばたき` を0に保つ。動く瞬きループではないため、中立表情からの補完で両目1本を登録する。
@@ -693,6 +781,9 @@ headless meshの生成と描画制御は[共通のFirstPerson処理](avatar-conv
 ## 視点
 
 - Descriptor の `ViewPosition` がある場合は、目ボーンからの推定より優先する。
+  主FBXルートのDescriptorでは、元の人体ボーンと最終リグの姿勢が一様な拡縮・回転・移動で
+  対応するときに、その変換を視点にも適用する。NagiyaRuriのセンタリング後の位置と
+  前後方向を含む比較手順は[視点比較](avatar-viewpoint-tests.md)を参照。
   目ボーンは回転用の支点であり、見えている眼球の中心とは限らない。
 - `ViewPosition` は Descriptor 原点からの、Unityワールド軸に沿ったメートル単位のオフセット。
   SDK 3.10.6 の `VRC_AvatarDescriptor.OnDrawGizmosSelected` は
@@ -765,10 +856,54 @@ headless meshの生成と描画制御は[共通のFirstPerson処理](avatar-conv
   as well as remapping descendants. Apply this at every merge so later merges retain live references.
 
 - `insideBounds=1` とplane colliderはResoniteで正しく再現できないため変換しない。
-- `rootTransform` があればそのboneへ、なければ所有GameObjectの親boneへ局所変換を畳む。
+- PhysBoneの `rootTransform` 未指定時は所有Transformを使う。12BのようにFBXオブジェクトへ
+  コンポーネントを追加すると、stripped GameObjectだけが保存され、TransformのYAMLがない場合がある。
+  この場合もGameObjectの出典IDからモデル内の完全なパスを解決し、物理を欠落させない。
+- Colliderの `rootTransform` があればそのboneへ、なければ所有GameObjectの親boneへ局所変換を畳む。
+  所有Transformが暗黙のFBXノードならそのノードへ直接取り付け、position/rotationはその局所空間のまま使う。
+  同名ボーンを持つ別枝との混同や、親変換の二重適用を避ける。
+- 12Bの登録ケースにはplane colliderが7個ある。PhysBone 14個を取り込めても、これらは既存の
+  plane非対応方針により出力されない。チェーン生成の成功を衝突挙動の完全な再現とみなさない。
+- FrooxEngine 2026.11.16.1330の実DLLを反射で確認したところ、`DynamicBoneChain.StaticColliders`
+  は `SyncRefList<IDynamicBoneCollider>` で、同DLL内の具象実装は `DynamicBoneSphereCollider` のみ。
+  PlaneCollider型は存在しない。標準コンポーネントへの直接変換はできず、独自コンポーネントは
+  受け取るクライアント側にも実装を必要とするため、通常パッケージの互換性を満たさない。
+  大球による平面近似も境界・裏面・接触方向が変わるので自動適用しない。必要ならUnity側で
+  対応するSphere/Capsuleへ調整した別ケースを作り、実クライアントで衝突を確認する。
+  APIは更新され得るため、再検討時は実行対象DLLで実装型と保存可能な参照先を再確認する。
 - node、offset、tail、radiusの署名でcolliderを共有する。
 
+## FBX衣装の明示的な骨参照の回帰事例
+
+Nagmaの手動結合済み衣装では、FBXのメッシュが通常のPrefab Transformを `m_Bones` で参照する。
+この階層の採取を生成メッシュだけに限定すると、参照先が生成されず、テンプレート側の骨へ
+フォールバックする。静止時の形状が似ていても、本体のHipsを動かした際に衣装が追従しない。
+FBXを使うMeshCopyも参照先の階層を採取し、検証済みのimport骨を親として明示的な子骨を生成する。
+削除済みRendererはこの採取対象から除く。名前だけで別枝の骨へ結び直さない。
+
+Nagmaでは腰の剣・鞘と衣装の計5 Renderer、66件の使用骨参照で追従不良を検出した。
+修正後は対象15 Rendererの使用骨すべてがHipsの試験移動に追従し、腰の剣の約1cmの静止位置差も解消。
+Unityの頂点・骨行列・bind pose・ウェイトから組み立てた静止形状と、保存パッケージの同じ値を比較した。
+共通のRenderer行列から求めた一つの剛体変換で出力座標系を揃え、頂点や骨ごとの位置合わせは行わない。
+双方向の最近傍頂点距離は全15 Rendererで0.1mm未満（最大約0.0303mm）。
+頂点順や溶接の違いを許す形状検査であり、トポロジー・法線・材質・全ポーズの一致を保証しない。
+IKがHipsの位置を駆動する場合があるため、追従テストは一時的な親を動かし、Hips自身が動いたことも検証する。
+
 ## マテリアル
+
+動的テクスチャと複数材質の制約:
+
+Ekuの `Takt_Screen` とMilfyの `SmartPhone_Screen` の第2レイヤーは、それぞれの `ScreenRT.renderTexture` を参照する。
+RenderTextureはカメラ等の実行時出力であり、通常画像のデコーダーへ渡さない。
+ベイク計画で明示的に警告し、該当する追加レイヤー・マスクの処理だけを除外する。
+メイン画像自体が動的ならメイン画像のベイクを省略し、材質の色とUV変換を保持してメインテクスチャを未割当にする。
+発光でも動的画像を入力から外し、利用可能な静的な発光マップやマスクを使う。
+参照先が存在しない場合はUnityのnull/白フォールバックを維持する。動的画面の再現を実装したものではない。
+画像デコードがnullを返した場合も、後続のNullReferenceExceptionではなく対象パスとGUIDを報告する。
+
+Ekuの `Hair_Front` はUnityでも1サブメッシュに2材質（髪とfake shadow）が割り当てられている。
+輪郭除外で追加するサブメッシュが既存の追加材質を奪わないよう、この場合は処理を保留する。
+警告には材質数・サブメッシュ数を含め、入力自体の構成か変換途中の不整合かを切り分けられるようにする。
 
 material variantは `m_Parent` chainをbaseから継承し、子の差分を上書きする。
 FBX `externalObjects` がない場合は、埋め込みmaterial名と `.mat` filename、diffuse texture basenameから

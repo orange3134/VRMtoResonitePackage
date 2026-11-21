@@ -11,6 +11,8 @@ import re
 import subprocess
 import sys
 
+import avatar_registry
+
 
 def sha256(path):
     with Path(path).open("rb") as stream:
@@ -64,7 +66,14 @@ def main():
     if not cases:
         parser.error("No cases selected")
     binaries = {"converter": args.converter.resolve(), "referenceDump": args.reference_dump.resolve()}
-    binary_hashes = {name: sha256(path) for name, path in binaries.items()}
+    if any(case["unity"]["status"] == "verified" for case in cases):
+        binaries["referenceConverter"] = binaries["referenceDump"].with_name("ResoPon.dll")
+    try:
+        binary_hashes = {name: sha256(path) for name, path in binaries.items()}
+    except OSError as error:
+        parser.error(str(error))
+    if "referenceConverter" in binaries and binary_hashes["referenceConverter"] != binary_hashes["converter"]:
+        parser.error("--converter must match ResoPon.dll beside --reference-dump")
     # Never reuse output directories or overwrite an earlier result.
     output.mkdir(parents=True, exist_ok=False)
     repo = Path(__file__).resolve().parents[1]
@@ -122,7 +131,8 @@ def main():
             if case["unity"]["status"] == "verified":
                 unity_expected = expected_path(case["unity"])
                 actual_path = folder / "unity.actual.json"
-                command = ["dotnet", str(binaries["referenceDump"]), str(source), str(unity_expected), str(actual_path)]
+                command = ["dotnet", str(binaries["referenceDump"]), str(source), str(unity_expected), str(actual_path),
+                           "--verify-selection", avatar_registry.selected_avatar(case.get("arguments", [])) or ""]
                 code = run(command, folder / "unity-dump.log", folder)
                 result["commands"].append({"arguments": command, "exitCode": code})
                 if code != 0:

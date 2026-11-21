@@ -109,6 +109,10 @@ preserving models with live skin/field references, authored objects, foreign
 attachments, renderers, behavior components, or Rig registrations for moved bones.
 Ordinary model instances remain outside this cleanup's candidate set.
 
+`SkeletonModelRendererChecks` removes original renderers from FBXs imported only
+for skeletons/templates, even when standalone generated meshes have the same names.
+It preserves bone/field references, authored geometry and actual model instances.
+
 Custom-eye rig assignment distinguishes same-named transforms and rejects missing
 or destroyed explicit references. Bone Proxy checks cover repeated accessories,
 descriptor-relative paths, avatar-root targets, humanoid targets after armature

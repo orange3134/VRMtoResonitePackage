@@ -200,6 +200,7 @@ internal static partial class VrchatMaterialBuilder
     {
         if (string.IsNullOrEmpty(guid)) return null; // Shader's default white texture.
         var asset = package.ByGuid(guid);
+        if (asset?.IsRenderTexture == true) return null;
         if (asset?.HasContent != true)
         {
             UniLog.Warning($"Bake texture {guid} was not found; using the shader's default white texture.");

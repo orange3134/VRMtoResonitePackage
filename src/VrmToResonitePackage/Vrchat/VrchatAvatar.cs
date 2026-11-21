@@ -29,6 +29,7 @@ public sealed class VrchatAvatar
     public string FbxPath { get; set; }
 
     public string FbxGuid { get; set; }
+    internal HashSet<string> ModelsWithoutBlendShapes { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Scale baked during Assimp import to reproduce Unity ModelImporter file-unit conversion.</summary>
     public float FbxImportScale { get; set; } = 1f;
@@ -56,6 +57,7 @@ public sealed class VrchatAvatar
 
     /// <summary>VRChat ViewPosition: unscaled Unity-world-axis offset from the descriptor origin, in meters.</summary>
     public Vec3? ViewPosition { get; set; }
+    internal VrchatViewpoint RigViewpoint { get; set; }
 
     public string LeftEyeBoneName { get; set; }
     public string RightEyeBoneName { get; set; }
@@ -124,6 +126,15 @@ public sealed class VrchatAvatar
     /// <summary>Saved local poses of unpacked model bones, including unweighted skeleton ancestors.</summary>
     public Dictionary<VrchatBoneTarget, VrchatAuthoredBoneTransform> AuthoredBoneTransforms { get; } = new();
 
+    /// <summary>Imported skeleton nodes verified to exist in the authored prefab, even without pose overrides.</summary>
+    public HashSet<VrchatBoneTarget> AuthoredImportedBones { get; } = new();
+
+    /// <summary>Effective Unity child order, identified by prefab occurrence rather than names.</summary>
+    public List<VrchatHierarchyOrder> HierarchyOrders { get; } = new();
+
+    /// <summary>Effective activeSelf values, scoped by model path or authored prefab occurrence.</summary>
+    public Dictionary<VrchatBoneTarget, bool> HierarchyActiveStates { get; } = new();
+
     /// <summary>
     /// All GameObject names present in the selected prefab's hierarchy. Used to drop imported FBX
     /// meshes that the prefab deleted (avatars built by removing mesh objects from a shared FBX).
@@ -135,6 +146,9 @@ public sealed class VrchatAvatar
     public Dictionary<VrchatGameObjectReference, bool> PrefabRendererStates { get; } = new();
     /// <summary>Removed FBX renderer/MeshFilter components. Preserve their objects and children.</summary>
     public HashSet<VrchatModelRendererReference> RemovedModelRenderers { get; } = new();
+    /// <summary>Models imported for skeleton/mesh templates, without an authored FBX instance.
+    /// Keep their bones and objects, but remove their original renderer components after copying.</summary>
+    public HashSet<string> UninstantiatedFbxGuids { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Whole excluded models; never import their geometry or skeletons.</summary>
     public HashSet<string> EditorOnlyFbxGuids { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Excluded model nodes, including bones and non-rendering objects.</summary>
@@ -196,6 +210,8 @@ public sealed class VrchatPhysicsPlacement
 }
 
 public sealed record VrchatGameObjectReference(string FbxGuid, string Name);
+
+public sealed record VrchatHierarchyOrder(VrchatBoneTarget Parent, IReadOnlyList<VrchatBoneTarget> Children);
 
 public readonly record struct VrchatModelScaleOverride(float? X = null, float? Y = null, float? Z = null);
 

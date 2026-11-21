@@ -5,6 +5,32 @@ start Unity, install packages, run the conversion app, or read any avatar assets
 Its input is the JSON reference captured in Unity and the matching JSON snapshot
 from the ResoPon parser (v1/v2), or a repeated Unity capture (v2). Capture/compare is separate from the production converter.
 
+Use `scripts/check-prefab-unity.py --registry .local/avatar-tests.json` to capture
+and compare all registered prefab inputs sequentially. `--case <id>` selects a
+subset. The resulting report distinguishes capture, parity and process failures;
+its coverage manifest can be replayed without starting Unity.
+
+Native generated-mesh metadata has a separate synthetic regression:
+
+```sh
+dotnet build tests/UnityReferenceDump -c Release -o .tmp_verify/reference-build
+dotnet .tmp_verify/reference-build/UnityReferenceDump.dll --check-native-metadata .tmp_verify/new-native-metadata-fixture
+dotnet .tmp_verify/reference-build/UnityReferenceDump.dll --check-source-transforms .tmp_verify/new-source-transform-fixture
+```
+
+It checks binary and YAML subassets, signed fileIDs, channel names/order, stale
+weights, empty meshes, missing/wrong-type rejection and unchanged mesh inputs.
+Source transform checks cover tiny authored TRS in binary FBX 7400/7500, helper
+collapse, static versus skinned pivots, six Euler orders and unsupported fallbacks.
+
+For an independent Unity skin-root oracle, generate a self-authored model with
+`--write-skin-root-fixture <new.fbx>`. Copy `ResoPonSkinRootSmoke.cs` from
+`tools/unity/Tests` into a trusted project's Editor folder alongside the exporter.
+Set `RESOPON_SKIN_ROOT_SOURCE` to that FBX and `RESOPON_REFERENCE_SMOKE_OUT` to a
+new output directory, then invoke `ResoPonSkinRootSmoke.Run` in batch mode. It tests
+opposite cluster orders and a weighted common ancestor, and writes a prefab path
+and Unity expectation for the regular producer/comparator to replay.
+
 ```sh
 python scripts/compare-unity-reference.py expected.json actual.json
 python scripts/compare-unity-reference.py expected.json actual.json --report diff.json
@@ -42,13 +68,15 @@ or reordering siblings intentionally changes IDs. Source and original-source
 asset references remain provenance, not instance identity. Ordered bone bindings,
 blendshape weights, local transforms and selected PhysBone parameters are included.
 The validator checks internal references and field types; v1/v2 mixing is rejected.
-The ResoPon v2 producer resolves YAML-authored hierarchy/components, including
-variants and repeated nested prefabs. It fails explicitly for implicit FBX model
-hierarchy and missing dependencies. Comparing two Unity captures still proves
+The ResoPon v2 producer resolves YAML-authored and implicit FBX hierarchy/components,
+including variants, removals and repeated nested model occurrences. It uses shared
+model metadata, imported ID conventions and serialized overrides; missing dependencies
+and ambiguous/optimized model hierarchy fail explicitly. Comparing two Unity captures still proves
 repeatability of captured fields, not ResoPon parity.
 
 The Python suite includes invented v2 data for repeated instances, missing records,
 ordered references, transform/weight changes, invalid identities and dangling refs.
+The quaternion sign pair `q` / `-q` compares equal without changing numeric tolerances.
 Replay tests also prevent unsupported cases, changed baselines and field differences
 from being reported as matches. Existing replay output is never reused.
 
@@ -72,3 +100,11 @@ This checks actual parser parity with Unity, independence from expected values,
 negative comparison controls, output protection and unchanged source assets.
 Use `scripts/test-unity-resolved.py` to replay a private collection's `coverage.json`;
 see [the v2 workflow](../../docs/unity-reference-tests.md) for status semantics and limits.
+
+For the FBX variant integration fixture, generate a new self-authored model with
+`UnityReferenceDump --write-fbx-fixture output.fbx`. Set `RESOPON_FBX_SMOKE_SOURCE`
+to that file, copy `ResoPonFbxReferenceSmoke.cs` to the Unity project's Editor folder,
+and run `ResoPonFbxReferenceSmoke.Run` with a new `RESOPON_REFERENCE_SMOKE_OUT`.
+The generated `prefab-path.txt` identifies the variant for the same producer check.
+It covers repeated model instances, Japanese names, underscore ordering, model
+Renderer/GameObject removals, additions, inactive state and physics references.

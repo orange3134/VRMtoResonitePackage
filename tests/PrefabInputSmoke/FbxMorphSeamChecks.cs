@@ -9,6 +9,57 @@ internal static class FbxMorphSeamChecks
     {
         string directory = Path.GetFullPath(Path.Combine(".tmp_verify", "morph-seams", Guid.NewGuid().ToString("N")));
         Directory.CreateDirectory(directory);
+        string model = Path.Combine(directory, "import-settings.fbx");
+        Write(model, 7400, false, true, false);
+        var asset = new UnityAsset { DiskPath = model, LogicalPath = "Assets/import-settings.fbx", MetaPath = model + ".meta" };
+        foreach (bool enabled in new[] { true, false })
+        {
+            File.WriteAllText(asset.MetaPath, $"ModelImporter:\n  meshes:\n    importBlendShapes: {(enabled ? 1 : 0)}\n");
+            var resolver = new UnityModelFileIdResolver(asset);
+            Require(resolver.Hierarchy.Single(node => node.HasMesh).Skinned == enabled &&
+                resolver.BlendShapeNamesByPath.Any() == enabled && resolver.BlendShapeNames.Any() == enabled &&
+                resolver.PossibleBlendShapeNames.Any() == enabled,
+                "ModelImporter controls morph-only renderers, their channels and animation target candidates");
+        }
+        foreach (int version in new[] { 7400, 7500 })
+        {
+            string binary = Path.Combine(directory, $"disable-{version}.fbx");
+            Write(binary, version, false, true, false);
+            CheckDisabled(binary);
+        }
+        string ascii = Path.Combine(directory, "disable-ascii.fbx");
+        File.WriteAllText(ascii, """
+            ; FBX 7.4.0 project file
+            FBXHeaderExtension: {
+                FBXHeaderVersion: 1003
+                FBXVersion: 7400
+            }
+            Objects: {
+                Model: 20, "Model::Body", "Mesh" {}
+                Geometry: 10, "Geometry::Body", "Mesh" {
+                    Vertices: *9 { a: 0,0,0,1,0,0,0,1,0 }
+                    PolygonVertexIndex: *3 { a: 0,1,-3 }
+                }
+                Deformer: 30, "Deformer::Face", "BlendShape" {}
+                Deformer: 40, "Deformer::Face", "BlendShapeChannel" {
+                    DeformPercent: 0
+                    FullWeights: *1 { a: 100 }
+                }
+                Geometry: 50, "Geometry::Face", "Shape" {
+                    Indexes: *1 { a: 0 }
+                    Vertices: *3 { a: 0,0,1 }
+                    Normals: *3 { a: 0,0,0 }
+                }
+            }
+            Connections: {
+                C: "OO",20,0
+                C: "OO",10,20
+                C: "OO",030,10
+                C: "OO",40,30
+                C: "OO",50,40
+            }
+            """);
+        CheckDisabled(ascii);
         foreach (int version in new[] { 7400, 7500 })
         foreach (bool existingColor in new[] { false, true })
         foreach (bool duplicateTextures in new[] { false, true })
@@ -37,6 +88,18 @@ internal static class FbxMorphSeamChecks
             Write(noSeam, version, existingColor, seam: false, duplicateTextures);
             Require(UnityFbxMorphSeams.Prepare(noSeam) == noSeam, "matching morph deltas need no protection");
         }
+    }
+
+    private static void CheckDisabled(string source)
+    {
+        byte[] original = File.ReadAllBytes(source);
+        using var context = new AssimpContext();
+        var before = context.ImportFile(source, PostProcessSteps.None).Meshes.Single();
+        string filtered = UnityFbxMorphSeams.Prepare(source, importBlendShapes: false);
+        var after = context.ImportFile(filtered, PostProcessSteps.None).Meshes.Single();
+        Require(before.MeshAnimationAttachmentCount == 1 && after.MeshAnimationAttachmentCount == 0 &&
+            before.Vertices.SequenceEqual(after.Vertices) && before.FaceCount == after.FaceCount &&
+            original.SequenceEqual(File.ReadAllBytes(source)), "Only the temporary FBX loses its morph channels: " + source);
     }
 
     private static int Errors(Mesh original, Mesh imported)

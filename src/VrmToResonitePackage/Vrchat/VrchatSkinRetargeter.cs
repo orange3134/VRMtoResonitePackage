@@ -4,10 +4,17 @@ using FrooxEngine;
 
 namespace VrmToResonitePackage.Vrchat;
 
-/// <summary>Preserves skin deformation when Merge Armature replaces a bone's coordinate frame.</summary>
+/// <summary>Composes bind pose corrections from prefab skin binding and subsequent armature merges.</summary>
 internal sealed class VrchatSkinRetargeter
 {
     private readonly Dictionary<SkinnedMeshRenderer, Dictionary<int, float4x4>> _corrections = new();
+
+    public void CorrectBindPose(SkinnedMeshRenderer renderer, int index, float4x4 correction)
+    {
+        if (!_corrections.TryGetValue(renderer, out var bones))
+            _corrections.Add(renderer, bones = new());
+        bones[index] = correction * bones.GetValueOrDefault(index, float4x4.Identity);
+    }
 
     public int Retarget(Slot root, IReadOnlyDictionary<Slot, Slot> mappings)
     {
@@ -21,12 +28,7 @@ internal sealed class VrchatSkinRetargeter
             // Capture before any source is moved/destroyed; compose successive replacements
             // in order and clone each renderer's mesh only once after all merges.
             if (renderer.Mesh.Target != null)
-            {
-                if (!_corrections.TryGetValue(renderer, out var bones))
-                    _corrections.Add(renderer, bones = new());
-                float4x4 correction = target.GlobalToLocal * source.LocalToGlobal;
-                bones[i] = correction * bones.GetValueOrDefault(i, float4x4.Identity);
-            }
+                CorrectBindPose(renderer, i, target.GlobalToLocal * source.LocalToGlobal);
             renderer.Bones[i] = target;
             rewritten++;
         }
@@ -37,6 +39,8 @@ internal sealed class VrchatSkinRetargeter
     {
         foreach (var (renderer, corrections) in _corrections)
         {
+            // Prefab filtering can remove a renderer after its initial binding.
+            if (renderer.IsDestroyed) continue;
             var asset = renderer.Mesh.Asset;
             if (asset?.Data == null)
                 throw new InvalidDataException($"Cannot retarget unloaded mesh: {renderer.Slot.Name}");

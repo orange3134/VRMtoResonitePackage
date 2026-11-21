@@ -95,7 +95,7 @@ internal static class UnityPrefabInstances
                         { ["fileID"] = new YamlNode { ScalarValue = "0" } } };
                 // The selected descriptor becomes the parsing root. Its former ancestors
                 // are absent from this view, so local bone paths must stop here as well.
-                if (included != null && d.ClassId == 4 && root?["m_Father"]?.Guid == null &&
+                if (included != null && d.ClassId is 4 or 224 && root?["m_Father"]?.Guid == null &&
                     root?["m_Father"]?.FileID is long parent && parent != 0 &&
                     scene.Doc(parent) != null && !documentIds.Contains(parent))
                     root.Map["m_Father"] = new YamlNode { Map = new()

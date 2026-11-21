@@ -3,6 +3,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import sys
 from pathlib import Path
 import tempfile
 import types
@@ -11,6 +12,7 @@ from unittest import mock
 from test_resolved import snapshot
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "scripts"))
 spec = importlib.util.spec_from_file_location("replay", REPO / "scripts/test-unity-resolved.py")
 replay = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(replay)
@@ -64,6 +66,53 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertEqual("unsupported", report["cases"][0]["status"])
 
+    def test_batch_selection_is_verified_by_producer(self):
+        manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
+        manifest["cases"][0]["conversionArguments"] = ["--avatar", "Other avatar"]
+        self.coverage.write_text(json.dumps(manifest), encoding="utf-8")
+        def producer(command, **kwargs):
+            self.assertEqual(["--verify-selection", "Other avatar"], command[-2:])
+            kwargs["stdout"].write(b"SELECTION_MISMATCH: different prefab\n")
+            return types.SimpleNamespace(returncode=1)
+        code, report, _ = self.run_replay(producer)
+        self.assertEqual(1, code)
+        self.assertEqual("selection-mismatch", report["cases"][0]["status"])
+
+    def test_batch_default_selection_is_also_verified(self):
+        manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
+        manifest["cases"][0]["conversionArguments"] = []
+        self.coverage.write_text(json.dumps(manifest), encoding="utf-8")
+        def producer(command, **kwargs):
+            self.assertEqual(["--verify-selection", ""], command[-2:])
+            replay.write_json(Path(command[4]), snapshot())
+            return types.SimpleNamespace(returncode=0)
+        code, report, _ = self.run_replay(producer)
+        self.assertEqual(0, code)
+        self.assertEqual("matched", report["cases"][0]["status"])
+
+    def test_new_package_lock_invalidates_prefab_replay(self):
+        manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
+        lock = self.root / "packages-lock.json"
+        manifest["cases"][0]["projectFiles"] = {str(lock): None}
+        self.coverage.write_text(json.dumps(manifest), encoding="utf-8")
+        lock.write_text("{}", encoding="utf-8")
+        code, report, producer = self.run_replay(None)
+        self.assertEqual(1, code)
+        self.assertIn("project configuration changed", report["cases"][0]["error"])
+        producer.assert_not_called()
+
+    def test_prefab_capture_without_dependency_inventory_requires_recapture(self):
+        manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
+        source = Path(manifest["cases"][0]["inputPath"])
+        prefab = source.with_suffix(".prefab")
+        source.rename(prefab)
+        manifest["cases"][0]["inputPath"] = str(prefab)
+        self.coverage.write_text(json.dumps(manifest), encoding="utf-8")
+        code, report, producer = self.run_replay(None)
+        self.assertEqual(1, code)
+        self.assertEqual("recapture-required", report["cases"][0]["status"])
+        producer.assert_not_called()
+
     def test_missing_dependency_is_not_success(self):
         def producer(command, **kwargs):
             kwargs["stdout"].write(b"MISSING_PREFAB_SOURCE: abc\n")
@@ -71,6 +120,34 @@ class ReplayTests(unittest.TestCase):
         code, report, _ = self.run_replay(producer)
         self.assertEqual(1, code)
         self.assertEqual("missing-dependency", report["cases"][0]["status"])
+
+    def test_archive_dependency_overlay_is_explicit_and_hashed(self):
+        manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
+        dependency = self.root / "template.prefab"
+        dependency.write_bytes(b"self-authored dependency")
+        files = {str(dependency): replay.sha256(dependency)}
+        manifest["cases"][0]["dependencyFiles"] = files
+        self.coverage.write_text(json.dumps(manifest), encoding="utf-8")
+        def producer(command, **kwargs):
+            self.assertEqual("--dependencies", command[-2])
+            self.assertEqual(files, json.loads(Path(command[-1]).read_text(encoding="utf-8")))
+            replay.write_json(Path(command[4]), snapshot())
+            return types.SimpleNamespace(returncode=0)
+        code, report, _ = self.run_replay(producer)
+        self.assertEqual(0, code)
+        self.assertIn("archive plus", report["cases"][0]["dependencyScope"])
+
+    def test_changed_archive_dependency_requires_recapture(self):
+        manifest = json.loads(self.coverage.read_text(encoding="utf-8"))
+        dependency = self.root / "template.prefab"
+        dependency.write_bytes(b"before")
+        manifest["cases"][0]["dependencyFiles"] = {str(dependency): replay.sha256(dependency)}
+        self.coverage.write_text(json.dumps(manifest), encoding="utf-8")
+        dependency.write_bytes(b"after")
+        code, report, producer = self.run_replay(None)
+        self.assertEqual(1, code)
+        self.assertEqual("recapture-required", report["cases"][0]["status"])
+        producer.assert_not_called()
 
     def test_actual_difference_fails_replay(self):
         def producer(command, **kwargs):

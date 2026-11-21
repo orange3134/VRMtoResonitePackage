@@ -11,8 +11,16 @@ internal static class UnityFbxBlendShapeDefaults
 {
     internal readonly record struct Channel(string Name, float Weight, string RendererPath, string ShapeName = null);
 
-    public static IReadOnlyList<Channel> Read(string path)
+    public static IReadOnlyList<Channel> Read(string path) => Read(path, out _);
+
+    internal static IReadOnlyList<Channel> Read(string path, out IReadOnlyDictionary<string, string[]> skinBonePaths)
+        => Read(path, out skinBonePaths, out _);
+
+    internal static IReadOnlyList<Channel> Read(string path, out IReadOnlyDictionary<string, string[]> skinBonePaths,
+        out IReadOnlyDictionary<string, System.Numerics.Matrix4x4> localTransforms)
     {
+        skinBonePaths = null;
+        localTransforms = null;
         try
         {
             byte[] data = File.ReadAllBytes(path);
@@ -23,7 +31,7 @@ internal static class UnityFbxBlendShapeDefaults
             }
             int version = BitConverter.ToInt32(data, 23);
             var reader = new Reader(data, version >= 7500);
-            return reader.ReadChannels();
+            return reader.ReadChannels(out skinBonePaths, out localTransforms);
         }
         catch
         {
@@ -43,7 +51,8 @@ internal static class UnityFbxBlendShapeDefaults
             _wide = wide;
         }
 
-        public IReadOnlyList<Channel> ReadChannels()
+        public IReadOnlyList<Channel> ReadChannels(out IReadOnlyDictionary<string, string[]> skinBonePaths,
+            out IReadOnlyDictionary<string, System.Numerics.Matrix4x4> localTransforms)
         {
             var nodes = new List<Node>();
             void Collect(Node node)
@@ -54,10 +63,51 @@ internal static class UnityFbxBlendShapeDefaults
             while (TryReadNode(out Node node)) Collect(node);
             var objects = nodes.Where(n => n.Name is "Model" or "Geometry" or "Deformer" &&
                 n.Properties.Count >= 3 && n.Properties[0] is long).ToDictionary(n => (long)n.Properties[0]);
-            var parents = nodes.Where(n => n.Name == "C" && n.Properties.Count >= 3 &&
+            var connections = nodes.Where(n => n.Name == "C" && n.Properties.Count >= 3 &&
                 n.Properties[0] as string == "OO" && n.Properties[1] is long && n.Properties[2] is long)
-                .GroupBy(n => (long)n.Properties[1]).ToDictionary(g => g.Key,
-                    g => g.Select(n => (long)n.Properties[2]).Distinct().ToArray());
+                .Select(n => (Child: (long)n.Properties[1], Parent: (long)n.Properties[2])).Distinct().ToArray();
+            var parents = connections.GroupBy(c => c.Child).ToDictionary(g => g.Key, g => g.Select(c => c.Parent).ToArray());
+            // A cluster can have earlier links to other objects. Enumerate this
+            // parent's incoming connections in file order, not global child order.
+            var children = connections.ToLookup(c => c.Parent, c => c.Child);
+            var skinPaths = new Dictionary<string, string[]>(StringComparer.Ordinal);
+            foreach (var skin in objects.Where(e => e.Value.Name == "Deformer" && e.Value.Properties[2] as string == "Skin"))
+            {
+                // Connection order is the cluster index order; object names alone cannot
+                // distinguish a mesh from a joint or repeated names in separate branches.
+                var clusters = children[skin.Key].Where(id => objects.GetValueOrDefault(id)?.Properties[2] as string == "Cluster");
+                var paths = new List<string>();
+                bool valid = true;
+                foreach (long cluster in clusters)
+                {
+                    var bones = children[cluster].Where(id => objects.GetValueOrDefault(id)?.Name == "Model").ToArray();
+                    string path = bones.Length == 1 ? ModelPath(bones[0], new()) : null;
+                    if (path == null) { valid = false; break; }
+                    paths.Add(path);
+                }
+                if (!valid) continue;
+                foreach (long model in ModelsAbove(skin.Key, new()))
+                    if (ModelPath(model, new()) is string path)
+                    {
+                        if (skinPaths.ContainsKey(path)) skinPaths[path] = null; // ambiguous multiple skins
+                        else skinPaths.Add(path, paths.ToArray());
+                    }
+            }
+            skinBonePaths = skinPaths.Where(p => p.Value != null).ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+            var transforms = new Dictionary<string, System.Numerics.Matrix4x4>();
+            var ambiguous = new HashSet<string>();
+            foreach (var entry in objects.Where(e => e.Value.Name == "Model"))
+                if (ModelPath(entry.Key, new()) is string path &&
+                    UnityFbxLocalTransform.TryRead(entry.Value.Children
+                        .FirstOrDefault(n => n.Name == "Properties70")?.Children
+                        .Where(n => n.Name == "P").Select(n => (IReadOnlyList<object>)n.Properties), out var matrix,
+                        entry.Value.Properties[2] as string == "Mesh" && !skinPaths.ContainsKey(path) &&
+                        !children[entry.Key].Any(id => objects.GetValueOrDefault(id)?.Name == "Model")))
+                {
+                    if (!transforms.TryAdd(path, matrix)) ambiguous.Add(path);
+                }
+            foreach (string path in ambiguous) transforms.Remove(path);
+            localTransforms = transforms;
             var result = new List<Channel>();
             foreach (var entry in objects.Where(e => e.Value.Name == "Deformer" &&
                          e.Value.Properties[2] as string == "BlendShapeChannel"))
@@ -67,8 +117,8 @@ internal static class UnityFbxBlendShapeDefaults
                     ?.Properties.FirstOrDefault() as double? ?? 0d;
                 double endWeight = GetEndFrameWeight(channel);
                 float weight = endWeight > 0 ? (float)(percent / endWeight * 100d) : (float)percent;
-                var shapes = objects.Where(o => o.Value.Name == "Geometry" && o.Value.Properties[2] as string == "Shape" &&
-                    (parents.GetValueOrDefault(o.Key)?.Contains(entry.Key) ?? false)).Select(o => o.Value).ToArray();
+                var shapes = children[entry.Key].Select(objects.GetValueOrDefault)
+                    .Where(o => o?.Name == "Geometry" && o.Properties[2] as string == "Shape").ToArray();
                 string shapeName = shapes.Length == 1 ? NormalizeObjectName(shapes[0].Properties[1] as string) : null;
                 foreach (long model in ModelsAbove(entry.Key, new()))
                     if (ModelPath(model, new()) is string path)

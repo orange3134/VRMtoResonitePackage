@@ -13,7 +13,7 @@ internal static partial class VrchatMaterialBuilder
     private static async Task<StaticTexture2D> BakeEmissionMap(Slot assets, UnityPackage package,
         LilToonInfo info, Bitmap2D bakedMain)
     {
-        bool Exists(string guid) => package.ByGuid(guid)?.HasContent == true;
+        bool Exists(string guid) => package.ByGuid(guid) is { IsRenderTexture: false, HasContent: true };
         bool hasMask = Exists(info.EmissionBlendMaskGuid);
         bool usesMain = info.EmissionMainStrength > 0 && (bakedMain != null || Exists(info.MainTexGuid));
         // A map alone already supports its own ST and UV selection; keep the cached source texture.

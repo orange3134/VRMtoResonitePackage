@@ -36,6 +36,12 @@ internal static class MaterialLayerChecks
         SaveMaterial(colorAlphaGuid, 2, true);
         const string missingAlphaGuid = "99999999999999999999999999999999";
         SaveMaterial(missingAlphaGuid, 2, true, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        const string cameraGuid = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        const string cameraMaterialGuid = "cccccccccccccccccccccccccccccccc";
+        var cameraPath = Path.Combine(folder, "Assets/Camera.renderTexture");
+        File.WriteAllText(cameraPath, "--- !u!84 &8400000\nRenderTexture:\n  m_Name: Camera\n");
+        File.WriteAllText(cameraPath + ".meta", "guid: " + cameraGuid);
+        SaveMaterial(cameraMaterialGuid, 2, true, mainGuid: cameraGuid, emission: true);
         using var package = UnityPackage.Open(prefab);
         var builder = typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.Vrchat.VrchatMaterialBuilder")!;
         Bitmap2D Bake(LilToonInfo info) => (Bitmap2D)builder.GetMethod("CompositeMainLayers",
@@ -148,6 +154,11 @@ internal static class MaterialLayerChecks
         var alphaMaterial = await Build(alphaOnlyGuid);
         var colorMaterial = await Build(colorAlphaGuid);
         var tint = new colorX(0.2f, 0.3f, 0.4f, 0.5f, ColorProfile.sRGB);
+        var cameraMaterial = await Build(cameraMaterialGuid);
+        Check(cameraMaterial.MainTexture.Target == null && cameraMaterial.Color.Value == tint &&
+              cameraMaterial.MainTextureScale.Value == new float2(2, 3) &&
+              cameraMaterial.EmissionMap.Target is StaticTexture2D white && white.Slot.Name.Contains("White"),
+            "Dynamic main texture retains tint and UVs and uses the white emission fallback");
         Check(tintMaterial.Color.Value == tint && tintMaterial.MainTextureScale.Value == new float2(2, 3),
             "Production no-bake path retains material tint and texture transform");
         Check(alphaMaterial.Color.Value == new colorX(0.2f, 0.3f, 0.4f, 1f, ColorProfile.sRGB) &&
@@ -171,7 +182,8 @@ internal static class MaterialLayerChecks
             return (XiexeToonMaterial)task.GetType().GetProperty("Result")!.GetValue(task)!;
         }
 
-        void SaveMaterial(string guid, int alphaMode, bool second, string alphaGuid = maskGuid)
+        void SaveMaterial(string guid, int alphaMode, bool second, string alphaGuid = maskGuid,
+            string mainGuid = redGuid, bool emission = false)
         {
             string path = Path.Combine(folder, "Assets", guid + ".mat");
             File.WriteAllText(path, $$"""
@@ -184,12 +196,14 @@ internal static class MaterialLayerChecks
                     - _UseOutline: 0
                     - _AlphaMaskMode: {{alphaMode}}
                     - _UseMain2ndTex: {{(second ? 1 : 0)}}
+                    - _UseEmission: {{(emission ? 1 : 0)}}
+                    - _EmissionMainStrength: 1
                     m_Colors:
                     - _Color: {r: 0.2, g: 0.3, b: 0.4, a: 0.5}
                     - _Color2nd: {r: 0.3, g: 0.4, b: 0.5, a: 0.6}
                     m_TexEnvs:
                     - _MainTex:
-                        m_Texture: {fileID: 2800000, guid: {{redGuid}}}
+                        m_Texture: {fileID: {{(mainGuid == cameraGuid ? 8400000 : 2800000)}}, guid: {{mainGuid}}}
                         m_Scale: {x: 2, y: 3}
                         m_Offset: {x: 0.1, y: 0.2}
                     - _AlphaMask:

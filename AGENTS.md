@@ -82,6 +82,11 @@ Resonite DLLを `ResonitePath` に指定して再ビルドする。配布版も�
   `--vrchat-dump` を使う。
 - `.unitypackage` に複数アバターがある場合は `--avatar <name>` で対象を指定する。
 - 実変換の回帰確認では、ログの「完了」だけでなく生成パッケージを `--inspect` で再読込する。
+- 骨・スロットの増加や接続不良の調査では、[変換後の階層比較](docs/converted-structure-tests.md)で
+  Unity・変換前解析・保存パッケージを照合し、対応不明な階層や未検証項目を成功扱いにしない。
+- 網羅的テストでは、Unityの解析結果と同じ入力・選択アバターに対するResoPonの解析結果を
+  比較する工程を必ず含める。変換成功・解析一致・未検証を分けて報告し、不一致や未採取を
+  成功扱いにしない。手順は [ローカルアバター回帰テスト](docs/local-avatar-tests.md) を参照する。
 - Resoniteを起動するテストは `%LOCALAPPDATA%\ResoPon` に実行ごとのLocalDBを作成する。
   サンドボックスでは通常環境での実行許可が必要になる場合がある。
 

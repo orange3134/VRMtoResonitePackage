@@ -161,6 +161,42 @@ internal static class MaterialBakeResolutionChecks
                 AlphaMaskGuid = maskGuid, AlphaMaskMode = 1 }).GetPixel(0, 0).a;
             Check(Math.Abs(actual - expected) < 0.01f, "Shared main sampler retains the mask's own color space");
         }
+        const string dynamicGuid = "22222222222222222222222222222222";
+        bool Dynamic(string guid) => guid == dynamicGuid;
+        var dynamicLayer = new LilToonInfo {
+            Main2nd = new() { Enabled = true, TextureGuid = dynamicGuid },
+            Main3rd = new() { Enabled = true, TextureGuid = graySrgb } };
+        var dynamicPlan = LilToonMainTextureBakePlan.Create(dynamicLayer, _ => true, Dynamic);
+        Check(!dynamicPlan.Main2nd && dynamicPlan.Main3rd && dynamicPlan.Warnings.Single().Contains("RenderTexture"),
+            "Dynamic second layer is reported and does not prevent the static third layer");
+        Check(LilToonMainTextureBakePlan.Create(dynamicLayer, guid => guid != dynamicGuid, Dynamic).Main2nd,
+            "Missing RenderTexture retains Unity's null/white fallback instead of becoming a dynamic stage");
+        var staticThird = (Bitmap2D)method.Invoke(null, new object[] { package, dynamicLayer, dynamicPlan })!;
+        Check(Math.Abs(staticThird.GetPixel(0, 0).r - 0.3f) < 0.01f,
+            "Remaining static layer is actually baked without decoding the RenderTexture");
+        Check(!LilToonMainTextureBakePlan.Create(new LilToonInfo {
+            MainTexGuid = dynamicGuid, Main2nd = new() { Enabled = true } }, _ => true, Dynamic).Required,
+            "Dynamic base prevents baking dependent stages");
+        var dynamicMasks = LilToonMainTextureBakePlan.Create(new LilToonInfo {
+            MainTexHSVG = new Vector4(0, 0, 1, 1), MainColorAdjustMaskGuid = dynamicGuid,
+            AlphaMaskMode = 1, AlphaMaskGuid = dynamicGuid,
+            Main2nd = new() { Enabled = true, MaskGuid = dynamicGuid },
+            Main3rd = new() { Enabled = true, TextureGuid = stripeGuid } }, _ => true, Dynamic);
+        Check(!dynamicMasks.Main && !dynamicMasks.Main2nd && !dynamicMasks.Alpha && dynamicMasks.Main3rd,
+            "Dynamic masks omit only their dependent stages");
+        string invalidPath = Path.Combine(folder, "Assets/Invalid.png");
+        File.WriteAllText(invalidPath, "not a PNG");
+        var decode = typeof(VrchatMaterialBuilder).GetMethod("DecodeBitmap", BindingFlags.Static | BindingFlags.NonPublic)!;
+        try
+        {
+            decode.Invoke(null, new object[] { new UnityAsset { Guid = "invalid", LogicalPath = "Assets/Invalid.png", DiskPath = invalidPath } });
+            Check(false, "Invalid image must fail with texture identity");
+        }
+        catch (TargetInvocationException error)
+        {
+            Check(error.InnerException is InvalidDataException && error.InnerException.Message.Contains("Assets/Invalid.png"),
+                "Invalid image reports its identity rather than a null reference");
+        }
         if (failures.Count != 0) throw new Exception(string.Join("\n", failures));
     }
 }

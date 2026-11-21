@@ -11,11 +11,13 @@ internal sealed class ResolvedSnapshot
     private const string Collider = "VRC.SDK3.Dynamics.PhysBone.Components.VRCPhysBoneCollider";
     private readonly UnityPackage view;
     private readonly string guid;
+    private bool SceneInput => view.ByGuid(guid).Extension == ".unity";
     private readonly Dictionary<UnityObjectId, YamlDocument> documents = new();
     private readonly Dictionary<UnityObjectId, Node> nodes = new();
     private readonly Dictionary<UnityObjectId, Node> owners = new();
     private readonly Dictionary<UnityObjectId, string> ids = new();
     private readonly Dictionary<string, (string Parent, YamlDocument Instance)> occurrences = new();
+    private readonly Dictionary<string, ModelSnapshot> models = new();
     private readonly List<Node> ordered = new();
     private sealed class Node
     {
@@ -31,9 +33,10 @@ internal sealed class ResolvedSnapshot
     }
 
     private ResolvedSnapshot(UnityPackage view, string guid) { this.view = view; this.guid = guid; }
-    public static object Capture(UnityPackage view, string guid) => new ResolvedSnapshot(view, guid).Capture();
+    public static object Capture(UnityPackage view, string guid, bool isPrefabChild = false)
+        => new ResolvedSnapshot(view, guid).Capture(isPrefabChild);
 
-    private object Capture()
+    private object Capture(bool isPrefabChild)
     {
         foreach (var entry in view.PrefabGraph.Scenes)
         {
@@ -44,9 +47,39 @@ internal sealed class ResolvedSnapshot
                 string child = instance.Root["m_SourcePrefab"]?.Guid;
                 var asset = view.ByGuid(child);
                 if (asset == null) throw new InvalidDataException("MISSING_PREFAB_SOURCE: " + child);
-                if (asset.Extension == ".fbx")
-                    throw new NotSupportedException("UNSUPPORTED_MODEL_HIERARCHY: ResoPon's graph has no resolved Transform/component records for implicit FBX instances: " + asset.LogicalPath);
                 occurrences.Add(child, (entry.Guid, instance));
+            }
+        }
+        foreach (string occurrence in occurrences.Keys.Where(g => view.ByGuid(g).Extension == ".fbx"))
+        {
+            var references = new HashSet<long>();
+            foreach (var entry in view.PrefabGraph.Scenes)
+                foreach (var document in view.ReadScene(view.ByGuid(entry.Guid)).Documents.Values)
+                    Collect(document.Root);
+            foreach (var modification in view.PrefabGraph.Modifications.Where(m => m.Target.Occurrence == occurrence))
+                references.Add(modification.Target.FileId);
+            var model = new ModelSnapshot(view, view.ByGuid(occurrence), view.ModelFileIds(occurrence), references);
+            models.Add(occurrence, model);
+            foreach (var modification in view.PrefabGraph.Modifications.Where(m => m.Target.Occurrence == occurrence))
+            {
+                if (!model.Documents.TryGetValue(model.Canonical(modification.Target.FileId), out var document)) continue;
+                string property = modification.Value["propertyPath"]?.AsString()?.Split('.')[0];
+                if (property is "m_Name" or "m_IsActive" or "m_LocalPosition" or "m_LocalRotation" or "m_LocalScale" or
+                    "m_Children" or "m_Father" or "m_RootOrder" or "m_Materials" or "m_Enabled" or "m_Mesh" or
+                    "m_Bones" or "m_RootBone" or "m_BlendShapeWeights")
+                    UnityPropertyOverrides.Apply(document.Root, modification.Value, modification.DeclaringGuid);
+            }
+            foreach (var document in model.Documents.Values)
+                if (!view.PrefabGraph.IsRemoved(occurrence, document.FileId) &&
+                    !view.PrefabGraph.IsRemoved(occurrence, document.Root["m_GameObject"]?.FileID ?? 0))
+                    documents.Add(new(occurrence, document.FileId), document);
+
+            void Collect(YamlNode node)
+            {
+                if (node == null) return;
+                if (node.Guid == occurrence && node.FileID is long id && id != 0) references.Add(id);
+                foreach (var child in node.Map?.Values ?? Enumerable.Empty<YamlNode>()) Collect(child);
+                foreach (var child in node.Items) Collect(child);
             }
         }
         foreach (var (key, doc) in documents.Where(p => p.Value.ClassId is 4 or 224))
@@ -131,7 +164,10 @@ internal sealed class ResolvedSnapshot
         foreach (var node in ordered)
         {
             var r = Identity(node.Key, node, node.Document.ClassId == 224 ? "UnityEngine.RectTransform" : "UnityEngine.Transform");
-            r["parent"] = node.Parent?.Id ?? ""; r["name"] = node.Name;
+            r["parent"] = node.Parent?.Id ?? "";
+            // Unity's Prefab importer names the asset root after its file even when
+            // the serialized root name is stale (for example after a file rename).
+            r["name"] = node.Parent == null && !SceneInput && !isPrefabChild ? Path.GetFileNameWithoutExtension(view.ByGuid(guid).LogicalPath) : node.Name;
             r["siblingIndex"] = node.Parent?.Children.IndexOf(node) ?? 0;
             r["activeSelf"] = node.ActiveSelf; r["activeInHierarchy"] = node.Active;
             foreach (string property in new[] { "localPosition", "localRotation", "localScale" })
@@ -207,22 +243,25 @@ internal sealed class ResolvedSnapshot
     private Dictionary<string, object> Identity(UnityObjectId key, Node node, string type) => new()
     {
         ["id"] = ids[key], ["path"] = node.Path, ["type"] = type,
-        ["source"] = Source(key), ["originalSource"] = new AssetReference(OriginalGuid(key.Occurrence), Id(key.FileId)),
+        ["source"] = Source(key), ["originalSource"] = SceneInput && key.Occurrence == guid
+            ? new AssetReference("", "0") : new AssetReference(OriginalGuid(key.Occurrence), Id(key.FileId)),
     };
     private AssetReference Source(UnityObjectId key)
     {
         string occurrence = key.Occurrence;
         long fileId = key.FileId;
+        if (SceneInput && occurrence == guid) return new("", "0");
         while (occurrence != guid)
         {
             if (!occurrences.TryGetValue(occurrence, out var link)) throw new InvalidDataException("Missing source occurrence.");
+            if (SceneInput && link.Parent == guid) break;
             var explicitIds = view.ReadScene(view.ByGuid(link.Parent)).Documents.Values
-                .Where(d => d.Stripped && view.PrefabGraph.Identity(link.Parent, d.FileId) == key).Select(d => d.FileId).ToArray();
+                .Where(d => d.Stripped && Canonical(view.PrefabGraph.Identity(link.Parent, d.FileId)) == key).Select(d => d.FileId).ToArray();
             if (explicitIds.Length > 1) throw new InvalidDataException("Ambiguous source identity.");
             fileId = explicitIds.Length == 1 ? explicitIds[0] : (fileId ^ link.Instance.FileId) & long.MaxValue;
             occurrence = link.Parent;
         }
-        return new(guid, Id(fileId));
+        return new(OriginalGuid(occurrence), Id(fileId));
     }
     private UnityObjectId Ref(UnityObjectId context, YamlNode reference)
     {
@@ -230,8 +269,10 @@ internal sealed class ResolvedSnapshot
         if (reference.FileID == null) throw new InvalidDataException("Malformed object reference.");
         var key = view.PrefabGraph.Identity(reference.Guid ?? context.Occurrence, reference.FileID.Value);
         if (key.IsNull) throw new InvalidDataException($"Unresolved reference: {reference.Guid ?? context.Occurrence}:{reference.FileID}");
-        return key;
+        return Canonical(key);
     }
+    private UnityObjectId Canonical(UnityObjectId key) => !key.IsNull && models.TryGetValue(key.Occurrence, out var model)
+        ? new(key.Occurrence, model.Canonical(key.FileId)) : key;
     private string Address(UnityObjectId context, YamlNode reference)
     {
         var key = Ref(context, reference);
@@ -251,7 +292,9 @@ internal sealed class ResolvedSnapshot
         if (asset.Extension == ".fbx")
         {
             var resolver = view.ModelFileIds(asset.Guid);
-            string path = resolver.ResolveNodePath(mesh.FileID ?? 0);
+            string path = models.TryGetValue(asset.Guid, out var model)
+                ? model.ResolveMeshPath(mesh.FileID ?? 0, context.Occurrence == asset.Guid ? context.FileId : 0) : null;
+            path ??= resolver.ResolveNodePath(mesh.FileID ?? 0);
             if (resolver.PossibleBlendShapeNames == null || (path == null && resolver.PossibleBlendShapeNames.Count != 0))
                 throw new InvalidDataException("Unresolved FBX mesh/blendshape metadata: " + asset.LogicalPath);
             // A successful scan proving that the entire FBX has no shapes does not
@@ -260,13 +303,16 @@ internal sealed class ResolvedSnapshot
         }
         else
         {
-            var document = view.ReadScene(asset)?.Doc(mesh.FileID ?? 0);
+            // Mesh/Texture payloads are intentionally omitted from binary scene
+            // enumeration. Resolve the exact subasset using the production reader.
+            var document = view.ReadAssetDocument(asset.Guid, mesh.FileID ?? 0);
             if (document?.ClassId != 43) throw new NotSupportedException("Unsupported native mesh metadata: " + asset.LogicalPath);
             names = Items(document.Root["m_Shapes"]?["channels"]).Select(n => n["name"]?.AsString()
                 ?? throw new InvalidDataException("Unnamed blendshape.")).ToArray();
         }
         var values = Items(weights);
-        if (values.Count > names.Count) throw new InvalidDataException("More blendshape weights than resolved channels.");
+        // Unity exposes weights only for channels on the current sharedMesh. Serialized
+        // arrays can retain stale trailing entries after a mesh revision/replacement.
         return names.Select((name, index) => (object)new { index, name, weight = index < values.Count ? Number(values[index]) : 0f }).ToArray();
     }
     private static string Type(YamlDocument doc) => doc.ClassId switch
