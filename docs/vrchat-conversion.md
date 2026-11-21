@@ -431,6 +431,13 @@ BlendShapeはボーンのあるメッシュに限定せず、morphだけを持�
   assumed redundant across Animator states. Reject multi-curve viseme and legacy blink motions conservatively: a single-shape driver
   cannot also clear another authored shape, even when its required value is zero.
 
+  Clonka の FX は `VisemeParameterOnly` を使い、Entry で15音素を選んで有声音のクリップ時刻を
+  `Voice` で駆動する。各クリップが同じ15項目のうち1個を開き、残り14個をゼロに戻す場合、
+  ResoPon はこの対応からネイティブの `DirectVisemeDriver` を設定する。口パク停止用の状態を
+  持つ場合は、全15項目を消すクリップと逆のスイッチ条件で無音へ復帰する遷移も確認する。
+  変換するのは口パク有効時の割当で、VRChat のキャンセルスイッチと音量カーブは再生しない。
+  クリップが衣装など別の項目もリセットする場合は、この推定の対象外となる。
+
 ### 主モデルと骨格の統合
 
 - descriptor hierarchyが参照するhumanoid FBXをprimaryとして優先する。

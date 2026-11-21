@@ -238,6 +238,8 @@ def compare(expected, actual, abs_tol=1e-6, rel_tol=1e-6):
     excluded = {"sections"}
     if expected["schemaVersion"] == 2 and ("skinSizes" not in expected or "skinSizes" not in actual):
         excluded.add("skinSizes")
+    if expected["schemaVersion"] == 2 and ("lipSync" not in expected or "lipSync" not in actual):
+        excluded.add("lipSync")  # Unity FX observation is compared to the saved driver.
     walk({k: v for k, v in expected.items() if k not in excluded},
          {k: v for k, v in actual.items() if k not in excluded}, "$")
     for section in expected["sections"]:

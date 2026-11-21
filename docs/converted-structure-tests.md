@@ -71,6 +71,18 @@ python -B scripts/compare-converted-structure.py unity.json converted.json --rep
 
 ## 保存済みパッケージから採取する
 
+Unity の新しい v2 採取には `lipSync` が入る。Descriptor の方式、参照 Renderer、宣言した
+shape 配列を記録する。パラメーター方式では独立したプレビュー階層で FX に音素0〜14を入力し、
+Voice=1 で1秒評価したとき、その音素だけで100になる shape を測る。既定状態で反応がなく、
+音素レイヤーの Any State に単一の真偽スイッチがある場合は、その反対値も測定して条件を残す。
+これらは指定条件での割当であり、動作中の音量曲線や表情の全組合せは測定しない。
+
+保存側は `PackageRegressionDump --structure` の `visemeDrivers` に、有効状態、Analyzer の接続先、
+各音素のフィールド参照、その所有 Renderer、ウェイト添字、埋め込みメッシュの shape 名を保存する。
+上記の一括実行または `compare-converted-structure.py` が `comparison.json` の `visemes` に
+一致数・欠落・余分な割当を出す。名前が同じ表情制御用 Slot もあるため、対象 Renderer を
+一意に識別できないときや、旧データに採取項目がないときは未検証になる。
+
 登録全件の変換を `scripts/convert-all-local-avatars.py` で完了した後は、
 その実行の `report.json` と隣接する凍結済み `registry.json` を使って一括採取できる。
 

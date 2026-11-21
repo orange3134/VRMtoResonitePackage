@@ -121,6 +121,7 @@ AnimationClip:
     }
     Asset("Assets/Face.controller", controllerGuid, controller.ToString());
     AnimatorFaceConflictChecks.Run(Asset, selected);
+    VoiceVisemeChecks.Run();
     BlinkLoopChecks.Run(Asset, selected);
     ExpressionDefaultChecks.Run(Asset, selected);
     ModularArmatureChecks.Run(Asset);

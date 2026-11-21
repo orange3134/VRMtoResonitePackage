@@ -66,7 +66,14 @@ public static class VrchatAnimatorFaceParser
                 // its startup default is enabled. Reject such layers conservatively.
                 bool gated = reachable.Any(id => (controller.Doc(id)?.Root?["m_Conditions"]?.Seq ?? new())
                     .Any(condition => condition["m_ConditionEvent"]?.AsString() != "Viseme"));
-                if (descriptor["lipSync"]?.AsInt() == 4 && !gated)
+                var voiceChannels = descriptor["lipSync"]?.AsInt() == 4
+                    ? VrchatVoiceVisemes.Read(controller, animatorLayer, Clip) : null;
+                if (voiceChannels != null && !layerBindings.Skip(layerIndex).Any(b => voiceChannels.Any(b.Contains)))
+                {
+                    for (int i = 0; i < voiceChannels.Length; i++)
+                        RecordViseme(i, new() { new Shape(voiceChannels[i].Path, voiceChannels[i].Name, 100) });
+                }
+                else if (descriptor["lipSync"]?.AsInt() == 4 && !gated)
                 {
                     foreach (long id in reachable)
                     {

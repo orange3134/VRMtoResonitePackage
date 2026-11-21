@@ -28,12 +28,77 @@ internal static class StructureSnapshot
         {
             format = "resopon.converted-structure", schemaVersion = 1, packageSha256 = hash,
             coordinateSystem = "Resonite saved local TRS; quaternion xyzw; no Unity-space normalization",
-            slots
+            slots, visemeDrivers = VisemeDrivers()
         };
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(snapshot, new JsonSerializerOptions { WriteIndented = true });
         using var file = new FileStream(output, FileMode.CreateNew);
         file.Write(json);
         Console.WriteLine($"Captured structure: {slots.Length} slots; package SHA-256 {hash}");
+
+        object[] VisemeDrivers()
+        {
+            var weights = new Dictionary<string, (string Renderer, int Index, string Mesh)>();
+            var analyzers = new Dictionary<string, string>();
+            var drivers = new List<(string Id, DataTreeDictionary Data)>();
+            foreach (var slot in nodes)
+            {
+                int index = 0;
+                foreach (var component in Array(slot.Data.TryGetNode("Components")).Cast<DataTreeDictionary>())
+                {
+                    string id = slot.Id + ":" + index++;
+                    var data = (DataTreeDictionary)component.TryGetNode("Data");
+                    switch (TypeName(component))
+                    {
+                        case "[FrooxEngine]FrooxEngine.VisemeAnalyzer":
+                            analyzers.Add(Scalar(data.TryGetNode("ID")), id);
+                            break;
+                        case "[FrooxEngine]FrooxEngine.DirectVisemeDriver":
+                            drivers.Add((id, data));
+                            break;
+                        case "[FrooxEngine]FrooxEngine.SkinnedMeshRenderer":
+                            string mesh = Scalar(data.TryGetNode("Mesh"));
+                            int channel = 0;
+                            foreach (var weight in Array(data.TryGetNode("BlendShapeWeights")))
+                            {
+                                if (weight is DataTreeDictionary field && Scalar(field.TryGetNode("ID")) is string fieldId)
+                                    weights.Add(fieldId, (id, channel, mesh));
+                                channel++;
+                            }
+                            break;
+                    }
+                }
+            }
+            var channels = new Dictionary<string, string[]>();
+            string[] ShapeNames(string mesh)
+            {
+                if (mesh == null || package == null || !meshes.TryGetValue(mesh, out string url) ||
+                    !Uri.TryCreate(url?.TrimStart('@'), UriKind.Absolute, out var uri) || uri.Scheme != "packdb") return null;
+                if (channels.TryGetValue(url, out var names)) return names;
+                using var source = package.ReadAsset(RecordPackage.GetAssetSignature(uri));
+                using var buffer = new MemoryStream();
+                source.CopyTo(buffer); buffer.Position = 0;
+                var geometry = new MeshX();
+                geometry.Decode(buffer);
+                return channels[url] = geometry.BlendShapes.Select(s => s.Name).ToArray();
+            }
+            string[] phonemes = { "Silence", "PP", "FF", "TH", "DD", "kk", "CH", "SS", "nn", "RR", "aa", "E", "ih", "oh", "ou" };
+            return drivers.Select(d =>
+            {
+                string source = Scalar(d.Data.TryGetNode("Source"));
+                var bindings = new List<object>();
+                foreach (string phoneme in phonemes)
+                {
+                    string field = Scalar(d.Data.TryGetNode(phoneme));
+                    if (field == null) continue;
+                    bool found = weights.TryGetValue(field, out var target);
+                    var names = found ? ShapeNames(target.Mesh) : null;
+                    bindings.Add(new { phoneme, field, renderer = target.Renderer, index = found ? (int?)target.Index : null,
+                        shape = names != null && target.Index < names.Length ? names[target.Index] : null });
+                }
+                return (object)new { component = d.Id, enabled = Value<bool>(d.Data.TryGetNode("Enabled")), source,
+                    analyzer = source == null ? null : analyzers.GetValueOrDefault(source), bindings };
+            }).ToArray();
+        }
 
         void Index(DataTreeDictionary data, string id, string parent, int index, string[] parentPath, bool active, float4x4 parentWorld)
         {

@@ -85,6 +85,11 @@ Unity採取値を本リポジトリや配布EXEへ取り込まないため、THI
 RecordPackage/DataTree APIを呼び出す。FrooxEngine 2026.11.16.1330のCollider調査は
 インストール済みDLLの型・フィールドの反射確認のみで、逆コンパイル実装のコピーはない。
 開発用ツール・実アバター由来の期待条件・採取データは製品EXEへ同梱しない。
+
+口パク照合では Unity 2022.3.22f1 と VRChat Avatars SDK 3.10.6 のローカル環境で
+Descriptor の公開シリアライズ項目と FX の評価結果を参照した。保存側は既存の
+RecordPackage と MeshX API でフィールド参照と形状名を読む。Voice 駆動 FX の変換と
+テストは独立実装で、SDK や Resonite の実装、入力アバターのクリップ・素材は取り込まない。
 新しい外部コード・配布依存・通知対象は追加しない。
 
 変換後の階層採取と三段階比較runnerも同じ範囲の独立実装。インストール済みElements.Coreの

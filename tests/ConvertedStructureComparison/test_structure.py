@@ -64,6 +64,26 @@ def remap_slots(converted, changes):
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_viseme_compares_the_field_owner_and_saved_mesh_channel(self):
+        unity, converted = fixtures()
+        renderer = unity['sections']['renderers'][0]['id']
+        unity['lipSync'] = [dict(mode=3, bindings=[dict(phoneme=10, renderer=renderer, shape='Open')])]
+        saved = dict(phoneme='aa', renderer='r/1:0', index=4, shape='Open')
+        driver = dict(component='r/1:1', enabled=True, analyzer='r/0:2', bindings=[saved])
+        converted['visemeDrivers'] = []
+        def check():
+            return comparison.compare(unity, unity, converted)['visemes']
+        self.assertEqual('different', check()['status'])
+        converted['visemeDrivers'].append(driver)
+        self.assertEqual('matched', check()['status'])
+        for field, wrong in [('renderer', 'r/0:0'), ('shape', 'Blink'), ('phoneme', 'PP')]:
+            with self.subTest(field=field), mock.patch.dict(saved, {field: wrong}):
+                self.assertEqual('different', check()['status'])
+        with mock.patch.dict(driver, analyzer=None):
+            self.assertEqual('different', check()['status'])
+        del converted['visemeDrivers']
+        self.assertEqual('unverified', check()['status'])
+
     def test_root_requires_reviewed_mapping_and_only_covered_fields_match(self):
         unity, converted = fixtures()
         self.assertEqual('needs-review', comparison.compare(unity, unity, converted)['status'])
