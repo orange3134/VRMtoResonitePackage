@@ -23,8 +23,16 @@ internal static class ShaderPropertyFallbackConverter
         YamlNode colors = LilToonConverter.FlattenProps(props?["m_Colors"]);
         YamlNode texEnvs = LilToonConverter.FlattenProps(props?["m_TexEnvs"]);
 
-        string mainTexName = FindName(texEnvs, "_BaseMap", "_BaseColorMap", "_MainTex",
-            "_AlbedoMap", "_Albedo", "_DiffuseMap", "_Diffuse");
+        // UTS2 samples _MainTex even when its hidden _BaseMap also has a saved value.
+        bool isUnityChanToon2 = !string.IsNullOrEmpty(shaderSource)
+            ? Regex.IsMatch(shaderSource, @"^\s*Shader\s+""UnityChanToonShader/", RegexOptions.Multiline)
+            : TryFloat(floats, out float utsVersion, "_utsVersion")
+                ? utsVersion is >= 2f and < 3f
+                : parent?.IsUnityChanToon2 == true;
+        string mainTexName = isUnityChanToon2
+            ? FindName(texEnvs, "_MainTex")
+            : FindName(texEnvs, "_BaseMap", "_BaseColorMap", "_MainTex",
+                "_AlbedoMap", "_Albedo", "_DiffuseMap", "_Diffuse");
         string normalMapName = FindName(texEnvs, "_BumpMap", "_NormalMap", "_NormalTex");
         string metallicMapName = FindName(texEnvs, "_MetallicGlossMap");
         string specGlossMapName = FindName(texEnvs, "_SpecGlossMap");
@@ -175,6 +183,7 @@ internal static class ShaderPropertyFallbackConverter
         {
             Name = root?["m_Name"]?.AsString() ?? parent?.Name,
             IsLilToon = false,
+            IsUnityChanToon2 = isUnityChanToon2,
             UsesStandardKeywords = usesStandardKeywords,
             UsesUrpKeywords = usesUrpKeywords,
             Color = color,

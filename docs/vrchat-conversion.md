@@ -985,6 +985,13 @@ Transparent / Fur / FurTwoPassへの変更時に0.001を設定する。MultiもC
 variantの継承値より優先する0.5固定、未選択・対象外材質の保持、CLI互換・GUI引数の受け渡し、
 生成パッケージのinspectと再読込後の材質設定を確認する。
 
+### Unity-Chan Toon Shader 2
+
+UTS2 はメインテクスチャとその UV 変換を `_MainTex` から読む。Lyphos 1.10 のように
+同じマテリアルに非表示の `_BaseMap` が保存される場合もある。シェーダーがパッケージ外に
+あるときは保存済みの `_utsVersion` (2.x) で識別する。マテリアルバリアントでは省略された
+`_MainTex` を親から継承し、明示された null は未設定として扱う。
+
 ### lilToon
 
 - headless変換ではUnity editor bakerを実行できない。直接表現できるpropertyとtexture transformを保持し、

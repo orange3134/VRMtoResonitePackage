@@ -33,6 +33,7 @@ static void Run()
     HumanoidSkeletonMappingChecks.Run();
     SkinBoneIndexChecks.Run();
     MaterialBakePlanChecks.Run();
+    CheckUnityChanMainTexture();
     VrmToResonitePackage.ResoniteLocator.InstallAssemblyResolver(
         Environment.GetEnvironmentVariable("RESONITE_PATH") ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite");
     MaterialBakeResolutionChecks.Run();
@@ -2292,6 +2293,32 @@ static VrchatAvatar ReadFilter(string path)
         new[] { typeof(UnityPackage), typeof(string), typeof(VrchatAvatar) })!
         .Invoke(null, new object[] { package, package.InputPrefab.Guid, avatar });
     return avatar;
+}
+
+static void CheckUnityChanMainTexture()
+{
+    static YamlDocument Material(string fields) => UnityYaml.ParseDocuments(
+        "--- !u!21 &1\nMaterial:\n  m_SavedProperties:\n" + fields).Single();
+    const string version = "    m_Floats:\n    - _utsVersion: 2.075\n";
+    const string textures = "    m_TexEnvs:\n";
+    const string hidden = "    - _BaseMap:\n        m_Texture: {fileID: 2800000, guid: hidden}\n";
+    const string main = "    - _MainTex:\n        m_Texture: {fileID: 2800000, guid: main}\n" +
+        "        m_Scale: {x: 2, y: 3}\n        m_Offset: {x: 0.25, y: 0.5}\n";
+    var parent = ShaderPropertyFallbackConverter.Parse(Material(version + textures + hidden + main));
+    var child = ShaderPropertyFallbackConverter.Parse(Material(textures + hidden), parent);
+    Check(parent.MainTexGuid == "main" && child.MainTexGuid == "main" &&
+        child.MainTexScale == new System.Numerics.Vector2(2, 3) &&
+        child.MainTexOffset == new System.Numerics.Vector2(0.25f, 0.5f),
+        "UTS2 variants inherit the sampled main texture and its UV transform");
+    var cleared = ShaderPropertyFallbackConverter.Parse(Material(textures + hidden +
+        "    - _MainTex:\n        m_Texture: {fileID: 0}\n"), parent);
+    Check(cleared.MainTexGuid == null, "Clearing UTS2 _MainTex ignores the populated hidden _BaseMap");
+    var byName = ShaderPropertyFallbackConverter.Parse(Material(textures + hidden + main),
+        shaderSource: "Shader \"UnityChanToonShader/Example\" {}");
+    var otherShader = ShaderPropertyFallbackConverter.Parse(Material(version + textures + hidden + main),
+        shaderSource: "Shader \"Example/Other\" {}");
+    Check(byName.MainTexGuid == "main" && otherShader.MainTexGuid == "hidden",
+        "A supplied shader declaration takes precedence over saved UTS2 properties");
 }
 
 static void Check(bool condition, string label)
