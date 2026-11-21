@@ -26,7 +26,8 @@ VRM・VRChat とも、モデル取り込み時に作った `Assets` スロット
 既存スロットの親を変更することで、レンダラーやサムネイルからの参照を維持する。
 
 `Assets`、`Avatar Settings`、`Avatar System` はアバタールート直下に置く。
-表情の `Expressions`、装着者判定の `Avatar Root Identification`、メッシュの読み込み判定と
+設定とシステムのスロット名は `<color=#00ffff>…</color>` でシアン表示する。
+表情の `Expressions`、装着者判定の `Avatar Root Identification`、メッシュの読み込み判定 `Mesh loaded check` と
 代替表示、VRM の `VRM Metadata`、複数の口形を合成する `Visemes …` は、必要な場合に
 `Avatar System` の子として生成する。入力モデルの同名スロットとは `ResoPon/AvatarSystem` タグで区別する。
 Resonite が作る `CenteredRoot` や各部位の Proxy は元の階層に置き、

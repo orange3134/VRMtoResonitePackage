@@ -25,10 +25,11 @@ internal static class GeneratedAvatarChecks
         {
             Check(!typeof(AvatarSetup).Assembly.GetManifestResourceNames().Any(n => n.EndsWith(".resonitepackage")),
                 "converter embeds no avatar helper packages");
-            var authored = avatar.AddSlot("Avatar System");
+            const string systemName = "<color=#00ffff>Avatar System</color>";
+            var authored = avatar.AddSlot(systemName);
             AvatarSetup.EnsureAvatarRootIdentification(avatar);
             AvatarSetup.EnsureAvatarRootIdentification(avatar);
-            Check(avatar.AvatarSystem().Name == "Avatar System" && authored.ChildrenCount == 0,
+            Check(avatar.AvatarSystem().Name == systemName && authored.ChildrenCount == 0,
                 "generated system has its own folder alongside a same-named authored object");
             Check(avatar.AvatarSystem().Children.Count(s => s.Name == "Avatar Root Identification") == 1, "identification is idempotent");
             AvatarSetup.SetupEyeSwing(avatar, avatar.AddSlot("Eye Manager").AttachComponent<EyeRotationDriver>(), source);
@@ -67,7 +68,8 @@ internal static class GeneratedAvatarChecks
             var standIn = avatar.AvatarSystem()
                 .FindChild("Avatar Loading Display").FindChild("LoadingStandin");
             Check(!renderer.Enabled && standIn.ActiveSelf, "pending mesh shows stand-in and hides avatar renderer");
-            Check(avatar.GetComponentInChildren<MeshRendererLoadStatus>().Renderers.Count == 1,
+            var loadCheck = avatar.AvatarSystem().FindChild("Mesh loaded check");
+            Check(loadCheck?.GetComponent<MeshRendererLoadStatus>()?.Renderers.Count == 1,
                 "stand-in renderer is excluded from the mesh loading gate");
             await Verify(avatar, standIn, parent, expectedSwing);
             renderer.Mesh.Target = meshSlot.AttachComponent<QuadMesh>();

@@ -658,7 +658,7 @@ internal static class AvatarSetup
         Slot system = root.Children.FirstOrDefault(slot => slot.Tag == AvatarSystemTag);
         if (system == null)
         {
-            system = root.AddSlot("Avatar System");
+            system = root.AddSlot("<color=#00ffff>Avatar System</color>");
             system.Tag = AvatarSystemTag;
         }
         return system;

@@ -31,7 +31,7 @@ internal static class MeshLoadingSetup
         PublishHeadPose(root);
 
         Slot system = AvatarSetup.EnsureAvatarSystemRoot(root);
-        Slot loadCheck = system.AddSlot("<color=cyan>ResoPon</color> - Mesh loaded check");
+        Slot loadCheck = system.AddSlot("Mesh loaded check");
         MeshRendererLoadStatus loadStatus = loadCheck.AttachComponent<MeshRendererLoadStatus>();
         DynamicValueVariable<bool> loadVariable = loadCheck.AttachComponent<DynamicValueVariable<bool>>();
         loadVariable.Value.Value = false;
