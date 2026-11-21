@@ -104,7 +104,40 @@ internal static class BlinkLoopChecks
             asset("Assets/LaterTree.asset", treeGuid, tree.Replace($"{{fileID: 7400000, guid: {resetGuid}}}", "{fileID: 20600000}"));
             Check(Parse(laterLayers, laterGuid: treeGuid, laterFileId: 20600000).Blink == null, "cyclic external BlendTree is not treated as empty");
         }
-        Console.WriteLine("PASS: startup blink loop detection, reset curves, layer order, sides and adapter");
+        // The startup state's missing motion is also explicitly labelled as a blink in
+        // the same machine. A separately shipped source pose can identify its eyelid.
+        const string lost = "abcf1300000000000000000000000005";
+        const string pose = "abcf1300000000000000000000000006";
+        string eyePulse = Curve("eyelid_sleep", 0, 25, 100, 0) + Curve("Smile", 0);
+        void WritePose(string curves, string directory = "Assets/Face", string guid = pose) =>
+            asset(directory + "/brink_base.anim", guid, "--- !u!74 &7400000\nAnimationClip:\n" + Indent(Clip(curves, false)));
+        VrchatAvatar Recover(string labelledGuid = lost)
+        {
+            const string recoveryController = "abcf1300000000000000000000000008";
+            string startup = Machine(100, lost).Replace("  m_DefaultState:",
+                "  m_ChildStates:\n  - m_State: {fileID: 101}\n  - m_State: {fileID: 102}\n  m_DefaultState:");
+            asset("Assets/Recovered.controller", recoveryController, "--- !u!91 &91\nAnimatorController:\n  m_AnimatorLayers:\n" +
+                "  - m_StateMachine: {fileID: 100}\n" + startup + "--- !u!1102 &102\nAnimatorState:\n  m_Name: brink\n" +
+                $"  m_Motion: {{fileID: 7400000, guid: {labelledGuid}}}\n");
+            using var package = UnityPackage.Open(selected);
+            var avatar = new VrchatAvatar { VisemeRendererName = "Body" };
+            VrchatAnimatorFaceParser.Apply(package, UnityYaml.ParseFlatDocument(
+                $"baseAnimationLayers:\n- type: 5\n  animatorController: {{guid: {recoveryController}}}\n"), avatar);
+            return avatar;
+        }
+        WritePose(eyePulse.Replace("Face/Body", "Body"));
+        var recovered = Recover();
+        Check(recovered.Blink?.BlendShapeName == "eyelid_sleep" && recovered.BlinkInitialValues.Count == 1,
+            "a missing blink motion uses only the pulsing eyelid, leaving other face defaults untouched");
+        Check(Recover(resetGuid).Blink == null, "unrelated missing startup motion is not inferred from a loose clip");
+        WritePose(eyePulse);
+        Check(Recover().Blink == null, "a pose authored on another renderer cannot supply the missing blink");
+        WritePose((eyePulse + Curve("Mouth", 0, 100, 0)).Replace("Face/Body", "Body"));
+        Check(Recover().Blink == null, "a mixed expression is not used for automatic blinking");
+        WritePose(eyePulse.Replace("Face/Body", "Body"));
+        WritePose(eyePulse.Replace("Face/Body", "Body"), "Assets/Other", "abcf1300000000000000000000000007");
+        Check(Recover().Blink == null, "ambiguous packaged blink poses are not selected");
+        Console.WriteLine("PASS: startup blink detection, missing motion fallback, reset curves, layer order, sides and adapter");
     }
 
     private static string Indent(string text) => string.Join("\n", text.Split('\n').Select(l => "  " + l));

@@ -42,6 +42,41 @@ internal sealed class VrchatBlinkLoop
     public static VrchatBlinkLoop Read(YamlNode clip)
     {
         if (clip?["m_AnimationClipSettings"]?["m_LoopTime"]?.AsBool() != true) return null;
+        return ReadPulse(clip, null);
+    }
+
+    // Some packages omit the startup motion but include the source blink pose.
+    // Require a blink-labelled state sharing that exact missing reference and a
+    // unique matching clip in the controller's directory tree.
+    public static VrchatBlinkLoop RecoverMissingMotion(UnityPackage package, UnityAsset controllerAsset,
+        UnityScene controller, YamlNode machine, YamlNode motion, string facePath)
+    {
+        if (motion?.Guid == null || motion.FileID != 7400000 || package.ByGuid(motion.Guid) != null ||
+            string.IsNullOrEmpty(facePath)) return null;
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var child in machine?["m_ChildStates"]?.Seq ?? new())
+        {
+            var state = controller.Doc(child["m_State"]?.FileID ?? 0)?.Root;
+            var reference = state?["m_Motion"];
+            string name = state?["m_Name"]?.AsString();
+            if (reference?.Guid != motion.Guid || reference.FileID != motion.FileID ||
+                !(string.Equals(name, "blink", StringComparison.OrdinalIgnoreCase) ||
+                  string.Equals(name, "brink", StringComparison.OrdinalIgnoreCase) || name is "まばたき" or "瞬き")) continue;
+            names.Add(name);
+            names.Add(name + "_base");
+        }
+        if (names.Count == 0) return null;
+        string directory = controllerAsset.LogicalPath[..(controllerAsset.LogicalPath.LastIndexOf('/') + 1)];
+        var candidates = package.ByExtension(".anim").Where(a =>
+            a.LogicalPath.StartsWith(directory, StringComparison.OrdinalIgnoreCase) &&
+            names.Contains(Path.GetFileNameWithoutExtension(a.LogicalPath))).Take(2).ToArray();
+        if (candidates.Length != 1) return null;
+        var clip = package.ReadAssetDocument(candidates[0].Guid, 7400000);
+        return clip?.ClassId == 74 ? ReadPulse(clip.Root, facePath) : null;
+    }
+
+    private static VrchatBlinkLoop ReadPulse(YamlNode clip, string fallbackFacePath)
+    {
         var result = new VrchatBlinkLoop();
         var curves = clip["m_FloatCurves"]?.Seq ?? new();
         foreach (var curve in curves)
@@ -51,7 +86,7 @@ internal sealed class VrchatBlinkLoop
                 attribute?.StartsWith("blendShape.", StringComparison.Ordinal) != true) continue;
             string name = attribute["blendShape.".Length..];
             // A loop that also needs an unrelated face reset is not an eyelid-only motion.
-            if (!IsBlinkName(name)) return null;
+            if (fallbackFacePath == null && !IsBlinkName(name)) return null;
             var keys = curve["curve"]?["m_Curve"]?.Seq;
             if (keys == null || keys.Count == 0) return null;
             var values = keys.Select(k => k["value"]?.AsFloat() ?? float.NaN).ToArray();
@@ -62,10 +97,16 @@ internal sealed class VrchatBlinkLoop
                 // Equal endpoints with nonzero slopes can still move between keys.
                 if (keys.Any(k => (k["inSlope"]?.AsFloat() ?? 0) != 0 ||
                     (k["outSlope"]?.AsFloat() ?? 0) != 0)) return null;
+                // Unreferenced source poses commonly key the whole face at zero.
+                // Only the moving eyelid supplies evidence for a native driver.
+                if (fallbackFacePath != null) continue;
             }
             else
             {
-                if (values.Max() != 100) return null;
+                if (values.Max() != 100 || fallbackFacePath != null &&
+                    (path != fallbackFacePath || SidePreset(name) != "blink" ||
+                     !(IsBlinkName(name) || name.Contains("eyelash", StringComparison.OrdinalIgnoreCase) ||
+                       name.Contains("eyelid", StringComparison.OrdinalIgnoreCase)))) return null;
                 result.Bindings.Add(new VrchatBlink
                 {
                     MeshGameObjectPath = path, MeshGameObjectName = path.Split('/').Last(),
@@ -74,7 +115,7 @@ internal sealed class VrchatBlinkLoop
             }
             if (!result.InitialValues.TryAdd(new(path, name), 0)) return null;
         }
-        if (result.Bindings.Count == 0) return null;
+        if (result.Bindings.Count == 0 || fallbackFacePath != null && result.Bindings.Count != 1) return null;
         if (HasVisibilityCurves(clip, result.InitialValues.Keys)) return null;
         // Unlabelled, mixed, or one-sided sets still support ordinary binocular blinking.
         // Split only complete, unambiguous left/right sets (including eyelash helpers).
