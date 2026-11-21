@@ -83,6 +83,18 @@ Voice=1 で1秒評価したとき、その音素だけで100になる shape を�
 一致数・欠落・余分な割当を出す。名前が同じ表情制御用 Slot もあるため、対象 Renderer を
 一意に識別できないときや、旧データに採取項目がないときは未検証になる。
 
+口形を全件照合するときは、次の回帰ケースを区別する。
+
+- GameVketChan は変換前に15音素を読み取れても、保存時に `Silence` の接続が欠けることがある。
+  変換ログで対象 shape の名前を確認し、保存後の音素ごとの接続と照合する。
+- アイザラ、Omaneko、Tolass は複数の音素に同じ shape を指定する。期待値は
+  Renderer・音素・shape の組で数える。ユニークな shape 数だけを比較すると欠落を見逃す。
+- Ricorine は Descriptor の宣言配列が空でも FX を評価すると15音素が得られる。
+  Bel Albino は `MouthMode=2`、`CN_MOUTH_MORPH_CANCEL_ENABLE=true`、`Voice=1` で
+  5母音の独立した応答を確認できる。既定状態だけで応答がない場合は、測定した条件を記録する。
+- VRM 0.x は入力の母音プリセットから対象メッシュとモーフ添字を引き、保存先の Renderer・
+  shape 名と比較する。AvatarSample_C は5母音が比較対象になる。
+
 登録全件の変換を `scripts/convert-all-local-avatars.py` で完了した後は、
 その実行の `report.json` と隣接する凍結済み `registry.json` を使って一括採取できる。
 
