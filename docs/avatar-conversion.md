@@ -20,6 +20,11 @@ VRMは `VrmParser`、VRChatはパーサーと `VrchatModelAdapter` が共通の 
   一度だけ構築する。入力形式ごとの表情取り込みと初期値の反映を終えてから接続する。
 - 最終的なrenderer構成に対して `MeshLoadingSetup.Apply` を実行する。
 
+VRM・VRChat とも、モデル取り込み時に作った `Assets` スロットを一人称設定でも共有する。
+リグ設定がこのスロットを `CenteredRoot` 配下へ移すため、保存前にアバタールート直下へ戻す。
+その子スロットをプロバイダーの型で `Meshes`、`Materials`、`Textures` に振り分ける。
+既存スロットの親を変更することで、レンダラーやサムネイルからの参照を維持する。
+
 エンジン起動・アセット待機・パッケージ出力は[ヘッドレスエンジン](headless-engine.md)、
 工程別の計測は[変換性能の診断](conversion-performance.md)を参照する。
 
@@ -163,7 +168,7 @@ VRMのannotation解決は[VRM FirstPerson](vrm-conversion.md#vrm-firstperson)、
 
 - `Both` は変更しない。
 - `ThirdPersonOnly` / `FirstPersonOnly` はrendererのEnabledではなく `RenderMaterialOverride` で切り替える。
-- Invisible Materialは `Assets/Invisible Material` の透明な `PBS_RimSpecular` とする。
+- Invisible Materialは `Assets/Materials/Invisible Material` の透明な `PBS_RimSpecular` とする。
 - `Auto` は頭ボーン配下の影響頂点を除いたheadless meshを生成する。
   元rendererを三人称用、headless rendererを一人称用にし、生成meshのblendshapeは除去する。
 

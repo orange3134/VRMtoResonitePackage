@@ -271,10 +271,10 @@ internal static class Converter
                         setupOptions.NearClip = options.NearClip.Value;
                     }
                     var expressionResolver = new BlendshapeResolver(root, vrm);
-                    AvatarSetup.Build(root, vrm, setupOptions, expressionResolver);
+                    AvatarSetup.Build(root, assetsSlot, vrm, setupOptions, expressionResolver);
                     await MaterialTuner.Apply(root, assetsSlot, vrm, vrmPath,
                         options.TransparentCutoutMaterials);
-                    await AvatarSetup.ApplyFirstPersonAutoAsync(root, vrm);
+                    await AvatarSetup.ApplyFirstPersonAutoAsync(root, assetsSlot, vrm);
                     await Expressions.VrmExpressionAdapter.BuildAsync(root, vrm, expressionResolver, !options.NoExpressionMenu);
                     SpringBoneSetup.Apply(root, vrm);
                 }
@@ -292,7 +292,7 @@ internal static class Converter
 
                 root.Name = displayName;
                 Console.WriteLine("パッケージを書き出し中...");
-                await ExportPackage(world, root, outputPath);
+                await ExportPackage(world, root, assetsSlot, outputPath);
             }).ConfigureAwait(false);
         }
         finally
@@ -560,12 +560,12 @@ internal static class Converter
                     }
                     setupOptions.ViewPosition = viewPosition;
                     setupOptions.RigViewpoint = avatar.RigViewpoint;
-                    AvatarSetup.Build(root, model, setupOptions, faceResolver, physicsNodes);
+                    AvatarSetup.Build(root, assetsSlot, model, setupOptions, faceResolver, physicsNodes);
                     profile?.Mark("avatar-setup");
                     await Vrchat.VrchatMaterialBuilder.Apply(root, assetsSlot, avatar, package, importedMeshSources, authoredObjects, importedNodePaths,
                         options.TransparentCutoutMaterials);
                     profile?.Mark("materials");
-                    await AvatarSetup.ApplyFirstPersonAutoAsync(root, model, physicsNodes);
+                    await AvatarSetup.ApplyFirstPersonAutoAsync(root, assetsSlot, model, physicsNodes);
                     profile?.Mark("first-person");
                     SpringBoneSetup.Apply(root, model, physicsNodes);
                 }
@@ -610,7 +610,7 @@ internal static class Converter
                 Vrchat.VrchatHierarchyCleanup.CollapseUnpackedWrappers(root, avatar, descriptorRoot,
                     importedFbxRoots.GetValueOrDefault(avatar.FbxGuid), importedMeshSources, importedNodePaths);
                 profile?.Mark("settle-updates");
-                await ExportPackage(world, root, outputPath);
+                await ExportPackage(world, root, assetsSlot, outputPath);
                 profile?.Mark("export-package");
             }).ConfigureAwait(false);
         }
@@ -1105,8 +1105,28 @@ internal static class Converter
         UniLog.Warning("一部のアセットの読み込みが完了しませんでした。そのまま続行します。");
     }
 
-    private static async Task ExportPackage(World world, Slot root, string outputPath)
+    private static void OrganizeAssets(Slot root, Slot assetsSlot)
     {
+        // Rig setup can move the original asset container under CenteredRoot.
+        assetsSlot.Parent = root;
+        var assetSlots = assetsSlot.Children.ToArray();
+        Slot meshes = assetsSlot.AddSlot("Meshes");
+        Slot materials = assetsSlot.AddSlot("Materials");
+        Slot textures = assetsSlot.AddSlot("Textures");
+        foreach (Slot asset in assetSlots)
+        {
+            if (asset.GetComponent<IAssetProvider<Mesh>>() != null)
+                asset.Parent = meshes;
+            else if (asset.GetComponent<IAssetProvider<Material>>() != null)
+                asset.Parent = materials;
+            else if (asset.GetComponent<ITextureProvider>() != null)
+                asset.Parent = textures;
+        }
+    }
+
+    private static async Task ExportPackage(World world, Slot root, Slot assetsSlot, string outputPath)
+    {
+        OrganizeAssets(root, assetsSlot);
         var avatarRootVariable = root.GetComponents<DynamicReferenceVariable<Slot>>()
             .FirstOrDefault(v => v.VariableName.Value == "modular_avatar/AvatarRoot");
         if (avatarRootVariable != null)
