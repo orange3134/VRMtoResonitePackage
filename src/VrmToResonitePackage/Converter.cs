@@ -498,7 +498,7 @@ internal static class Converter
                         importedMeshSources, importedNodePaths, prefabSlots) ?? descriptorRoot;
                 expressionRoot = Vrchat.VrchatSceneSetup.ExpressionBindingRoot(avatar, expressionRoot);
                 int repairedBlendshapeMeshes = await Vrchat.VrchatBlendShapeRepair.Apply(root, avatar,
-                    importedMeshSources, authoredObjects, importedNodePaths, expressionRoot);
+                    importedMeshSources, authoredObjects, importedNodePaths, expressionRoot, prefabSlots);
                 profile?.Mark("blendshape-repair");
                 if (repairedBlendshapeMeshes > 0)
                 {

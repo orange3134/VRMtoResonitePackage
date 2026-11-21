@@ -85,10 +85,14 @@ Voice=1 で1秒評価したとき、その音素だけで100になる shape を�
 
 口形を全件照合するときは、次の回帰ケースを区別する。
 
-- GameVketChan は変換前に15音素を読み取れても、保存時に `Silence` の接続が欠けることがある。
-  変換ログで対象 shape の名前を確認し、保存後の音素ごとの接続と照合する。
+- GameVketChan は FBX インポーターが省略する `Silence` を含む。復元したチャンネル名と
+  保存後のドライバーの接続先をセットで確認する。
 - アイザラ、Omaneko、Tolass は複数の音素に同じ shape を指定する。期待値は
   Renderer・音素・shape の組で数える。ユニークな shape 数だけを比較すると欠落を見逃す。
+  保存データでは `field` が音素の直結先、`weightField` が最大値を合成した後のメッシュの接続先。
+  `PrefabSceneSmoke --viseme-package <package> <expectations.json>` はヘッドレスエンジンに
+  パッケージを読み戻し、ドライバー出力に個別・同時入力・ゼロを与えて各 shape の応答を確認する。
+  期待値は Unity 等から得た音素名と shape 名の JSON オブジェクトで指定する。
 - Ricorine は Descriptor の宣言配列が空でも FX を評価すると15音素が得られる。
   Bel Albino は `MouthMode=2`、`CN_MOUTH_MORPH_CANCEL_ENABLE=true`、`Voice=1` で
   5母音の独立した応答を確認できる。既定状態だけで応答がない場合は、測定した条件を記録する。

@@ -12,7 +12,8 @@ internal static class VrchatBlendShapeRepair
 {
     public static async Task<int> Apply(Slot root, VrchatAvatar avatar,
         IReadOnlyDictionary<Slot, string> sources, IReadOnlyDictionary<string, Slot> authoredObjects,
-        IReadOnlyDictionary<Slot, string> importedPaths = null, Slot expressionRoot = null)
+        IReadOnlyDictionary<Slot, string> importedPaths = null, Slot expressionRoot = null,
+        IReadOnlyDictionary<string, Slot> prefabSlots = null)
     {
         using var profile = ConversionProfile.Start("blendshape-repair");
         int repaired = await NormalizeRepeatedBlendShapeNames(root);
@@ -52,6 +53,20 @@ internal static class VrchatBlendShapeRepair
             if (!requestedByRenderer.TryGetValue(matches[0], out var requested))
                 requestedByRenderer[matches[0]] = requested = new(StringComparer.Ordinal);
             requested.UnionWith(names);
+        }
+        // The FBX importer can discard a neutral viseme with no vertex deltas. Its
+        // named channel is still part of the descriptor/FX contract.
+        foreach (var viseme in avatar.Visemes)
+        {
+            var slot = viseme.MeshTarget == null || importedPaths == null ? null :
+                VrchatSceneSetup.ResolveImportedTarget(viseme.MeshTarget, sources, importedPaths, prefabSlots);
+            var matches = rendererPaths.Where(p => slot != null ? p.Key.Slot == slot :
+                viseme.MeshGameObjectPath != null ? p.Value == viseme.MeshGameObjectPath :
+                p.Key.Slot.Name == viseme.MeshGameObjectName).Select(p => p.Key).ToArray();
+            if (matches.Length != 1) continue;
+            if (!requestedByRenderer.TryGetValue(matches[0], out var requested))
+                requestedByRenderer[matches[0]] = requested = new(StringComparer.Ordinal);
+            requested.Add(viseme.BlendShapeName);
         }
         foreach (SkinnedMeshRenderer renderer in root.GetComponentsInChildren<SkinnedMeshRenderer>())
         {

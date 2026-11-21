@@ -12,14 +12,15 @@ bool primarySkinPackage = args.Length == 4 && args[0] == "--primary-skin-package
 bool skinPackage = args.Length == 4 && args[0] == "--skin-package" || primarySkinPackage;
 bool uprightPackage = args.Length == 3 && args[0] == "--upright-package";
 bool skinMotionPackage = args.Length == 3 && args[0] == "--skin-motion-package";
+bool visemePackage = args.Length == 3 && args[0] == "--viseme-package";
 nativePackage |= skinPackage;
-if (args.Length != 2 && !nativePackage && !uprightPackage && !skinMotionPackage) throw new ArgumentException("Usage: PrefabSceneSmoke <FBX path> <skinned renderer with blendshapes> | --native-package <prefab> <package> | --skin-package <input> <package> <avatar> | --primary-skin-package <input> <package> <avatar> | --upright-package <package> <viewHeight> | --skin-motion-package <package> <expectations.json>");
-string fbxPath = nativePackage || uprightPackage || skinMotionPackage ? null : Path.GetFullPath(args[0]);
+if (args.Length != 2 && !nativePackage && !uprightPackage && !skinMotionPackage && !visemePackage) throw new ArgumentException("Usage: PrefabSceneSmoke <FBX path> <skinned renderer with blendshapes> | --native-package <prefab> <package> | --skin-package <input> <package> <avatar> | --primary-skin-package <input> <package> <avatar> | --upright-package <package> <viewHeight> | --skin-motion-package <package> <expectations.json> | --viseme-package <package> <expectations.json>");
+string fbxPath = nativePackage || uprightPackage || skinMotionPackage || visemePackage ? null : Path.GetFullPath(args[0]);
 string nativePrefab = nativePackage ? Path.GetFullPath(args[1]) : null;
 string nativeOutput = nativePackage ? Path.GetFullPath(args[2]) : null;
 string uprightOutput = uprightPackage ? Path.GetFullPath(args[1]) : null;
-string motionOutput = skinMotionPackage ? Path.GetFullPath(args[1]) : null;
-string motionExpectations = skinMotionPackage ? Path.GetFullPath(args[2]) : null;
+string motionOutput = skinMotionPackage || visemePackage ? Path.GetFullPath(args[1]) : null;
+string motionExpectations = skinMotionPackage || visemePackage ? Path.GetFullPath(args[2]) : null;
 string resonite = Environment.GetEnvironmentVariable("RESONITE_PATH")
     ?? @"C:\Program Files (x86)\Steam\steamapps\common\Resonite";
 typeof(VrchatAvatar).Assembly.GetType("VrmToResonitePackage.ResoniteLocator")!
@@ -30,7 +31,7 @@ try
     await Run(fbxPath, args[1], nativePrefab, nativeOutput, skinPackage ? args[3] : null,
         uprightOutput,
         uprightPackage ? float.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture) : 0, primarySkinPackage,
-        motionOutput, motionExpectations);
+        motionOutput, motionExpectations, visemePackage);
     Console.WriteLine("Prefab scene smoke checks passed.");
     // This is a standalone test process; do not run the engine's asynchronous shutdown
     // callbacks after disposing its services (headless shutdown can throw on background threads).
@@ -44,7 +45,7 @@ catch (Exception error)
 
 [MethodImpl(MethodImplOptions.NoInlining)]
 static async Task Run(string fbxPath, string rendererName, string nativePrefab, string nativeOutput, string avatarName,
-    string uprightPackage, float viewHeight, bool primarySkinPackage, string motionPackage, string motionExpectations)
+    string uprightPackage, float viewHeight, bool primarySkinPackage, string motionPackage, string motionExpectations, bool visemePackage)
 {
     string temp = Path.Combine(Path.GetTempPath(), "ResoPonSceneSmoke", Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(Path.Combine(temp, "Assets"));
@@ -74,7 +75,8 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
         Slot root = world.AddSlot("Test avatar"), assets = root.AddSlot("Assets");
         if (motionPackage != null)
         {
-            await SkinMotionChecks.CheckPackage(root, motionPackage, motionExpectations);
+            if (visemePackage) await VisemeMotionChecks.CheckPackage(root, motionPackage, motionExpectations);
+            else await SkinMotionChecks.CheckPackage(root, motionPackage, motionExpectations);
             return;
         }
         if (uprightPackage != null)

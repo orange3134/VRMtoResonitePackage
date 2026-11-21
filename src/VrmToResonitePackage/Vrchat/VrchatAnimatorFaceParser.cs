@@ -67,11 +67,14 @@ public static class VrchatAnimatorFaceParser
                 bool gated = reachable.Any(id => (controller.Doc(id)?.Root?["m_Conditions"]?.Seq ?? new())
                     .Any(condition => condition["m_ConditionEvent"]?.AsString() != "Viseme"));
                 var voiceChannels = descriptor["lipSync"]?.AsInt() == 4
-                    ? VrchatVoiceVisemes.Read(controller, animatorLayer, Clip) : null;
-                if (voiceChannels != null && !layerBindings.Skip(layerIndex).Any(b => voiceChannels.Any(b.Contains)))
+                    ? VrchatVoiceVisemes.Read(controller, animatorLayer, Clip, avatar.VisemeRendererName,
+                        descriptor["VisemeBlendShapes"]?.Seq?.Select(v => v.AsString()).ToArray(), reachable) : null;
+                if (voiceChannels != null && !Enumerable.Range(layerIndex, animatorLayers.Count - layerIndex)
+                    .Any(i => OverridesVoice(i, voiceChannels)))
                 {
                     for (int i = 0; i < voiceChannels.Length; i++)
-                        RecordViseme(i, new() { new Shape(voiceChannels[i].Path, voiceChannels[i].Name, 100) });
+                        if (voiceChannels[i] != default)
+                            RecordViseme(i, new() { new Shape(voiceChannels[i].Path, voiceChannels[i].Name, 100) });
                 }
                 else if (descriptor["lipSync"]?.AsInt() == 4 && !gated)
                 {
@@ -212,6 +215,19 @@ public static class VrchatAnimatorFaceParser
                     return shapes;
                 }
 
+            }
+
+            bool OverridesVoice(int index, (string Path, string Name)[] channels)
+            {
+                if (!channels.Any(layerBindings[index].Contains)) return false;
+                long machine = animatorLayers[index]["m_StateMachine"]?.FileID ?? 0;
+                // An expression may replace the mouth while selected. An empty
+                // resting pose leaves the voice bank active during ordinary speech.
+                if (!initialStates.TryGetValue(machine, out var state) || Clip(state?["m_Motion"]) == null ||
+                    graph.Reachable(machine).Any(id => controller.Doc(id)?.Root?["m_Conditions"]?.Seq?.Any(
+                        c => c["m_ConditionEvent"]?.AsString() is "Voice" or "Viseme") == true)) return true;
+                var resting = MotionBindings(state["m_Motion"], out bool complete);
+                return !complete || channels.Any(resting.Contains);
             }
 
             HashSet<(string, string)> LayerBindings(YamlNode animatorLayer)

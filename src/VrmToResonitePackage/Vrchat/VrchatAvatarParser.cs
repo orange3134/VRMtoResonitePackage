@@ -1888,6 +1888,7 @@ public static partial class VrchatAvatarParser
         // Variant descriptors often reference a local stripped renderer; follow it to the source
         // FBX GUID/fileID so the imported renderer name is preserved.
         string visemeMesh = ResolveReferenceGameObjectName(package, scene, d?["VisemeSkinnedMesh"], modelResolvers);
+        avatar.VisemeRendererName = visemeMesh;
         var visemeTarget = ResolveDescriptorMeshTarget(package, descriptorGuid, d?["VisemeSkinnedMesh"], avatar.FbxGuid);
         // FaceEmo selects one face mesh: visemes, eyelids, then the direct Body child.
         var faceReference = ExpressionFaceReference(d);
