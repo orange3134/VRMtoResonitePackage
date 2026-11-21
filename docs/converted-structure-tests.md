@@ -108,6 +108,10 @@ Unity/parserが外部プロジェクト依存を補って解析したアーカ�
   含め同じnullが繰り返される事例がある。参照件数と欠落した骨の種類を区別し、保存メッシュの
   正のウェイトがnullを指すか調べる。ウェイトから使われないnullだけで変形破損と断定しない。
 - 保存時のrenderer Enabled差は、読み込み後のmesh可用性とdriverの値で切り分ける。
+  再読込時はアバターの `MeshRendererLoadStatus.IsLoaded` を期限付きで待ち、
+  完了後に各rendererのパス・mesh可用性・Enabledを照合する。Bel AlbinoやOmanekoでは
+  個々のmeshが利用可能になっても、読み込み待ちのdriverがまだEnabledをfalseに保つ時間がある。
+  期限内に完了しなければ未検証とする。
   一つのモデルで正常なdriverを確認しても、他モデル全件の差を自動的に承認しない。
 
 ```powershell
@@ -145,6 +149,9 @@ python -B scripts/compare-converted-structure.py unity.json parser.json `
 2. `transforms` の対応候補と `unmappedSlots` を確認する。完全なルート相対名前パスを
    変換後パスの末尾と照合する。変換用ラッパーの挿入を許容するが、同名の候補が複数なら
    `ambiguous` とし、自動選択しない。名前中の `/` は区切らず親IDからパスを復元する。
+   Avatar Settings の Dynamic Bone Settings に生成する無効なテンプレートチェーンとその子は、
+   自動対応の候補から外す。Legnia 4P では、Unity の `EditorOnly` の衣装と物理設定テンプレートが
+   同じ `skirt` という名前を持つ。対応先が見つからない衣装は未対応として残す。
 3. `unmappedSubtrees` で連続した未対応部分木を数え、`referencedBy` で利用箇所を追う。
    `sameNameSourceIds` は調査用で、対応判定には使わない。表情・装着・素材用の生成スロットも
    含まれる。参照がないことだけを削除理由にしない。

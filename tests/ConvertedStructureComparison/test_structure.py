@@ -129,6 +129,26 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual('ambiguous', report['transforms'][1]['status'])
         self.assertEqual(['r/0', 'r/2'], report['transforms'][1]['candidates'])
 
+    def test_generated_template_is_not_a_source_mesh_candidate(self):
+        unity, converted = fixtures()
+        slots = converted['slots']
+        slots[2]['path'][-1] = 'OtherMesh'
+        parent = slots[0]
+        for sid, name in [('r/2', 'Avatar Settings'), ('r/2/0', 'Dynamic Bone Settings'), ('r/2/0/0', 'Mesh')]:
+            slot = dict(slots[1], id=sid, parent=parent['id'], siblingIndex=int(sid.split('/')[-1]),
+                        serializedId=sid, path=parent['path'] + [name], components=[])
+            slots.append(slot)
+            parent = slot
+        chain = dict(id=slot['id'] + ':0', type='[FrooxEngine]FrooxEngine.DynamicBoneChain',
+                     enabled=False, slotReferences=[], bones=None, rigBones=None, blendShapeWeights=None)
+        slot['components'].append(chain)
+        report = comparison.compare(unity, unity, converted)
+        self.assertEqual('unmapped', report['transforms'][2]['status'])
+        self.assertEqual('unverified', report['renderers'][0]['status'])
+        slots[2]['path'][-1] = 'Mesh'
+        report = comparison.compare(unity, unity, converted)
+        self.assertEqual('r/1', report['transforms'][2]['target'])
+
     def test_bone_order_and_repeated_entries_preserved(self):
         unity, converted = fixtures()
         converted['slots'][-1]['components'][0]['bones'].reverse()

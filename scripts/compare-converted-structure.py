@@ -155,7 +155,18 @@ def compare(unity, parser, converted, overrides=None):
     for sid in sources:
         by_path[source_path(sid)].append(sid)
     suffixes = collections.defaultdict(list)
+    template_slots = set()
     for slot in slots.values():
+        # SpringBoneSetup creates disabled template chains under the avatar's settings.
+        # A template or its bindings can have the same name as an excluded Unity object.
+        path = slot['path']
+        if slot['parent'] in template_slots or (
+                len(path) == 4 and path[1] in ('Avatar Settings', '<color=#00ffff>Avatar Settings</color>')
+                and path[2] == 'Dynamic Bone Settings' and any(
+                    c['type'] == '[FrooxEngine]FrooxEngine.DynamicBoneChain' and c.get('enabled') is False
+                    for c in slot['components'])):
+            template_slots.add(slot['id'])
+            continue
         for length in range(1, len(slot['path'])):
             suffixes[tuple(slot['path'][-length:])].append(slot['id'])
     overrides = overrides or {}
