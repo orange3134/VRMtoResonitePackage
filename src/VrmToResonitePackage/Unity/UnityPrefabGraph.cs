@@ -73,6 +73,67 @@ internal sealed class UnityPrefabGraph
 
     public UnityObjectId Identity(string guid, long id) => _identities.Resolve(guid, id);
 
+    // AnimationClip paths start at the descriptor's GameObject, including when
+    // that object is below the scene root or the renderer is in a nested prefab.
+    internal string RendererAnimationPath(UnityObjectId root, UnityObjectId renderer)
+    {
+        if (root.IsNull || renderer.IsNull || IsRemoved(renderer.Occurrence, renderer.FileId)) return null;
+        if (root.Occurrence == renderer.Occurrence && _package.ByGuid(root.Occurrence)?.Extension == ".fbx")
+        {
+            // The FBX resolver sees the imported hierarchy before prefab overrides.
+            if (Modifications.Any(m => m.Target.Occurrence == root.Occurrence && m.Target != root &&
+                m.Value["propertyPath"]?.AsString() is "m_Name" or "m_Father")) return null;
+            var resolver = _package.ModelFileIds(root.Occurrence);
+            var path = resolver.ResolveRendererComponentPath(renderer.FileId);
+            // Unity can fold a model container into the avatar root. Accept a suffix
+            // only if both the root and the full renderer path reproduce Unity's IDs.
+            while (path != null)
+            {
+                if (resolver.ResolveAnimationRootPath(root.FileId, renderer.FileId, path) != null) return path;
+                if (path.Length == 0) break;
+                int slash = path.IndexOf('/');
+                path = slash < 0 ? "" : path[(slash + 1)..];
+            }
+            return null;
+        }
+        var scene = Scene(renderer.Occurrence);
+        var component = scene?.Doc(renderer.FileId);
+        if (component?.ClassId != 137) return null;
+        var reference = component.Root["m_GameObject"];
+        var gameObject = Identity(reference?.Guid ?? renderer.Occurrence, reference?.FileID ?? 0);
+        var transform = Scene(gameObject.Occurrence)?.TransformOfGameObject(gameObject.FileId);
+        var current = Identity(gameObject.Occurrence, transform?.FileId ?? 0);
+        var names = new Stack<string>();
+        var visited = new HashSet<UnityObjectId>();
+        while (!current.IsNull && visited.Add(current))
+        {
+            scene = Scene(current.Occurrence);
+            transform = scene?.Doc(current.FileId);
+            var owner = transform?.Root?["m_GameObject"];
+            if (owner?.FileID is not long id || id == 0) return null;
+            var go = Identity(owner.Guid ?? current.Occurrence, id);
+            if (go == root) return string.Join("/", names);
+            var name = Scene(go.Occurrence)?.GameObjectName(go.FileId);
+            if (string.IsNullOrEmpty(name) || name.Contains('/')) return null;
+            names.Push(name);
+            var father = transform.Root["m_Father"];
+            string occurrence = current.Occurrence;
+            // A nested prefab root keeps m_Father=0 in its own asset. Its
+            // PrefabInstance supplies the placement parent in the owning scene.
+            while (father?.FileID == 0)
+            {
+                var placement = Scenes.SelectMany(e => e.Scene.Documents.Values
+                    .Where(d => d.ClassId == 1001 && d.Root["m_SourcePrefab"]?.Guid == occurrence)
+                    .Select(d => (e.Guid, d.Root))).SingleOrDefault();
+                if (placement.Root == null) return null;
+                occurrence = placement.Guid;
+                father = placement.Root["m_Modification"]?["m_TransformParent"];
+            }
+            current = Identity(father?.Guid ?? occurrence, father?.FileID ?? 0);
+        }
+        return null;
+    }
+
     private void Visit(string guid, HashSet<string> ancestors)
     {
         if (_package.ByGuid(guid)?.Extension is not (".prefab" or ".unity")) return;

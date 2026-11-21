@@ -11,6 +11,8 @@ public sealed class LilToonInfo
     public bool IsLilToon { get; set; } = true;
     public bool IsToonStandard { get; set; }
     public bool IsMobileToonLit { get; set; }
+    public bool IsUnityChanToon2 { get; set; }
+    public bool IsUts2NoOutlineTransparent { get; set; }
     public bool UsesStandardKeywords { get; set; }
     public bool UsesUrpKeywords { get; set; }
     public bool IsFakeShadow { get; set; }

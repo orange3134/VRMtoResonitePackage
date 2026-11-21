@@ -18,6 +18,7 @@ public sealed class VrchatAvatar
     public string ExpressionFacePath { get; set; }
     public HashSet<string> ExpressionVisemeNames { get; } = new(StringComparer.Ordinal);
     public string VisemeRendererName { get; set; }
+    public string VisemeRendererPath { get; set; }
     public List<VrchatPhysicsPlacement> PhysicsPlacements { get; } = new();
     /// <summary>Root prefab GameObject name (also the avatar/display name).</summary>
     public string Name { get; set; }

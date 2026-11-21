@@ -18,9 +18,14 @@ internal static class UnityFbxBlendShapeDefaults
 
     internal static IReadOnlyList<Channel> Read(string path, out IReadOnlyDictionary<string, string[]> skinBonePaths,
         out IReadOnlyDictionary<string, System.Numerics.Matrix4x4> localTransforms)
+        => Read(path, out skinBonePaths, out localTransforms, out _);
+
+    internal static IReadOnlyList<Channel> Read(string path, out IReadOnlyDictionary<string, string[]> skinBonePaths,
+        out IReadOnlyDictionary<string, System.Numerics.Matrix4x4> localTransforms, out bool hasEmbeddedShapes)
     {
         skinBonePaths = null;
         localTransforms = null;
+        hasEmbeddedShapes = false;
         try
         {
             byte[] data = File.ReadAllBytes(path);
@@ -31,7 +36,7 @@ internal static class UnityFbxBlendShapeDefaults
             }
             int version = BitConverter.ToInt32(data, 23);
             var reader = new Reader(data, version >= 7500);
-            return reader.ReadChannels(out skinBonePaths, out localTransforms);
+            return reader.ReadChannels(out skinBonePaths, out localTransforms, out hasEmbeddedShapes);
         }
         catch
         {
@@ -52,7 +57,7 @@ internal static class UnityFbxBlendShapeDefaults
         }
 
         public IReadOnlyList<Channel> ReadChannels(out IReadOnlyDictionary<string, string[]> skinBonePaths,
-            out IReadOnlyDictionary<string, System.Numerics.Matrix4x4> localTransforms)
+            out IReadOnlyDictionary<string, System.Numerics.Matrix4x4> localTransforms, out bool hasEmbeddedShapes)
         {
             var nodes = new List<Node>();
             void Collect(Node node)
@@ -61,6 +66,7 @@ internal static class UnityFbxBlendShapeDefaults
                 foreach (var child in node.Children) Collect(child);
             }
             while (TryReadNode(out Node node)) Collect(node);
+            hasEmbeddedShapes = nodes.Any(n => n.Name == "Geometry" && n.Children.Any(c => c.Name == "Shape"));
             var objects = nodes.Where(n => n.Name is "Model" or "Geometry" or "Deformer" &&
                 n.Properties.Count >= 3 && n.Properties[0] is long).ToDictionary(n => (long)n.Properties[0]);
             var connections = nodes.Where(n => n.Name == "C" && n.Properties.Count >= 3 &&

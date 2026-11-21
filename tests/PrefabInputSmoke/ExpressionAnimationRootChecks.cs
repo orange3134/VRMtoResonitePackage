@@ -29,6 +29,14 @@ Connections: {
         long root = UnityModelFileIdResolver.Compute("GameObject", "//RootNode/root", 0);
         long face = UnityModelFileIdResolver.Compute("SkinnedMeshRenderer", "//RootNode/root/Face/SkinnedMeshRenderer", 0);
         var resolver = Read();
+        string prefab = asset("Assets/FoldedBlink.prefab", "ade00000000000000000000000000002",
+            $"--- !u!1001 &1\nPrefabInstance:\n  m_SourcePrefab: {{fileID: 100100000, guid: {guid}}}\n");
+        using (var package = UnityPackage.Open(prefab))
+        {
+            var graph = UnityPrefabGraph.Resolve(package, package.InputPrefab.Guid);
+            Check(graph.RendererAnimationPath(new(guid, root), new(guid, face)) == "Face",
+                "blink path on folded FBX is relative to the descriptor root");
+        }
         Check(resolver.ResolveAnimationRootPath(root, face, "Face") == "RootNode/Payload", "folded model root recovered from real component ID");
         Check(resolver.ResolveAnimationRootPath(root, face, "Missing/Face") == null, "a matching leaf cannot bypass a missing authored parent");
         Check(resolver.ResolveAnimationRootPath(root, face, "../Face") == null, "parent traversal is rejected");

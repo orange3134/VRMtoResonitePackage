@@ -132,6 +132,16 @@ NDMF Manual Bake等で保存した`.asset`は、YAMLだけでなくUnity Seriali
 
 ## FBX表情の頂点溶接前処理
 
+古いバイナリFBXでは、各シェイプが `Geometry`（Mesh）の直下に、名前付きの `Shape` として
+格納される。Assimpはこの形式のメッシュ本体とスキンを読めてもシェイプを取り込まない。
+解析と実変換の両方で、一時FBXに各メッシュの `BlendShape` とシェイプ順の
+`BlendShapeChannel`・`Geometry`（Shape）を作って接続する。疎な頂点番号、位置・法線の差分は
+元データを引き継ぎ、メッシュの同名プロパティから既定ウェイトを読む。その後で頂点溶接を保護する。
+
+Rengyo v1.9 同梱の `rengyo_v1.3` はこの形式のFBX 7.1を使う。Unity Editorでの基準値は
+`Body` が135個、素体の `sotal` が4個で、素体の初期ウェイトは順に 0、100、0、100。
+保存後の名前・順序・初期値に加え、Descriptorの15音素と、FXの顔カーブが実際のRendererを駆動することを確認する。
+
 `UnityFbxMorphSeams` のID索引は、Shape → BlendShapeChannel → BlendShape → Meshを辿るための
 `Geometry` と `Deformer` に限定する。NagmaのFBXには同じIDの`Texture`が複数記録されており、
 全Objectsを一意なIDで辞書化するとインポート前に失敗する。テクスチャを含む無関係なノードは
@@ -679,6 +689,10 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
   rendererの完全なFBX pathで解決する。pathが判明している参照を名前だけの表へfallbackしない。
 
 VRChatの15 visemeはResonite enumへ対応させ、Unityの0〜100をResoniteの0〜1へ変換する。
+Lyphos 1.10 の Ex・Fa は無音と母音 aa に同じ `Body/lipsync.a` を割り当て、初期値は 0。
+無音の強さが 1 のときに開口を防ぐため、VRChat の無音と母音が同じ Renderer の同じ
+weight に解決された場合、発話音素だけをその weight に接続する。専用の無音シェイプは
+通常どおり駆動する。保存パッケージの検証では、発話後に無音だけを 1 に戻し、母音が閉じることも確認する。
 customEyeLookSettingsの左右の目はprefab配置・Transform fileIDまたはFBXの完全なpathを保持する。
 通常のhumanoid骨も主FBXの配置IDとnode pathを保持し、向き補正・リグ設定で同じ参照解決を使う。
 ローカルの目Transformも配置を生成し、Merge Armature後の参照表をAvatarSetupのリグ割り当てまで渡す。
@@ -759,6 +773,21 @@ Bodyの `まばたき` を0に保つ。動く瞬きループではないため�
 同じGUIDの実体が同梱されていればそちらを解析し、その他の不明な欠落motionは非競合と決めつけない。
 保存パッケージをExpressionSmokeで再生するときは `RESOPON_TEST_EXPECTED_BLINK_BINDINGS` を
 Shipilkaでは `1`、Linaでは `2` に設定し、瞬き接続が0本でも開閉テストが通ることを防ぐ。
+
+Alconia 1.1.1 の `Alconia.prefab` はDescriptorのまぶたが未設定で、FXの初期状態と同じ
+ステートマシンの `brink` 状態が参照するモーションもパッケージに含まれない。
+一方、同梱の `brink_base.anim` をUnity Editorでサンプリングすると、動くのは
+`body/eyelashe_sleep` の1本で、開始時0、13/60秒で100、終了時0になる。
+この場合、Resoniteの自動まばたきにこの閉眼先を使う。
+
+補完には、初期状態と瞬きを明示する状態が同一の欠落クリップを参照し、コントローラーと同じ
+ディレクトリ以下で状態名またはその `_base` に一致する `.anim` が一意であることを使う。
+対象は開眼から完全閉眼し再び開く両目用のカーブ1本に限る。DescriptorのGameObjectから
+口パク用Rendererまでの相対パスを解決し、カーブのパスと完全一致することを確認する。
+たとえば `Face/Body` を指定した場合、直下の `Body` のカーブは使わない。パスを特定できない場合や、
+FXレイヤーの `m_AvatarMask` または `m_Mask` がAvatarMaskを参照する場合は補完を見送る。
+同じクリップに含まれるほかの表情のゼロ値はリセットに適用しない。既存の瞬き設定を優先し、
+後段の初期モーションが閉眼先を上書きする場合も補完しない。
 
 共通の追跡設定ではAvatarCreatorのBlendShape名ヒューリスティクスによる補完を行わないため、
 瞬きがないアバターを再変換するだけで接続先が増えるとは限らない。
@@ -962,6 +991,18 @@ Transparent / Fur / FurTwoPassへの変更時に0.001を設定する。MultiもC
 `PrefabSceneSmoke/TransparentMaterialChecks` は両入力形式で対象一覧、同名材質の個別選択、
 variantの継承値より優先する0.5固定、未選択・対象外材質の保持、CLI互換・GUI引数の受け渡し、
 生成パッケージのinspectと再読込後の材質設定を確認する。
+
+### Unity-Chan Toon Shader 2
+
+UTS2 はメインテクスチャとその UV 変換を `_MainTex` から読む。Lyphos 1.10 のように
+同じマテリアルに非表示の `_BaseMap` が保存される場合もある。シェーダーがパッケージ外に
+あるときは保存済みの `_utsVersion` (2.x) で識別する。マテリアルバリアントでは省略された
+`_MainTex` を親から継承し、明示された null は未設定として扱う。
+
+Lyphos の頬が使う UTS2 の `NoOutline/ToonColor_DoubleShadeWithFeather_Transparent`
+は色描画パスでアルファブレンドと ZWrite Off を固定する。保存された Standard 用の
+`_Mode` や `_SrcBlend` はこのパスの描画設定に影響しない。シェーダー同梱時は
+色描画パスを読み、外部参照の場合は同シェーダーの GUID から Alpha と既定キュー 3000 を復元する。
 
 ### lilToon
 

@@ -12,6 +12,7 @@ internal static class FbxMorphSeamChecks
         string model = Path.Combine(directory, "import-settings.fbx");
         Write(model, 7400, false, true, false);
         var asset = new UnityAsset { DiskPath = model, LogicalPath = "Assets/import-settings.fbx", MetaPath = model + ".meta" };
+        CheckEmbeddedShapes(directory, model);
         foreach (bool enabled in new[] { true, false })
         {
             File.WriteAllText(asset.MetaPath, $"ModelImporter:\n  meshes:\n    importBlendShapes: {(enabled ? 1 : 0)}\n");
@@ -90,6 +91,24 @@ internal static class FbxMorphSeamChecks
         }
     }
 
+    private static void CheckEmbeddedShapes(string directory, string modern)
+    {
+        string legacy = Path.Combine(directory, "embedded.fbx");
+        Write(legacy, 7100, false, true, false, embedded: true);
+        byte[] original = File.ReadAllBytes(legacy);
+        using var context = new AssimpContext();
+        var expected = context.ImportFile(modern, PostProcessSteps.None).Meshes.Single();
+        var restored = context.ImportFile(UnityFbxMorphSeams.Prepare(legacy), PostProcessSteps.JoinIdenticalVertices).Meshes.Single();
+        Require(Errors(expected, restored) == 0, "embedded shapes preserve each corner's authored delta after welding");
+        var resolver = new UnityModelFileIdResolver(new UnityAsset { DiskPath = legacy, LogicalPath = "Assets/embedded.fbx" });
+        Require(resolver.BlendShapeNames["Body"].Single() == "Sweat" &&
+            resolver.BlendShapeDefaultWeightsByPath["RootNode/Body"].Single() == 25 &&
+            resolver.Hierarchy.Single(n => n.HasMesh).Skinned, "analysis sees the embedded shape, its default and morph-only renderer");
+        var disabled = context.ImportFile(UnityFbxMorphSeams.Prepare(legacy, false), PostProcessSteps.None).Meshes.Single();
+        Require(disabled.MeshAnimationAttachmentCount == 0 && original.SequenceEqual(File.ReadAllBytes(legacy)),
+            "disabling embedded shapes leaves the source FBX intact");
+    }
+
     private static void CheckDisabled(string source)
     {
         byte[] original = File.ReadAllBytes(source);
@@ -119,7 +138,7 @@ internal static class FbxMorphSeamChecks
 
     private sealed record Node(string Name, object[] Values, params Node[] Children);
     private static Node N(string name, object value) => new(name, new[] { value });
-    private static void Write(string path, int version, bool color, bool seam, bool duplicateTextures)
+    private static void Write(string path, int version, bool color, bool seam, bool duplicateTextures, bool embedded = false)
     {
         // Two overlapping triangles have identical base attributes. Only control point 0
         // moves; point 3 must stay still, despite occupying the same base position.
@@ -161,6 +180,13 @@ internal static class FbxMorphSeamChecks
             }).ToArray() };
         var connections = new Node("Connections", [], new[] { (20L, 0L), (10L, 20L), (30L, 10L), (40L, 30L), (50L, 40L) }
             .Select(p => new Node("C", new object[] { "OO", p.Item1, p.Item2 })).ToArray());
+        if (embedded)
+        {
+            geometry.Add(new Node("Shape", ["Sweat"], objects.Children[4].Children.Skip(1).ToArray()));
+            geometry.Add(new Node("Properties70", [], new Node("P", ["Sweat", "Number", "", "A", 25d])));
+            objects = new Node("Objects", [], objects.Children[0] with { Children = geometry.ToArray() }, objects.Children[1]);
+            connections = connections with { Children = connections.Children.Take(2).ToArray() };
+        }
         using var stream = File.Create(path);
         using var writer = new BinaryWriter(stream);
         bool wide = version >= 7500;

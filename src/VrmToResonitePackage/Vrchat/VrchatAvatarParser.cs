@@ -1889,6 +1889,12 @@ public static partial class VrchatAvatarParser
         // FBX GUID/fileID so the imported renderer name is preserved.
         string visemeMesh = ResolveReferenceGameObjectName(package, scene, d?["VisemeSkinnedMesh"], modelResolvers);
         avatar.VisemeRendererName = visemeMesh;
+        var visemeRef = d?["VisemeSkinnedMesh"];
+        var descriptorOwner = d?["m_GameObject"];
+        var graph = package.PrefabGraph;
+        avatar.VisemeRendererPath = graph?.RendererAnimationPath(
+            graph.Identity(descriptorOwner?.Guid ?? descriptorGuid, descriptorOwner?.FileID ?? 0),
+            graph.Identity(visemeRef?.Guid ?? descriptorGuid, visemeRef?.FileID ?? 0));
         var visemeTarget = ResolveDescriptorMeshTarget(package, descriptorGuid, d?["VisemeSkinnedMesh"], avatar.FbxGuid);
         // FaceEmo selects one face mesh: visemes, eyelids, then the direct Body child.
         var faceReference = ExpressionFaceReference(d);
