@@ -4,7 +4,6 @@ import argparse
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,11 +14,7 @@ import sys
 import uuid
 
 import avatar_registry
-
-
-def sha256(path):
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+from avatar_registry import sha256
 
 
 def write_json(path, data):
@@ -29,11 +24,11 @@ def write_json(path, data):
 def compare_unity(case, input_path, directory, build, repo, timeout):
     """Replay the registered capture, never an earlier parity result or a learned baseline."""
     if input_path.suffix.lower() == ".vrm":
-        return {"status": "not-applicable", "reason": "Unity prefab projection does not cover VRM inputs"}
+        return {"status": "not-applicable", "reason": "Unity prefab projection does not cover VRM inputs"}, None
     capture = case.get("unityResolvedCollection", {})
     coverage_name = capture.get("coveragePath") or case.get("prefabUnityCheck", {}).get("coveragePath")
     if not coverage_name:
-        return {"status": "not-captured", "reason": "No Unity coverage registered; capture Unity reference first"}
+        return {"status": "not-captured", "reason": "No Unity coverage registered; capture Unity reference first"}, None
     provenance = {}
     try:
         coverage_path = Path(coverage_name).resolve()
@@ -50,7 +45,7 @@ def compare_unity(case, input_path, directory, build, repo, timeout):
             raise ValueError("Unity capture input differs from registered conversion input")
         if reference["status"] != "captured":
             return dict(provenance, status="not-captured", captureStatus=reference["status"],
-                        reason=reference.get("reason", reference.get("error", "Unity reference not captured")))
+                        reason=reference.get("reason", reference.get("error", "Unity reference not captured"))), None
         # Verify the production parser selects this same prefab, including default selection.
         reference["conversionArguments"] = case.get("arguments", [])
         baseline = directory / "unity-baseline"
@@ -72,9 +67,10 @@ def compare_unity(case, input_path, directory, build, repo, timeout):
             raise ValueError("Unity replay case/converter identity mismatch")
         if run.returncode != 0 and result["status"] == "matched":
             raise ValueError("Unity replay failed despite a matched case")
-        return dict(result, **provenance, reportPath=str(report_path), exitCode=run.returncode)
+        verified = reference if result["status"] in ("matched", "different") else None
+        return dict(result, **provenance, reportPath=str(report_path), exitCode=run.returncode), verified
     except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
-        return dict(provenance, status="failed", error=str(error))
+        return dict(provenance, status="failed", error=str(error)), None
 
 
 def validation_status(conversion, comparison):
@@ -158,7 +154,7 @@ def main():
             input_path = avatar_registry.input_path(registry_path, case)
             item["inputPath"] = str(input_path)
             item["inputSha256"] = sha256(input_path)
-            item["unityComparison"] = compare_unity(case, input_path, directory, build, repo, args.timeout)
+            item["unityComparison"], reference = compare_unity(case, input_path, directory, build, repo, args.timeout)
             print(f"Unity {case_id}: {item['unityComparison']['status']}", flush=True)
             shutil.copytree(build, directory / "build")
             temp = directory / "temp"
@@ -170,6 +166,12 @@ def main():
             if len(outputs) != 1:
                 raise RuntimeError(f"Expected one package, found {len(outputs)}")
             invoke(["--inspect", str(outputs[0])], "inspect.log")
+            if sha256(input_path) != item["inputSha256"]:
+                raise ValueError("Conversion input changed during validation: " + str(input_path))
+            if reference is not None:
+                if reference["inputSha256"] != item["inputSha256"]:
+                    raise ValueError("Unity comparison and conversion used different input checksums")
+                avatar_registry.verify_project_files(reference)
             target = packages / f"{case_id}__{outputs[0].name}"
             source_hash = sha256(outputs[0])
             shutil.copy2(outputs[0], target)

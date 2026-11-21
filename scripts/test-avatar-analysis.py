@@ -11,6 +11,8 @@ import re
 import subprocess
 import sys
 
+import avatar_registry
+
 
 def sha256(path):
     with Path(path).open("rb") as stream:
@@ -122,7 +124,8 @@ def main():
             if case["unity"]["status"] == "verified":
                 unity_expected = expected_path(case["unity"])
                 actual_path = folder / "unity.actual.json"
-                command = ["dotnet", str(binaries["referenceDump"]), str(source), str(unity_expected), str(actual_path)]
+                command = ["dotnet", str(binaries["referenceDump"]), str(source), str(unity_expected), str(actual_path),
+                           "--verify-selection", avatar_registry.selected_avatar(case.get("arguments", [])) or ""]
                 code = run(command, folder / "unity-dump.log", folder)
                 result["commands"].append({"arguments": command, "exitCode": code})
                 if code != 0:

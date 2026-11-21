@@ -191,7 +191,23 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
         var wrapperPaths = (Dictionary<Slot, string>)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "CaptureImportedPaths", wrapperRoots);
         Call("VrmToResonitePackage.Converter", "CollapsePrimaryFbxWrapper", alignment, wrapperAvatar, wrapperRoots,
             wrapperSources, wrapperPaths);
-        Call("VrmToResonitePackage.Converter", "RemoveImportAlignment", alignment, root, wrapperSources, wrapperPaths);
+        Call("VrmToResonitePackage.Converter", "RemoveImportAlignment", alignment, root, wrapperRoots, wrapperSources, wrapperPaths);
+        Check(wrapperRoots["wrapped"] == root && wrapperRoots["other"] == otherWrapper,
+            "Hierarchy overrides resolve to the surviving model roots after removing the alignment");
+        Slot hiddenAlignment = root.AddSlot("Alignment"), hiddenModel = hiddenAlignment.AddSlot("Hidden FBX");
+        var hiddenRoots = new Dictionary<string, Slot> { ["hidden"] = hiddenModel };
+        var hiddenSources = new Dictionary<Slot, string> { [hiddenModel] = "hidden" };
+        var hiddenPaths = new Dictionary<Slot, string> { [hiddenModel] = "" };
+        var hiddenAvatar = new VrchatAvatar { FbxGuid = "hidden" };
+        hiddenAvatar.HierarchyActiveStates[new("hidden", "RootNode", "")] = false;
+        Call("VrmToResonitePackage.Converter", "CollapsePrimaryFbxWrapper", hiddenAlignment, hiddenAvatar,
+            hiddenRoots, hiddenSources, hiddenPaths);
+        Call("VrmToResonitePackage.Converter", "RemoveImportAlignment", hiddenAlignment, root,
+            hiddenRoots, hiddenSources, hiddenPaths);
+        Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ApplyHierarchyActiveStates", hiddenAvatar,
+            hiddenSources, hiddenPaths, null, hiddenRoots);
+        Check(!hiddenModel.IsDestroyed && !hiddenModel.ActiveSelf && hiddenModel.Parent == root && root.ActiveSelf,
+            "Disabling the primary model preserves its avatar parent and siblings");
         Check((Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
                 new VrchatBoneTarget("wrapped", "RootNode", ""), wrapperSources, wrapperPaths) == root,
             "Model-root physics references survive both wrapper and alignment collapse");
@@ -215,7 +231,7 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
             Call("VrmToResonitePackage.Converter", "CollapsePrimaryFbxWrapper", primaryAlignment,
                 new VrchatAvatar { FbxGuid = "primary-node" }, primaryRoots, primarySources, primaryPaths);
             CheckRoot();
-            Call("VrmToResonitePackage.Converter", "RemoveImportAlignment", primaryAlignment, root, primarySources, primaryPaths);
+            Call("VrmToResonitePackage.Converter", "RemoveImportAlignment", primaryAlignment, root, primaryRoots, primarySources, primaryPaths);
             CheckRoot();
             primaryNode.Destroy();
         }

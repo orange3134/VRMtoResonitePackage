@@ -85,7 +85,8 @@ def main(argv=None):
         require(source.suffix.lower() in ('.unitypackage', '.prefab'), 'unsupported input')
         arguments = case.get('conversionArguments')
         require(arguments == [] or (isinstance(arguments, list) and len(arguments) == 2 and
-                arguments[0] == '--avatar' and isinstance(arguments[1], str) and arguments[1]),
+                isinstance(arguments[0], str) and arguments[0].lower() == '--avatar' and
+                isinstance(arguments[1], str) and arguments[1]),
                 'coverage must record conversionArguments: [] or ["--avatar", "name"]')
         require(not (source.suffix.lower() == '.unitypackage' and case.get('dependencyFiles')),
                 'archive requires captured external dependencies; use a complete prefab input for conversion')

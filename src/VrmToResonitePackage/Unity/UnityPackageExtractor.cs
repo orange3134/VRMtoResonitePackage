@@ -25,6 +25,7 @@ public sealed class UnityAsset
     public string MetaPath { get; set; }
 
     public string Extension => Path.GetExtension(LogicalPath ?? "").ToLowerInvariant();
+    public bool IsRenderTexture => Extension == ".rendertexture";
 
     public bool HasContent => DiskPath != null && File.Exists(DiskPath);
 }

@@ -85,6 +85,8 @@ Prefab入力の依存記録はAssets/Packages内のserialized GUID参照とパ�
 ネイティブアセット内部の外部参照やPackageCache全体を網羅するプロジェクトバックアップではない。
 
 終了コード0は、選択した全ケースの解析結果と、`verified` のUnity参照が一致したことを示す。
+Unity参照の照合時には、登録引数で本番パーサが選ぶPrefabのGUIDも検証する。
+複数の `--avatar` は最後の指定を使う。指定を省略したケースでは既定選択を照合する。
 1は実行失敗・ハッシュ変更・差分、2はコマンド引数の誤りを示す。
 `report.json` の `unityMatched` を別に確認する。未対応・採取失敗・保留中のUnityケースは
 `not-verified` として理由を残し、Unityの成功件数には含めない。
@@ -133,6 +135,8 @@ python -B scripts/convert-all-local-avatars.py --jobs 3
    指すことも本番パーサで検証する。過去の一致記録を今回の結果として流用しない。
 3. `unityComparison` に一致・不一致・未採取・未対応・再採取必要・失敗とレポートを保存する。
    差分があっても残りの比較・変換・inspectは続行し、手動確認用のパッケージも集約する。
+   集約直前に入力のハッシュを再確認する。比較結果が一致または不一致の場合は、採取時の
+   入力・依存ファイル・プロジェクト設定とも照合し、変更を検出したケースは失敗として集約から除く。
 4. `conversionStatus` と `unityComparisonSummary` を分け、全体の `status` は不一致・失敗が
    あれば `failed`、未採取・未対応・再採取必要なら `incomplete` とする。アーカイブ外の依存を
    補って解析が一致した場合も、`unityComparison.status=matched` と `dependencyScope` を記録し、

@@ -30,6 +30,7 @@ class BatchFixture:
         self.input = self.repo / ".local" / "avatar with spaces 日本語.vrm"
         self.input.write_bytes(b"self-authored fixture")
         self.converted = []
+        self.after_inspect = None
 
     def invoke(self, command, *, cwd, **kwargs):
         if command[1] == "build":
@@ -39,6 +40,8 @@ class BatchFixture:
             (output / "UnityReferenceDump.dll").write_bytes(b"test reference producer")
         elif command[2] == "--inspect":
             self.assertEqual(b"package fixture", (Path(cwd) / command[3]).read_bytes())
+            if self.after_inspect:
+                self.after_inspect()
         else:
             # Resolve exactly as a child process would, against its supplied cwd.
             source = Path(cwd) / command[2]
@@ -70,6 +73,23 @@ class BatchFixture:
 
 
 class BatchInputTests(BatchFixture, unittest.TestCase):
+    def test_selection_follows_cli_option_consumption(self):
+        select = batch.avatar_registry.selected_avatar
+        self.assertIsNone(select(["--transparent-cutout", "--avatar"]))
+        self.assertEqual("LastName", select(["--AvAtAr", "First", "-O", "--avatar", "--AVATAR", "LastName"]))
+        self.assertEqual("--avatar", select(["--avatar", "--avatar"]))
+        self.assertIsNone(select(["--avatar", "First", "--Avatar", ""]))
+        with self.assertRaises(ValueError):
+            select(["--AVATAR"])
+
+    def test_changed_input_is_not_collected(self):
+        self.after_inspect = lambda: self.input.write_bytes(b"replaced input")
+        code, report = self.run_batch([str(self.input)])
+        self.assertEqual(1, code)
+        self.assertEqual("failed", report["cases"][0]["validationStatus"])
+        self.assertIn("input changed", report["cases"][0]["error"])
+        self.assertEqual([], list(Path(report["packageDirectory"]).iterdir()))
+
     def test_relative_input_uses_registry_directory_for_hash_and_conversion(self):
         (self.caller / self.input.name).write_bytes(b"different avatar at the same relative path")
         code, report = self.run_batch([self.input.name])
@@ -99,7 +119,8 @@ class UnityBatchTests(BatchFixture, unittest.TestCase):
         self.input = self.input.with_suffix(".unitypackage")
         self.input.write_bytes(b"invented package; no external assets")
         self.coverage = self.root / "coverage.json"
-        self.reference = {"id": "case-0", "inputPath": str(self.input), "status": "captured"}
+        self.reference = {"id": "case-0", "inputPath": str(self.input), "status": "captured",
+                          "inputSha256": batch.sha256(self.input)}
         self.parity = "matched"
         self.replay_metadata = {}
         self.replayed = []
@@ -150,6 +171,25 @@ class UnityBatchTests(BatchFixture, unittest.TestCase):
         self.assertEqual("passed", report["conversionStatus"])
         self.assertEqual({"matched": 1}, report["unityComparisonSummary"])
         self.assertEqual({"incomplete": 1}, report["validationSummary"])
+
+    def test_changed_dependency_after_match_is_not_collected(self):
+        dependency = self.root / "Model.fbx"
+        dependency.write_bytes(b"original model")
+        self.reference["dependencyFiles"] = {str(dependency): batch.sha256(dependency)}
+        self.after_inspect = lambda: dependency.write_bytes(b"edited model")
+        code, report = self.compare()
+        self.assertEqual(1, code)
+        self.assertIn("dependency changed", report["cases"][0]["error"])
+        self.assertEqual([], list(Path(report["packageDirectory"]).iterdir()))
+
+    def test_created_project_file_after_match_is_not_collected(self):
+        manifest = self.root / "packages-lock.json"
+        self.reference["projectFiles"] = {str(manifest): None}
+        self.after_inspect = lambda: manifest.write_text("{}")
+        code, report = self.compare()
+        self.assertEqual(1, code)
+        self.assertIn("configuration changed", report["cases"][0]["error"])
+        self.assertEqual([], list(Path(report["packageDirectory"]).iterdir()))
 
     def test_missing_capture_is_incomplete(self):
         self.reference.update(status="failed", reason="Missing script")

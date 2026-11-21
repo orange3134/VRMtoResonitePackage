@@ -260,7 +260,7 @@ internal static partial class VrchatMaterialBuilder
         material.MainTextureScale.Value = ToFloat2(info.MainTexScale);
         material.MainTextureOffset.Value = ToFloat2(info.MainTexOffset);
         var bakePlan = LilToonMainTextureBakePlan.Create(info, guid => package.ByGuid(guid)?.HasContent == true,
-            guid => package.ByGuid(guid)?.Extension == ".rendertexture");
+            guid => package.ByGuid(guid)?.IsRenderTexture == true);
         var (mainTex, bakedMain) = await BakeMainLayers(assetsSlot, package, info, bakePlan);
         if (mainTex != null)
         {
@@ -431,7 +431,8 @@ internal static partial class VrchatMaterialBuilder
                 material.EmissionMapScale.Value = float2.One;
                 material.EmissionMapOffset.Value = float2.Zero;
             }
-            else if (info.EmissionMainStrength > 0f && info.MainTexGuid != null)
+            else if (info.EmissionMainStrength > 0f && info.MainTexGuid != null &&
+                     package.ByGuid(info.MainTexGuid)?.IsRenderTexture != true)
             {
                 emission = await GetRgbTimesAlphaTexture(assetsSlot, package, info.MainTexGuid,
                     textureCache, "EmissionMainTexture");
@@ -693,6 +694,7 @@ internal static partial class VrchatMaterialBuilder
         }
         cache[cacheKey] = null;
         UnityAsset asset = package.ByGuid(guid);
+        if (asset?.IsRenderTexture == true) return null;
         if (asset?.HasContent != true)
         {
             UniLog.Warning($"テクスチャ(guid {guid}, {label})がパッケージに見つかりません。");
@@ -756,6 +758,7 @@ internal static partial class VrchatMaterialBuilder
         cache[cacheKey] = null;
 
         UnityAsset asset = package.ByGuid(guid);
+        if (asset?.IsRenderTexture == true) return null;
         if (asset?.HasContent != true)
         {
             UniLog.Warning($"{label} texture (guid {guid}) was not found in the Unity package.");
@@ -908,7 +911,7 @@ internal static partial class VrchatMaterialBuilder
 
     private static Bitmap2D DecodeBitmap(UnityAsset asset)
     {
-        if (asset?.HasContent != true)
+        if (asset?.HasContent != true || asset.IsRenderTexture)
         {
             return null;
         }
@@ -999,6 +1002,7 @@ internal static partial class VrchatMaterialBuilder
         cache[cacheKey] = null;
 
         UnityAsset asset = package.ByGuid(guid);
+        if (asset?.IsRenderTexture == true) return null;
         if (asset?.HasContent != true)
         {
             UniLog.Warning($"{label} texture (guid {guid}) was not found in the Unity package.");

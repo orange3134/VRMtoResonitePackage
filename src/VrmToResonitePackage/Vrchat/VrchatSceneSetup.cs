@@ -532,9 +532,11 @@ internal static class VrchatSceneSetup
         }
     }
 
-    public static void RemapImportedRoot(Slot source, Slot target, Dictionary<Slot, string> sources,
-        Dictionary<Slot, string> paths)
+    public static void RemapImportedRoot(Slot source, Slot target, Dictionary<string, Slot> modelRoots,
+        Dictionary<Slot, string> sources, Dictionary<Slot, string> paths)
     {
+        foreach (var guidKey in modelRoots.Where(entry => entry.Value == source).Select(entry => entry.Key).ToArray())
+            modelRoots[guidKey] = target;
         if (sources.Remove(source, out string guid)) sources[target] = guid;
         if (paths.Remove(source, out string path)) paths[target] = path;
     }

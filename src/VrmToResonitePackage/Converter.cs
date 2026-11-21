@@ -484,7 +484,7 @@ internal static class Converter
                 // already-Unity-axis offset before its wrapper is collapsed.
                 float3? viewPosition = Vrchat.VrchatSceneSetup.ResolveViewPosition(avatar, descriptorRoot);
                 CollapsePrimaryFbxWrapper(importRoot, avatar, importedFbxRoots, importedMeshSources, importedNodePaths);
-                RemoveImportAlignment(importRoot, root, importedMeshSources, importedNodePaths);
+                RemoveImportAlignment(importRoot, root, importedFbxRoots, importedMeshSources, importedNodePaths);
                 profile?.Mark("prefab-hierarchy");
 
                 Console.WriteLine("アセットの読み込みを待機中...");
@@ -701,9 +701,8 @@ internal static class Converter
                 sourceRootNode.LocalPosition = position;
                 sourceRootNode.LocalRotation = rotation;
                 sourceRootNode.LocalScale = scale;
-                Vrchat.VrchatSceneSetup.RemapImportedRoot(instanceRoot, sourceRootNode,
+                Vrchat.VrchatSceneSetup.RemapImportedRoot(instanceRoot, sourceRootNode, importedFbxRoots,
                     importedMeshSources, importedNodePaths);
-                importedFbxRoots[additional.Guid] = sourceRootNode;
                 CollapseAdditionalFbxWrapper(instanceRoot, sourceRootNode, parent, additional.InstanceName,
                     resetSinglePayloadTransform: true);
                 continue;
@@ -898,6 +897,12 @@ internal static class Converter
             return;
         }
 
+        // An inactive model instance needs its own slot. Moving its override to the
+        // avatar root would also deactivate sibling models and avatar components.
+        if (avatar.HierarchyActiveStates.Any(entry => !entry.Value && entry.Key.PrefabGuid == null &&
+                entry.Key.Path == "" && entry.Key.FbxGuid == avatar.FbxGuid))
+            return;
+
         foreach (Slot child in primaryRoot.Children.ToList())
         {
             float3 position = child.GlobalPosition;
@@ -909,9 +914,8 @@ internal static class Converter
             child.GlobalScale = scale;
         }
         UniLog.Log($"primary FBX wrapper collapsed: {primaryRoot.Name}");
-        Vrchat.VrchatSceneSetup.RemapImportedRoot(primaryRoot, importRoot, sources, paths);
+        Vrchat.VrchatSceneSetup.RemapImportedRoot(primaryRoot, importRoot, importedFbxRoots, sources, paths);
         primaryRoot.Destroy();
-        importedFbxRoots[avatar.FbxGuid] = importRoot;
     }
 
     private static void AlignVrchatImportUp(Slot importRoot, VrmModel model,
@@ -957,8 +961,8 @@ internal static class Converter
                    $"from ({from.X:F3}, {from.Y:F3}, {from.Z:F3}) to Y+");
     }
 
-    private static void RemoveImportAlignment(Slot importRoot, Slot root, Dictionary<Slot, string> sources,
-        Dictionary<Slot, string> paths)
+    private static void RemoveImportAlignment(Slot importRoot, Slot root, Dictionary<string, Slot> modelRoots,
+        Dictionary<Slot, string> sources, Dictionary<Slot, string> paths)
     {
         foreach (Slot child in importRoot.Children.ToList())
         {
@@ -970,7 +974,7 @@ internal static class Converter
             child.GlobalRotation = rotation;
             child.GlobalScale = scale;
         }
-        Vrchat.VrchatSceneSetup.RemapImportedRoot(importRoot, root, sources, paths);
+        Vrchat.VrchatSceneSetup.RemapImportedRoot(importRoot, root, modelRoots, sources, paths);
         importRoot.Destroy();
     }
 

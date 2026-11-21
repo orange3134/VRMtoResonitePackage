@@ -339,7 +339,8 @@ BlendShapeはボーンのあるメッシュに限定せず、morphだけを持�
   Merge Armature前にSlotを解決し、各mergeのskin用bone mappingでphysics参照も更新する。
   破棄後のsource identity検索や名前fallbackでは、移動先や別instanceを正しく区別できない。
   FBX rootを指す空pathも保持する。primary wrapperとimport alignmentを畳むときは、
-  捕捉済みのGUID/pathを順に生存する親Slotへ移し、physics解決時の参照切れを防ぐ。
+  捕捉済みのGUID/pathとモデルルート表を生存する親Slotへ移し、physics・並び順・有効状態の参照を維持する。
+  主FBXのルートに無効化指定がある場合は専用Slotを残し、アバター全体や兄弟モデルへの波及を防ぐ。
   additional wrapper を畳む場合も、生存する source root へ GUID/空path と import root 表を移す。
   When a captured `RootNode` survives beneath the primary wrapper, root references
   prefer that node over the wrapper's empty-path identity, including after wrapper
@@ -511,7 +512,7 @@ BlendShapeはボーンのあるメッシュに限定せず、morphだけを持�
   全Proxyの接続先を移動前に確定する。明示参照やpathの解決失敗時は同名の別objectへfallbackしない。
   rendererやPhysBoneのない所有objectも配置を生成し、物理と共有する同一配置は重複記録しない。
   boneReferenceの番号は[Unity HumanBodyBones](https://github.com/Unity-Technologies/UnityCsReference/blob/master/Modules/Animation/ScriptBindings/Avatar.bindings.cs)に従い、親指は既存のVRM 1命名へ正規化する。
-- primaryを含むimport wrapperは最終階層に残さない。
+- primaryを含むimport wrapperは、モデル単位の無効化を保持する場合を除いて最終階層から取り除く。
 
 ## FBXの単位と軸
 
@@ -890,7 +891,8 @@ IKがHipsの位置を駆動する場合があるため、追従テストは一�
 Ekuの `Takt_Screen` とMilfyの `SmartPhone_Screen` の第2レイヤーは、それぞれの `ScreenRT.renderTexture` を参照する。
 RenderTextureはカメラ等の実行時出力であり、通常画像のデコーダーへ渡さない。
 ベイク計画で明示的に警告し、該当する追加レイヤー・マスクの処理だけを除外する。
-メイン画像自体が動的なら全ベイクを除外する。他の静的レイヤーは従来どおり処理できる。
+メイン画像自体が動的ならメイン画像のベイクを省略し、材質の色とUV変換を保持してメインテクスチャを未割当にする。
+発光でも動的画像を入力から外し、利用可能な静的な発光マップやマスクを使う。
 参照先が存在しない場合はUnityのnull/白フォールバックを維持する。動的画面の再現を実装したものではない。
 画像デコードがnullを返した場合も、後続のNullReferenceExceptionではなく対象パスとGUIDを報告する。
 

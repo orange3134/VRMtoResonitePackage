@@ -7,7 +7,6 @@ Never updates expectations. Exit 0 means all selected captured cases matched;
 import argparse
 import collections
 import datetime
-import hashlib
 import importlib.util
 import json
 import os
@@ -17,36 +16,13 @@ import subprocess
 import sys
 
 import avatar_registry
-
-
-def sha256(path):
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+from avatar_registry import RecaptureRequired, sha256, verify_project_files
 
 
 def write_json(path, value):
     with path.open("x", encoding="utf-8") as stream:
         json.dump(value, stream, ensure_ascii=False, indent=2)
         stream.write("\n")
-
-
-class RecaptureRequired(ValueError):
-    pass
-
-
-def verify_project_files(case):
-    prefab = Path(case["inputPath"])
-    files = {Path(name): digest for name, digest in case.get("dependencyFiles", {}).items()}
-    if prefab.suffix.lower() == ".prefab":
-        if not files.get(prefab) or not files.get(Path(str(prefab) + ".meta")):
-            raise RecaptureRequired("Recapture prefab with dependency checksums")
-    for path, digest in files.items():
-        if (sha256(path) if path.is_file() else "") != digest:
-            raise RecaptureRequired("Unity dependency changed; recapture prefab: " + str(path))
-    for name, digest in case.get("projectFiles", {}).items():
-        path = Path(name)
-        if (sha256(path) if path.exists() else None) != digest:
-            raise RecaptureRequired("Prefab metadata or project configuration changed; recapture: " + name)
 
 
 def load_comparator():

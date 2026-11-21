@@ -175,7 +175,7 @@ internal static class MixedScaleSkinChecks
                 BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, args);
             Call("ApplyVrchatPrefabHierarchy", alignment, avatar, roots, sources, paths, null, null, null);
             Call("CollapsePrimaryFbxWrapper", alignment, avatar, roots, sources, paths);
-            Call("RemoveImportAlignment", alignment, root, sources, paths);
+            Call("RemoveImportAlignment", alignment, root, roots, sources, paths);
             // Oracle: authored node scale times prefab-root scale times FBX units.
             var expected = new float3(1, helpers ? 18 : 3, 1.05f) * new float3(2, 3, 4) * units;
             Check(MathX.Distance(armature.GlobalScale, expected) < .0001f &&
