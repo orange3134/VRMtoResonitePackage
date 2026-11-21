@@ -27,6 +27,41 @@ SHA-256 は `30a0bc21f298c2e75427245468405849b6c7ea67eb9ced14ecbc5dc1ef3eabb3`�
 `Resources/ResoPon.png`、`.ico`、`logo.svg`、`loading.svg`、`arrow.svg` は作者が自作と確認済み。
 Modular Avatar の `Editor/images` はMITの対象外だが、本アプリには含めていない。
 
+## Unity参照データの採取ツール
+
+[vrctomのUnity用エクスポーター](https://github.com/halby24/vrctom/tree/983995e2372c30b07828b88644b971912ffb68a1/tools/unity)
+（commit `983995e2372c30b07828b88644b971912ffb68a1`、[MIT](https://github.com/halby24/vrctom/blob/983995e2372c30b07828b88644b971912ffb68a1/LICENSE)）は
+Unityの解決値を比較用JSONに採取する設計の参照元。ResoPon側の採取・比較は独立実装で、
+vrctomのコード、依存物、アバター素材、取得済みの期待値は移植・同梱していない。
+開発用エクスポーターはUnity Editor APIを利用し、VRChat SDKはローカル検証用プロジェクト側で利用する。
+いずれもResoPonの配布EXEには同梱しない。検証手順は[Unity参照データとの比較](unity-reference-tests.md)。
+
+実アバターを照合する際の素材・採取JSON・利用条件の確認記録は `.local/` または
+`.tmp_verify/` に保持する。検証専用にPython公式のembeddable packageを展開する場合も、
+同梱の `LICENSE.txt`（PSF Licenseと内包コードの通知）を残し、版と入手元をローカルに記録する。
+これらを製品・リポジトリへ取り込まない検証では、配布用の第三者通知の追加対象にはしない。
+規約PDFのローカル確認に使うpypdf等の補助ツールも同様に、取得版・出典・ハッシュと
+同梱ライセンスをローカルに保持する。再検査スクリプトはPython標準ライブラリだけを使い、
+規約確認用ライブラリを製品依存やテストの必須依存へ追加しない。
+
+解決済みv2の採取はUnity 2022.3の
+[InstantiatePrefab](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/PrefabUtility.InstantiatePrefab.html) と
+[GetCorrespondingObjectFromOriginalSource](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/PrefabUtility.GetCorrespondingObjectFromOriginalSource.html)
+等の公開API仕様を参照した独立実装。ドキュメントのサンプルコードやUnity実装を転載していない。
+Variantのスモークテスト用メッシュ・材質・Prefabもテスト内で自作し、第三者のアバターは同梱しない。
+ResoPon側のv2ダンプ・再検証runnerも独立実装で、本リポジトリのPrefab graphと既存の
+FBXメタデータ解析APIを呼ぶ。外部の実装コードや採取したアバターデータをソースへ取り込まない。
+既存参照のAssimpNet等は引き続き利用者のResoniteからロードし、新しい配布依存は追加しない。
+この変更は開発用ツール・資料のみで配布物の依存は増えず、追加の第三者通知対象はない。
+実アバターのローカル採取では、素材ごとの版・作者・利用条件と導入範囲を `.local/` に記録する。
+
+同梱規約の探索はunitypackage直下だけでなく、その商品のダウンロードディレクトリ内の
+Readme・Licenseフォルダーと `.url` も対象にする。リンク先は作者の公式販売ページと照合する。
+PDFの文字抽出結果が空でも規約がないとは判断せず、表示して確認する。ダウンロードが無効で
+公開プレビューが提供されている資料は、プレビューを読む。商品ページが指定する規約とPDFの
+表題等に不整合がある場合は、確認できた根拠・利用範囲・残る不整合を記録し、解消済みと扱わない。
+これらの資料・確認記録もローカルに保持し、製品へ同梱しない。
+
 ## 配布経路と検証
 
 - AssetsTools.NETをNuGet PackageReferenceとして同梱する。単一ファイルpublishではEXEに含まれる。

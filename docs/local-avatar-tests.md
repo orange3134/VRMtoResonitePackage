@@ -1,5 +1,12 @@
 # ローカルアバター回帰テスト
 
+Unityで継承を解決して採取したv2基準値は、[Unity参照データの直接比較](unity-reference-tests.md#resopon解析との直接比較v2)
+で再検証する。`.local/avatar-tests.json` の `unityResolvedParity` に比較レポートへのパス、状態、
+入力・期待値・実値のハッシュを追記できる。採取状態の `unityResolvedCollection` や既存の
+`analysisCollection` は保持し、比較成功と採取成功を区別する。
+
+Prefabの解析結果をUnity Editorの値と比較する場合は、[Unity参照データとの比較](unity-reference-tests.md)を参照。
+
 ユーザーからアバターのパスを渡されたら、調査の最初に `.local/avatar-tests.json` に追記する。
 既存ケースは残し、同じ入力は更新する。`.local/` は Git の除外対象で、環境固有の情報を保存する。
 アバター本体はコピーせず、保存済みの Unity プロジェクトまたは VRM / unitypackage を参照する。
@@ -49,6 +56,42 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-local-avatar.ps
 コミット前に `git check-ignore .local/avatar-tests.json` と `git diff --cached` で、
 パス・ログ・アバター本体がステージされていないことを確認する。
 
+### 収集した解析データを回帰テストで再利用する
+
+継続利用するデータセットは `.local/avatar-analysis/<採取ID>/` に保存する。
+一時ビルド・展開したアバターは引き続き `.tmp_verify/` に置く。
+`.local/avatar-analysis/latest.json` の `path` が直近の `index.json` を指す。
+登録一覧のコピー、入力SHA-256、採取したGit HEAD、実行DLLのSHA-256、元ログ、
+比較用の `parser.expected.json`、取得できたケースの `unity.expected.json` を保持する。
+各ケースの `analysisCollection` からも採取先を参照できる。
+
+Python 3.11以降と現在の開発ビルドで、Unityを起動せず再検査する例:
+
+```powershell
+dotnet build tests/UnityReferenceDump -c Release -o .tmp_verify/avatar-analysis-build
+$index = (Get-Content -Raw .local/avatar-analysis/latest.json | ConvertFrom-Json).path
+python -B scripts/test-avatar-analysis.py $index `
+  --converter .tmp_verify/avatar-analysis-build/ResoPon.dll `
+  --reference-dump .tmp_verify/avatar-analysis-build/UnityReferenceDump.dll `
+  --output .tmp_verify/avatar-analysis-replay
+```
+
+出力先は毎回新しいディレクトリを指定する。`--case <ケースID>` は複数指定できる。
+入力・記録済み依存ファイル・期待値のハッシュが変わった場合は失敗し、期待値を自動更新しない。
+Prefab入力の依存記録はAssets/Packages内のserialized GUID参照とパッケージmanifestであり、
+ネイティブアセット内部の外部参照やPackageCache全体を網羅するプロジェクトバックアップではない。
+
+終了コード0は、選択した全ケースの解析結果と、`verified` のUnity参照が一致したことを示す。
+1は実行失敗・ハッシュ変更・差分、2はコマンド引数の誤りを示す。
+`report.json` の `unityMatched` を別に確認する。未対応・採取失敗・保留中のUnityケースは
+`not-verified` として理由を残し、Unityの成功件数には含めない。
+
+解析スナップショットは、VRChatでは選択アバターの診断セクション、VRMではメッシュ診断を
+行単位で保持する。起動時のバージョン・環境表示・取り込み途中の診断は元ログ側に保存する。
+これは現在の解析動作を固定する比較基準であり、正しさを独立に保証する期待値ではない。
+Unity参照との一致も[採取対象のフィールド](unity-reference-tests.md#比較する範囲v1)に限られ、
+実変換・inspect・クライアントでの外観と動作は別途検証する。
+
 `-SkipBuild` で同じDLLを使う複数の変換を同秒に起動すると、DLL横の `Logs/convert_yyyyMMdd_HHmmss.log`
 が衝突する。並行検証には既定の実行別ビルドを使う。ただし `-o` で出力先を分けても
 `obj/Release` は共有されるため、ビルド工程は順番に実行して中間DLLのロック競合を避ける。
@@ -94,3 +137,12 @@ Windows の GUI EXE を PowerShell から検証するときは `Start-Process -W
 DLL を併置して直接実行・参照する環境では、同じ publish ビルドの
 `bin/Release/win-x64/ResoPon.dll` も揃え、古い併置 DLL を検証対象にしない。
 EXE の実変換ログのバージョンと、参照する DLL のバージョン・SHA-256を確認する。
+
+### Unityで継承を解決した期待値の保存
+
+Variantを含むPrefabの解決済み状態は[Unity参照データのv2採取](unity-reference-tests.md)を使い、
+`.local/unity-resolved/` に保存する。ケースの `unityResolvedCollection` には採取先・状態・失敗理由を記録する。
+`captured` はUnityの期待値を収集できた状態であり、ResoPonとの照合成功ではない。
+`test-avatar-analysis.py` と `UnityReferenceDump` は従来のv1照合を継続し、v2は入力に使わない。
+v2の再現性・構造検査には `compare-unity-reference.py expected.json repeat.json` を使う。
+元入力・依存物・Unity/SDK版・採取コードのハッシュも保存し、期待値は自動上書きしない。
