@@ -132,6 +132,16 @@ NDMF Manual Bake等で保存した`.asset`は、YAMLだけでなくUnity Seriali
 
 ## FBX表情の頂点溶接前処理
 
+古いバイナリFBXでは、各シェイプが `Geometry`（Mesh）の直下に、名前付きの `Shape` として
+格納される。Assimpはこの形式のメッシュ本体とスキンを読めてもシェイプを取り込まない。
+解析と実変換の両方で、一時FBXに各メッシュの `BlendShape` とシェイプ順の
+`BlendShapeChannel`・`Geometry`（Shape）を作って接続する。疎な頂点番号、位置・法線の差分は
+元データを引き継ぎ、メッシュの同名プロパティから既定ウェイトを読む。その後で頂点溶接を保護する。
+
+Rengyo v1.9 同梱の `rengyo_v1.3` はこの形式のFBX 7.1を使う。Unity Editorでの基準値は
+`Body` が135個、素体の `sotal` が4個で、素体の初期ウェイトは順に 0、100、0、100。
+保存後の名前・順序・初期値に加え、Descriptorの15音素と、FXの顔カーブが実際のRendererを駆動することを確認する。
+
 `UnityFbxMorphSeams` のID索引は、Shape → BlendShapeChannel → BlendShape → Meshを辿るための
 `Geometry` と `Deformer` に限定する。NagmaのFBXには同じIDの`Texture`が複数記録されており、
 全Objectsを一意なIDで辞書化するとインポート前に失敗する。テクスチャを含む無関係なノードは

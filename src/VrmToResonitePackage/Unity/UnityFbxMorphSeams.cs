@@ -8,7 +8,7 @@ namespace VrmToResonitePackage.Unity;
 /// <summary>Applies the model's morph import policy before Assimp welds vertices and chooses renderer types.</summary>
 internal static class UnityFbxMorphSeams
 {
-    public static string Prepare(string path, bool importBlendShapes = true)
+    public static string Prepare(string path, bool importBlendShapes = true, string outputPath = null)
     {
         byte[] bytes = File.ReadAllBytes(path);
         if (bytes.Length < 27 || !bytes.AsSpan().StartsWith("Kaydara FBX Binary"u8))
@@ -21,12 +21,16 @@ internal static class UnityFbxMorphSeams
         {
             var deformers = objects.Where(n => n.Name == "Deformer" && n.Values is [int or long, _, "BlendShape", ..])
                 .Select(n => Convert.ToInt64(n.Values[0])).ToHashSet();
-            if (connections.RemoveAll(n => n.Name == "C" && n.Values is ["OO", int or long, ..] &&
-                    deformers.Contains(Convert.ToInt64(n.Values[1]))) == 0) return path;
+            int removed = connections.RemoveAll(n => n.Name == "C" && n.Values is ["OO", int or long, ..] &&
+                    deformers.Contains(Convert.ToInt64(n.Values[1])));
+            foreach (var mesh in objects.Where(n => IsGeometry(n, "Mesh")))
+                removed += mesh.Children.RemoveAll(n => n.Name == "Shape");
+            if (removed == 0) return path;
             string filtered = Path.ChangeExtension(path, ".no-morphs.fbx");
             document.Save(filtered);
             return filtered;
         }
+        int embeddedShapes = ExpandEmbeddedShapes(objects, connections);
         // Only Geometry and Deformer objects participate in Shape -> Channel ->
         // BlendShape -> Mesh traversal. Some exporters repeat unrelated Texture IDs
         // (e.g. Nagma); leave those records intact without indexing them here.
@@ -83,14 +87,66 @@ internal static class UnityFbxMorphSeams
             layer.Children.Add(Node.New("LayerElement", null, Node.New("Type", "LayerElementColor"), Node.New("TypedIndex", channel)));
             protectedMeshes++;
         }
-        if (protectedMeshes == 0) return path;
-        string output = Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileNameWithoutExtension(path) + ".morph-seams.fbx");
+        if (protectedMeshes == 0 && embeddedShapes == 0) return path;
+        string output = outputPath ?? Path.ChangeExtension(path, ".morph-seams.fbx");
         document.Save(output);
-        UniLog.Log($"Protected morph seams in {protectedMeshes} FBX mesh(es): {Path.GetFileName(path)}.");
+        if (protectedMeshes > 0) UniLog.Log($"Protected morph seams in {protectedMeshes} FBX mesh(es): {Path.GetFileName(path)}.");
+        if (embeddedShapes > 0) UniLog.Log($"Expanded {embeddedShapes} embedded FBX shapes: {Path.GetFileName(path)}.");
         return output;
     }
 
     private static bool IsGeometry(Node n, string kind) => n.Name == "Geometry" && n.Values.Length >= 3 && n.Values[2] as string == kind;
+
+    // Older FBX files store the named Shape directly under its mesh. Assimp expects
+    // separate geometry and deformer objects. Keep the sparse control-point arrays
+    // verbatim and create the links in the mesh's original shape index order.
+    private static int ExpandEmbeddedShapes(List<Node> objects, List<Node> connections)
+    {
+        var meshes = objects.Where(n => IsGeometry(n, "Mesh") && n.Children.Any(c => c.Name == "Shape")).ToArray();
+        if (meshes.Length == 0) return 0;
+        var used = objects.Select(n => n.Values.FirstOrDefault()).OfType<long>().ToHashSet();
+        foreach (var c in connections.Where(n => n.Name == "C"))
+            used.UnionWith(c.Values.Skip(1).Take(2).OfType<long>());
+        long next = 0;
+        long NewId()
+        {
+            do { next++; } while (used.Contains(next));
+            return next;
+        }
+        void Link(long from, long to) => connections.Add(Node.WithProperties("C", "OO", from, to));
+
+        int count = 0;
+        foreach (var mesh in meshes)
+        {
+            var properties = mesh.Children.FirstOrDefault(n => n.Name == "Properties70");
+            long deformer = NewId();
+            var blendShape = Node.WithProperties("Deformer", deformer, "\0\u0001Deformer", "BlendShape");
+            blendShape.Children.Add(Node.New("Version", 100));
+            objects.Add(blendShape);
+            Link(deformer, (long)mesh.Values[0]);
+            foreach (var embedded in mesh.Children.Where(n => n.Name == "Shape").ToArray())
+            {
+                if (embedded.Values is not [string name])
+                    throw new InvalidDataException("Expected a named embedded FBX shape.");
+                long channelId = NewId(), shapeId = NewId();
+                var channel = Node.WithProperties("Deformer", channelId, name + "\0\u0001Deformer", "BlendShapeChannel");
+                channel.Children.Add(Node.New("Version", 100));
+                var weight = properties?.Children.FirstOrDefault(p => p.Name == "P" && p.Values.FirstOrDefault() as string == name);
+                channel.Children.Add(Node.New("DeformPercent", Convert.ToDouble(weight?.Values.LastOrDefault(), CultureInfo.InvariantCulture)));
+                channel.Children.Add(Node.New("FullWeights", new double[] { 100 }));
+                var shape = Node.WithProperties("Geometry", shapeId, name + "\0\u0001Geometry", "Shape");
+                shape.Children.Add(Node.New("Version", 100));
+                shape.Children.AddRange(embedded.Children);
+                objects.Add(channel);
+                objects.Add(shape);
+                Link(channelId, deformer);
+                Link(shapeId, channelId);
+                mesh.Children.Remove(embedded);
+                count++;
+            }
+        }
+        return count;
+    }
 
     private static string DisconnectAsciiBlendShapes(string path, byte[] bytes)
     {
@@ -196,19 +252,29 @@ internal static class UnityFbxMorphSeams
         public List<Node> Children = new();
         public static Node New(string name, object value, params Node[] children)
         {
+            var node = WithProperties(name, value == null ? [] : [value]);
+            node.Children.AddRange(children);
+            return node;
+        }
+
+        public static Node WithProperties(string name, params object[] values)
+        {
             using var stream = new MemoryStream(); using var writer = new BinaryWriter(stream, Encoding.UTF8, true);
-            switch (value)
+            foreach (object value in values)
             {
-                case int i: writer.Write((byte)'I'); writer.Write(i); break;
-                case string s: writer.Write((byte)'S'); byte[] utf8 = Encoding.UTF8.GetBytes(s); writer.Write(utf8.Length); writer.Write(utf8); break;
-                case double[] a:
-                    writer.Write((byte)'d'); writer.Write(a.Length); writer.Write(0); writer.Write(a.Length * 8);
-                    foreach (double d in a) writer.Write(d); break;
-                case null: break;
-                default: throw new InvalidDataException("Unsupported generated FBX property.");
+                switch (value)
+                {
+                    case int i: writer.Write((byte)'I'); writer.Write(i); break;
+                    case long l: writer.Write((byte)'L'); writer.Write(l); break;
+                    case double number: writer.Write((byte)'D'); writer.Write(number); break;
+                    case string s: writer.Write((byte)'S'); byte[] utf8 = Encoding.UTF8.GetBytes(s); writer.Write(utf8.Length); writer.Write(utf8); break;
+                    case double[] a:
+                        writer.Write((byte)'d'); writer.Write(a.Length); writer.Write(0); writer.Write(a.Length * 8);
+                        foreach (double d in a) writer.Write(d); break;
+                    default: throw new InvalidDataException("Unsupported generated FBX property.");
+                }
             }
-            return new() { Name = name, Properties = stream.ToArray(), PropertyCount = value == null ? 0 : 1,
-                Values = value == null ? [] : [value], Children = children.ToList(), Terminator = children.Length > 0 };
+            return new() { Name = name, Properties = stream.ToArray(), PropertyCount = values.Length, Values = values };
         }
     }
 
@@ -247,7 +313,7 @@ internal static class UnityFbxMorphSeams
             byte[] raw = reader.ReadBytes((int)length);
             // Disconnecting morphs needs only object IDs and links. Preserve the
             // original property bytes without inflating vertex and shape arrays.
-            var values = _readMeshData || name is "Deformer" or "C" ? new object[(int)count] : [];
+            var values = _readMeshData || name is "Geometry" or "Deformer" or "C" ? new object[(int)count] : [];
             using (var props = new BinaryReader(new MemoryStream(raw), Encoding.UTF8))
                 for (int i = 0; i < values.Length; i++) values[i] = ReadProperty(props);
             var node = new Node { Name = name, Properties = raw, PropertyCount = (int)count, Values = values };
