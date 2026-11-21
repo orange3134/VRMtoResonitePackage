@@ -103,7 +103,7 @@ internal sealed class UnityPrefabGraph
                     if (identity.IsNull) continue;
                     _modifications.Add(new(guid, identity, modification));
                     if (documents.TryGetValue(identity.Occurrence, out var owned) && owned.TryGetValue(identity.FileId, out var document))
-                        UnityPropertyOverrides.Apply(document.Root, modification, guid);
+                        UnityPropertyOverrides.Apply(document, modification, guid);
                 }
                 foreach (var removed in modifications?["m_RemovedComponents"]?.Seq ?? new())
                 {

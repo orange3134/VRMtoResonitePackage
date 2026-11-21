@@ -60,7 +60,8 @@ SkinnedMeshRenderer:
             Modification(6, "arbitrary.emptyPacked.Array.size", "2") +
             Modification(6, "arbitrary.emptyPacked.Array.data[0]", "-1") +
             Modification(7, "m_Bones.Array.data[0]", "") + Modification(7, "m_Materials.Array.size", "0") +
-            Modification(7, "m_BlendShapeWeights.Array.data[0]", "0") + Modification(4, "m_LocalPosition.x", "1.5");
+            Modification(7, "m_BlendShapeWeights.Array.data[0]", "0") +
+            Modification(7, "m_BlendShapeWeights.Array.data[4]", "37.5") + Modification(4, "m_LocalPosition.x", "1.5");
         asset("Assets/GraphVariant.prefab", variantGuid, variant);
         string outerText = $"--- !u!1001 &200\nPrefabInstance:\n  m_SourcePrefab: {{guid: {variantGuid}}}\n  m_Modification:\n    m_Modifications:\n" +
             Modification(5, "pull", "0.8") + Modification(6, "arbitrary.references.Array.data[1]", "", "{fileID: 901}") +
@@ -99,8 +100,8 @@ SkinnedMeshRenderer:
                 "Hierarchy extraction follows an overridden parent reference into the declaring outer scene");
             var renderer = leaves[0].Scene.Doc(7).Root;
             Require(renderer["m_Bones"].Seq[0].FileID == 0 && renderer["m_Materials"].Seq.Count == 0 &&
-                renderer["m_BlendShapeWeights"].Seq.Select(v => v.AsInt()).SequenceEqual(new[] { 0, 10 }),
-                "Null references, array shrinking and explicit zero overrides survive composition");
+                renderer["m_BlendShapeWeights"].Seq.Select(v => v.AsString()).SequenceEqual(new[] { "0", "10", "0", "0", "37.5" }),
+                "Sparse weight overrides preserve existing weights and initialize intervening channels to numeric zero");
             var position = leaves[0].Scene.Doc(4).Root["m_LocalPosition"];
             Require(position["x"].AsFloat() == 1.5f && position["y"].AsFloat() == 3 && position["z"].AsFloat() == 4,
                 "Transform property overrides preserve the other axes");

@@ -21,12 +21,12 @@ internal static class UnityPropertyOverrides
         Stripped = document.Stripped, Root = Clone(document.Root),
     };
 
-    public static void Apply(YamlNode root, YamlNode modification, string declaringGuid)
+    public static void Apply(YamlDocument document, YamlNode modification, string declaringGuid)
     {
         string path = modification["propertyPath"]?.AsString();
         if (string.IsNullOrEmpty(path)) throw new InvalidDataException("Empty prefab property path.");
         string[] parts = path.Split('.');
-        Set(root, 0);
+        Set(document.Root, 0);
 
         void Set(YamlNode parent, int offset)
         {
@@ -58,7 +58,10 @@ internal static class UnityPropertyOverrides
                 else throw new InvalidDataException($"Invalid array property: {path}");
                 if (size < 0 || size > MaxArrayLength) throw new InvalidDataException($"Invalid prefab array size: {path}");
                 YamlNode template = items.FirstOrDefault();
-                while (items.Count < size) items.Add(Default(template, packed));
+                // Mesh replacement and sparse prefab overrides can grow a renderer's
+                // weight array beyond the channels present on its original mesh.
+                bool zeroFill = packed || (document.ClassId == 137 && offset == 0 && key == "m_BlendShapeWeights");
+                while (items.Count < size) items.Add(Default(template, zeroFill));
                 if (resize)
                 {
                     if (items.Count > size) items.RemoveRange(size, items.Count - size);
@@ -101,8 +104,8 @@ internal static class UnityPropertyOverrides
             { ScalarValue = BitConverter.ToInt32(data, i * 4).ToString(CultureInfo.InvariantCulture) }).ToList();
     }
 
-    private static YamlNode Default(YamlNode template, bool packed)
-        => packed ? new() { ScalarValue = "0" } : template?.FileID != null
+    private static YamlNode Default(YamlNode template, bool zeroFill)
+        => zeroFill ? new() { ScalarValue = "0" } : template?.FileID != null
             ? new() { Map = new() { ["fileID"] = new() { ScalarValue = "0" } } }
             : template?.Map != null ? new() { Map = new() } : template?.Seq != null
                 ? new() { Seq = new() } : new();

@@ -653,6 +653,9 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
 - Scope FBX default weights by model occurrence and renderer name, and fill missing
   weights on every corresponding renderer record. Explicit zero overrides remain authoritative.
 - 明示的なprefab `m_BlendShapeWeights` は0を含めて既定値より優先する。
+  SkinnedMeshRenderer の配列を拡張する上書きでは、既存の値を保持し、追加された未指定要素を
+  数値の0で初期化する。MANUKA DR_05 Variant 1では、未指定要素を空ノードにすると
+  Unity参照との比較が途中で失敗する。元PrefabをUnityで採取し、修正後の値と照合した。
 - 初期weightはblendshape修復直後と最終scene setupの両方で適用する。
   同じFBX内に同名rendererが複数ある場合、複製元のblendshape名・順序とdescriptorの瞬きindexは
   rendererの完全なFBX pathで解決する。pathが判明している参照を名前だけの表へfallbackしない。

@@ -67,7 +67,7 @@ internal sealed class ResolvedSnapshot
                 if (property is "m_Name" or "m_IsActive" or "m_LocalPosition" or "m_LocalRotation" or "m_LocalScale" or
                     "m_Children" or "m_Father" or "m_RootOrder" or "m_Materials" or "m_Enabled" or "m_Mesh" or
                     "m_Bones" or "m_RootBone" or "m_BlendShapeWeights")
-                    UnityPropertyOverrides.Apply(document.Root, modification.Value, modification.DeclaringGuid);
+                    UnityPropertyOverrides.Apply(document, modification.Value, modification.DeclaringGuid);
             }
             foreach (var document in model.Documents.Values)
                 if (!view.PrefabGraph.IsRemoved(occurrence, document.FileId) &&
