@@ -689,6 +689,10 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
   rendererの完全なFBX pathで解決する。pathが判明している参照を名前だけの表へfallbackしない。
 
 VRChatの15 visemeはResonite enumへ対応させ、Unityの0〜100をResoniteの0〜1へ変換する。
+Lyphos 1.10 の Ex・Fa は無音と母音 aa に同じ `Body/lipsync.a` を割り当て、初期値は 0。
+無音の強さが 1 のときに開口を防ぐため、VRChat の無音と母音が同じ Renderer の同じ
+weight に解決された場合、発話音素だけをその weight に接続する。専用の無音シェイプは
+通常どおり駆動する。保存パッケージの検証では、発話後に無音だけを 1 に戻し、母音が閉じることも確認する。
 customEyeLookSettingsの左右の目はprefab配置・Transform fileIDまたはFBXの完全なpathを保持する。
 通常のhumanoid骨も主FBXの配置IDとnode pathを保持し、向き補正・リグ設定で同じ参照解決を使う。
 ローカルの目Transformも配置を生成し、Merge Armature後の参照表をAvatarSetupのリグ割り当てまで渡す。

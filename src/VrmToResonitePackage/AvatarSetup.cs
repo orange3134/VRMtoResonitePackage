@@ -811,8 +811,13 @@ internal static class AvatarSetup
             }
             foreach (var target in skin.GroupBy(b => b.Weight))
             {
-                var phonemes = target.Select(b => b.Viseme).Distinct().ToArray();
-                if (phonemes.Length == 1)
+                var phonemes = target.Select(b => b.Viseme).Distinct().ToList();
+                // Some VRChat descriptors reuse a speech vowel for the silence slot.
+                // Driving that vowel while idle would hold the mouth open.
+                if (vrm.Source == ModelSource.VrchatFbx &&
+                    phonemes.Any(p => p is Viseme.aa or Viseme.E or Viseme.ih or Viseme.oh or Viseme.ou))
+                    phonemes.Remove(Viseme.Silence);
+                if (phonemes.Count == 1)
                 {
                     driver[phonemes[0]].ForceLink(target.Key);
                     continue;
