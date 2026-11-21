@@ -33,9 +33,10 @@ internal sealed class ResolvedSnapshot
     }
 
     private ResolvedSnapshot(UnityPackage view, string guid) { this.view = view; this.guid = guid; }
-    public static object Capture(UnityPackage view, string guid) => new ResolvedSnapshot(view, guid).Capture();
+    public static object Capture(UnityPackage view, string guid, bool isPrefabChild = false)
+        => new ResolvedSnapshot(view, guid).Capture(isPrefabChild);
 
-    private object Capture()
+    private object Capture(bool isPrefabChild)
     {
         foreach (var entry in view.PrefabGraph.Scenes)
         {
@@ -166,7 +167,7 @@ internal sealed class ResolvedSnapshot
             r["parent"] = node.Parent?.Id ?? "";
             // Unity's Prefab importer names the asset root after its file even when
             // the serialized root name is stale (for example after a file rename).
-            r["name"] = node.Parent == null && !SceneInput ? Path.GetFileNameWithoutExtension(view.ByGuid(guid).LogicalPath) : node.Name;
+            r["name"] = node.Parent == null && !SceneInput && !isPrefabChild ? Path.GetFileNameWithoutExtension(view.ByGuid(guid).LogicalPath) : node.Name;
             r["siblingIndex"] = node.Parent?.Children.IndexOf(node) ?? 0;
             r["activeSelf"] = node.ActiveSelf; r["activeInHierarchy"] = node.Active;
             foreach (string property in new[] { "localPosition", "localRotation", "localScale" })

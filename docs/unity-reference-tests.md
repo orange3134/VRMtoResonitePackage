@@ -47,7 +47,10 @@ Unityは通常のimportとプロジェクト内のEditorコードを実行する
 - `unity/coverage.json`: 同じPrefab入力で後から再比較できるmanifest。
   `conversionArguments` には選択引数を保存する。直接指定の既定値は `[]`、
   `--avatar NAME` または登録ケースのアバター指定がある場合は `["--avatar", "NAME"]`。
-  再比較時に本番パーサが選ぶPrefabを検証し、[変換後の階層比較](converted-structure-tests.md)にも
+  採取前に本番と共通の候補選択を行い、Prefab内の子が選ばれた場合はそのGameObjectの
+  fileIDをUnityに渡す。UnityはPrefabのGUIDとfileIDで対象を特定し、その部分木を2回採取する。
+  再比較は元入力と選択引数から部分木を選び直す。旧基準がPrefab全体を含む場合は再採取する。
+  [変換後の階層比較](converted-structure-tests.md)にも
   同じmanifestを渡せる。材質など選択以外の登録オプションを使った変換は全件バッチで行う。
 - `parity/`: ResoPon解析JSON、項目ごとの差分、比較ログ。
 - `report.json`: 採取状態と比較状態、Unity版、Prefabとmeta・プロジェクト設定の前後ハッシュ、
@@ -97,7 +100,8 @@ python scripts/test-unity-resolved.py .local/prefab-reference/<run>/coverage.jso
 単一の `.unitypackage` を入力とする既存のcoverageは引き続きアーカイブのSHA-256で照合する。
 アーカイブに含まれないPrefab等を採取元プロジェクトから補う診断では、coverageへ
 `dependencyFiles`（絶対パス→SHA-256）を明示して保存する。再比較は `--dependencies` で
-その一覧だけを渡し、アーカイブにないGUIDを補完する。元のGUIDを置換しない。
+その一覧だけを渡し、アーカイブにないGUIDを補完する。アバター候補はアーカイブ内のPrefab・シーンに
+限定し、候補の継承元やFBXの解決には補完したアセットも使う。
 一覧の全ファイルを前後に照合し、変更時は `recapture-required` とする。
 レポートの `dependencyScope` は補完を明記する。この一致は「アーカイブ＋採取時の依存」の
 解析結果であり、アーカイブ単体の依存充足や通常の変換出力まで証明するものではない。

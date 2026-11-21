@@ -5,13 +5,14 @@ using VrmToResonitePackage;
 using VrmToResonitePackage.Unity;
 using VrmToResonitePackage.Vrchat;
 
-if ((args.Length == 3 || args.Length == 5 && args[3] == "--avatar") && args[0] == "--viewpoint")
+if ((args.Length == 3 || args.Length == 5 && args[3] == "--avatar") && args[0] is "--viewpoint" or "--prefab-root")
 {
-    // --viewpoint INPUT OUTPUT [--avatar NAME] does not consume expected values.
     try
     {
         ResoniteLocator.InstallAssemblyResolver(ResoniteLocator.Locate(null));
-        ViewpointSnapshot.Write(args[1], args[2], args.Length == 5 ? args[4] : null);
+        string avatarName = args.Length == 5 ? args[4] : null;
+        if (args[0] == "--prefab-root") WritePrefabRoot(args[1], args[2], avatarName);
+        else ViewpointSnapshot.Write(args[1], args[2], avatarName);
         return 0;
     }
     catch (Exception error) { Console.Error.WriteLine(error); return 1; }
@@ -65,6 +66,7 @@ if (!validOptions)
 {
     Console.Error.WriteLine("Usage: UnityReferenceDump <input.prefab|input.unitypackage> <unity-expected.json> <resopon-actual.json> [--verify-selection <avatar-or-empty-for-default>] [--dependencies <captured-file-hashes.json>]");
     Console.Error.WriteLine("       UnityReferenceDump --viewpoint <input> <new-output.json> [--avatar <name>]");
+    Console.Error.WriteLine("       UnityReferenceDump --prefab-root <input.prefab> <new-output.json> [--avatar <name>]");
     return 2;
 }
 try
@@ -100,6 +102,17 @@ catch (Exception error)
 static void CheckSourceTransforms(string directory) => SourceTransformChecks.Run(directory);
 
 [MethodImpl(MethodImplOptions.NoInlining)]
+static void WritePrefabRoot(string input, string output, string avatarName)
+{
+    using var source = UnityPackage.Open(input);
+    if (source.InputPrefab == null) throw new InvalidDataException("--prefab-root requires a project prefab.");
+    var selection = VrchatAvatarParser.SelectAvatar(source, avatarName);
+    using var file = new FileStream(output, FileMode.CreateNew, FileAccess.Write);
+    JsonSerializer.Serialize(file, new { prefabGuid = selection.SourceGuid,
+        prefabChildId = selection.PrefabChildId?.ToString(CultureInfo.InvariantCulture) });
+}
+
+[MethodImpl(MethodImplOptions.NoInlining)]
 static void Run(string input, string guid, string output, int version, bool verifySelection, string avatarName, string dependencies)
 {
     using var source = UnityPackage.Open(input);
@@ -110,18 +123,12 @@ static void Run(string input, string guid, string output, int version, bool veri
         throw new InvalidDataException($"Expected prefab {guid} is not present in the input.");
     if (selected.Extension == ".unity" && (!verifySelection || version != 2))
         throw new InvalidDataException("Scene projection requires v2 and --verify-selection.");
-    if (verifySelection)
-    {
-        var avatar = VrchatAvatarParser.Parse(source, string.IsNullOrEmpty(avatarName) ? null : avatarName);
-        if (!string.Equals(avatar.PrefabPath, selected.LogicalPath, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"SELECTION_MISMATCH: conversion selects {avatar.PrefabPath}, Unity reference selects {selected.LogicalPath}");
-    }
     if (dependencies != null) AddCapturedDependencies(source, dependencies);
-    using var selectedSource = source.CreateView(guid);
-    using var view = selected.Extension == ".unity"
-        ? VrchatAvatarParser.CreateSelectedView(selectedSource, string.IsNullOrEmpty(avatarName) ? null : avatarName, out _)
-        : UnityPrefabInstances.CreateView(selectedSource, guid, null);
-    var snapshot = version == 2 ? ResolvedSnapshot.Capture(view, guid) : ReferenceSnapshot.Capture(view, guid);
+    var selection = verifySelection ? VrchatAvatarParser.SelectAvatar(source, avatarName) : null;
+    if (selection != null && !string.Equals(selection.SourceGuid, guid, StringComparison.OrdinalIgnoreCase))
+        throw new InvalidDataException($"SELECTION_MISMATCH: conversion selects {source.ByGuid(selection.SourceGuid).LogicalPath}, Unity reference selects {selected.LogicalPath}");
+    using var view = selection != null ? selection.CreateView(source) : UnityPrefabInstances.CreateView(source, guid, null);
+    var snapshot = version == 2 ? ResolvedSnapshot.Capture(view, guid, selection?.PrefabChildId != null) : ReferenceSnapshot.Capture(view, guid);
     // CreateNew protects captured expectations and previous test outputs, even when paths
     // alias one another via links or differ only in spelling on the current filesystem.
     byte[] json = JsonSerializer.SerializeToUtf8Bytes(snapshot, new JsonSerializerOptions
@@ -149,7 +156,7 @@ static void AddCapturedDependencies(UnityPackage source, string manifest)
         string id = File.ReadLines(meta).FirstOrDefault(line => line.StartsWith("guid: ", StringComparison.Ordinal))?[6..].Trim();
         if (id?.Length != 32 || !id.All(Uri.IsHexDigit) || source.ByGuid(id) != null) continue;
         // Dependencies supply only missing GUIDs. They cannot replace the tested archive's assets.
-        source.SetViewAsset(new UnityAsset { Guid = id, DiskPath = assetPath, MetaPath = meta,
+        source.SetViewAsset(new UnityAsset { Guid = id, DiskPath = assetPath, MetaPath = meta, IsReferenceOnly = true,
             LogicalPath = "CapturedDependencies/" + Path.GetFileName(assetPath) });
     }
 }

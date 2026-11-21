@@ -309,8 +309,15 @@ def main(argv=None):
                 with target.open("xb") as stream:
                     stream.write(source.read_bytes())
                 copied[target] = sha(source)
+        root_path = work / "selection.json"
+        command = ["dotnet", str(binary), "--prefab-root", str(prefab), str(root_path)]
+        if args.avatar is not None:
+            command += ["--avatar", args.avatar]
+        if invoke(command, output / "selection.log", args.timeout):
+            raise ValueError("Prefab root selection failed; see selection.log")
+        selection = read(root_path)
         manifest = output / "manifest.json"
-        write(manifest, {"cases": [{"id": args.case_id, "prefabPath": asset_path}]})
+        write(manifest, {"cases": [{"id": args.case_id, "prefabPath": asset_path, "prefabChildId": selection["prefabChildId"]}]})
         capture = output / "unity"
         env = dict(os.environ, RESOPON_RESOLVED_MANIFEST=str(manifest), RESOPON_RESOLVED_OUT=str(capture))
         env["RESOPON_REFERENCE_VIEWPOINTS"] = "1" if args.viewpoints else "0"
@@ -327,6 +334,8 @@ def main(argv=None):
         if index["unityVersion"] != version:
             raise ValueError("Unity Editor version differs from ProjectVersion.txt")
         case, = index["cases"]
+        if case["prefabGuid"] != selection["prefabGuid"] or (case.get("prefabChildId") or None) != selection["prefabChildId"]:
+            raise ValueError("Unity captured a different prefab or avatar root")
         if case["id"] != args.case_id or case["prefabPath"] != asset_path or case["status"] != "captured" or not (
                 case["repeatMatches"] and case["sourceUnchanged"]) or case["dependencyHash"] != case["dependencyHashAfter"]:
             raise ValueError("Unity did not capture a stable reference for the selected prefab")

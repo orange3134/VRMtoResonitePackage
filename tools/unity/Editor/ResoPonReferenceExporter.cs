@@ -81,11 +81,13 @@ public static class ResoPonReferenceExporter
         Export(Environment.GetEnvironmentVariable("RESOPON_REFERENCE_PREFAB"),
             Environment.GetEnvironmentVariable("RESOPON_REFERENCE_OUT"),
             Environment.GetEnvironmentVariable("RESOPON_REFERENCE_PROJECTION"),
-            Environment.GetEnvironmentVariable("RESOPON_REFERENCE_SCENE_ROOT"));
+            Environment.GetEnvironmentVariable("RESOPON_REFERENCE_SCENE_ROOT"),
+            Environment.GetEnvironmentVariable("RESOPON_REFERENCE_PREFAB_CHILD_ID"));
     }
 
     // Resolved is the collection default; authored retains the existing parser comparison schema.
-    public static void Export(string prefabPath, string outputPath, string projection = "resolved", string sceneRootPath = null)
+    public static void Export(string prefabPath, string outputPath, string projection = "resolved", string sceneRootPath = null,
+        string prefabChildId = null)
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode)
             throw new InvalidOperationException("Reference capture requires Edit Mode.");
@@ -101,6 +103,8 @@ public static class ResoPonReferenceExporter
             throw new InvalidOperationException("Input must be an Assets/... .prefab or .unity asset path.");
         if (sceneInput && (projection == "authored" || string.IsNullOrEmpty(sceneRootPath)))
             throw new InvalidOperationException("Scene capture requires resolved/viewpoint projection and an exact scene root path.");
+        if (sceneInput && !string.IsNullOrEmpty(prefabChildId))
+            throw new InvalidOperationException("A prefab child ID cannot select a scene root.");
         if (sceneInput && (!Application.isBatchMode || SceneManager.GetSceneByPath(prefabPath).isLoaded))
             throw new InvalidOperationException("Scene capture requires a closed scene in a batch Editor.");
         var prefab = sceneInput ? null : AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
@@ -120,6 +124,16 @@ public static class ResoPonReferenceExporter
             var instance = sceneInput ? SelectSceneRoot(preview, sceneRootPath)
                 : PrefabUtility.InstantiatePrefab(prefab, preview) as GameObject;
             if (instance == null) throw new InvalidOperationException("Prefab instantiation failed.");
+            if (!string.IsNullOrEmpty(prefabChildId))
+            {
+                long fileId = long.Parse(prefabChildId, CultureInfo.InvariantCulture);
+                instance = instance.GetComponentsInChildren<Transform>(true).Select(t => t.gameObject).Single(child =>
+                {
+                    var source = PrefabUtility.GetCorrespondingObjectFromSource(child);
+                    return source != null && AssetDatabase.TryGetGUIDAndLocalFileIdentifier(source, out string sourceGuid, out long id)
+                        && sourceGuid == guid && id == fileId;
+                });
+            }
             json = projection == "viewpoint" ? ResoPonResolvedReference.CaptureViewpoint(instance.transform, guid) : projection == "resolved"
                 ? ResoPonResolvedReference.Capture(instance.transform, guid)
                 : JsonUtility.ToJson(BuildCapture(instance.transform, guid), true) + "\n";

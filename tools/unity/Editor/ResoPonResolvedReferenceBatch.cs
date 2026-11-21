@@ -11,7 +11,7 @@ using UnityEngine;
 public static class ResoPonResolvedReferenceBatch
 {
     [Serializable] private class Manifest { public Item[] cases; }
-    [Serializable] private class Item { public string id, prefabPath, sceneRootPath; }
+    [Serializable] private class Item { public string id, prefabPath, sceneRootPath, prefabChildId; }
     [Serializable] private class Results
     {
         public string format = "resopon.unity-resolved-collection";
@@ -22,7 +22,7 @@ public static class ResoPonResolvedReferenceBatch
     }
     [Serializable] private class Result
     {
-        public string id, prefabPath, sceneRootPath, prefabGuid, assetType, status, error;
+        public string id, prefabPath, sceneRootPath, prefabChildId, prefabGuid, assetType, status, error;
         public string inputSha256, inputSha256After, dependencyHash, dependencyHashAfter;
         public string expectedPath, expectedSha256, repeatSha256;
         public string viewpointPath, viewpointSha256, viewpointRepeatSha256;
@@ -51,7 +51,8 @@ public static class ResoPonResolvedReferenceBatch
             bool failed = false;
             foreach (var item in manifest.cases)
             {
-                var result = new Result { id = item.id, prefabPath = item.prefabPath, sceneRootPath = item.sceneRootPath, status = "failed" };
+                var result = new Result { id = item.id, prefabPath = item.prefabPath, sceneRootPath = item.sceneRootPath,
+                    prefabChildId = item.prefabChildId, status = "failed" };
                 results.cases.Add(result);
                 string folder = Path.Combine(output, item.id);
                 Directory.CreateDirectory(folder);
@@ -66,15 +67,15 @@ public static class ResoPonResolvedReferenceBatch
                     result.expectedPath = item.id + "/expected.json";
                     string expected = Path.Combine(output, result.expectedPath);
                     string repeat = Path.Combine(folder, "repeat.json");
-                    ResoPonReferenceExporter.Export(item.prefabPath, expected, "resolved", item.sceneRootPath);
-                    ResoPonReferenceExporter.Export(item.prefabPath, repeat, "resolved", item.sceneRootPath);
+                    ResoPonReferenceExporter.Export(item.prefabPath, expected, "resolved", item.sceneRootPath, item.prefabChildId);
+                    ResoPonReferenceExporter.Export(item.prefabPath, repeat, "resolved", item.sceneRootPath, item.prefabChildId);
                     if (Environment.GetEnvironmentVariable("RESOPON_REFERENCE_VIEWPOINTS") == "1")
                     {
                         result.viewpointPath = item.id + "/viewpoint.json";
                         string viewpoint = Path.Combine(output, result.viewpointPath);
                         string viewpointRepeat = Path.Combine(folder, "viewpoint-repeat.json");
-                        ResoPonReferenceExporter.Export(item.prefabPath, viewpoint, "viewpoint", item.sceneRootPath);
-                        ResoPonReferenceExporter.Export(item.prefabPath, viewpointRepeat, "viewpoint", item.sceneRootPath);
+                        ResoPonReferenceExporter.Export(item.prefabPath, viewpoint, "viewpoint", item.sceneRootPath, item.prefabChildId);
+                        ResoPonReferenceExporter.Export(item.prefabPath, viewpointRepeat, "viewpoint", item.sceneRootPath, item.prefabChildId);
                         result.viewpointSha256 = Hash(viewpoint);
                         result.viewpointRepeatSha256 = Hash(viewpointRepeat);
                         if (result.viewpointSha256 != result.viewpointRepeatSha256)

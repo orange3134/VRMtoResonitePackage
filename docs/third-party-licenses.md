@@ -105,6 +105,8 @@ Unity側の骨行列・bind pose・ウェイト採取にも外部サンプルの
 既存のModelImporter逆コンパイル資料は設定の意味の調査だけに参照し、実装の転載・移植はない。
 blendshape無効化では、実行対象のFrooxEngine.dllでModelImportSettingsの公開フィールドを確認した。
 一時FBXの接続編集とASCII・バイナリの回帰fixtureはリポジトリ内で実装し、配布依存や通知の追加はない。
+ASCII接続IDの数値照合、Prefab部分木の採取、参照専用アセットの選択除外も既存コードと
+自作テストだけを使う。Unity側の確認にはインストール済みEditor 2022.3.22f1を使用した。
 最終確認はインストール済みFrooxEngine 2026.11.16.1330を参照したビルド・実変換で行う。
 自作ASCII FBX・Prefabと生成シーンを回帰テストに使い、Omaneko v1.1およびNoraMiaree v1.0.0の
 既存の利用条件確認を引き継ぐ実検証は非公開ローカルに限る。新しい通知対象・配布素材はない。

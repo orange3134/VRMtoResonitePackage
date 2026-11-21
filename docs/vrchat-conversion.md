@@ -644,6 +644,7 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
   アニメーション候補を解析結果から除く。主FBXと追加FBXの設定を個別に保持し、Resoniteが読む
   一時FBXでBlendShapeデフォーマからメッシュへの接続を外す。バイナリ・ASCIIともに
   スキンとボーンの接続は維持され、保存メッシュのshape数とrendererのweight数は0になる。
+  ASCII FBXの接続元は符号付き64ビット整数として照合する。宣言の `30` と接続の `030` は同じIDを指す。
 - blinkやprefab weightが数値参照する最大indexまで、欠落shapeを空frameとして復元する。
 - 名前参照だけのrendererは大量の空frameを復元しない。
 - FBX `BlendShapeChannel.DeformPercent` はModelImporterの `importBlendShapeDeformPercent` が

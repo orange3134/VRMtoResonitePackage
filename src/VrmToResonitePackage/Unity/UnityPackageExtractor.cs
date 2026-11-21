@@ -7,6 +7,7 @@ namespace VrmToResonitePackage.Unity;
 public sealed class UnityAsset
 {
     internal long? SubAssetId { get; init; }
+    internal bool IsReferenceOnly { get; init; }
     public string Guid { get; init; }
 
     /// <summary>Original asset GUID, retained when Guid identifies a parsing occurrence.</summary>
@@ -68,7 +69,7 @@ public sealed partial class UnityPackage : IDisposable
 
     public IEnumerable<UnityAsset> AvatarSources => InputPrefab != null
         ? new[] { InputPrefab }
-        : ByExtension(".prefab").Concat(ByExtension(".unity"));
+        : ByExtension(".prefab").Concat(ByExtension(".unity")).Where(asset => !asset.IsReferenceOnly);
 
     public static UnityPackage Open(string path) =>
         string.Equals(Path.GetExtension(path), ".prefab", StringComparison.OrdinalIgnoreCase)

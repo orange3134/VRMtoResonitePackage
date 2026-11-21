@@ -54,7 +54,7 @@ internal static class FbxMorphSeamChecks
             Connections: {
                 C: "OO",20,0
                 C: "OO",10,20
-                C: "OO",30,10
+                C: "OO",030,10
                 C: "OO",40,30
                 C: "OO",50,40
             }

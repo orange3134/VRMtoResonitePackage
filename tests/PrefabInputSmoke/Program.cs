@@ -284,6 +284,10 @@ AnimatorState:
     {
         Check(package.InputPrefab == null, "Unitypackage remains unscoped");
         Check(VrchatAvatarParser.ListAvatars(package).Single().Name == "Selected", "Unitypackage avatar selection regression");
+        package.SetViewAsset(new UnityAsset { Guid = otherGuid, LogicalPath = "Assets/Other.prefab",
+            DiskPath = Path.Combine(root, "Assets", "Other.prefab"), IsReferenceOnly = true });
+        Check(package.ByGuid(otherGuid)?.HasContent == true && VrchatAvatarParser.SelectAvatar(package, "Other").SourceGuid == selectedGuid,
+            "A captured dependency can supply a prefab but cannot become the selected archive avatar");
         extracted = package.ByGuid(selectedGuid).DiskPath;
     }
     Check(!File.Exists(extracted) && File.Exists(archive), "Only extracted temporary files are cleaned up");
@@ -406,6 +410,27 @@ MonoBehaviour:
             "Regular prefab excludes an EditorOnly descendant while retaining Body");
         Check(avatar.RendererMaterials.All(r => r.RendererGameObjectName != "Preview") && avatar.PhysBones.Count == 0,
             "Regular prefab excludes EditorOnly renderer materials and PhysBones");
+    }
+    string twin = Asset("Assets/Twin.prefab", "bb003200000000000000000000000001", File.ReadAllText(regular) + """
+
+--- !u!114 &40
+MonoBehaviour:
+  m_GameObject: {fileID: 10}
+  m_Script: {fileID: 11500000, guid: 67cc4cb7839cd3741b63733d5adf0442}
+--- !u!114 &41
+MonoBehaviour:
+  m_GameObject: {fileID: 30}
+  m_Script: {fileID: 11500000, guid: 67cc4cb7839cd3741b63733d5adf0442}
+""");
+    using (var package = UnityPackage.Open(twin))
+    {
+        foreach (var (name, rootId) in new[] { ("Body", 10L), ("Preview", 30L) })
+        {
+            var selection = VrchatAvatarParser.SelectAvatar(package, name);
+            using var view = selection.CreateView(package);
+            Check(selection.PrefabChildId == rootId && view.PrefabGraph.Scene(selection.SourceGuid).GameObjects.Single().FileId == rootId,
+                "Unity capture and parser view select the same child: " + name);
+        }
     }
     string copySource = Asset("Assets/CopySource.fbx", "88000000000000000000000000000001", "");
     File.AppendAllText(copySource + ".meta", "ModelImporter:\n  internalIDToNameTable:\n  - first:\n      43: -1079801745714767569\n    second: Body_Base\n");

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using Elements.Core;
@@ -96,8 +97,8 @@ internal static class UnityFbxMorphSeams
         // Latin-1 keeps character offsets identical to byte offsets, including in UTF-8
         // names. Edit only the BlendShape -> mesh connections in the temporary file.
         string text = Encoding.Latin1.GetString(bytes);
-        var deformers = new HashSet<string>();
-        var connections = new List<(string Source, int Start, int End)>();
+        var deformers = new HashSet<long>();
+        var connections = new List<(long Source, int Start, int End)>();
         int depth = 0, cursor = 0;
         bool objects = false, links = false;
         while (cursor < text.Length)
@@ -117,8 +118,9 @@ internal static class UnityFbxMorphSeams
                 var id = Next(ref end);
                 if (!Next(ref end).SequenceEqual(",")) continue;
                 Next(ref end); // Object name.
-                if (Next(ref end).SequenceEqual(",") && Next(ref end).SequenceEqual("\"BlendShape\""))
-                    deformers.Add(id.ToString());
+                if (Next(ref end).SequenceEqual(",") && Next(ref end).SequenceEqual("\"BlendShape\"") &&
+                    long.TryParse(id, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out long deformerId))
+                    deformers.Add(deformerId);
             }
             if (links && token.SequenceEqual("C") && Next(ref end).SequenceEqual(":") &&
                 Next(ref end).SequenceEqual("\"OO\"") && Next(ref end).SequenceEqual(","))
@@ -126,7 +128,8 @@ internal static class UnityFbxMorphSeams
                 var source = Next(ref end);
                 if (!Next(ref end).SequenceEqual(",")) continue;
                 Next(ref end); // Destination object ID.
-                connections.Add((source.ToString(), start, end));
+                if (long.TryParse(source, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out long sourceId))
+                    connections.Add((sourceId, start, end));
             }
         }
         bool changed = false;

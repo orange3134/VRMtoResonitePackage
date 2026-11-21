@@ -49,14 +49,19 @@ class PrefabCaptureTests(unittest.TestCase):
         self.called_producer = False
 
     def run_process(self, command, **kwargs):
-        if command[0] == str(self.unity):
+        if "--prefab-root" in command:
+            avatar = self.args[self.args.index("--avatar") + 1] if "--avatar" in self.args else None
+            self.assertEqual(["--avatar", avatar] if avatar else [], command[5:])
+            capture.write(Path(command[4]), dict(prefabGuid="b" * 32, prefabChildId="123" if "--avatar" in command else None))
+        elif command[0] == str(self.unity):
+            item, = capture.read(Path(kwargs["env"]["RESOPON_RESOLVED_MANIFEST"]))["cases"]
             target = Path(kwargs["env"]["RESOPON_RESOLVED_OUT"])
             (target / "prefab").mkdir(parents=True)
             expected = target / "prefab/expected.json"
             capture.write(expected, snapshot())
             capture.write(expected.with_name("repeat.json"), {} if self.bad_repeat else snapshot())
             capture.write(target / "index.json", dict(unityVersion="2022.3.22f1", cases=[dict(
-                id="prefab", prefabPath="Assets/Avatar 日本語.prefab", status="captured",
+                id="prefab", prefabPath="Assets/Avatar 日本語.prefab", prefabChildId=item["prefabChildId"], status="captured",
                 repeatMatches=True, sourceUnchanged=True, expectedPath="prefab/expected.json",
                 expectedSha256=capture.sha(expected), repeatSha256=capture.sha(expected), inputSha256=capture.sha(self.prefab),
                 inputSha256After=capture.sha(self.prefab), prefabGuid="b" * 32,
@@ -109,6 +114,22 @@ class PrefabCaptureTests(unittest.TestCase):
         self.assertEqual(0, code)
         case, = capture.read(self.output / "unity/coverage.json")["cases"]
         self.assertEqual(["--avatar", "Variant with spaces"], case["conversionArguments"])
+        self.assertEqual("123", capture.read(self.output / "manifest.json")["cases"][0]["prefabChildId"])
+
+    def test_editor_capturing_another_child_cannot_publish_coverage(self):
+        self.args.extend(["--avatar", "Right"])
+        def wrong_child(command, **kwargs):
+            result = self.run_process(command, **kwargs)
+            if command[0] == str(self.unity):
+                index_path = Path(kwargs["env"]["RESOPON_RESOLVED_OUT"]) / "index.json"
+                index = capture.read(index_path)
+                index["cases"][0]["prefabChildId"] = "456"
+                index_path.write_text(json.dumps(index), encoding="utf-8")
+            return result
+        code, report = self.run_capture(wrong_child)
+        self.assertEqual(1, code)
+        self.assertIn("different prefab or avatar root", report["error"])
+        self.assertFalse((self.output / "unity/coverage.json").exists())
 
     def viewpoint_process(self, command, **kwargs):
         result = self.run_process(command, **kwargs)
@@ -196,7 +217,11 @@ class PrefabCaptureTests(unittest.TestCase):
         self.assertFalse((self.output / "unity/coverage.json").exists())
 
     def test_unity_failure_cleans_up_and_does_not_compare(self):
-        code, report = self.run_capture(lambda *a, **k: types.SimpleNamespace(returncode=1))
+        def fail_editor(command, **kwargs):
+            if command[0] == str(self.unity):
+                return types.SimpleNamespace(returncode=1)
+            return self.run_process(command, **kwargs)
+        code, report = self.run_capture(fail_editor)
         self.assertEqual(1, code)
         self.assertEqual("failed", report["captureStatus"])
         self.assertEqual("not-run", report["parityStatus"])

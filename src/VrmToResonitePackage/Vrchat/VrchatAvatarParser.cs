@@ -60,6 +60,14 @@ public static partial class VrchatAvatarParser
         /// <summary>A prefab variant whose hierarchy lives in an FBX (descriptor added on a stripped root).</summary>
         public bool IsVariantOfFbx => FbxGuidOverrides?.Count > 0;
         public int Size => IsVariantOfFbx ? FbxGuidOverrides.Count : Subtree?.Count ?? 0;
+
+        public AvatarSelection Selection()
+        {
+            var transform = Root == null ? null : Scene.TransformOfGameObject(Root.FileId);
+            long? childId = Source.Extension == ".prefab" && transform?.Root["m_Father"]?.FileID is long parent && parent != 0
+                ? Root.FileId : null;
+            return new(Source.Guid, Root != null ? Subtree : null, SceneInstanceId, childId);
+        }
     }
 
     private sealed class FbxPlacement
@@ -106,15 +114,15 @@ public static partial class VrchatAvatarParser
     public static VrchatAvatar Parse(UnityPackage package, string avatarOverride = null)
         => Parse(package, avatarOverride, false);
 
-    // Diagnostics must select the same scene placement as production, including its attachments.
-    internal static UnityPackage CreateSelectedView(UnityPackage package, string avatarOverride, out string sourceGuid)
+    internal sealed record AvatarSelection(string SourceGuid, HashSet<long> Subtree, long SceneInstanceId, long? PrefabChildId)
     {
-        var (_, selected) = SelectCandidate(package, avatarOverride);
-        sourceGuid = selected.Source.Guid;
-        return selected.SceneInstanceId != 0
-            ? UnityPrefabInstances.CreateSceneInstanceView(package, sourceGuid, selected.SceneInstanceId)
-            : UnityPrefabInstances.CreateView(package, sourceGuid, selected.Root != null ? selected.Subtree : null);
+        public UnityPackage CreateView(UnityPackage package) => SceneInstanceId != 0
+            ? UnityPrefabInstances.CreateSceneInstanceView(package, SourceGuid, SceneInstanceId)
+            : UnityPrefabInstances.CreateView(package, SourceGuid, Subtree);
     }
+
+    internal static AvatarSelection SelectAvatar(UnityPackage package, string avatarOverride)
+        => SelectCandidate(package, avatarOverride).Selected.Selection();
 
     private static (List<Candidate> Candidates, Candidate Selected) SelectCandidate(UnityPackage package, string avatarOverride)
     {
@@ -144,9 +152,7 @@ public static partial class VrchatAvatarParser
         {
             // All collectors must see the same selected hierarchy and instance identities.
             // Re-discover the descriptor in the view so inherited references use its scenes too.
-            using var view = selected.SceneInstanceId != 0
-                ? UnityPrefabInstances.CreateSceneInstanceView(package, selected.Source.Guid, selected.SceneInstanceId)
-                : UnityPrefabInstances.CreateView(package, selected.Source.Guid, selected.Root != null ? selected.Subtree : null);
+            using var view = selected.Selection().CreateView(package);
             profile?.Mark("create-view");
             return Parse(view, selected.Name, true);
         }
