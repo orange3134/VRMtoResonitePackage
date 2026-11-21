@@ -121,10 +121,11 @@ public static class VrchatAnimatorFaceParser
                     loop ??= VrchatBlinkLoop.ReadNeutral(clip);
                     bool missingMotion = clip == null;
                     if (missingMotion && (animatorLayer["m_Mask"]?.FileID ?? 0) == 0 &&
+                        (animatorLayer["m_AvatarMask"]?.FileID ?? 0) == 0 &&
                         (animatorLayer["m_SyncedLayerIndex"]?.AsInt() ?? -1) < 0)
                         loop = VrchatBlinkLoop.RecoverMissingMotion(package, asset, controller,
                             controller.Doc(animatorLayer["m_StateMachine"]?.FileID ?? 0)?.Root, state?["m_Motion"],
-                            avatar.VisemeRendererName);
+                            avatar.VisemeRendererPath);
                     if (loop != null)
                     {
                         // Earlier face layers may share these curves: the active blink layer

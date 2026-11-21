@@ -52,7 +52,7 @@ internal sealed class VrchatBlinkLoop
         UnityScene controller, YamlNode machine, YamlNode motion, string facePath)
     {
         if (motion?.Guid == null || motion.FileID != 7400000 || package.ByGuid(motion.Guid) != null ||
-            string.IsNullOrEmpty(facePath)) return null;
+            facePath == null) return null;
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var child in machine?["m_ChildStates"]?.Seq ?? new())
         {
