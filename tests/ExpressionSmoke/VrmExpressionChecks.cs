@@ -58,7 +58,7 @@ internal static class VrmExpressionChecks
                 restored = parent.AddSlot(name + " restored");
                 await PackageImporter.ImportPackage(package, restored); await default(ToWorld); await Frames(120);
                 await Verify(restored, vrm, version, sparse);
-                Check(snapshot == ExpressionPackageSnapshot.Capture(restored.FindChild("Expressions"), Path.Combine(artifacts, name + "-after")),
+                Check(snapshot == ExpressionPackageSnapshot.Capture(restored.FindExpressionRoot(), Path.Combine(artifacts, name + "-after")),
                     "VRM catalog, poses, outputs and all 64 mappings survive package reload");
             }
             finally { restored?.Destroy(); avatar.Destroy(); }
@@ -69,7 +69,7 @@ internal static class VrmExpressionChecks
     private static async Task Verify(Slot avatar, VrmModel source, int version, bool sparse)
     {
         EquipAvatar(avatar); await Frames(30);
-        var root = avatar.FindChild("Expressions");
+        var root = avatar.FindExpressionRoot();
         var face = avatar.FindChild("Face").GetComponent<SkinnedMeshRenderer>();
         for (int i = 0; i < 7200 && face.BlendShapeWeights.Count != Shapes.Length; i++) await default(NextUpdate);
         Check(face.BlendShapeWeights.Count == Shapes.Length, "saved VRM mesh loaded");

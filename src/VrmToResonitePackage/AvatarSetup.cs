@@ -104,8 +104,8 @@ internal static class AvatarSetup
         ["rightLittleDistal"] = BodyNode.RightPinky_Distal,
     };
 
-    public static void Build(Slot root, VrmModel vrm, AvatarSetupOptions options, BlendshapeResolver resolver = null,
-        IReadOnlyDictionary<int, Slot> nodeSlots = null)
+    public static void Build(Slot root, Slot assetsSlot, VrmModel vrm, AvatarSetupOptions options,
+        BlendshapeResolver resolver = null, IReadOnlyDictionary<int, Slot> nodeSlots = null)
     {
         // Capture renderer paths before rig/eye setup changes the hierarchy.
         resolver ??= new BlendshapeResolver(root, vrm);
@@ -221,7 +221,7 @@ internal static class AvatarSetup
         if (options.NearClip > 0f)
         {
             // Pull the near clip in so long bangs don't occlude the first-person view.
-            Slot renderSettingsSlot = root.AddSlot("AvatarRenderSettings");
+            Slot renderSettingsSlot = EnsureAvatarSettingsRoot(root).AddSlot("AvatarRenderSettings");
             AvatarRenderSettings renderSettings = renderSettingsSlot.AttachComponent<AvatarRenderSettings>();
             renderSettings.NearClip.Value = options.NearClip;
             renderSettings.FarClip.Value = null;
@@ -237,7 +237,7 @@ internal static class AvatarSetup
             AvatarCreator.TrySetupFaceTracking(root);
         }
         SetupAwayIndicator(root);
-        SetupFirstPersonVisibility(root, vrm);
+        SetupFirstPersonVisibility(root, assetsSlot, vrm);
 
         root.GetComponentInChildren((AvatarPoseNode n) => n.Node.Value == BodyNode.Head)?.InstrumentWithViewHeadOverride();
         UniLog.Log("アバターセットアップ完了。");
@@ -650,6 +650,20 @@ internal static class AvatarSetup
         binding.VariableName.Value = variableName;
     }
 
+    internal const string AvatarSystemTag = "ResoPon/AvatarSystem";
+
+    internal static Slot EnsureAvatarSystemRoot(Slot root)
+    {
+        // An imported GameObject can also be named "Avatar System".
+        Slot system = root.Children.FirstOrDefault(slot => slot.Tag == AvatarSystemTag);
+        if (system == null)
+        {
+            system = root.AddSlot("<color=#00ffff>Avatar System</color>");
+            system.Tag = AvatarSystemTag;
+        }
+        return system;
+    }
+
     internal static Slot EnsureAvatarSettingsRoot(Slot root)
     {
         var space = root.GetComponents<DynamicVariableSpace>()
@@ -805,7 +819,7 @@ internal static class AvatarSetup
                 }
                 // A field can have only one writer. Keep each phoneme live and
                 // drive the shared mouth shape with the strongest current weight.
-                var mixer = skin.Key.Slot.AddSlot("Visemes " + string.Join(" ", phonemes));
+                var mixer = EnsureAvatarSystemRoot(root).AddSlot("Visemes " + string.Join(" ", phonemes));
                 var max = mixer.AttachComponent<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Math.ValueMaxMulti<float>>();
                 foreach (var phoneme in phonemes)
                 {
@@ -856,7 +870,7 @@ internal static class AvatarSetup
         RenderingContext.RenderToAsset,
     };
 
-    private static void SetupFirstPersonVisibility(Slot root, VrmModel vrm)
+    private static void SetupFirstPersonVisibility(Slot root, Slot assetsSlot, VrmModel vrm)
     {
         List<VrmFirstPersonMeshAnnotation> effectiveAnnotations = vrm.FirstPersonMeshAnnotations
             .Where(a => a.Flag is VrmFirstPersonFlag.ThirdPersonOnly or VrmFirstPersonFlag.FirstPersonOnly)
@@ -893,7 +907,7 @@ internal static class AvatarSetup
 
         EnsureAvatarRootIdentification(root);
 
-        IAssetProvider<FrooxEngine.Material> invisibleMaterial = GetOrCreateInvisibleMaterial(root);
+        IAssetProvider<FrooxEngine.Material> invisibleMaterial = GetOrCreateInvisibleMaterial(assetsSlot);
         int configured = 0;
         foreach ((MeshRenderer renderer, VrmFirstPersonFlag flag) in rendererFlags)
         {
@@ -925,7 +939,7 @@ internal static class AvatarSetup
         }
     }
 
-    public static async Task ApplyFirstPersonAutoAsync(Slot root, VrmModel vrm,
+    public static async Task ApplyFirstPersonAutoAsync(Slot root, Slot assetsSlot, VrmModel vrm,
         IReadOnlyDictionary<int, Slot> nodeSlots = null)
     {
         List<VrmFirstPersonMeshAnnotation> autoAnnotations = vrm.FirstPersonMeshAnnotations
@@ -952,10 +966,7 @@ internal static class AvatarSetup
             return;
         }
 
-        IAssetProvider<FrooxEngine.Material> invisibleMaterial = GetOrCreateInvisibleMaterial(root);
-        Slot assets = root.FindChild("Assets") ?? root.AddSlot("Assets");
-        Slot firstPersonMeshAssets = assets.FindChild("FirstPerson Auto Meshes")
-                                     ?? assets.AddSlot("FirstPerson Auto Meshes");
+        IAssetProvider<FrooxEngine.Material> invisibleMaterial = GetOrCreateInvisibleMaterial(assetsSlot);
         int configured = 0;
 
         // Resolve and deduplicate the source renderers before creating any headless children.
@@ -971,7 +982,7 @@ internal static class AvatarSetup
             switch (renderer)
             {
                 case SkinnedMeshRenderer skinned:
-                    if (await TrySetupAutoSkinnedRenderer(skinned, firstPersonBone, firstPersonMeshAssets,
+                    if (await TrySetupAutoSkinnedRenderer(skinned, firstPersonBone, assetsSlot,
                             invisibleMaterial))
                     {
                         UniLog.Log($"FirstPerson RenderMaterialOverride: {renderer.Slot.Name}");
@@ -995,7 +1006,7 @@ internal static class AvatarSetup
     }
 
     private static async Task<bool> TrySetupAutoSkinnedRenderer(SkinnedMeshRenderer renderer, Slot firstPersonBone,
-        Slot meshAssetSlot, IAssetProvider<FrooxEngine.Material> invisibleMaterial)
+        Slot assetsSlot, IAssetProvider<FrooxEngine.Material> invisibleMaterial)
     {
         if (renderer.Mesh.Target == null || renderer.Mesh.Asset?.Data == null || renderer.Materials.Count == 0)
         {
@@ -1042,6 +1053,7 @@ internal static class AvatarSetup
         SkinnedMeshRenderer headless = headlessSlot.AttachComponent<SkinnedMeshRenderer>();
         headless.Enabled = renderer.Enabled;
         headless.EnabledField.DriveFrom(renderer.EnabledField);
+        Slot meshAssetSlot = assetsSlot.AddSlot("FirstPerson Mesh: " + renderer.Slot.Name);
         headless.Mesh.Target = meshAssetSlot.AttachStaticMesh(uri, getExisting: false);
         headless.BoundsComputeMethod.Value = renderer.BoundsComputeMethod.Value;
         headless.ExplicitLocalBounds.Value = renderer.ExplicitLocalBounds.Value;
@@ -1274,12 +1286,13 @@ internal static class AvatarSetup
             variable.Reference.DriveFrom(reference.Reference);
         }
         UniLog.Log($"DynamicReferenceVariable: {variableName} -> avatar root (linked={variable.Reference.Target == root})");
-        if (root.FindChild("Avatar Root Identification") != null)
+        Slot system = EnsureAvatarSystemRoot(root);
+        if (system.FindChild("Avatar Root Identification") != null)
         {
             return;
         }
 
-        Slot identification = root.AddSlot("Avatar Root Identification");
+        Slot identification = system.AddSlot("Avatar Root Identification");
         var worn = identification.AttachComponent<DynamicValueVariable<bool>>();
         worn.VariableName.Value = ModularAvatarNamespace + "/AvatarWorn";
         var wornLocal = identification.AttachComponent<DynamicValueVariable<bool>>();
@@ -1306,9 +1319,8 @@ internal static class AvatarSetup
         ExpressionFlux.Arrange(identification);
     }
 
-    private static IAssetProvider<FrooxEngine.Material> GetOrCreateInvisibleMaterial(Slot root)
+    private static IAssetProvider<FrooxEngine.Material> GetOrCreateInvisibleMaterial(Slot assetsSlot)
     {
-        Slot assetsSlot = root.FindChild("Assets") ?? root.AddSlot("Assets");
         PBS_RimSpecular existing = assetsSlot.GetComponentInChildren((PBS_RimSpecular m) =>
             m.Slot.Name == "Invisible Material");
         if (existing != null)

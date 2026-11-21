@@ -3,6 +3,7 @@
 VRM・VRChatの顔表情を固定ポーズとして取り込み、ハンドジェスチャー、キーボード、
 Resoniteのコンテキストメニュー、外部Dynamic Impulseから選択する。
 生成物は標準コンポーネントとProtoFluxで動作し、利用側にResoPonのDLLは不要。
+変換後はアバタールートの `Avatar System/Expressions` に配置する。
 既存パッケージを更新する場合は再変換・再インポートする。
 
 設定の型と初期値は[変数リファレンス](expression-variables.md)、

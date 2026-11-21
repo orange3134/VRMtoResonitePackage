@@ -26,7 +26,7 @@ internal static class VrmMetadataSetup
         space.SpaceName.Value = VrmMetadataNamespace;
         space.OnlyDirectBinding.Value = true;
 
-        Slot metadataSlot = root.FindChild("VRM Metadata") ?? root.AddSlot("VRM Metadata");
+        Slot metadataSlot = AvatarSetup.EnsureAvatarSystemRoot(root).FindChildOrAdd("VRM Metadata");
         DynamicField<string> variable = metadataSlot.GetComponents<DynamicField<string>>()
             .FirstOrDefault(v => string.Equals(v.VariableName.Value, VrmMetaVariable, StringComparison.Ordinal))
             ?? metadataSlot.AttachComponent<DynamicField<string>>();

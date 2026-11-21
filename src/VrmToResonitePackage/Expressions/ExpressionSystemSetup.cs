@@ -32,7 +32,7 @@ internal sealed partial class ExpressionSystemSetup
     private ExpressionSystemSetup(Slot avatar, ExpressionModel model)
     {
         _model = model;
-        _root = Record(avatar, "Expressions", SystemSpace);
+        _root = Record(AvatarSetup.EnsureAvatarSystemRoot(avatar), "Expressions", SystemSpace);
         _clipRoot = _root.AddSlot("Clips");
         _api = _root.AddSlot("API");
         // Method accepts calls from outside API; Internal is shared only within API.

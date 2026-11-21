@@ -84,7 +84,7 @@ internal static class StartupBlinkChecks
         manager.MinBlinkInterval.Value = manager.MaxBlinkInterval.Value = 1000000;
         manager.LeftEyeCloseOverride.Value = manager.RightEyeCloseOverride.Value = 0;
         EquipAvatar(avatar); await Frames(40);
-        var root = avatar.FindChild("Expressions"); var api = root.FindChild("API");
+        var root = avatar.FindExpressionRoot(); var api = root.FindChild("API");
         Check(driver.Eyes.Count == 2 && driver.Eyes.Any(e => e.Side.Value == EyeSide.Left) &&
             driver.Eyes.Any(e => e.Side.Value == EyeSide.Right) && driver.Eyes.All(e => e.OpenCloseTarget.IsLinkValid), "both native eye links");
         Near(face.GetBlendShape("blink").Value, 0, "combined blink opens initially");

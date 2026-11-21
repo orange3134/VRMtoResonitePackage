@@ -424,27 +424,28 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         await Frames();
         ExpressionGraphChecks.CheckMenuColors(expressions);
         var clone = avatar.Duplicate(avatar.Parent); EquipAvatar(clone); await Frames(90);
-        ExpressionGraphChecks.CheckLayout(clone.FindChild("Expressions"));
+        var cloneExpressions = clone.FindExpressionRoot();
+        ExpressionGraphChecks.CheckLayout(cloneExpressions);
         Check(Math.Abs(clone.GetComponent<ValueField<float>>().Value.Value - 0.2f) < 0.01, "cloning resets transient selection");
         Check(Math.Abs(field.Value - 1f) < 0.01, "cloning does not reset original");
-        await ExpressionDynamicInputChecks.CheckEdits(clone.FindChild("Expressions"));
+        await ExpressionDynamicInputChecks.CheckEdits(cloneExpressions);
         ExpressionDynamicInputChecks.CheckBindings(expressions);
-        ExpressionGraphChecks.CheckMenuColors(clone.FindChild("Expressions"));
+        ExpressionGraphChecks.CheckMenuColors(cloneExpressions);
         ExpressionGraphChecks.CheckMenuColors(expressions);
-        var cloneCore = clone.FindChild("Expressions").FindChild("API").FindChild("Internal");
+        var cloneCore = cloneExpressions.FindChild("API").FindChild("Internal");
         Check(Gestures(cloneCore) == (0, 0) && NoHandsAllowed(cloneCore) && !ContextMenuSelected(cloneCore) && ContextMenuSelected(core),
             "clone resets hand inputs and preserves disabled ordinary input");
         SetHandGesturesAllowed(cloneCore, true);
-        var cloneApi = clone.FindChild("Expressions").FindChild("API");
+        var cloneApi = cloneExpressions.FindChild("API");
         Check(ProtoFluxHelper.DynamicImpulseHandler.TriggerDynamicImpulseWithArgument(cloneApi,
             ExpressionSystemSetup.TrySetGestureLeftTag, true, 1) == 1, "clone has its own int request receiver");
         Check(Get<int>(cloneCore, "State.Gesture.Left") == 1 && Get<int>(cloneCore, "State.Gesture.Right") == 0 &&
             Gestures(core) == (0, 0) && NoHandsAllowed(core),
             "clone int requests update only the clone and leave the original hand state and input mode unchanged");
-        await KeyboardShortcutChecks.Run(clone.FindChild("Expressions"));
-        await HandGesturePermissionChecks.Run(clone.FindChild("Expressions"));
-        await ExpressionResetChecks.Run(clone.FindChild("Expressions"));
-        await ExpressionMenuToggleChecks.Run(clone.FindChild("Expressions"));
+        await KeyboardShortcutChecks.Run(cloneExpressions);
+        await HandGesturePermissionChecks.Run(cloneExpressions);
+        await ExpressionResetChecks.Run(cloneExpressions);
+        await ExpressionMenuToggleChecks.Run(cloneExpressions);
         Check(Gestures(core) == (0, 0) && NoHandsAllowed(core),
             "clone reset leaves the original input state unchanged");
         clone.Destroy();
@@ -525,7 +526,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         // because its local initialization flag starts false.
         var unwornClone = avatar.Duplicate(world.RootSlot);
         await Frames();
-        var unwornCore = unwornClone.FindChild("Expressions").FindChild("API").FindChild("Internal");
+        var unwornCore = unwornClone.FindExpressionRoot().FindChild("API").FindChild("Internal");
         Check(Gestures(unwornCore) == (3, 4) && Reference<Slot>(unwornCore, "State.CurrentExpression") == null && NoHandsAllowed(unwornCore),
             "an unworn clone does not initialize or repeatedly clear stored state");
         unwornClone.Parent = wearer;
@@ -565,7 +566,7 @@ static async Task Run(string resonite, string artifacts, string importedPackage,
         for (int i = 0; i < 120; i++) await default(NextUpdate);
         Check(Math.Abs(restored.GetComponent<ValueField<float>>().Value.Value - 0.4f) < 0.01, "package reload discards active requests and restores tracking");
         Check(restored.GetComponentsInChildren<StaticAnimationProvider>().Count == 0, "saved poses reload without animation assets");
-        var restoredExpressions = restored.FindChild("Expressions");
+        var restoredExpressions = restored.FindExpressionRoot();
         ExpressionGraphChecks.CheckLayout(restoredExpressions);
         await ExpressionDynamicInputChecks.CheckEdits(restoredExpressions);
         var restoredCore = restoredExpressions.FindChild("API").FindChild("Internal");
