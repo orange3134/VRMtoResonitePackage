@@ -2319,6 +2319,22 @@ static void CheckUnityChanMainTexture()
         shaderSource: "Shader \"Example/Other\" {}");
     Check(byName.MainTexGuid == "main" && otherShader.MainTexGuid == "hidden",
         "A supplied shader declaration takes precedence over saved UTS2 properties");
+    const string legacy = "    m_Floats:\n    - _Mode: 0\n    - _SrcBlend: 1\n    - _DstBlend: 0\n    - _ZWrite: 1\n";
+    var cheek = UnityYaml.ParseDocuments("--- !u!21 &1\nMaterial:\n" +
+        "  m_Shader: {fileID: 4800000, guid: 97b7edb5fc0f5744c9b264c2224a0b1e}\n" +
+        "  m_SavedProperties:\n" + legacy).Single();
+    var external = ShaderPropertyFallbackConverter.Parse(cheek);
+    var inherited = ShaderPropertyFallbackConverter.Parse(Material(legacy), external);
+    Check(new[] { external, inherited }.All(m => m.AlphaMode == "transparent" && m.RenderQueue == 3000 && !m.ZWrite),
+        "External UTS2 transparent color pass and variants override unused Standard properties");
+    const string bundled = "Shader \"UnityChanToonShader/NoOutline/ToonColor_DoubleShadeWithFeather_Transparent\" { " +
+        "SubShader { Tags { \"Queue\"=\"Transparent+12\" } Pass { ZWrite On ColorMask 0 } " +
+        "Pass { Tags { \"LightMode\"=\"ForwardBase\" } Blend SrcAlpha OneMinusSrcAlpha ZWrite Off } } }";
+    var local = ShaderPropertyFallbackConverter.Parse(Material(legacy), shaderSource: bundled);
+    Check(local.AlphaMode == "transparent" && !local.ZWrite && local.RenderQueue == 3012,
+        "Bundled UTS2 uses its color pass and declared queue");
+    Check(ShaderPropertyFallbackConverter.Parse(cheek, shaderSource: "Shader \"Example/Opaque\" {}").AlphaMode == "opaque",
+        "Bundled replacement shader takes precedence over the external UTS2 GUID");
 }
 
 static void Check(bool condition, string label)

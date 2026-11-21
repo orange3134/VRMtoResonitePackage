@@ -996,6 +996,11 @@ UTS2 はメインテクスチャとその UV 変換を `_MainTex` から読む�
 あるときは保存済みの `_utsVersion` (2.x) で識別する。マテリアルバリアントでは省略された
 `_MainTex` を親から継承し、明示された null は未設定として扱う。
 
+Lyphos の頬が使う UTS2 の `NoOutline/ToonColor_DoubleShadeWithFeather_Transparent`
+は色描画パスでアルファブレンドと ZWrite Off を固定する。保存された Standard 用の
+`_Mode` や `_SrcBlend` はこのパスの描画設定に影響しない。シェーダー同梱時は
+色描画パスを読み、外部参照の場合は同シェーダーの GUID から Alpha と既定キュー 3000 を復元する。
+
 ### lilToon
 
 - headless変換ではUnity editor bakerを実行できない。直接表現できるpropertyとtexture transformを保持し、
