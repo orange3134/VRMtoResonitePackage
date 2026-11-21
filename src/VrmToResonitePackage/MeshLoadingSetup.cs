@@ -12,7 +12,6 @@ namespace VrmToResonitePackage;
 /// </summary>
 internal static class MeshLoadingSetup
 {
-    private const string DynamicVariableSpaceName = "modular_avatar";
     private const string MeshNotLoadedVariable = "modular_avatar/MeshNotLoaded";
     private const string HeadBoneVariable = "modular_avatar/HumanBone.head";
     private const string HeadPoseVariable = "modular_avatar/HumanBonePose.head";
@@ -28,10 +27,11 @@ internal static class MeshLoadingSetup
             return;
         }
 
-        EnsureDynamicVariableSpace(root);
+        AvatarSetup.EnsureAvatarSettingsRoot(root);
         PublishHeadPose(root);
 
-        Slot loadCheck = root.AddSlot("<color=cyan>ResoPon</color> - Mesh loaded check");
+        Slot system = AvatarSetup.EnsureAvatarSystemRoot(root);
+        Slot loadCheck = system.AddSlot("<color=cyan>ResoPon</color> - Mesh loaded check");
         MeshRendererLoadStatus loadStatus = loadCheck.AttachComponent<MeshRendererLoadStatus>();
         DynamicValueVariable<bool> loadVariable = loadCheck.AttachComponent<DynamicValueVariable<bool>>();
         loadVariable.Value.Value = false;
@@ -42,8 +42,7 @@ internal static class MeshLoadingSetup
         variableNameDriver.TargetField.Target = loadVariable.VariableName;
         variableNameDriver.State.DriveFrom(loadStatus.IsLoaded);
 
-        Slot avatarSettings = AvatarSetup.EnsureAvatarSettingsRoot(root);
-        Slot loadingDisplay = avatarSettings.AddSlot("Avatar Loading Display");
+        Slot loadingDisplay = system.AddSlot("Avatar Loading Display");
         Slot standIn = await LoadingStandInSetup.BuildAsync(loadingDisplay);
 
         foreach (MeshRenderer renderer in renderers)
@@ -70,18 +69,6 @@ internal static class MeshLoadingSetup
         AvatarVoiceRangeVisualizer visualizer =
             renderer.Slot.Parent?.GetComponent<AvatarVoiceRangeVisualizer>();
         return visualizer?.VisualRoot.Target == renderer.Slot;
-    }
-
-    private static void EnsureDynamicVariableSpace(Slot root)
-    {
-        DynamicVariableSpace space = root.GetComponents<DynamicVariableSpace>()
-            .FirstOrDefault(candidate => candidate.SpaceName.Value == DynamicVariableSpaceName);
-        if (space == null)
-        {
-            space = root.AttachComponent<DynamicVariableSpace>();
-            space.SpaceName.Value = DynamicVariableSpaceName;
-            space.OnlyDirectBinding.Value = true;
-        }
     }
 
     private static void PublishHeadPose(Slot root)

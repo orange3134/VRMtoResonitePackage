@@ -221,7 +221,7 @@ internal static class AvatarSetup
         if (options.NearClip > 0f)
         {
             // Pull the near clip in so long bangs don't occlude the first-person view.
-            Slot renderSettingsSlot = root.AddSlot("AvatarRenderSettings");
+            Slot renderSettingsSlot = EnsureAvatarSettingsRoot(root).AddSlot("AvatarRenderSettings");
             AvatarRenderSettings renderSettings = renderSettingsSlot.AttachComponent<AvatarRenderSettings>();
             renderSettings.NearClip.Value = options.NearClip;
             renderSettings.FarClip.Value = null;
@@ -650,6 +650,20 @@ internal static class AvatarSetup
         binding.VariableName.Value = variableName;
     }
 
+    internal const string AvatarSystemTag = "ResoPon/AvatarSystem";
+
+    internal static Slot EnsureAvatarSystemRoot(Slot root)
+    {
+        // An imported GameObject can also be named "Avatar System".
+        Slot system = root.Children.FirstOrDefault(slot => slot.Tag == AvatarSystemTag);
+        if (system == null)
+        {
+            system = root.AddSlot("Avatar System");
+            system.Tag = AvatarSystemTag;
+        }
+        return system;
+    }
+
     internal static Slot EnsureAvatarSettingsRoot(Slot root)
     {
         var space = root.GetComponents<DynamicVariableSpace>()
@@ -805,7 +819,7 @@ internal static class AvatarSetup
                 }
                 // A field can have only one writer. Keep each phoneme live and
                 // drive the shared mouth shape with the strongest current weight.
-                var mixer = skin.Key.Slot.AddSlot("Visemes " + string.Join(" ", phonemes));
+                var mixer = EnsureAvatarSystemRoot(root).AddSlot("Visemes " + string.Join(" ", phonemes));
                 var max = mixer.AttachComponent<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.Math.ValueMaxMulti<float>>();
                 foreach (var phoneme in phonemes)
                 {
@@ -1272,12 +1286,13 @@ internal static class AvatarSetup
             variable.Reference.DriveFrom(reference.Reference);
         }
         UniLog.Log($"DynamicReferenceVariable: {variableName} -> avatar root (linked={variable.Reference.Target == root})");
-        if (root.FindChild("Avatar Root Identification") != null)
+        Slot system = EnsureAvatarSystemRoot(root);
+        if (system.FindChild("Avatar Root Identification") != null)
         {
             return;
         }
 
-        Slot identification = root.AddSlot("Avatar Root Identification");
+        Slot identification = system.AddSlot("Avatar Root Identification");
         var worn = identification.AttachComponent<DynamicValueVariable<bool>>();
         worn.VariableName.Value = ModularAvatarNamespace + "/AvatarWorn";
         var wornLocal = identification.AttachComponent<DynamicValueVariable<bool>>();

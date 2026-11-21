@@ -14,7 +14,7 @@ internal static class ImportedGestureAvatarChecks
         await default(ToWorld);
         ExpressionTestFields.EquipAvatar(avatar);
         for (int i = 0; i < 180; i++) await default(NextUpdate);
-        var root = avatar.FindChild("Expressions") ?? throw new InvalidOperationException("Missing expression system");
+        var root = avatar.FindExpressionRoot() ?? throw new InvalidOperationException("Missing expression system");
         await WaitForExpressionMeshes(root);
         await ImportedBlinkChecks.Run(avatar, root);
         ImportedInitialShapeChecks.Run(avatar);
@@ -41,7 +41,7 @@ internal static class ImportedGestureAvatarChecks
             await PackageImporter.ImportPackage(baselinePackage, baseline);
             await default(ToWorld);
             for (int i = 0; i < 180; i++) await default(NextUpdate);
-            var baselineRoot = baseline.FindChild("Expressions");
+            var baselineRoot = baseline.FindExpressionRoot();
             await WaitForExpressionMeshes(baselineRoot);
             Console.WriteLine("BASELINE graph (legacy board boundaries are reported, not asserted):");
             ExpressionGraphChecks.Report(baselineRoot);

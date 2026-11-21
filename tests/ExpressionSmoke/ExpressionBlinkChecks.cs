@@ -63,7 +63,7 @@ internal static class ExpressionBlinkChecks
     {
         EquipAvatar(avatar);
         await Frames(30);
-        var expressions = avatar.FindChild("Expressions");
+        var expressions = avatar.FindExpressionRoot();
         var core = expressions.FindChild("API").FindChild("Internal"); var table = expressions.FindChild("DV").FindChild("GestureTable");
         var catalog = expressions.FindChild("Clips"); var outputs = expressions.FindChild("Outputs");
         var close = outputs.FindChild("Close"); var reverse = outputs.FindChild("Reverse"); var mouth = outputs.FindChild("Mouth");

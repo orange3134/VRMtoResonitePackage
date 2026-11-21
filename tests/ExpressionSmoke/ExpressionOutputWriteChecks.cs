@@ -208,12 +208,12 @@ internal static class ExpressionOutputWriteChecks
             Select(1); await Frames();
             var unworn = avatar.Duplicate(avatar.World.RootSlot);
             await Frames();
-            var unwornOutput = unworn.FindChild("Expressions").FindChild("Outputs").FindChild("A");
+            var unwornOutput = unworn.FindExpressionRoot().FindChild("Outputs").FindChild("A");
             Near(Get<float>(unwornOutput, "Result"), 0.8f, "unworn clone writes Base despite retained selection");
             Near(a.Value, 1, "unworn clone does not change the original result");
             unworn.Destroy();
             // Dequip must also work while the avatar remains beneath the same UserRoot.
-            avatar.FindChild("Avatar Root Identification")
+            avatar.AvatarSystem().FindChild("Avatar Root Identification")
                 .GetComponent<FrooxEngine.CommonAvatar.AvatarUserReferenceAssigner>().OnDequip(null);
             await Frames(30);
             Check(Get<int>(core, "State.Gesture.Right") == 1 && Reference<Slot>(core, "State.CurrentExpression") == shortClip,
@@ -223,7 +223,7 @@ internal static class ExpressionOutputWriteChecks
             b.Value = 0.123f;
             var unwornCopy = avatar.Duplicate(avatar.World.RootSlot);
             await Frames();
-            var unwornStatic = unwornCopy.FindChild("Expressions").FindChild("Outputs").FindChild("B");
+            var unwornStatic = unwornCopy.FindExpressionRoot().FindChild("Outputs").FindChild("B");
             Near(Get<float>(unwornStatic, "Result"), 0.123f, "cloning an unworn avatar does not write static Base on startup");
             unwornCopy.Destroy();
             Playback(ramp);

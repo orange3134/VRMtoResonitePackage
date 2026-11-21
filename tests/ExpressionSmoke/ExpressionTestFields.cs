@@ -1,9 +1,16 @@
 using FrooxEngine;
+using VrmToResonitePackage;
 
 // Keep the IWorldElement generic constraint off the top-level Program type.
 // Program must load before Main can register the external Resonite DLL resolver.
 internal static class ExpressionTestFields
 {
+    // Packages produced before the Avatar System folder kept these children on the avatar.
+    public static Slot AvatarSystem(this Slot avatar) =>
+        avatar.Children.SingleOrDefault(slot => slot.Tag == AvatarSetup.AvatarSystemTag) ?? avatar;
+
+    public static Slot FindExpressionRoot(this Slot avatar) => avatar.AvatarSystem().FindChild("Expressions");
+
     public static (int Left, int Right) Gestures(Slot slot)
     {
         int Read(string hand) => slot.ExpressionVariables<DynamicValueVariable<int>>()
@@ -33,7 +40,7 @@ internal static class ExpressionTestFields
     {
         var equipSlot = avatar.GetComponent<FrooxEngine.CommonAvatar.AvatarObjectSlot>()
             ?? avatar.AttachComponent<FrooxEngine.CommonAvatar.AvatarObjectSlot>();
-        avatar.FindChild("Avatar Root Identification")
+        avatar.AvatarSystem().FindChild("Avatar Root Identification")
             .GetComponent<FrooxEngine.CommonAvatar.AvatarUserReferenceAssigner>().OnEquip(equipSlot);
     }
 

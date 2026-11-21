@@ -25,6 +25,13 @@ VRM・VRChat とも、モデル取り込み時に作った `Assets` スロット
 その子スロットをプロバイダーの型で `Meshes`、`Materials`、`Textures` に振り分ける。
 既存スロットの親を変更することで、レンダラーやサムネイルからの参照を維持する。
 
+`Assets`、`Avatar Settings`、`Avatar System` はアバタールート直下に置く。
+表情の `Expressions`、装着者判定の `Avatar Root Identification`、メッシュの読み込み判定と
+代替表示、VRM の `VRM Metadata`、複数の口形を合成する `Visemes …` は、必要な場合に
+`Avatar System` の子として生成する。入力モデルの同名スロットとは `ResoPon/AvatarSystem` タグで区別する。
+Resonite が作る `CenteredRoot` や各部位の Proxy は元の階層に置き、
+骨に追従する目のピボット、コライダー、一人称用レンダラーも対象の骨・メッシュの下に置く。
+
 エンジン起動・アセット待機・パッケージ出力は[ヘッドレスエンジン](headless-engine.md)、
 工程別の計測は[変換性能の診断](conversion-performance.md)を参照する。
 
@@ -103,7 +110,7 @@ CLI では従来どおり `--no-protection` を指定した実行で保護を外
 - 明示的な視点がない場合は、目の中点から眉間側へ補正する。
   `--view-forward` と `--view-up` で推定時のオフセットを上書きできる。
   VRChatのDescriptor視点の優先順位とオプションの加算規則は[視点](vrchat-conversion.md#視点)を参照する。
-- `AvatarRenderSettings` はルート直下へ作り、既定 `NearClip=0.075`、`FarClip=null` とする。
+- `Avatar Settings/AvatarRenderSettings` に既定 `NearClip=0.075`、`FarClip=null` を設定する。
 - ビセームと瞬きはResoniteの名前推測による自動補完を避け、入力から解決した設定を使う。
   視線の `EyeRotationDriver.MaxSwing` はVRM・VRChatともに `modular_avatar/EyeSwing` と値を共有する。
   `modular-avatar-resonite` と同名の `DynamicValueVariable<float>` を

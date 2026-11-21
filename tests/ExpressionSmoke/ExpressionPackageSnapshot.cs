@@ -94,6 +94,7 @@ internal static class ExpressionPackageSnapshot
         var renderer = target.FindNearestParent<SkinnedMeshRenderer>();
         var owner = renderer ?? target.FindNearestParent<Component>();
         var avatar = output.Parent.Parent.Parent;
+        if (avatar.Tag == VrmToResonitePackage.AvatarSetup.AvatarSystemTag) avatar = avatar.Parent;
         var path = new Stack<string>();
         for (var slot = owner.Slot; slot != avatar; slot = slot.Parent)
         {

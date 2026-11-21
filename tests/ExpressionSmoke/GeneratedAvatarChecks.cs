@@ -25,9 +25,12 @@ internal static class GeneratedAvatarChecks
         {
             Check(!typeof(AvatarSetup).Assembly.GetManifestResourceNames().Any(n => n.EndsWith(".resonitepackage")),
                 "converter embeds no avatar helper packages");
+            var authored = avatar.AddSlot("Avatar System");
             AvatarSetup.EnsureAvatarRootIdentification(avatar);
             AvatarSetup.EnsureAvatarRootIdentification(avatar);
-            Check(avatar.Children.Count(s => s.Name == "Avatar Root Identification") == 1, "identification is idempotent");
+            Check(avatar.AvatarSystem().Name == "Avatar System" && authored.ChildrenCount == 0,
+                "generated system has its own folder alongside a same-named authored object");
+            Check(avatar.AvatarSystem().Children.Count(s => s.Name == "Avatar Root Identification") == 1, "identification is idempotent");
             AvatarSetup.SetupEyeSwing(avatar, avatar.AddSlot("Eye Manager").AttachComponent<EyeRotationDriver>(), source);
             var rig = avatar.AttachComponent<BipedRig>();
             foreach (BodyNode bone in new[] { BodyNode.Hips, BodyNode.Spine, BodyNode.Head,
@@ -61,7 +64,7 @@ internal static class GeneratedAvatarChecks
             renderer.Mesh.Target = pendingMesh;
             await MeshLoadingSetup.Apply(avatar);
             await Frames(60);
-            var standIn = avatar.FindChild("<color=#00ffff>Avatar Settings</color>")
+            var standIn = avatar.AvatarSystem()
                 .FindChild("Avatar Loading Display").FindChild("LoadingStandin");
             Check(!renderer.Enabled && standIn.ActiveSelf, "pending mesh shows stand-in and hides avatar renderer");
             Check(avatar.GetComponentInChildren<MeshRendererLoadStatus>().Renderers.Count == 1,
@@ -86,7 +89,7 @@ internal static class GeneratedAvatarChecks
             await PackageImporter.ImportPackage(package, restored);
             await default(ToWorld);
             await Frames(120);
-            var restoredStandIn = restored.FindChild("<color=#00ffff>Avatar Settings</color>")
+            var restoredStandIn = restored.AvatarSystem()
                 .FindChild("Avatar Loading Display").FindChild("LoadingStandin");
             // Exercise the hidden thumbnail graph as if a fresh client was still loading meshes.
             var activeDriver = restoredStandIn.ActiveSelf_Field.ActiveLink as ISyncRef;
@@ -104,8 +107,8 @@ internal static class GeneratedAvatarChecks
         var variable = avatar.GetComponentsInChildren<DynamicValueVariable<float>>()
             .Single(v => v.VariableName.Value == "modular_avatar/EyeSwing");
         var settings = variable.Slot.Parent;
-        Check(avatar.Children.Count(s => s.Name == settings.Name) == 1,
-            "eye swing and loading display share one settings root");
+        Check(settings.Parent == avatar && avatar.Children.Count(s => s.Name == settings.Name) == 1,
+            "eye swing is under the single avatar settings folder at the root");
         Check(AvatarSetup.EnsureAvatarSettingsRoot(avatar) == settings &&
             settings.GetComponents<DynamicReferenceVariable<Slot>>().Count() == 1 &&
             avatar.GetComponent<DynamicVariableSpace>().TryReadValue<Slot>("AvatarSettingsRoot", out var published) &&
@@ -148,7 +151,7 @@ internal static class GeneratedAvatarChecks
         var fallback = standIn.GetComponentsInChildren<FrooxEngine.ProtoFlux.Runtimes.Execution.Nodes.ValueObjectInput<Uri>>().Single();
         Check((fallback.Value.Value?.Scheme is "local" or "resdb") && texture.URL.Value == fallback.Value.Value,
             "offline profile uses an imported fallback texture");
-        var assigner = avatar.FindChild("Avatar Root Identification").GetComponent<AvatarUserReferenceAssigner>();
+        var assigner = avatar.AvatarSystem().FindChild("Avatar Root Identification").GetComponent<AvatarUserReferenceAssigner>();
         Check(assigner.References.Count == 1, "one wearer reference is assigned by avatar equip events");
         assigner.OnDequip(null); await Frames(20);
         Check(!Value(avatar, "AvatarWorn") && !Value(avatar, "AvatarWornLocal") && transform.ScaleOverride.Value == null,

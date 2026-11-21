@@ -63,7 +63,7 @@ internal static class NeutralExpressionChecks
     private static async Task Verify(Slot avatar)
     {
         var mesh = avatar.FindChild("Face").GetComponent<SkinnedMeshRenderer>();
-        var root = avatar.FindChild("Expressions"); var api = root.FindChild("API");
+        var root = avatar.FindExpressionRoot(); var api = root.FindChild("API");
         var manager = avatar.GetComponentInChildren<EyeManager>();
         manager.LeftEyeCloseOverride.Value = 0;
         root.WriteDynamicVariable("ExpressionSystem/Config.SmoothingSpeed", 1000f);

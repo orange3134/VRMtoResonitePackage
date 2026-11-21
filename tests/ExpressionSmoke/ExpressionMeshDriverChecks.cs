@@ -76,7 +76,7 @@ internal static class ExpressionMeshDriverChecks
 
     private static void CheckSpeeds(Slot avatar, float expected)
     {
-        var smoothers = avatar.FindChild("Expressions").GetComponentsInChildren<SmoothValue<float>>();
+        var smoothers = avatar.FindExpressionRoot().GetComponentsInChildren<SmoothValue<float>>();
         Check(smoothers.Count == 2, "only non-blink mesh outputs have smoothing");
         foreach (var smooth in smoothers)
         {
@@ -89,7 +89,7 @@ internal static class ExpressionMeshDriverChecks
 
     private static async Task CheckSmoothingSpeed(Slot avatar, float initial, float updated)
     {
-        var expressions = avatar.FindChild("Expressions");
+        var expressions = avatar.FindExpressionRoot();
         var speed = expressions.GetComponentsInChildren<DynamicValueVariable<float>>()
             .Single(v => v.VariableName.Value == "ExpressionSystem/Config.SmoothingSpeed");
         Check(speed.Slot == expressions.FindChild("DV").FindChild("Config.SmoothingSpeed"), "one shared speed is editable in Expressions/DV");
@@ -118,7 +118,7 @@ internal static class ExpressionMeshDriverChecks
     {
         EquipAvatar(avatar);
         await Frames(30);
-        var expressions = avatar.FindChild("Expressions"); var core = expressions.FindChild("API").FindChild("Internal");
+        var expressions = avatar.FindExpressionRoot(); var core = expressions.FindChild("API").FindChild("Internal");
         var catalog = expressions.FindChild("Clips"); var table = expressions.FindChild("DV").FindChild("GestureTable");
         var first = avatar.FindChild("First").FindChild("Face").GetComponent<SkinnedMeshRenderer>();
         var second = avatar.FindChild("Second").FindChild("Face").GetComponent<SkinnedMeshRenderer>();
