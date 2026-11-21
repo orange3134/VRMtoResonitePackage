@@ -385,11 +385,11 @@ internal static class Converter
         {
             // ModelImporter always welds vertices using base attributes. Retain distinct
             // control points where morph deltas differ, before handing it the temporary FBX.
-            fbxPath = Unity.UnityFbxMorphSeams.Prepare(fbxPath);
+            fbxPath = Unity.UnityFbxMorphSeams.Prepare(fbxPath, !avatar.ModelsWithoutBlendShapes.Contains(avatar.FbxGuid));
             for (int i = 0; i < additionalFbxPaths.Count; i++)
             {
                 var (path, asset) = additionalFbxPaths[i];
-                additionalFbxPaths[i] = (Unity.UnityFbxMorphSeams.Prepare(path), asset);
+                additionalFbxPaths[i] = (Unity.UnityFbxMorphSeams.Prepare(path, !avatar.ModelsWithoutBlendShapes.Contains(asset.Guid)), asset);
             }
             profile?.Mark("prepare-fbx");
             await world.Coroutines.StartTask(async () =>

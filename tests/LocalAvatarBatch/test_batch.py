@@ -73,6 +73,35 @@ class BatchFixture:
 
 
 class BatchInputTests(BatchFixture, unittest.TestCase):
+    def test_saved_registry_describes_the_executed_arguments(self):
+        # Simulate an editor replacing the working registry after parsing and before
+        # the run directory is created. Keep that edit visible until build starts.
+        registry = self.repo / ".local/avatar-tests.json"
+        mint_id, invoke = batch.uuid.uuid4, self.invoke
+        original = None
+
+        def edit_registry():
+            nonlocal original
+            original = registry.read_bytes()
+            updated = json.loads(original)
+            updated["cases"][0]["arguments"] = ["--no-avatar"]
+            batch.write_json(registry, updated)
+            return mint_id()
+
+        def build_and_convert(command, **kwargs):
+            if command[1] == "build":
+                registry.write_bytes(original)
+            return invoke(command, **kwargs)
+
+        with mock.patch.object(batch.uuid, "uuid4", side_effect=edit_registry), \
+             mock.patch.object(self, "invoke", side_effect=build_and_convert):
+            code, report = self.run_batch([self.input.name])
+        self.assertEqual(0, code)
+        saved = Path(report["packageDirectory"]).parent / "registry.json"
+        self.assertEqual(original, saved.read_bytes())
+        self.assertEqual(batch.sha256(saved), report["registrySha256"])
+        self.assertNotIn("--no-avatar", report["cases"][0]["commands"][0]["arguments"])
+
     def test_selection_follows_cli_option_consumption(self):
         select = batch.avatar_registry.selected_avatar
         self.assertIsNone(select(["--transparent-cutout", "--avatar"]))

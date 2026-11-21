@@ -275,6 +275,8 @@ BlendShapeはボーンのあるメッシュに限定せず、morphだけを持�
   unpack済み骨格の通常のTransform文書に保存された位置・回転・スケールも保持する。
   PhysBoneやskinから直接参照されないArmatureなどの親を含め、skin骨またはその祖先であることと
   元モデルの完全なpathが一致することを確認して `AuthoredBoneTransforms` に収集する。
+  骨格モデルの候補は合成済みシーンごとにroot AnimatorとrendererのFBX参照から一度だけ収集し、
+  子のTransformや別Prefabの祖先をたどる際も、そのシーンを所有するビューの候補を使う。
   合成済みPrefabを読むため、Variantの上書きも反映し、省略フィールドはimport値を残す。
   Assimp補助ノードの折り畳みと配置の完了後、primary wrapperの折り畳み・MA統合・IK設定の前に適用する。
   FBXのmesh・bindposeを元の単位で保持するため、位置だけをそのモデルのimport scaleで割り、
@@ -639,7 +641,9 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
 
 - FBX内の元shape順を記録する。
 - ModelImporterの `meshes.importBlendShapes: 0` では、FBX由来のshape名・既定weight・
-  アニメーション候補を解析結果から除く。ボーンを持つMeshは引き続きスキン付きとして扱う。
+  アニメーション候補を解析結果から除く。主FBXと追加FBXの設定を個別に保持し、Resoniteが読む
+  一時FBXでBlendShapeデフォーマからメッシュへの接続を外す。バイナリ・ASCIIともに
+  スキンとボーンの接続は維持され、保存メッシュのshape数とrendererのweight数は0になる。
 - blinkやprefab weightが数値参照する最大indexまで、欠落shapeを空frameとして復元する。
 - 名前参照だけのrendererは大量の空frameを復元しない。
 - FBX `BlendShapeChannel.DeformPercent` はModelImporterの `importBlendShapeDeformPercent` が

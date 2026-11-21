@@ -284,6 +284,7 @@ public static partial class VrchatAvatarParser
                 continue;
             }
             var resolver = package.ModelFileIds(guid);
+            if (!resolver.ImportBlendShapes) avatar.ModelsWithoutBlendShapes.Add(guid);
             foreach ((string rendererName, IReadOnlyList<string> names) in resolver.BlendShapeNames)
             {
                 avatar.FbxBlendShapeNames.TryAdd(rendererName, names);
@@ -3192,6 +3193,7 @@ public static partial class VrchatAvatarParser
             var included = IncludedPrefabObjects(package, guid, scene, avatar, modelResolvers, prefabScenes);
             if (guid == sourceGuid && sourceSubtree != null) included.IntersectWith(sourceSubtree);
             ParsePhysBones(scene, included, avatar, guid, package);
+            string skeletonModel = SelectLocalSkeletonModel(package, scene, avatar.FbxGuid);
             // A saved unpacked rig carries its pose in ordinary Transform documents,
             // not FBX property modifications. Collect all verified skeleton nodes,
             // even when no renderer, PhysBone or eye directly references them.
@@ -3204,7 +3206,7 @@ public static partial class VrchatAvatarParser
                 var scale = root["m_LocalScale"];
                 var placement = new FbxPlacement();
                 CaptureLocalPlacementParents(package, scene, guid, transform.FileId, placement,
-                    SelectLocalSkeletonModel(package, scene, avatar.FbxGuid), modelResolvers,
+                    skeletonModel, modelResolvers,
                     includeSkeletonAncestors: true);
                 var imported = placement.ParentTransforms.FirstOrDefault();
                 if (imported?.ImportedBone == null || imported.Key != $"{guid}:{transform.FileId}") continue;
@@ -3351,20 +3353,13 @@ public static partial class VrchatAvatarParser
         // Baked Mesh assets no longer reference their source FBX. The root Animator's
         // Avatar still identifies that skeleton, even when accessory FBXs
         // are the only models referenced directly by the prefab's renderers.
-        var animatorModels = scene.RootGameObjects().SelectMany(scene.ComponentsOf)
-            .Where(component => component.ClassId == 95)
-            .Select(component => component.Root?["m_Avatar"]?.Guid)
-            .Where(g => package.ByGuid(g)?.Extension == ".fbx").ToArray();
-        var models = scene.MeshRenderers.Select(r => scene.RendererMesh(r)?.Guid)
-            .Where(g => package.ByGuid(g)?.Extension == ".fbx")
-            .Concat(animatorModels)
-            .Distinct().ToArray();
+        var (animatorModels, models) = package.SceneFbxReferences(scene);
         // A physics/eye reference by itself does not prove which of several skins
         // owns it. Only an explicit Animator permits retaining the preferred model.
         if (requireUnique && !animatorModels.Contains(primaryGuid))
-            return models.Length == 1 ? models[0] : null;
-        return models.Length == 0 || models.Contains(primaryGuid) ? primaryGuid :
-            models.Length == 1 ? models[0] : null;
+            return models.Count == 1 ? models.First() : null;
+        return models.Count == 0 || models.Contains(primaryGuid) ? primaryGuid :
+            models.Count == 1 ? models.First() : null;
     }
 
     private static VrchatBoneTarget ResolvePhysicsTarget(UnityPackage package, string guid, long id, string primaryGuid)

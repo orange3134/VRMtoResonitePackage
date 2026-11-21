@@ -4,6 +4,7 @@ import argparse
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -91,7 +92,8 @@ def main():
         parser.error("Jobs and timeout must be positive")
     repo = Path(__file__).resolve().parents[1]
     registry_path = repo / ".local/avatar-tests.json"
-    registry = json.loads(registry_path.read_text(encoding="utf-8-sig"))
+    registry_bytes = registry_path.read_bytes()
+    registry = json.loads(registry_bytes.decode("utf-8-sig"))
     cases = registry["cases"]
     ids = [case["id"] for case in cases]
     if (registry.get("version") != 1 or not ids or len(set(ids)) != len(ids)
@@ -105,14 +107,14 @@ def main():
     root = repo / ".tmp_verify/all-avatar-conversions" / run_id
     packages = root / "packages"
     packages.mkdir(parents=True)
-    shutil.copy2(registry_path, root / "registry.json")
+    (root / "registry.json").write_bytes(registry_bytes)
     environment = dict(os.environ, RESOPON_NOPAUSE="1")
     report = {
         "startedUtc": datetime.now(timezone.utc).isoformat(),
         "gitHead": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip(),
         "hasUncommittedChanges": bool(subprocess.check_output(
             ["git", "status", "--porcelain"], cwd=repo, text=True).strip()),
-        "registrySha256": sha256(root / "registry.json"),
+        "registrySha256": hashlib.sha256(registry_bytes).hexdigest(),
         "packageDirectory": str(packages), "status": "running", "cases": [],
         "clientValidation": "not-performed",
     }

@@ -66,7 +66,14 @@ def main():
     if not cases:
         parser.error("No cases selected")
     binaries = {"converter": args.converter.resolve(), "referenceDump": args.reference_dump.resolve()}
-    binary_hashes = {name: sha256(path) for name, path in binaries.items()}
+    if any(case["unity"]["status"] == "verified" for case in cases):
+        binaries["referenceConverter"] = binaries["referenceDump"].with_name("ResoPon.dll")
+    try:
+        binary_hashes = {name: sha256(path) for name, path in binaries.items()}
+    except OSError as error:
+        parser.error(str(error))
+    if "referenceConverter" in binaries and binary_hashes["referenceConverter"] != binary_hashes["converter"]:
+        parser.error("--converter must match ResoPon.dll beside --reference-dump")
     # Never reuse output directories or overwrite an earlier result.
     output.mkdir(parents=True, exist_ok=False)
     repo = Path(__file__).resolve().parents[1]

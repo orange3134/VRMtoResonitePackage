@@ -85,6 +85,8 @@ Prefab入力の依存記録はAssets/Packages内のserialized GUID参照とパ�
 ネイティブアセット内部の外部参照やPackageCache全体を網羅するプロジェクトバックアップではない。
 
 終了コード0は、選択した全ケースの解析結果と、`verified` のUnity参照が一致したことを示す。
+Unity参照を照合するケースでは、`--converter` と `--reference-dump` の隣にある
+`ResoPon.dll` のSHA-256を開始時に照合する。別ディレクトリの同一ビルドも指定できる。
 Unity参照の照合時には、登録引数で本番パーサが選ぶPrefabのGUIDも検証する。
 複数の `--avatar` は最後の指定を使う。指定を省略したケースでは既定選択を照合する。
 1は実行失敗・ハッシュ変更・差分、2はコマンド引数の誤りを示す。
@@ -123,7 +125,8 @@ python -B scripts/convert-all-local-avatars.py --jobs 3
 `packages/` には変換と `--inspect` が成功したパッケージを
 `<caseId>__<元の出力名>.resonitepackage` として集約し、コピー前後のSHA-256も照合する。
 `report.json` に全件の成否、入力・実行DLL・出力のハッシュ、Git HEAD、実行引数を記録する。
-登録一覧のコピーは `registry.json`、個別ログは `cases/<caseId>/` に残る。
+実行引数を読み取った登録一覧をそのまま `registry.json` に保存する。
+実行中に登録を編集しても、その実行の引数と記録は一致する。個別ログは `cases/<caseId>/` に残る。
 既存の単体テストの直近結果は更新しない。
 
 網羅的テストには次の解析比較を必ず含める。このバッチでは各ケースの変換前に自動実行する。

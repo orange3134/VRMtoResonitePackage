@@ -29,6 +29,7 @@ public sealed class VrchatAvatar
     public string FbxPath { get; set; }
 
     public string FbxGuid { get; set; }
+    internal HashSet<string> ModelsWithoutBlendShapes { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Scale baked during Assimp import to reproduce Unity ModelImporter file-unit conversion.</summary>
     public float FbxImportScale { get; set; } = 1f;

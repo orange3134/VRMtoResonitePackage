@@ -1291,6 +1291,24 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
     var afterRemoval = CountRendererObjects(removedTree);
     Check(beforeRemoval.Renderers > 0 && afterRemoval.Renderers == 0 && afterRemoval.Objects == beforeRemoval.Objects,
         "Production conversion honors a direct FBX renderer removal while the saved package retains its GameObject");
+
+    File.AppendAllText(modelPath + ".meta", "\nModelImporter:\n  meshes:\n    importBlendShapes: 0\n");
+    optionsType.GetProperty("OutputDirectory")!.SetValue(options, Path.Combine(temp, "NoMorphOutput"));
+    string noMorphOutput = await (Task<string>)Call("VrmToResonitePackage.Converter", "ConvertVrchat", world, basePath, options);
+    await world.Coroutines.StartTask(async () =>
+    {
+        await default(ToWorld);
+        var reloaded = world.AddSlot("Verify disabled blendshapes");
+        await PackageImporter.ImportPackage(noMorphOutput, reloaded);
+        await default(ToWorld);
+        var skins = reloaded.GetComponentsInChildren<SkinnedMeshRenderer>().ToArray();
+        for (int frame = 0; frame < 7200 && skins.Any(r => !r.Mesh.IsAssetAvailable); frame++)
+            await default(NextUpdate);
+        Check(skins.Any(r => r.Slot.Name == rendererName && r.Bones.Count > 0 && r.Mesh.Asset?.Data?.HasBoneBindings == true) &&
+              skins.All(r => r.Mesh.Asset?.Data?.BlendShapeCount == 0 && r.BlendShapeWeights.Count == 0),
+            "Disabling FBX blendshapes preserves skin bindings and saves zero mesh channels and renderer weights");
+        reloaded.Destroy();
+    });
 }
 
 static object Call(string type, string method, params object[] args)

@@ -41,6 +41,7 @@ public sealed partial class UnityPackage : IDisposable
     private readonly Dictionary<string, UnityAsset> _byGuid;
     private readonly Dictionary<string, string> _textByGuid = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UnityScene> _sceneByGuid = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<UnityScene, (IReadOnlySet<string> RootAnimators, IReadOnlySet<string> All)> _sceneFbxReferences = new();
     // Only source model data is shared across views; composed scenes and occurrence IDs stay local.
     private readonly Dictionary<(string Path, string Meta), UnityModelFileIdResolver> _modelIds;
 
@@ -153,6 +154,20 @@ public sealed partial class UnityPackage : IDisposable
     {
         _byGuid[asset.Guid] = asset;
         if (scene != null) _sceneByGuid[asset.Guid] = scene;
+        _sceneFbxReferences.Clear();
+    }
+
+    internal (IReadOnlySet<string> RootAnimators, IReadOnlySet<string> All) SceneFbxReferences(UnityScene scene)
+    {
+        if (_sceneFbxReferences.TryGetValue(scene, out var cached)) return cached;
+        var animators = scene.RootGameObjects().SelectMany(scene.ComponentsOf)
+            .Where(component => component.ClassId == 95)
+            .Select(component => component.Root?["m_Avatar"]?.Guid)
+            .Where(guid => ByGuid(guid)?.Extension == ".fbx").ToHashSet(StringComparer.Ordinal);
+        var models = scene.MeshRenderers.Select(renderer => scene.RendererMesh(renderer)?.Guid)
+            .Where(guid => ByGuid(guid)?.Extension == ".fbx").ToHashSet(StringComparer.Ordinal);
+        models.UnionWith(animators);
+        return _sceneFbxReferences[scene] = (animators, models);
     }
 
     public IEnumerable<UnityAsset> ByExtension(string extensionWithDot)
