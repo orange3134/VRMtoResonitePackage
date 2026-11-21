@@ -192,6 +192,7 @@ public sealed class UnityModelFileIdResolver
     {
         string importPath = path;
         string temporaryPath = null;
+        string morphPath = null;
         try
         {
             if (!string.Equals(Path.GetExtension(path), ".fbx", StringComparison.OrdinalIgnoreCase))
@@ -201,7 +202,14 @@ public sealed class UnityModelFileIdResolver
                 importPath = temporaryPath;
             }
             using var context = new AssimpContext();
-            _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath, out var sourceSkinPaths, out var sourceTransforms);
+            _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath, out var sourceSkinPaths, out var sourceTransforms,
+                out bool hasEmbeddedShapes);
+            if (ImportBlendShapes && hasEmbeddedShapes)
+            {
+                morphPath = Path.Combine(Path.GetTempPath(), $"ResoPon_morph_{Guid.NewGuid():N}.fbx");
+                importPath = UnityFbxMorphSeams.Prepare(importPath, outputPath: morphPath);
+                _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath);
+            }
             SourceSkinBonePaths = sourceSkinPaths;
             Scene scene = context.ImportFile(importPath, PostProcessSteps.None);
             if (scene?.RootNode == null)
@@ -325,6 +333,10 @@ public sealed class UnityModelFileIdResolver
         }
         finally
         {
+            if (morphPath != null)
+            {
+                try { File.Delete(morphPath); } catch { }
+            }
             if (temporaryPath != null)
             {
                 try { File.Delete(temporaryPath); } catch { }

@@ -12,6 +12,9 @@ namespace VrmToResonitePackage.Vrchat;
 /// </summary>
 internal static class ShaderPropertyFallbackConverter
 {
+    private const string Uts2NoOutlineTransparentName = "UnityChanToonShader/NoOutline/ToonColor_DoubleShadeWithFeather_Transparent";
+    private const string Uts2NoOutlineTransparentGuid = "97b7edb5fc0f5744c9b264c2224a0b1e";
+
     public static LilToonInfo Parse(YamlDocument material, LilToonInfo parent = null,
         string shaderSource = null)
     {
@@ -23,8 +26,24 @@ internal static class ShaderPropertyFallbackConverter
         YamlNode colors = LilToonConverter.FlattenProps(props?["m_Colors"]);
         YamlNode texEnvs = LilToonConverter.FlattenProps(props?["m_TexEnvs"]);
 
-        string mainTexName = FindName(texEnvs, "_BaseMap", "_BaseColorMap", "_MainTex",
-            "_AlbedoMap", "_Albedo", "_DiffuseMap", "_Diffuse");
+        // UTS2 samples _MainTex even when its hidden _BaseMap also has a saved value.
+        var shader = root?["m_Shader"];
+        bool hasSource = !string.IsNullOrEmpty(shaderSource);
+        string shaderName = hasSource
+            ? Regex.Match(shaderSource, @"^\s*Shader\s+""([^""]+)""", RegexOptions.Multiline).Groups[1].Value : null;
+        bool inheritsShader = !hasSource && (shader?.FileID ?? 0) == 0;
+        bool utsTransparent = hasSource ? shaderName == Uts2NoOutlineTransparentName :
+            inheritsShader ? parent?.IsUts2NoOutlineTransparent == true :
+            string.Equals(shader.Guid, Uts2NoOutlineTransparentGuid, StringComparison.OrdinalIgnoreCase);
+        bool isUnityChanToon2 = utsTransparent || (hasSource
+            ? shaderName.StartsWith("UnityChanToonShader/", StringComparison.Ordinal)
+            : TryFloat(floats, out float utsVersion, "_utsVersion")
+                ? utsVersion is >= 2f and < 3f
+                : parent?.IsUnityChanToon2 == true);
+        string mainTexName = isUnityChanToon2
+            ? FindName(texEnvs, "_MainTex")
+            : FindName(texEnvs, "_BaseMap", "_BaseColorMap", "_MainTex",
+                "_AlbedoMap", "_Albedo", "_DiffuseMap", "_Diffuse");
         string normalMapName = FindName(texEnvs, "_BumpMap", "_NormalMap", "_NormalTex");
         string metallicMapName = FindName(texEnvs, "_MetallicGlossMap");
         string specGlossMapName = FindName(texEnvs, "_SpecGlossMap");
@@ -152,7 +171,13 @@ internal static class ShaderPropertyFallbackConverter
                 : hasEmission,
             "_EMISSION") && hasEmission;
 
-        ShaderDefaults shaderDefaults = ReadShaderDefaults(root?["m_Shader"]?.FileID, shaderSource);
+        // This external UTS2 shader's color pass fixes Blend and ZWrite. Saved Standard
+        // material properties can remain in the YAML even though the pass never reads them.
+        ShaderDefaults shaderDefaults = ReadShaderDefaults(shader?.FileID, shaderSource);
+        if (utsTransparent && !hasSource)
+            shaderDefaults = inheritsShader
+                ? new ShaderDefaults(parent.RenderQueue, parent.AlphaMode, parent.ZWrite, null)
+                : new ShaderDefaults(3000, "transparent", false, null);
         int customRenderQueue = root?["m_CustomRenderQueue"]?.AsInt(-1) ?? -1;
         int inheritedRenderQueue = parent?.RenderQueue ?? -1;
         int renderQueue = customRenderQueue >= 0
@@ -166,8 +191,8 @@ internal static class ShaderPropertyFallbackConverter
         int? dstBlend = TryFloat(floats, out float dstBlendValue, "_DstBlend")
             ? (int)dstBlendValue
             : parent?.DstBlend;
-        string alphaMode = DetermineAlphaMode(floats, renderQueue, parent?.AlphaMode,
-            shaderDefaults.AlphaMode, srcBlend, dstBlend);
+        string alphaMode = (utsTransparent ? shaderDefaults.AlphaMode : null) ??
+            DetermineAlphaMode(floats, renderQueue, parent?.AlphaMode, shaderDefaults.AlphaMode, srcBlend, dstBlend);
         bool hasZWrite = TryFloat(floats, out float zWrite, "_ZWrite");
         bool hasCull = TryFloat(floats, out float cull, "_Cull", "_CullMode");
 
@@ -175,6 +200,8 @@ internal static class ShaderPropertyFallbackConverter
         {
             Name = root?["m_Name"]?.AsString() ?? parent?.Name,
             IsLilToon = false,
+            IsUnityChanToon2 = isUnityChanToon2,
+            IsUts2NoOutlineTransparent = utsTransparent,
             UsesStandardKeywords = usesStandardKeywords,
             UsesUrpKeywords = usesUrpKeywords,
             Color = color,
@@ -191,9 +218,9 @@ internal static class ShaderPropertyFallbackConverter
             DstBlend = dstBlend,
             Cutoff = Float(floats, parent?.Cutoff ?? 0.5f,
                 "_Cutoff", "_AlphaClipThreshold", "_AlphaCutoff"),
-            ZWrite = hasZWrite
+            ZWrite = (utsTransparent ? shaderDefaults.ZWrite : null) ?? (hasZWrite
                 ? zWrite >= 0.5f
-                : parent?.ZWrite ?? shaderDefaults.ZWrite ?? (alphaMode is "opaque" or "cutout"),
+                : parent?.ZWrite ?? shaderDefaults.ZWrite ?? (alphaMode is "opaque" or "cutout")),
             RenderQueue = renderQueue,
             Cull = hasCull ? (int)cull : parent?.Cull ?? shaderDefaults.Cull ?? 2,
             ColorMask = (int)Float(floats, parent?.ColorMask ?? 15f, "_ColorMask"),

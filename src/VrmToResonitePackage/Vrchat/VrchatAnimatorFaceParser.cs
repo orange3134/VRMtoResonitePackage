@@ -16,6 +16,7 @@ public static class VrchatAnimatorFaceParser
         var blinks = new HashSet<Shape>();
         var blinkLoops = new List<VrchatBlinkLoop>();
         var neutralBlinks = new List<VrchatBlinkLoop>();
+        var recoveredBlinks = new List<VrchatBlinkLoop>();
         foreach (YamlNode layer in descriptor?["baseAnimationLayers"]?.Seq ?? new())
         {
             // SDK FX layer. Gesture/Action animations must not become always-on face drivers.
@@ -118,6 +119,12 @@ public static class VrchatAnimatorFaceParser
                     var loop = VrchatBlinkLoop.Read(clip);
                     bool neutral = loop == null;
                     loop ??= VrchatBlinkLoop.ReadNeutral(clip);
+                    bool missingMotion = clip == null;
+                    if (missingMotion && (animatorLayer["m_Mask"]?.FileID ?? 0) == 0 &&
+                        (animatorLayer["m_SyncedLayerIndex"]?.AsInt() ?? -1) < 0)
+                        loop = VrchatBlinkLoop.RecoverMissingMotion(package, asset, controller,
+                            controller.Doc(animatorLayer["m_StateMachine"]?.FileID ?? 0)?.Root, state?["m_Motion"],
+                            avatar.VisemeRendererName);
                     if (loop != null)
                     {
                         // Earlier face layers may share these curves: the active blink layer
@@ -143,8 +150,10 @@ public static class VrchatAnimatorFaceParser
                                 c["classID"]?.AsInt() == 137 && loop.InitialValues.Keys.Any(b =>
                                     b.Path == c["path"]?.AsString() && "blendShape." + b.Shape == c["attribute"]?.AsString()));
                         });
-                        if (!overwritten) (neutral ? neutralBlinks : blinkLoops).Add(loop);
-                        else UniLog.Log($"Animator blink loop skipped: {clip["m_Name"]?.AsString()} is overridden or has an unresolved later layer.");
+                        if (overwritten) UniLog.Log($"Animator blink skipped: {state?["m_Name"]?.AsString()} is overridden or has an unresolved later layer.");
+                        else if (missingMotion) recoveredBlinks.Add(loop);
+                        else if (neutral) neutralBlinks.Add(loop);
+                        else blinkLoops.Add(loop);
                     }
                     var shapes = ActiveShapes(clip, requireOpen: true);
                     if (clip?["m_AnimationClipSettings"]?["m_LoopTime"]?.AsBool() == true &&
@@ -285,13 +294,16 @@ public static class VrchatAnimatorFaceParser
                 MeshGameObjectName = shape.Renderer.Split('/').Last(), BlendShapeName = shape.Name });
         }
         bool useNeutral = blinkLoops.Count == 0 && blinks.Count == 0 && neutralBlinks.Count == 1;
-        if (avatar.Blink == null && (blinkLoops.Count == 1 || useNeutral))
+        bool useRecovered = blinkLoops.Count == 0 && blinks.Count == 0 && neutralBlinks.Count == 0 && recoveredBlinks.Count == 1;
+        if (avatar.Blink == null && (blinkLoops.Count == 1 || useNeutral || useRecovered))
         {
-            var loop = useNeutral ? neutralBlinks[0] : blinkLoops[0];
+            var loop = useRecovered ? recoveredBlinks[0] : useNeutral ? neutralBlinks[0] : blinkLoops[0];
             avatar.Blink = loop.Bindings[0];
             avatar.AdditionalBlinks.AddRange(loop.Bindings.Skip(1));
             foreach (var entry in loop.InitialValues) avatar.BlinkInitialValues.Add(entry.Key, entry.Value);
-            UniLog.Log((useNeutral ? "Animator neutral blink fallback: " : "Animator blink loop: ") + string.Join(", ", loop.Bindings.Select(b =>
+            string source = useRecovered ? "Missing Animator motion: inferred blink from packaged pose" :
+                useNeutral ? "Animator neutral blink fallback" : "Animator blink loop";
+            UniLog.Log(source + ": " + string.Join(", ", loop.Bindings.Select(b =>
                 $"{b.MeshGameObjectPath}/{b.BlendShapeName} -> {b.Preset}")) +
                 $"; {loop.InitialValues.Count} open/reset values. Animator timing and parameter gates are replaced by native blinking.");
         }

@@ -29,8 +29,13 @@ internal static class VisemeMotionChecks
             fields.Add(phoneme.ToString(), link.Target);
             link.Target = null;
         }
-        if (!fields.Keys.ToHashSet().SetEquals(expected.Keys)) throw new InvalidDataException("Unexpected phoneme set");
         var signal = fields.Keys.ToDictionary(k => k, _ => 0f);
+        // Silence is itself an active phoneme. A vowel aliased to it must still
+        // be at rest when the expected mapping has no dedicated silence shape.
+        signal["Silence"] = 1f;
+        await Check("silence");
+        signal["Silence"] = 0f;
+        if (!fields.Keys.ToHashSet().SetEquals(expected.Keys)) throw new InvalidDataException("Unexpected phoneme set");
         foreach (string selected in expected.Keys)
         {
             signal[selected] = 0.75f;
@@ -44,6 +49,9 @@ internal static class VisemeMotionChecks
             signal[group.Last().Key] = 0.25f;
         }
         await Check("simultaneous");
+        foreach (string name in fields.Keys) signal[name] = 0;
+        signal["Silence"] = 1f;
+        await Check("return to silence");
         Console.WriteLine($"Verified {expected.Count} phoneme outputs and reset on {skin.Slot.Name}");
 
         async Task Check(string selected)
