@@ -10,7 +10,7 @@ Unityの設定値と、骨格で座標系を揃えた保存位置を別々に判
 ## 一括実行
 
 [Unity参照データ](unity-reference-tests.md)で作った解決済みv2の `coverage.json` を使う。
-Python 3.11以降、.NET 10 SDK、インストール済みResoniteが必要。Unityの再起動は不要。
+Python 3.11以降、.NET 11 SDK、インストール済みResoniteが必要。Unityの再起動は不要。
 
 ```powershell
 python -B scripts/check-converted-avatar.py .local/unity-resolved/<collection>/coverage.json `
@@ -100,6 +100,43 @@ Voice=1 で1秒評価したとき、その音素だけで100になる shape を�
   レポートの `declaredFallbacks` は宣言から補った数で、FX の測定条件と結果は別に記録する。
 - VRM 0.x は入力の母音プリセットから対象メッシュとモーフ添字を引き、保存先の Renderer・
   shape 名と比較する。AvatarSample_C は5母音が比較対象になる。
+
+VRMのテストアバターを登録するときは、元の入力と同じSHA-256のVRMを隔離プロジェクトでUniVRMの
+該当世代のインポーターに読み込ませる。VRM 0.xでは、生成Prefabの `VRMBlendShapeProxy` から
+各母音クリップの `RelativePath` と `Index` を取り、対象の `SkinnedMeshRenderer.sharedMesh` で
+shape名を引く。保存側でも実際のメッシュ名・shape名とドライバーの接続先を照合する。
+AvatarSample_C.v0ではUniVRM 0.128.3の顔が57 shape、保存メッシュが55 shapeで、5母音の
+添字が2ずつずれる。5母音の名前・接続先・発話後のリセットは個別に検査できる。
+元のshape列の欠落と、口パクが意図したshapeに届くかを別々に記録する。
+
+FBXのshape名を検証するときは、Unityの選択Rendererと、対応する保存メッシュ（埋め込みMeshX）の
+名前を添字ごとに比較する。同名の表情制御用Slotを件数に含めない。
+
+#### Lyphos 1.10 Ex・Fa の Body
+
+Ex・Faは同じFBXの同じメッシュ（fileID `4300044`）を参照する。Unityで採取した111件の名前は
+すべて元FBXの `BlendShapeChannel` 名と一致した。一方、このBodyをResonite付属のAssimpで
+読み込むと、マテリアル別の3つのメッシュすべてで、111件のattachment名はチャンネルに接続された
+Shape Geometryの名前と一致する。たとえば `mouth.smile1` と `sample.smile1` のGeometry名はどちらも `smile1`。
+
+Resoniteの `ModelImporter.ImportMesh` はattachment名でMeshXにshapeを追加し、同名があれば
+空くまで末尾に `_` を付ける。従来は重複する3種類のGeometry名に対して元のチャンネルを
+選べず、次の8件に短い名前が残った。
+
+| Bodyの添字（0始まり） | Unityと修正後の保存MeshX | 修正前の保存MeshX |
+|---|---|---|
+| 14, 104 | `mouth.smile1`, `sample.smile1` | `smile1`, `smile1_` |
+| 15, 105 | `mouth.smile2`, `sample.smile2` | `smile2`, `smile2_` |
+| 57, 85, 89, 97 | `eye.hide`, `brow.hide`, `tongre.hide`, `nose.hide` | `hide`, `hide_`, `hide__`, `hide___` |
+
+現在は、同一Renderer内でGeometry名が重複する場合、FBXの接続から各チャンネルが専有する
+Shape GeometryのオブジェクトIDを取得する。全チャンネルが一意の名前と1対1の接続を持つ場合、
+解析と変換に使う一時FBXで、該当Geometryに接続先のチャンネル名を付けてからAssimpに渡す。
+共有Geometry、複数フレーム、同名チャンネルなどでこの条件を満たさない場合は従来の別名解決を使う。
+
+Ex・Faとも保存メッシュの名前と添字はUnityと111件すべて一致し、各添字のフレームの頂点変位も
+修正前の保存パッケージと一致した。Faの `vrc.Dummy3` の初期ウェイトは従来からUnityの0%に対して
+保存側が100%で、名前とは別の差として記録する。
 
 登録全件の変換を `scripts/convert-all-local-avatars.py` で完了した後は、
 その実行の `report.json` と隣接する凍結済み `registry.json` を使って一括採取できる。

@@ -19,7 +19,7 @@
 ### プロジェクト内Prefabから採取と比較を一括実行する
 
 `scripts/check-prefab-unity.py` に保存済みPrefabを渡すと、そのプロジェクトでUnity参照値を採取し、
-同じ `.prefab` をResoPonの本番パーサで読み込んで比較する。Python 3.11以降・.NET 10 SDK・
+同じ `.prefab` をResoPonの本番パーサで読み込んで比較する。Python 3.11以降・.NET 11 SDK・
 Resonite、およびプロジェクトと同じ版のUnity Editorが必要。対象プロジェクトのEditorは閉じておく。
 依存物と利用条件を確認済みの信頼できるプロジェクトで実行する。
 
@@ -399,7 +399,7 @@ Unity EditorがPrefabを実体化したときの状態を期待値として採�
 ResoPonが同じ入力のUnity YAMLを解決した結果と照合する。Unityが必要なのは
 期待値を新規採取・更新するときだけ。配布版ResoPonや通常の変換にUnityは不要で、
 診断ツールも配布EXEには含めない。採取後のJSON比較だけならPython 3で実行できる。
-ResoPon側のJSONを生成し直すには、通常の開発ビルドと同じWindows、.NET 10、
+ResoPon側のJSONを生成し直すには、通常の開発ビルドと同じWindows、.NET 11、
 Resoniteのインストールが必要だが、UnityやFrooxEngineの起動は不要。
 
 1. 依存関係（VRChat SDK、必要なシェーダー・アセット等）を揃えた信頼できる

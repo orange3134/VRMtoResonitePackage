@@ -231,7 +231,6 @@ public static partial class VrchatAvatarParser
         ParseHumanoid(package, avatar);
         profile?.Mark("humanoid");
         ParseDescriptor(package, descriptorScene, effectiveDescriptor, avatar, descriptorGuid);
-        avatar.RigViewpoint = VrchatViewpoint.Capture(package, avatar, descriptorRoot.Guid, descriptorRoot.Id);
         ParseRenderers(package, selected.Source.Guid, avatar);
         avatar.RendererMaterials.RemoveAll(renderer => avatar.EditorOnlyFbxGuids.Contains(renderer.FbxGuid ?? ""));
         foreach (string excluded in avatar.EditorOnlyFbxGuids)
@@ -273,6 +272,12 @@ public static partial class VrchatAvatarParser
         profile?.Mark("expressions");
         ParsePhysics(package, selected.Source.Guid, avatar);
         profile?.Mark("physics");
+        // An accessory FBX changes model placement, but the descriptor and skeleton
+        // can still be authored on the selected prefab. Use their owning occurrence.
+        avatar.RigViewpoint = descriptorRoot.Guid == selected.Source.Guid
+            ? VrchatViewpoint.CaptureUnpacked(avatar, package.PrefabGraph.Scene(descriptorRoot.Guid), descriptorRoot.Guid, descriptorRoot.Id)
+            : VrchatViewpoint.Capture(package, avatar, descriptorRoot.Guid, descriptorRoot.Id);
+        profile?.Mark("viewpoint");
         ParseModularAvatarComponents(package, selected.Source.Guid, avatar);
         profile?.Mark("modular-avatar");
         return avatar;
@@ -291,6 +296,8 @@ public static partial class VrchatAvatarParser
             }
             var resolver = package.ModelFileIds(guid);
             if (!resolver.ImportBlendShapes) avatar.ModelsWithoutBlendShapes.Add(guid);
+            if (resolver.ShapeGeometryNames is { Count: > 0 } geometryNames)
+                avatar.ShapeGeometryNamesByModel.Add(guid, geometryNames);
             foreach ((string rendererName, IReadOnlyList<string> names) in resolver.BlendShapeNames)
             {
                 avatar.FbxBlendShapeNames.TryAdd(rendererName, names);

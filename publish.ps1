@@ -1,5 +1,5 @@
 # Distribution build script.
-# Output: publish\ResoPon.exe (single file, self-contained .NET runtime).
+# Output: publish\ResoPon.exe (single file, requires the .NET 11 Desktop Runtime for x64).
 # Resonite DLLs are NOT bundled; they are loaded from the installed Resonite at runtime.
 param(
     [string]$ResonitePath = "",

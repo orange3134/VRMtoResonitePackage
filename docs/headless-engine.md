@@ -14,6 +14,10 @@ ResoPonはResonite DLLを配布せず、ビルド時と実行時の両方でイ�
 
 ## Resonite APIのバイナリ互換性
 
+Resonite 2026.11.25.87 の `Renderite.Host.runtimeconfig.json` は .NET 11 を指定する。
+メジャーバージョン更新時は同ファイルの `runtimeOptions.frameworks` を確認し、
+ResoPon 本体とテストプロジェクトのターゲット、配布版に必要な Desktop Runtime を合わせる。
+
 FrooxEngineの公開プロパティや列挙型の戻り値型が変わると、ソース互換でも既存EXEは
 `MissingMethodException` になる。Resonite更新後にこの症状が出た場合は、対象環境のDLLを指定して
 ResoPonを再ビルドする。

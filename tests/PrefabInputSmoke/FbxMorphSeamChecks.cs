@@ -13,6 +13,7 @@ internal static class FbxMorphSeamChecks
         Write(model, 7400, false, true, false);
         var asset = new UnityAsset { DiskPath = model, LogicalPath = "Assets/import-settings.fbx", MetaPath = model + ".meta" };
         CheckEmbeddedShapes(directory, model);
+        CheckChannelNames(directory);
         foreach (bool enabled in new[] { true, false })
         {
             File.WriteAllText(asset.MetaPath, $"ModelImporter:\n  meshes:\n    importBlendShapes: {(enabled ? 1 : 0)}\n");
@@ -109,6 +110,32 @@ internal static class FbxMorphSeamChecks
             "disabling embedded shapes leaves the source FBX intact");
     }
 
+    private static void CheckChannelNames(string directory)
+    {
+        string path = Path.Combine(directory, "colliding-geometry-names.fbx");
+        Write(path, 7400, false, false, false, collidingNames: true);
+        var bytes = File.ReadAllBytes(path);
+        var resolver = new UnityModelFileIdResolver(new UnityAsset { DiskPath = path, LogicalPath = "Assets/Face.fbx" });
+        var names = resolver.ShapeGeometryNames;
+        Require(names.Count == 2 && names[50] == "mouth.Smile" && names[51] == "eye.Smile",
+            "Same-named geometries resolve by FBX object connections in reverse declaration order");
+        string import = UnityFbxMorphSeams.Prepare(path, shapeGeometryNames: names);
+        var source = UnityFbxBlendShapeDefaults.Read(path);
+        var prepared = UnityFbxBlendShapeDefaults.Read(import);
+        Require(prepared.All(c => c.ShapeName == c.Name) && prepared.Count == 2 &&
+            resolver.BlendShapeNames["Body"].ToHashSet().SetEquals(names.Values) &&
+            bytes.SequenceEqual(File.ReadAllBytes(path)), "Parser and temporary FBX agree on both channel names");
+        using var context = new AssimpContext();
+        var before = context.ImportFile(path, PostProcessSteps.None).Meshes.Single().MeshAnimationAttachments;
+        var after = context.ImportFile(import, PostProcessSteps.None).Meshes.Single().MeshAnimationAttachments;
+        Require(before.Count == 2 && after.Count == 2 && !before[0].Vertices.SequenceEqual(before[1].Vertices) &&
+            before.Zip(after).All(pair => pair.First.Vertices.SequenceEqual(pair.Second.Vertices)),
+            "Distinct morph deltas retain their indices when geometry names change");
+        Require(UnityFbxBlendShapeDefaults.ChannelNamesForImport(source.Select(c => c with { Name = "Smile" })).Count == 0 &&
+            UnityFbxBlendShapeDefaults.ChannelNamesForImport(source.Select(c => c with { ExclusiveShapeId = null })).Count == 0,
+            "Ambiguous channels and shared geometry stay on the existing import path");
+    }
+
     private static void CheckDisabled(string source)
     {
         byte[] original = File.ReadAllBytes(source);
@@ -138,7 +165,8 @@ internal static class FbxMorphSeamChecks
 
     private sealed record Node(string Name, object[] Values, params Node[] Children);
     private static Node N(string name, object value) => new(name, new[] { value });
-    private static void Write(string path, int version, bool color, bool seam, bool duplicateTextures, bool embedded = false)
+    private static void Write(string path, int version, bool color, bool seam, bool duplicateTextures, bool embedded = false,
+        bool collidingNames = false)
     {
         // Two overlapping triangles have identical base attributes. Only control point 0
         // moves; point 3 must stay still, despite occupying the same base position.
@@ -180,6 +208,18 @@ internal static class FbxMorphSeamChecks
             }).ToArray() };
         var connections = new Node("Connections", [], new[] { (20L, 0L), (10L, 20L), (30L, 10L), (40L, 30L), (50L, 40L) }
             .Select(p => new Node("C", new object[] { "OO", p.Item1, p.Item2 })).ToArray());
+        if (collidingNames)
+        {
+            var channel = objects.Children[3];
+            var shape = objects.Children[4];
+            objects.Children[3] = channel with { Values = [40L, "mouth.Smile\0\u0001Deformer", "BlendShapeChannel"] };
+            objects = objects with { Children = [
+                shape with { Values = [51L, shape.Values[1], "Shape"], Children = [
+                    N("Indexes", new[] { 1 }), N("Vertices", new double[] { 0, .3, 0 }), N("Normals", new double[3])] },
+                ..objects.Children, channel with { Values = [41L, "eye.Smile\0\u0001Deformer", "BlendShapeChannel"] }] };
+            connections = connections with { Children = [..connections.Children,
+                new("C", ["OO", 41L, 30L]), new("C", ["OO", 51L, 41L])] };
+        }
         if (embedded)
         {
             geometry.Add(new Node("Shape", ["Sweat"], objects.Children[4].Children.Skip(1).ToArray()));

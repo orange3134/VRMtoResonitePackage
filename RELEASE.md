@@ -5,7 +5,8 @@ Resonite DLL references.
 
 Prerequisites:
 
-- Resonite is installed locally, or pass `-ResonitePath`.
+- Install the .NET 11 SDK for Windows x64.
+- Install the .NET 11 version of Resonite locally, or pass `-ResonitePath` to point to that installation.
 - GitHub CLI is installed.
 - `gh auth login` has already been completed.
 

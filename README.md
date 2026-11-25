@@ -24,8 +24,8 @@ VRMアバターを **.resonitepackage** に変換するWindows用ツールです
 
 ## 必要環境
 
-- Windows x64 + .NET 10 Desktop Runtime（x64）
-- **Resonite がインストールされていること**
+- Windows x64 + .NET 11 Desktop Runtime（x64）
+- .NET 11 対応版の Resonite（2026.11.25.87 で動作確認）
 
 配布版は起動時に GitHub Releases の最新版を確認します。更新がある場合は確認画面から
 ダウンロード、実行ファイルの差し替え、再起動まで行えます。起動時の確認は設定画面で無効にできます。
@@ -83,6 +83,8 @@ Modular Avatar / NDMFのビルド処理は実行しません。
 
 ## ビルド方法
 
+Windows x64 用の .NET 11 SDK を使用します。
+
 ```
 dotnet build src/VrmToResonitePackage -c Release
 ```
@@ -90,7 +92,7 @@ dotnet build src/VrmToResonitePackage -c Release
 配布用:
 
 ```
-dotnet publish src/VrmToResonitePackage -c Release -o publish
+.\publish.ps1
 ```
 
 Resonite DLLの参照解決には、ビルド時に `ResonitePath` プロパティ

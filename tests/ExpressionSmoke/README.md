@@ -1,6 +1,6 @@
 # Expression integration checks
 
-Run from the repository root with .NET 10 and an installed Resonite runtime:
+Run from the repository root with .NET 11 and an installed Resonite runtime:
 
 ```powershell
 $env:RESOPON_NOPAUSE = '1'

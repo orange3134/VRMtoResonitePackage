@@ -254,7 +254,7 @@ by Microsoft.NETCore.App.Host.win-x64, even in framework-dependent builds.
 The .NET and Windows Desktop shared runtimes are installed separately.
 
 Project: https://github.com/dotnet/runtime
-License: https://github.com/dotnet/runtime/blob/v10.0.8/LICENSE.TXT
+License: https://github.com/dotnet/runtime/blob/v11.0.0/LICENSE.TXT
 
 The MIT License (MIT)
 

@@ -2,8 +2,11 @@
 
 視点はUnityの `VRC Avatar Descriptor.ViewPosition` の数値だけで判定しない。
 インポート時の向き補正・センタリング・スケールを考慮し、頭部に対する視点位置を比較する。
-変換時は、Descriptorが親配置を持たない主FBXのルートにあり、人体4骨の元パスを特定できる場合に、
-FBXの単位・ローカル姿勢・Prefabの上書きから各骨のUnity座標を再構成する。
+Descriptorが親配置を持たない主FBXのルートにある場合は、FBXの単位・ローカル姿勢・Prefabの上書きから
+人体4骨のUnity座標を再構成する。選択したPrefabのルートにDescriptorがあり、人体4骨がそのPrefabに
+保存されている場合は、主FBXの人体骨の完全パスを同じPrefab内のTransformに照合し、各骨からルートまでの
+保存姿勢を合成する。衣装やアクセサリーの追加FBXがある場合も、この判定はDescriptorの所属先で行う。
+骨の座標にはルートの回転・スケールを含め、位置はDescriptor原点からの相対値にする。
 Hipsを原点に頭と両上腕で座標軸を求め、HipsとHeadの距離比でスケールを合わせて、
 セットアップ時のリグへ視点を写す。4骨の位置誤差が3mmを超える場合や元姿勢が不明な場合は
 従来のDescriptor視点を使う。明示的な前方・上方オフセットは位置補正後に適用する。
@@ -84,3 +87,13 @@ Proxyはヘッドセット位置、Targetは頭ボーンを駆動するIK接続�
 終了コード0はこの比較範囲の一致、1は `different` または `unverified`、2はCLI・入出力の不備。
 骨・Descriptor・参照の欠落や曖昧さを一致にせず理由を残す。NagiyaRuriのように設定値とTargetが
 一致してもProxyだけがずれるケースを検出できる。外観・装着後の視点は別途確認する。
+
+Rengyo v1.3は展開済みPrefabの回帰例。Descriptorの設定値は Unity と一致していても、
+これを変換後の座標として使うとHead Proxyが約70.19 mmずれた。保存姿勢から視点を写すと、
+再読込したパッケージでUnity基準との距離は0.001 mm未満になった。
+
+Nagma（2022-05-14）の通常版とPhysBone版は、Prefab側にDescriptorと人体骨があり、
+追加FBXも持つ。ResoPon `d0d982e` ではFBX variantとしてのモデル配置が視点補正の分岐にも使われ、
+保存したHead Proxyは人体骨で位置合わせしたUnity視点より109.91 mm後方、8.14 mm上方にあった。
+Descriptorの所属先からPrefabの保存姿勢を使うようにすると、両版とも再読込後の視点誤差は0.006 mm未満になった。
+同じ構成の回帰では、元のPrefabをUnity Editorで開き、通常版・PhysBone版の両方でProxyとTargetを個別に比較する。

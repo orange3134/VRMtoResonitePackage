@@ -13,12 +13,12 @@
 | Resonite.UnitySDK | MaterialTuner、LilToonConverter、VrchatMaterialBuilder、ShaderPropertyFallbackConverter、ベイク計画。MToon・lilToon変換を照合 |
 | lilToon | VrchatMainTextureBaker とレイヤー処理。lil_common_functions.hlsl 等の色補正・グラデーション・アルファマスク・合成 |
 | Unity-Chan Toon Shader 2.0.9 | Unity Technologies Japan、Unity-Chan License 2.0。シェーダー宣言、メインテクスチャの参照先、NoOutline 透明シェーダーの GUID と色描画パスの状態を確認し、変換を独立実装。シェーダーのソースは同梱しない |
-| Lyphos 1.10（Kocha_no_omise） | 作者規約 Ver1.00 に基づき、ユーザー提供の Ex・Fa のマテリアル、口の初期値、音素の共有先をローカルで照合。無音時の接続処理と信号試験は独立実装。アバター、画像、変換パッケージは配布物・テストコードに含めない |
+| Lyphos 1.10（Kocha_no_omise） | 作者規約 Ver1.00 に基づき、ユーザー提供の Ex・Fa のマテリアル、口の初期値、音素の共有先、BodyのFBXチャンネル名、保存メッシュの名前・頂点変位をローカルで照合。チャンネル名の復元は既存のFBX読み書きを用いた独立実装で、回帰試験のFBXは合成データ。無音時の接続処理と信号試験も独立実装。アバター、画像、変換パッケージは配布物・テストコードに含めない |
 | UniVRM / MToon | VrmParser の MToon 0.x → 1.0 変換。MToon10Migrator のシェーディング範囲・中心変換 |
 | Modular Avatar | VrchatSkinRetargeter の bind pose 補正。数式の互換実装と大規模なコード移植は区別し、参照元 MeshRetargeter のMIT通知を保持 |
 | Modular Avatar for Resonite | AvatarSetup の識別グラフ、SpringBoneSetup、MeshLoadingSetup、LoadingStandInSetup、LoadingFallback.png、UnityNativeMeshのMeshX変換規約。構成・設定の移植と素材の再利用 |
 | AssetsTools.NET | UnitySerializedAssetsのバイナリSerializedFile・type tree読み取り。NuGet 3.0.5を同梱しMIT通知と内包LZ4のBSD-2-Clause通知を保持 |
-| .NET | native application host。SelfContained=false でもEXEに含む。[公式ホストパッケージ](https://www.nuget.org/packages/Microsoft.NETCore.App.Host.win-x64/10.0.8)のMIT表示を確認 |
+| .NET | native application host。SelfContained=false でもEXEに含む。[公式ホストパッケージ](https://www.nuget.org/packages/Microsoft.NETCore.App.Host.win-x64/11.0.0)のMIT表示を確認 |
 | xxHash | UnityModelFileIdResolver.XxHash64 の round・merge・avalanche。4バイト末尾は符号なしで扱い、UTF-8名での符号拡張を防ぐ。参照実装のBSD-2-Clause通知を保持 |
 
 `LoadingFallback.png` は modular-avatar-resonite の
@@ -91,6 +91,11 @@ RecordPackage/DataTree APIを呼び出す。FrooxEngine 2026.11.16.1330のCollid
 インストール済みDLLの型・フィールドの反射確認のみで、逆コンパイル実装のコピーはない。
 開発用ツール・実アバター由来の期待条件・採取データは製品EXEへ同梱しない。
 
+VRM 0.x の Unity 側の比較には導入済みの UniVRM / UniGLTF 0.128.3 を使用した。
+隔離プロジェクトでは各パッケージの LICENSE.md と同梱の通知を保持する。
+参照範囲はインポーターの実行と生成Prefabの公開フィールド・Meshの読み取りで、
+検証用パッケージ・モデル・採取データを ResoPon の配布物へ追加しない。
+
 口パク照合では Unity 2022.3.22f1 と VRChat Avatars SDK 3.10.6 のローカル環境で
 Descriptor の公開シリアライズ項目と FX の評価結果を参照した。保存側は既存の
 RecordPackage と MeshX API でフィールド参照と形状名を読む。Voice 駆動 FX の変換と
@@ -106,6 +111,8 @@ DataTree公開APIを反射で確認し、保存済みローカルパッケージ
 EkuのRenderTexture判定とNagmaのFBX骨階層採取の修正、保存スキンの追従テストは、既存の
 本リポジトリ実装とUnity 2022.3.22f1・インストール済みFrooxEngineのAPIを用いた独立実装。
 Unity側の骨行列・bind pose・ウェイト採取にも外部サンプルのコピーはない。
+Nagmaの視点補正は既存の骨座標変換を利用し、通常版・PhysBone版のPrefabでUnityが採取した
+Descriptorと人体骨の座標をローカルで照合した。
 素材ごとの既存の利用条件確認を引き継いでローカル検証だけに利用し、新たな配布物や通知対象は増えない。
 
 骨格参照用FBXの余分なrendererを除く修正は既存Prefab解析・FrooxEngine APIによる独立実装。
@@ -186,6 +193,8 @@ Resonite.UnityShaders のシェーダーソースやテクスチャ、NDMF の�
 旧形式FBXのシェイプ変換では、Anacharis作「Rengyo」v1.9のFBX構造とUnityでの読み込み結果を
 ローカルで照合した。付属VN3規約 v1.00 の調整・改変許諾の範囲で検証し、アバターや変換物は同梱しない。
 変換処理は既存のFBX読み書きを使った独立実装で、コミットするテストの頂点と差分は合成データ。
+同梱の `rengyo_v1.3` Prefabで視点を検証する際は、Unityで採取したDescriptorと骨の座標を
+ローカル比較に使用した。視点の変換処理は独立実装で、回帰テストには合成したTransformを使う。
 
 夏樹テル作「アルコニア」v1.1.1は、作者のVN3規約に基づくローカル変換でPrefab・FXの参照と
 閉眼カーブの値を照合した。変換処理とテストは独立実装で、モデル・クリップ・変換物は配布物に含めない。

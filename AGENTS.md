@@ -38,7 +38,7 @@ VRM または VRChat アバター入り `.unitypackage` を Resonite の `.reson
 Windowsアプリ。ヘッドレス FrooxEngine と Resonite 本体の `ModelImporter` を使い、リグ、視点、
 表情、揺れもの、マテリアル、VRM FirstPerson を設定する。
 
-- C# / .NET 10 / WPF / x64
+- C# / .NET 11 / WPF / x64
 - `SelfContained=false` の単一ファイルEXE
 - Resonite DLLは実行環境から読み込み、配布物には含めない
 
@@ -46,7 +46,7 @@ Windowsアプリ。ヘッドレス FrooxEngine と Resonite 本体の `ModelImpo
 
 ```powershell
 dotnet build src/VrmToResonitePackage -c Release
-dotnet publish src/VrmToResonitePackage -c Release -o publish
+.\publish.ps1
 ```
 
 - DLL参照元は `ResonitePath`、環境変数 `RESONITE_PATH`、または既定のSteamパス。
@@ -72,8 +72,10 @@ Resonite DLLを `ResonitePath` に指定して再ビルドする。配布版も�
 
 ## 実行と検証
 
-- ユーザーから渡された実アバターのテストケースは `.local/avatar-tests.json` に記録し、
-  別の修正でも関連ケースを再利用する。環境固有パス・報告ログ・検証結果はコミットしない。
+- テストアバターを追加するときは、全形式（`.prefab`・`.unitypackage`・`.vrm`）で、
+  同じ入力・選択アバターの解析情報を必ず Unity Editor で取得する。採取結果の保存先を
+  `.local/avatar-tests.json` の該当ケースに記録して登録完了とする。採取できない場合は
+  理由を記録し、登録未完了として報告する。環境固有パス・報告ログ・検証結果はコミットしない。
   登録形式と実行コマンドは [ローカルアバター回帰テスト](docs/local-avatar-tests.md) を参照する。
 - 自動実行では `RESOPON_NOPAUSE=1` を設定し、キー入力待ちを無効にする。
 - 変換ログはEXEと同じディレクトリの `Logs/convert_*.log` に出力される。
