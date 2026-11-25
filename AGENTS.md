@@ -38,7 +38,7 @@ VRM または VRChat アバター入り `.unitypackage` を Resonite の `.reson
 Windowsアプリ。ヘッドレス FrooxEngine と Resonite 本体の `ModelImporter` を使い、リグ、視点、
 表情、揺れもの、マテリアル、VRM FirstPerson を設定する。
 
-- C# / .NET 10 / WPF / x64
+- C# / .NET 11 / WPF / x64
 - `SelfContained=false` の単一ファイルEXE
 - Resonite DLLは実行環境から読み込み、配布物には含めない
 
@@ -46,7 +46,7 @@ Windowsアプリ。ヘッドレス FrooxEngine と Resonite 本体の `ModelImpo
 
 ```powershell
 dotnet build src/VrmToResonitePackage -c Release
-dotnet publish src/VrmToResonitePackage -c Release -o publish
+.\publish.ps1
 ```
 
 - DLL参照元は `ResonitePath`、環境変数 `RESONITE_PATH`、または既定のSteamパス。

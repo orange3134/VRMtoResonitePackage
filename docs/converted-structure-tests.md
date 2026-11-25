@@ -10,7 +10,7 @@ Unityの設定値と、骨格で座標系を揃えた保存位置を別々に判
 ## 一括実行
 
 [Unity参照データ](unity-reference-tests.md)で作った解決済みv2の `coverage.json` を使う。
-Python 3.11以降、.NET 10 SDK、インストール済みResoniteが必要。Unityの再起動は不要。
+Python 3.11以降、.NET 11 SDK、インストール済みResoniteが必要。Unityの再起動は不要。
 
 ```powershell
 python -B scripts/check-converted-avatar.py .local/unity-resolved/<collection>/coverage.json `
