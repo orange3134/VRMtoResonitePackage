@@ -91,6 +91,11 @@ RecordPackage/DataTree APIを呼び出す。FrooxEngine 2026.11.16.1330のCollid
 インストール済みDLLの型・フィールドの反射確認のみで、逆コンパイル実装のコピーはない。
 開発用ツール・実アバター由来の期待条件・採取データは製品EXEへ同梱しない。
 
+VRM 0.x の Unity 側の比較には導入済みの UniVRM / UniGLTF 0.128.3 を使用した。
+隔離プロジェクトでは各パッケージの LICENSE.md と同梱の通知を保持する。
+参照範囲はインポーターの実行と生成Prefabの公開フィールド・Meshの読み取りで、
+検証用パッケージ・モデル・採取データを ResoPon の配布物へ追加しない。
+
 口パク照合では Unity 2022.3.22f1 と VRChat Avatars SDK 3.10.6 のローカル環境で
 Descriptor の公開シリアライズ項目と FX の評価結果を参照した。保存側は既存の
 RecordPackage と MeshX API でフィールド参照と形状名を読む。Voice 駆動 FX の変換と

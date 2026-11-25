@@ -101,6 +101,19 @@ Voice=1 で1秒評価したとき、その音素だけで100になる shape を�
 - VRM 0.x は入力の母音プリセットから対象メッシュとモーフ添字を引き、保存先の Renderer・
   shape 名と比較する。AvatarSample_C は5母音が比較対象になる。
 
+VRMにも独立したUnity基準が必要な場合は、同じSHA-256のVRMを隔離プロジェクトでUniVRMの
+該当世代のインポーターに読み込ませる。VRM 0.xでは、生成Prefabの `VRMBlendShapeProxy` から
+各母音クリップの `RelativePath` と `Index` を取り、対象の `SkinnedMeshRenderer.sharedMesh` で
+shape名を引く。保存側でも実際のメッシュ名・shape名とドライバーの接続先を照合する。
+AvatarSample_C.v0ではUniVRM 0.128.3の顔が57 shape、保存メッシュが55 shapeで、5母音の
+添字が2ずつずれる。5母音の名前・接続先・発話後のリセットは個別に検査できる。
+元のshape列の欠落と、口パクが意図したshapeに届くかを別々に記録する。
+
+FBXでもshapeの件数と初期値だけでは名前の差を検出できない。Lyphos 1.10 Ex・Faの
+`Body` は両側とも111 shapeだが、Unityの `mouth.smile1` と `sample.smile1` が
+保存メッシュでは `smile1` と `smile1_` になる。比較には選択したRendererの埋め込み
+MeshXから順に読み出した名前を使い、同名の表情制御用Slotを件数に含めない。
+
 登録全件の変換を `scripts/convert-all-local-avatars.py` で完了した後は、
 その実行の `report.json` と隣接する凍結済み `registry.json` を使って一括採取できる。
 
