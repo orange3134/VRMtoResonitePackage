@@ -12,6 +12,7 @@ public sealed class UnityModelFileIdResolver
 {
     private readonly Dictionary<long, string> _names = new();
     internal bool ImportBlendShapes { get; private set; } = true;
+    internal IReadOnlyDictionary<long, string> ShapeGeometryNames { get; private set; }
     private bool _importBlendShapeDeformPercent = true;
     private readonly Dictionary<long, int> _classes = new();
     internal int ClassId(long fileId) => _classes.GetValueOrDefault(fileId);
@@ -204,11 +205,13 @@ public sealed class UnityModelFileIdResolver
             using var context = new AssimpContext();
             _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath, out var sourceSkinPaths, out var sourceTransforms,
                 out bool hasEmbeddedShapes);
-            if (ImportBlendShapes && hasEmbeddedShapes)
+            if (ImportBlendShapes)
+                ShapeGeometryNames = UnityFbxBlendShapeDefaults.ChannelNamesForImport(_defaultWeightChannels);
+            if (ImportBlendShapes && (hasEmbeddedShapes || ShapeGeometryNames.Count > 0))
             {
                 morphPath = Path.Combine(Path.GetTempPath(), $"ResoPon_morph_{Guid.NewGuid():N}.fbx");
-                importPath = UnityFbxMorphSeams.Prepare(importPath, outputPath: morphPath);
-                _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath);
+                importPath = UnityFbxMorphSeams.Prepare(importPath, outputPath: morphPath, shapeGeometryNames: ShapeGeometryNames);
+                if (hasEmbeddedShapes) _defaultWeightChannels = UnityFbxBlendShapeDefaults.Read(importPath);
             }
             SourceSkinBonePaths = sourceSkinPaths;
             Scene scene = context.ImportFile(importPath, PostProcessSteps.None);

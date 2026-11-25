@@ -9,9 +9,27 @@ namespace VrmToResonitePackage.Unity;
 /// </summary>
 internal static class UnityFbxBlendShapeDefaults
 {
-    internal readonly record struct Channel(string Name, float Weight, string RendererPath, string ShapeName = null);
+    internal readonly record struct Channel(string Name, float Weight, string RendererPath, string ShapeName = null,
+        long? ExclusiveShapeId = null);
 
     public static IReadOnlyList<Channel> Read(string path) => Read(path, out _);
+
+    // Material-split meshes can expose Geometry names for every Assimp attachment.
+    // Resolve collisions before import, while each shape still has its FBX object ID.
+    internal static Dictionary<long, string> ChannelNamesForImport(IEnumerable<Channel> channels)
+    {
+        var names = new Dictionary<long, string>();
+        foreach (var mesh in channels.GroupBy(c => c.RendererPath))
+        {
+            if (!mesh.GroupBy(c => c.ShapeName).Any(g => g.Count() > 1)) continue;
+            if (mesh.Any(c => c.ExclusiveShapeId == null || string.IsNullOrEmpty(c.Name)) ||
+                mesh.Select(c => c.Name).Distinct(StringComparer.Ordinal).Count() != mesh.Count()) continue;
+            foreach (var channel in mesh)
+                if (channel.ShapeName != channel.Name)
+                    names[channel.ExclusiveShapeId.Value] = channel.Name;
+        }
+        return names;
+    }
 
     internal static IReadOnlyList<Channel> Read(string path, out IReadOnlyDictionary<string, string[]> skinBonePaths)
         => Read(path, out skinBonePaths, out _);
@@ -126,9 +144,11 @@ internal static class UnityFbxBlendShapeDefaults
                 var shapes = children[entry.Key].Select(objects.GetValueOrDefault)
                     .Where(o => o?.Name == "Geometry" && o.Properties[2] as string == "Shape").ToArray();
                 string shapeName = shapes.Length == 1 ? NormalizeObjectName(shapes[0].Properties[1] as string) : null;
+                long? shapeId = shapes.Length == 1 && shapes[0].Properties is [long id, string, "Shape"] &&
+                    parents[id].Length == 1 ? id : null;
                 foreach (long model in ModelsAbove(entry.Key, new()))
                     if (ModelPath(model, new()) is string path)
-                        result.Add(new Channel(NormalizeObjectName(channel.Properties[1] as string), weight, path, shapeName));
+                        result.Add(new Channel(NormalizeObjectName(channel.Properties[1] as string), weight, path, shapeName, shapeId));
             }
             return result;
 

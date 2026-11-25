@@ -8,7 +8,8 @@ namespace VrmToResonitePackage.Unity;
 /// <summary>Applies the model's morph import policy before Assimp welds vertices and chooses renderer types.</summary>
 internal static class UnityFbxMorphSeams
 {
-    public static string Prepare(string path, bool importBlendShapes = true, string outputPath = null)
+    public static string Prepare(string path, bool importBlendShapes = true, string outputPath = null,
+        IReadOnlyDictionary<long, string> shapeGeometryNames = null)
     {
         byte[] bytes = File.ReadAllBytes(path);
         if (bytes.Length < 27 || !bytes.AsSpan().StartsWith("Kaydara FBX Binary"u8))
@@ -41,6 +42,13 @@ internal static class UnityFbxMorphSeams
         var shapes = new Dictionary<long, List<Node>>();
         foreach (var shape in objects.Where(n => IsGeometry(n, "Shape")))
         {
+            if (shapeGeometryNames != null && shapeGeometryNames.TryGetValue((long)shape.Values[0], out string name))
+            {
+                string original = (string)shape.Values[1];
+                int separator = original.IndexOf('\0');
+                shape.Values[1] = separator < 0 ? name : name + original[separator..];
+                shape.Properties = Node.WithProperties("Geometry", shape.Values).Properties;
+            }
             var visited = new HashSet<long>();
             void Visit(long id)
             {
@@ -87,7 +95,7 @@ internal static class UnityFbxMorphSeams
             layer.Children.Add(Node.New("LayerElement", null, Node.New("Type", "LayerElementColor"), Node.New("TypedIndex", channel)));
             protectedMeshes++;
         }
-        if (protectedMeshes == 0 && embeddedShapes == 0) return path;
+        if (protectedMeshes == 0 && embeddedShapes == 0 && shapeGeometryNames is not { Count: > 0 }) return path;
         string output = outputPath ?? Path.ChangeExtension(path, ".morph-seams.fbx");
         document.Save(output);
         if (protectedMeshes > 0) UniLog.Log($"Protected morph seams in {protectedMeshes} FBX mesh(es): {Path.GetFileName(path)}.");

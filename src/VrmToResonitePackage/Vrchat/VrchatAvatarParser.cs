@@ -295,6 +295,8 @@ public static partial class VrchatAvatarParser
             }
             var resolver = package.ModelFileIds(guid);
             if (!resolver.ImportBlendShapes) avatar.ModelsWithoutBlendShapes.Add(guid);
+            if (resolver.ShapeGeometryNames is { Count: > 0 } geometryNames)
+                avatar.ShapeGeometryNamesByModel.Add(guid, geometryNames);
             foreach ((string rendererName, IReadOnlyList<string> names) in resolver.BlendShapeNames)
             {
                 avatar.FbxBlendShapeNames.TryAdd(rendererName, names);

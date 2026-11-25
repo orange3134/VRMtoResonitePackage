@@ -120,16 +120,23 @@ Ex・Faは同じFBXの同じメッシュ（fileID `4300044`）を参照する。
 Shape Geometryの名前と一致する。たとえば `mouth.smile1` と `sample.smile1` のGeometry名はどちらも `smile1`。
 
 Resoniteの `ModelImporter.ImportMesh` はattachment名でMeshXにshapeを追加し、同名があれば
-空くまで末尾に `_` を付ける。ResoPonの `BlendShapeNameNormalizer.ChannelAliases` は
-Geometry名から元チャンネルを一意に引ける場合に別名を登録する。Ex・Faとも変換ログで103件の
-チャンネル名の復元を確認した。重複する3種類のGeometry名に属する次の8件には別名が登録されず、
-保存パッケージを再読込しても両Prefabで同じ差が残る。
+空くまで末尾に `_` を付ける。従来は重複する3種類のGeometry名に対して元のチャンネルを
+選べず、次の8件に短い名前が残った。
 
-| Bodyの添字（0始まり） | Unityのチャンネル名（添字順） | 保存MeshXの名前（同順） |
+| Bodyの添字（0始まり） | Unityと修正後の保存MeshX | 修正前の保存MeshX |
 |---|---|---|
 | 14, 104 | `mouth.smile1`, `sample.smile1` | `smile1`, `smile1_` |
 | 15, 105 | `mouth.smile2`, `sample.smile2` | `smile2`, `smile2_` |
 | 57, 85, 89, 97 | `eye.hide`, `brow.hide`, `tongre.hide`, `nose.hide` | `hide`, `hide_`, `hide__`, `hide___` |
+
+現在は、同一Renderer内でGeometry名が重複する場合、FBXの接続から各チャンネルが専有する
+Shape GeometryのオブジェクトIDを取得する。全チャンネルが一意の名前と1対1の接続を持つ場合、
+解析と変換に使う一時FBXで、該当Geometryに接続先のチャンネル名を付けてからAssimpに渡す。
+共有Geometry、複数フレーム、同名チャンネルなどでこの条件を満たさない場合は従来の別名解決を使う。
+
+Ex・Faとも保存メッシュの名前と添字はUnityと111件すべて一致し、各添字のフレームの頂点変位も
+修正前の保存パッケージと一致した。Faの `vrc.Dummy3` の初期ウェイトは従来からUnityの0%に対して
+保存側が100%で、名前とは別の差として記録する。
 
 登録全件の変換を `scripts/convert-all-local-avatars.py` で完了した後は、
 その実行の `report.json` と隣接する凍結済み `registry.json` を使って一括採取できる。
