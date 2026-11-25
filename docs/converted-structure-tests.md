@@ -101,7 +101,7 @@ Voice=1 で1秒評価したとき、その音素だけで100になる shape を�
 - VRM 0.x は入力の母音プリセットから対象メッシュとモーフ添字を引き、保存先の Renderer・
   shape 名と比較する。AvatarSample_C は5母音が比較対象になる。
 
-VRMにも独立したUnity基準が必要な場合は、同じSHA-256のVRMを隔離プロジェクトでUniVRMの
+VRMのテストアバターを登録するときは、元の入力と同じSHA-256のVRMを隔離プロジェクトでUniVRMの
 該当世代のインポーターに読み込ませる。VRM 0.xでは、生成Prefabの `VRMBlendShapeProxy` から
 各母音クリップの `RelativePath` と `Index` を取り、対象の `SkinnedMeshRenderer.sharedMesh` で
 shape名を引く。保存側でも実際のメッシュ名・shape名とドライバーの接続先を照合する。

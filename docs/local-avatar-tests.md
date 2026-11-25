@@ -10,9 +10,24 @@ Unityで継承を解決して採取したv2基準値は、[Unity参照データ�
 
 Prefabの解析結果をUnity Editorの値と比較する場合は、[Unity参照データとの比較](unity-reference-tests.md)を参照。
 
-ユーザーからアバターのパスを渡されたら、調査の最初に `.local/avatar-tests.json` に追記する。
-既存ケースは残し、同じ入力は更新する。`.local/` は Git の除外対象で、環境固有の情報を保存する。
-アバター本体はコピーせず、保存済みの Unity プロジェクトまたは VRM / unitypackage を参照する。
+### テストアバターを追加する
+
+調査の最初に `.local/avatar-tests.json` にケースID、元の入力パス、変換引数を記録する。
+既存ケースは保持し、同じ入力・選択アバターのケースは更新して以後の回帰検証に再利用する。
+**登録時には、同じ入力・選択アバターの解析情報を必ず Unity Editor で取得する。**
+同じパッケージでも `--avatar` の選択が異なる場合は、選択ごとに採取する。
+
+- **Prefab / unitypackage** は、登録時の引数（既定選択を含む）に対応するアバターの継承・上書きを
+  Unity で解決し、階層・Renderer・骨参照などの v2 基準値を保存する。該当ケースの
+  `unityResolvedCollection.coveragePath` または `prefabUnityCheck.coveragePath` から
+  採取結果を参照できるようにする。[Unity 参照データの採取手順](unity-reference-tests.md)
+- **VRM** は、登録した VRM と SHA-256 が同じファイルを対応世代の UniVRM で読み込み、
+  生成されたアバターの階層・Renderer と、検証対象の表情などを Unity で採取する。
+  入力の SHA-256、Unity・UniVRM の版、結果ファイルの保存先をケースに記録する。
+  [VRM の Unity 基準と保存パッケージの照合](converted-structure-tests.md)
+
+採取結果はローカルに保存し、その参照先を該当ケースに記録して登録完了とする。
+依存不足などで取得できない場合は、理由を記録し、Unity 解析未採取・登録未完了として報告する。
 
 ```json
 {
@@ -26,6 +41,10 @@ Prefabの解析結果をUnity Editorの値と比較する場合は、[Unity参�
       "issue": "継承した Descriptor が見つからず変換に失敗する",
       "expected": "変換と inspect が成功し、削除した衣装が含まれない",
       "arguments": [],
+      "unityResolvedCollection": {
+        "status": "captured",
+        "coveragePath": "D:\\work\\ResoPon\\.local\\unity-resolved\\example-run\\coverage.json"
+      },
       "notes": "追加の目視確認項目や調査結果を記録する"
     }
   ]
