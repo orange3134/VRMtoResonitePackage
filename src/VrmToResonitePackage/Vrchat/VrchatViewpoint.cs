@@ -62,6 +62,43 @@ internal sealed record VrchatViewpoint(Vector3 View, Vector3[] Anchors)
         return new(view, anchors);
     }
 
+    internal static VrchatViewpoint CaptureUnpacked(VrchatAvatar avatar, UnityScene scene, string guid, long owner)
+    {
+        var root = scene.TransformOfGameObject(owner);
+        if (avatar.ViewPosition is not {} view || root?.Root?["m_Father"]?.FileID != 0) return null;
+
+        var bonesByPath = avatar.AuthoredImportedBones
+            .Where(b => b.PrefabGuid == guid && b.FbxGuid == avatar.FbxGuid && b.Path != null)
+            .ToLookup(b => UnityModelPath.Normalize(b.Path));
+        var anchors = new Vector3[Bones.Length];
+        for (int i = 0; i < Bones.Length; i++)
+        {
+            if (!avatar.HumanBoneTargets.TryGetValue(Bones[i].Name, out var bone) || bone.Path == null) return null;
+            var matches = bonesByPath[UnityModelPath.Normalize(bone.Path)];
+            if (matches.Count() != 1) return null;
+
+            var transform = scene.Doc(matches.Single().TransformFileId);
+            var visited = new HashSet<long>();
+            Vector3 point = Vector3.Zero;
+            while (true)
+            {
+                if (transform?.ClassId != 4 || transform.Stripped || !visited.Add(transform.FileId)) return null;
+                var pose = scene.GetLocalTransform(transform.Root?["m_GameObject"]?.FileID ?? 0);
+                if (!pose.Found) return null;
+                point = Vector3.Transform(point * pose.Scale, Quaternion.Normalize(pose.Rotation));
+                // ViewPosition is a world-axis offset from the descriptor origin.
+                // Keep the root rotation and scale, but omit its translation.
+                if (transform.FileId == root.FileId) break;
+                point += pose.Position;
+                var parent = transform.Root["m_Father"];
+                if (parent?.Guid != null && parent.Guid != guid) return null;
+                transform = scene.Doc(parent?.FileID ?? 0);
+            }
+            anchors[i] = point;
+        }
+        return new(view, anchors);
+    }
+
     internal float3? Resolve(BipedRig rig)
     {
         var positions = new Vector3[Bones.Length];

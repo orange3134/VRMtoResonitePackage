@@ -42,6 +42,7 @@ static void Run()
         "runtimes", "win-x64", "native", "assimp.dll"));
     FbxMorphSeamChecks.Run();
     ModelHierarchyChecks.Run();
+    UnpackedViewpointChecks.Run();
     BlendShapeNormalChecks.Run();
     OutlineExclusionChecks.Run();
     NativeAssetChecks.Run();

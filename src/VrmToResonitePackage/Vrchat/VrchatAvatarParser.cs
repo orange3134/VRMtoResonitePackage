@@ -231,7 +231,6 @@ public static partial class VrchatAvatarParser
         ParseHumanoid(package, avatar);
         profile?.Mark("humanoid");
         ParseDescriptor(package, descriptorScene, effectiveDescriptor, avatar, descriptorGuid);
-        avatar.RigViewpoint = VrchatViewpoint.Capture(package, avatar, descriptorRoot.Guid, descriptorRoot.Id);
         ParseRenderers(package, selected.Source.Guid, avatar);
         avatar.RendererMaterials.RemoveAll(renderer => avatar.EditorOnlyFbxGuids.Contains(renderer.FbxGuid ?? ""));
         foreach (string excluded in avatar.EditorOnlyFbxGuids)
@@ -273,6 +272,11 @@ public static partial class VrchatAvatarParser
         profile?.Mark("expressions");
         ParsePhysics(package, selected.Source.Guid, avatar);
         profile?.Mark("physics");
+        // Unpacked prefabs use the skeleton paths verified while collecting physics and placements.
+        avatar.RigViewpoint = avatar.HasUnpackedRootPlacement && descriptorRoot.Guid == selected.Source.Guid
+            ? VrchatViewpoint.CaptureUnpacked(avatar, selected.Scene, descriptorRoot.Guid, descriptorRoot.Id)
+            : VrchatViewpoint.Capture(package, avatar, descriptorRoot.Guid, descriptorRoot.Id);
+        profile?.Mark("viewpoint");
         ParseModularAvatarComponents(package, selected.Source.Guid, avatar);
         profile?.Mark("modular-avatar");
         return avatar;
