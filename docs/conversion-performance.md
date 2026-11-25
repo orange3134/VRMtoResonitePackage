@@ -135,6 +135,48 @@ VRMとVRChatの共通経路なので、両方の保存パッケージを再読�
 複数入力の一括処理ではエンジン初期化とワールド作成の繰り返しも合計する。
 起動共有の効果は入力数に依存し、単体変換のモデル読み込み短縮とは分けて評価する。
 
+## .NET 11移行後の改善候補
+
+### FBXの数値配列を必要な箇所だけ展開する
+
+既定ウェイトを取得する `UnityFbxBlendShapeDefaults.Reader` は、各ノードの
+`f` / `d` 配列をすべて復元する。圧縮時は入力範囲のコピー、伸長先の
+`MemoryStream`、`ToArray()`、最終的な型付き配列を経由する。
+この読み取り器で配列値を参照するのは `GetEndFrameWeight` が読む
+`FullWeights` の末尾なので、まず頂点・法線などの不要な配列を格納長で読み飛ばす余地がある。
+ノード境界を確認し、子ノードや接続の走査、空の `FullWeights` の既定値100を維持する。
+
+数値配列そのものが必要な例は、モーフ補正の `UnityFbxMorphSeams.ReadProperty` が読む
+`double[]` / `int[]`。Windows x64では、.NET 11の `ZLibDecoder.Decompress` に
+圧縮範囲と `MemoryMarshal.AsBytes(result.AsSpan())` を渡して最終配列に直接展開できる。
+要素数と型幅の積を検査し、伸長の完了・消費した入力長・出力長を確認する。
+この経路は保存時に元のプロパティバイト列も使う。圧縮・非圧縮の両方で
+インデックスと頂点差分を照合し、空配列と切り詰めた入力も確認する。
+工程全体の効果は `fbx-fileids:<asset>` とモーフ補正を実行する入力で個別に測る。
+[FBX既定値](../src/VrmToResonitePackage/Unity/UnityFbxBlendShapeDefaults.cs)・[FBXモーフ補正](../src/VrmToResonitePackage/Unity/UnityFbxMorphSeams.cs)
+
+### VRMの頂点ループから4バイトの一時配列を除く
+
+`GlbPreprocessor` は頂点番号のUVへの書き込み、軸反転、逆バインド行列の補正で
+`BitConverter.GetBytes(value).CopyTo(...)` を繰り返す。
+既存のBINチャンクに `BinaryPrimitives.WriteSingleLittleEndian` で直接書き込めば、
+各floatの一時配列を省ける。このAPIは.NET 11より前から利用できる。
+頂点のストライド、書き換える成分、符号付きゼロを含むビット表現は維持する。
+比較する場合は同じ入力から生成したimport用GLBをバイト単位で照合できる。
+[GLB前処理](../src/VrmToResonitePackage/Vrm/GlbPreprocessor.cs)
+
+### GUIの子プロセス結果を一度に取得する
+
+`GuiApp.RunConversionProcessAsync` の起動、標準出力・標準エラーの並行読み取り、
+終了待ちは、.NET 11の `Process.RunAndCaptureTextAsync(ProcessStartInfo, ...)` にまとめられる。
+現行の開始設定を渡し、結果の両ストリームと終了コードを、出力ファイルの特定と
+失敗ログに引き継ぐ。これは保守性の改善で、APIは引き続き出力全文をメモリに保持する。
+[GUIの変換処理](../src/VrmToResonitePackage/GuiApp.cs)
+
+APIの仕様はMicrosoft Learnと.NET 11.0.0の公開APIを参照した。検証には自作の合成データを使い、
+外部の実装・素材・追加パッケージの取り込みはない。
+[Microsoft Learn の .NET 11 ライブラリ変更点](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries)
+
 ## ログの読み違いを避ける
 
 - 時刻付きログの空白区間は、その間の処理を示す候補であり関数単位の計測ではない。
