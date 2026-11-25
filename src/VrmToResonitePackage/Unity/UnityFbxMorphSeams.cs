@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.IO.Compression;
 using System.Text;
 using Elements.Core;
 
@@ -323,7 +322,7 @@ internal static class UnityFbxMorphSeams
             // original property bytes without inflating vertex and shape arrays.
             var values = _readMeshData || name is "Geometry" or "Deformer" or "C" ? new object[(int)count] : [];
             using (var props = new BinaryReader(new MemoryStream(raw), Encoding.UTF8))
-                for (int i = 0; i < values.Length; i++) values[i] = ReadProperty(props);
+                for (int i = 0; i < values.Length; i++) values[i] = ReadProperty(props, raw);
             var node = new Node { Name = name, Properties = raw, PropertyCount = (int)count, Values = values };
             while (reader.BaseStream.Position < end)
             {
@@ -335,7 +334,7 @@ internal static class UnityFbxMorphSeams
             if (reader.BaseStream.Position != end) throw new InvalidDataException("Invalid FBX node end.");
             return node;
         }
-        private static object ReadProperty(BinaryReader r)
+        private static object ReadProperty(BinaryReader r, byte[] properties)
         {
             char type = (char)r.ReadByte();
             switch (type)
@@ -346,15 +345,17 @@ internal static class UnityFbxMorphSeams
                 case 'R': return r.ReadBytes(r.ReadInt32());
                 case 'd': case 'i': case 'f': case 'l': case 'b': case 'c':
                     int count = r.ReadInt32(), encoding = r.ReadInt32(), length = r.ReadInt32();
-                    byte[] bytes = r.ReadBytes(length);
-                    if (type is not ('d' or 'i')) return null;
-                    using (var stream = new MemoryStream(bytes))
-                    using (Stream data = encoding == 0 ? stream : encoding == 1 ? new ZLibStream(stream, CompressionMode.Decompress) : throw new InvalidDataException("Invalid FBX array encoding."))
-                    using (var reader = new BinaryReader(data))
+                    long start = r.BaseStream.Position;
+                    if (count < 0 || length < 0 || length > properties.Length - start)
+                        throw new InvalidDataException("Invalid FBX array bounds.");
+                    var stored = properties.AsSpan((int)start, length);
+                    r.BaseStream.Position = start + length;
+                    return type switch
                     {
-                        if (type == 'd') { var array = new double[count]; for (int i = 0; i < count; i++) array[i] = reader.ReadDouble(); return array; }
-                        else { var array = new int[count]; for (int i = 0; i < count; i++) array[i] = reader.ReadInt32(); return array; }
-                    }
+                        'd' => FbxNumericArray.Decode<double>(stored, count, encoding),
+                        'i' => FbxNumericArray.Decode<int>(stored, count, encoding),
+                        _ => null,
+                    };
                 default: throw new InvalidDataException($"Unknown FBX property {type}.");
             }
         }

@@ -1,4 +1,5 @@
 using Elements.Core;
+using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -331,7 +332,7 @@ internal static class GlbPreprocessor
                     var bytes = new byte[count * 8];
                     for (int v = 0; v < count; v++)
                     {
-                        BitConverter.GetBytes((float)v).CopyTo(bytes, v * 8);
+                        BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan(v * 8), v);
                     }
                     appended.AddRange(bytes);
                     bufferViews.Add(new JsonObject
@@ -601,8 +602,7 @@ internal static class GlbPreprocessor
                     foreach (int floatIndex in new[] { 0, 4, 8, 12, 2, 6, 10, 14 })
                     {
                         int byteIndex = baseOffset + floatIndex * 4;
-                        float value = BitConverter.ToSingle(data, byteIndex);
-                        BitConverter.GetBytes(-value).CopyTo(data, byteIndex);
+                        NegateFloatAt(data, byteIndex);
                     }
                 }
             }
@@ -1002,8 +1002,8 @@ internal static class GlbPreprocessor
 
     private static void NegateFloatAt(byte[] data, int byteIndex)
     {
-        float value = BitConverter.ToSingle(data, byteIndex);
-        BitConverter.GetBytes(-value).CopyTo(data, byteIndex);
+        Span<byte> component = data.AsSpan(byteIndex, sizeof(float));
+        BinaryPrimitives.WriteSingleLittleEndian(component, -BinaryPrimitives.ReadSingleLittleEndian(component));
     }
 
     /// <summary>Reverses each triangle's winding (swaps the 2nd and 3rd index) of a scalar index accessor.</summary>
@@ -1081,8 +1081,7 @@ internal static class GlbPreprocessor
             foreach (int floatIndex in XConjugationIndices)
             {
                 int byteIndex = baseOffset + floatIndex * 4;
-                float value = BitConverter.ToSingle(data, byteIndex);
-                BitConverter.GetBytes(-value).CopyTo(data, byteIndex);
+                NegateFloatAt(data, byteIndex);
             }
         }
     }

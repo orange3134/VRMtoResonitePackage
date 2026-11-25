@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Text;
 
 namespace VrmToResonitePackage.Unity;
@@ -233,11 +232,13 @@ internal static class UnityFbxBlendShapeDefaults
 
             string name = Encoding.UTF8.GetString(_data, (int)_position, nameLength);
             _position += nameLength;
-            long propertyEnd = _position + propertyLength;
+            long propertyEnd = checked(_position + propertyLength);
+            if (propertyEnd < _position || propertyEnd > end || propertyCount < 0 || propertyCount > propertyLength)
+                throw new InvalidDataException("Invalid FBX property list.");
             var properties = new List<object>((int)Math.Min(propertyCount, int.MaxValue));
             for (long i = 0; i < propertyCount; i++)
             {
-                properties.Add(ReadProperty());
+                properties.Add(ReadProperty(name == "FullWeights" && i == 0, propertyEnd));
             }
             _position = propertyEnd;
 
@@ -252,7 +253,7 @@ internal static class UnityFbxBlendShapeDefaults
             return true;
         }
 
-        private object ReadProperty()
+        private object ReadProperty(bool readWeights, long propertyEnd)
         {
             char type = (char)_data[_position++];
             switch (type)
@@ -274,14 +275,26 @@ internal static class UnityFbxBlendShapeDefaults
                 case 'R':
                     return ReadRaw();
                 case 'f':
-                    return ReadArray(BitConverter.ToSingle);
                 case 'd':
-                    return ReadArray(BitConverter.ToDouble);
                 case 'l':
                 case 'i':
                 case 'b':
-                    SkipArray();
-                    return null;
+                case 'c':
+                    int count = ReadInt32();
+                    int encoding = ReadInt32();
+                    int storedLength = ReadInt32();
+                    if (count < 0 || storedLength < 0 || _position + storedLength > propertyEnd || encoding is not (0 or 1))
+                        throw new InvalidDataException("Invalid FBX array header.");
+                    var stored = _data.AsSpan((int)_position, storedLength);
+                    _position += storedLength;
+                    // This reader only uses numeric arrays for the last frame weight.
+                    if (!readWeights) return null;
+                    return type switch
+                    {
+                        'd' => FbxNumericArray.Decode<double>(stored, count, encoding),
+                        'f' => FbxNumericArray.Decode<float>(stored, count, encoding),
+                        _ => null,
+                    };
                 default:
                     throw new InvalidDataException($"Unknown FBX property type '{type}'.");
             }
@@ -330,56 +343,6 @@ internal static class UnityFbxBlendShapeDefaults
             return value;
         }
 
-        private void SkipArray()
-        {
-            int length = ReadInt32();
-            int encoding = ReadInt32();
-            int storedLength = ReadInt32();
-            if (length < 0 || encoding < 0 || storedLength < 0)
-            {
-                throw new InvalidDataException("Invalid FBX array.");
-            }
-            _position += storedLength;
-        }
-
-        private T[] ReadArray<T>(Func<byte[], int, T> readValue)
-        {
-            int length = ReadInt32();
-            int encoding = ReadInt32();
-            int storedLength = ReadInt32();
-            if (length < 0 || storedLength < 0)
-            {
-                throw new InvalidDataException("Invalid FBX array.");
-            }
-
-            byte[] stored = _data.AsSpan((int)_position, storedLength).ToArray();
-            _position += storedLength;
-            byte[] raw;
-            if (encoding == 0)
-            {
-                raw = stored;
-            }
-            else if (encoding == 1)
-            {
-                using var input = new MemoryStream(stored);
-                using var zlib = new ZLibStream(input, CompressionMode.Decompress);
-                using var output = new MemoryStream();
-                zlib.CopyTo(output);
-                raw = output.ToArray();
-            }
-            else
-            {
-                throw new InvalidDataException($"Unsupported FBX array encoding {encoding}.");
-            }
-
-            int elementSize = raw.Length / Math.Max(length, 1);
-            var result = new T[length];
-            for (int i = 0; i < length; i++)
-            {
-                result[i] = readValue(raw, i * elementSize);
-            }
-            return result;
-        }
     }
 
     private sealed record Node(string Name, List<object> Properties, List<Node> Children);

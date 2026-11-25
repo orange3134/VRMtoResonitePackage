@@ -7,6 +7,19 @@ internal static class FbxMorphSeamChecks
 {
     public static void Run()
     {
+        using (var compressed = new MemoryStream())
+        {
+            using (var zlib = new ZLibStream(compressed, CompressionLevel.Fastest, true))
+                zlib.Write(ReadOnlySpan<byte>.Empty);
+            byte[] empty = compressed.ToArray();
+            Require(FbxNumericArray.Decode<float>(empty, 0, 1).Length == 0, "Empty compressed FBX array");
+            try
+            {
+                FbxNumericArray.Decode<float>(empty.AsSpan(0, empty.Length - 1), 0, 1);
+                throw new Exception("Truncated FBX array was accepted");
+            }
+            catch (InvalidDataException) { }
+        }
         string directory = Path.GetFullPath(Path.Combine(".tmp_verify", "morph-seams", Guid.NewGuid().ToString("N")));
         Directory.CreateDirectory(directory);
         string model = Path.Combine(directory, "import-settings.fbx");
@@ -27,6 +40,8 @@ internal static class FbxMorphSeamChecks
         {
             string binary = Path.Combine(directory, $"disable-{version}.fbx");
             Write(binary, version, false, true, false);
+            Require(UnityFbxBlendShapeDefaults.Read(binary).Single().Weight == 25,
+                $"FBX {version} uses the final FullWeights element for the initial weight");
             CheckDisabled(binary);
         }
         string ascii = Path.Combine(directory, "disable-ascii.fbx");
@@ -193,7 +208,7 @@ internal static class FbxMorphSeamChecks
             new("Model", new object[] { 20L, "Body\0\u0001Model", "Mesh" }, N("Version", 232)),
             new("Deformer", new object[] { 30L, "Face\0\u0001Deformer", "BlendShape" }, N("Version", 100)),
             new("Deformer", new object[] { 40L, "Sweat\0\u0001Deformer", "BlendShapeChannel" },
-                N("Version", 100), N("DeformPercent", 0d), N("FullWeights", new double[] { 100 })),
+                N("Version", 100), N("DeformPercent", 50d), N("FullWeights", new double[] { 80, 200 })),
             new("Geometry", new object[] { 50L, "Sweat\0\u0001Geometry", "Shape" }, N("Version", 100),
                 N("Indexes", seam ? new[] { 0 } : new[] { 0, 3 }),
                 N("Vertices", seam ? new double[] { 0, 0, .2 } : new double[] { 0, 0, .2, 0, 0, .2 }),

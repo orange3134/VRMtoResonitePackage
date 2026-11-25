@@ -671,16 +671,11 @@ internal sealed class MainWindow : Window
         startInfo.Environment["RESOPON_NOPAUSE"] = "1";
         AddCliArguments(startInfo.ArgumentList, options, resonitePath);
 
-        using var process = new Process { StartInfo = startInfo };
-        process.Start();
-        Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
-        Task<string> errorTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        string output = await outputTask;
-        string error = await errorTask;
+        var result = await Process.RunAndCaptureTextAsync(startInfo);
+        int exitCode = result.ExitStatus.ExitCode;
 
         string logPath = FindLatestLogPath(logsDirectory, startTime);
-        string[] reportedOutputFiles = output
+        string[] reportedOutputFiles = result.StandardOutput
             .Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries)
             .Where(line => line.StartsWith("RESOPON_OUTPUT:", StringComparison.Ordinal))
             .Select(line => line["RESOPON_OUTPUT:".Length..].Trim())
@@ -689,11 +684,11 @@ internal sealed class MainWindow : Window
         string[] outputFiles = reportedOutputFiles.Length > 0
             ? reportedOutputFiles
             : GetExpectedOutputFiles(options, expectedOutputName).Where(File.Exists).ToArray();
-        if (process.ExitCode != 0 && string.IsNullOrWhiteSpace(logPath))
+        if (exitCode != 0 && string.IsNullOrWhiteSpace(logPath))
         {
-            logPath = WriteGuiProcessFailureLog(logsDirectory, output, error);
+            logPath = WriteGuiProcessFailureLog(logsDirectory, result.StandardOutput, result.StandardError);
         }
-        return new ConversionRunResult(process.ExitCode, outputFiles, logPath, process.ExitCode == 0 ? 0 : 1);
+        return new ConversionRunResult(exitCode, outputFiles, logPath, exitCode == 0 ? 0 : 1);
     }
 
     private static ProcessStartInfo CreateConverterProcessStartInfo()
