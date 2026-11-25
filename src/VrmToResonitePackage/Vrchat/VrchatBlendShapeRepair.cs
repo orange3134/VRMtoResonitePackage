@@ -84,92 +84,145 @@ internal static class VrchatBlendShapeRepair
             int maxReferencedIndex = MaxReferencedBlendShapeIndex(avatar, renderer.Slot.Name);
             var requestedNames = requestedByRenderer.GetValueOrDefault(renderer) ?? new HashSet<string>();
             int requiredCount = Math.Min(expected.Count, maxReferencedIndex + 1);
-            if (requiredCount == 0 && (aliases == null || !aliases.Keys.Any(renderer.Mesh.Asset.Data.HasBlendShape)) && !expected.Any(name => requestedNames.Contains(name) && !renderer.Mesh.Asset.Data.HasBlendShape(name)))
-            {
-                continue;
-            }
-            UniLog.Log($"Checking referenced blendshapes on {renderer.Slot.Name}: " +
-                       $"required through {requiredCount - 1}, FBX={expected.Count}, " +
-                       $"imported={renderer.MeshBlendshapeCount}.");
-
-            using var meshProfile = ConversionProfile.Start($"repair-mesh:{renderer.Slot.Name}");
-
-            MeshX mesh;
-            var oldWeights = new Dictionary<string, Queue<float>>(StringComparer.Ordinal);
-            for (int i = 0; i < renderer.MeshBlendshapeCount; i++)
-            {
-                string name = renderer.BlendShapeName(i);
-                name = aliases?.GetValueOrDefault(name, name) ?? name;
-                if (!oldWeights.TryGetValue(name, out Queue<float> values))
-                {
-                    values = new Queue<float>();
-                    oldWeights.Add(name, values);
-                }
-                values.Enqueue(i < renderer.BlendShapeWeights.Count ? renderer.BlendShapeWeights[i] : 0f);
-            }
-
-            await default(ToBackground);
-            object readLock = new();
-            await renderer.Mesh.Asset.RequestReadLock(readLock).ConfigureAwait(false);
-            try
-            {
-                mesh = new MeshX(renderer.Mesh.Asset.Data);
-            }
-            finally
-            {
-                renderer.Mesh.Asset.ReleaseReadLock(readLock);
-            }
-            meshProfile?.Mark("clone");
-
-            int renamed = RestoreChannelNames(mesh, aliases);
-            if (renamed < 0)
-            {
-                UniLog.Warning($"Ambiguous FBX channel names on {renderer.Slot.Name}; mesh left unchanged.");
-                await default(ToWorld);
-                continue;
-            }
-            int inserted = InsertMissingBlendShapes(mesh, expected, requiredCount);
-            if (inserted < 0)
-            {
-                LogSequenceMismatch(renderer.Slot.Name, mesh, expected.Take(requiredCount).ToList());
-                await default(ToWorld);
-                continue;
-            }
-            inserted += InsertMissingNamedBlendShapes(mesh, expected, requestedNames);
-            if (inserted == 0 && renamed == 0)
-            {
-                await default(ToWorld);
-                continue;
-            }
-            List<string> repairedNames = mesh.BlendShapes.Select(shape => shape.Name).ToList();
-            meshProfile?.Mark("edit-shapes");
-
-            Uri uri = await MeshAssetWriter.SaveAsync(renderer.Engine.LocalDB, mesh).ConfigureAwait(false);
-            meshProfile?.Mark("save-asset");
-            await default(ToWorld);
-            if (uri == null || renderer.Mesh.Target is not StaticMesh staticMesh)
-            {
-                continue;
-            }
-
-            staticMesh.URL.Value = uri;
-            while (renderer.BlendShapeWeights.Count > 0)
-            {
-                renderer.BlendShapeWeights.RemoveAt(renderer.BlendShapeWeights.Count - 1);
-            }
-            foreach (string name in repairedNames)
-            {
-                float value = oldWeights.TryGetValue(name, out Queue<float> values) && values.Count > 0
-                    ? values.Dequeue()
-                    : 0f;
-                renderer.BlendShapeWeights.Add();
-                renderer.BlendShapeWeights.GetElement(renderer.BlendShapeWeights.Count - 1).Value = value;
-            }
-
-            repaired++;
-            UniLog.Log($"Restored {inserted} stripped blendshape(s) and {renamed} FBX channel name(s) on {renderer.Slot.Name}.");
+            if (await RepairMesh(root, renderer, expected, aliases, requiredCount, requestedNames,
+                knownSource: sourcePath != null || copy != null)) repaired++;
         }
         return repaired;
+    }
+
+    internal static async Task<int> ApplyVrm(Slot root, Vrm.VrmModel model)
+    {
+        int repaired = 0;
+        var slots = root.GetAllChildren().ToLookup(slot => slot.Name);
+        var nodeNames = model.NodeNames.ToLookup(name => name);
+        foreach (var (meshIndex, nodes) in model.MeshToNodes)
+        {
+            if (meshIndex < 0 || meshIndex >= model.MeshTargetNames.Count) continue;
+            var expected = model.MeshTargetNames[meshIndex];
+            if (expected.Count == 0) continue;
+            foreach (int node in nodes)
+            {
+                string name = model.GetNodeName(node);
+                if (string.IsNullOrEmpty(name) || nodeNames[name].Count() != 1 || slots[name].Count() != 1) continue;
+                var skins = slots[name].Single().GetComponents<SkinnedMeshRenderer>().ToArray();
+                if (skins.Length == 1 && await RepairMesh(root, skins[0], expected, null, 0, null, true)) repaired++;
+            }
+        }
+        return repaired;
+    }
+
+    private static async Task<bool> RepairMesh(Slot root, SkinnedMeshRenderer renderer, IReadOnlyList<string> expected,
+        IReadOnlyDictionary<string, string> aliases, int requiredCount, IReadOnlySet<string> requestedNames, bool knownSource)
+    {
+        if (renderer.Mesh.Target is not StaticMesh staticMesh || renderer.Mesh.Asset?.Data is not MeshX source) return false;
+        var imported = source.BlendShapes.Select(s => s.Name).ToArray();
+        if (imported.SequenceEqual(expected) && (aliases == null || !imported.Any(aliases.ContainsKey))) return false;
+        // Only a source-identified mesh with a unique channel table can supply the entire order.
+        // A name-only lookup can describe a different renderer elsewhere in the hierarchy.
+        var order = knownSource && expected.All(n => !string.IsNullOrEmpty(n)) &&
+            expected.Distinct(StringComparer.Ordinal).Count() == expected.Count
+            ? expected.Select((name, index) => (name, index)).ToDictionary(x => x.name, x => x.index, StringComparer.Ordinal) : null;
+        if (order != null && imported.Any(name => !order.ContainsKey(aliases?.GetValueOrDefault(name, name) ?? name))) order = null;
+        if (order == null && requiredCount == 0 && (aliases == null || !imported.Any(aliases.ContainsKey)) &&
+            (requestedNames == null || !expected.Any(name => requestedNames.Contains(name) && !source.HasBlendShape(name)))) return false;
+
+        using var meshProfile = ConversionProfile.Start($"repair-mesh:{renderer.Slot.Name}");
+
+        MeshX mesh;
+        var oldWeights = new Dictionary<string, Queue<float>>(StringComparer.Ordinal);
+        for (int i = 0; i < renderer.MeshBlendshapeCount; i++)
+        {
+            string name = renderer.BlendShapeName(i);
+            name = aliases?.GetValueOrDefault(name, name) ?? name;
+            if (!oldWeights.TryGetValue(name, out Queue<float> values))
+            {
+                values = new Queue<float>();
+                oldWeights.Add(name, values);
+            }
+            values.Enqueue(i < renderer.BlendShapeWeights.Count ? renderer.BlendShapeWeights[i] : 0f);
+        }
+
+        await default(ToBackground);
+        object readLock = new();
+        await renderer.Mesh.Asset.RequestReadLock(readLock).ConfigureAwait(false);
+        try
+        {
+            mesh = new MeshX(renderer.Mesh.Asset.Data);
+        }
+        finally
+        {
+            renderer.Mesh.Asset.ReleaseReadLock(readLock);
+        }
+        meshProfile?.Mark("clone");
+
+        int renamed = RestoreChannelNames(mesh, aliases);
+        if (renamed < 0)
+        {
+            UniLog.Warning($"Ambiguous FBX channel names on {renderer.Slot.Name}; mesh left unchanged.");
+            await default(ToWorld);
+            return false;
+        }
+        int inserted;
+        if (order != null)
+        {
+            inserted = 0;
+            foreach (string name in expected)
+                if (!mesh.HasBlendShape(name))
+                {
+                    mesh.AddBlendShape(name).AddFrame(1f);
+                    inserted++;
+                }
+            mesh.SortBlendshapes((a, b) => order[a.Name].CompareTo(order[b.Name]));
+        }
+        else
+        {
+            inserted = InsertMissingBlendShapes(mesh, expected, requiredCount);
+        }
+        if (inserted < 0)
+        {
+            LogSequenceMismatch(renderer.Slot.Name, mesh, expected.Take(requiredCount).ToList());
+            await default(ToWorld);
+            return false;
+        }
+        if (order == null && requestedNames != null) inserted += InsertMissingNamedBlendShapes(mesh, expected, requestedNames);
+        if (inserted == 0 && renamed == 0 && order == null)
+        {
+            await default(ToWorld);
+            return false;
+        }
+        List<string> repairedNames = mesh.BlendShapes.Select(shape => shape.Name).ToList();
+        meshProfile?.Mark("edit-shapes");
+
+        Uri uri = await MeshAssetWriter.SaveAsync(renderer.Engine.LocalDB, mesh).ConfigureAwait(false);
+        meshProfile?.Mark("save-asset");
+        await default(ToWorld);
+        if (uri == null)
+        {
+            return false;
+        }
+
+        if (root.GetComponentsInChildren<MeshRenderer>().Any(r => r != renderer && r.Mesh.Target == staticMesh))
+        {
+            var provider = staticMesh.Slot.AddSlot("Restored blendshapes").AttachComponent<StaticMesh>();
+            provider.URL.Value = uri;
+            renderer.Mesh.Target = provider;
+        }
+        else staticMesh.URL.Value = uri;
+        while (renderer.BlendShapeWeights.Count > 0)
+        {
+            renderer.BlendShapeWeights.RemoveAt(renderer.BlendShapeWeights.Count - 1);
+        }
+        foreach (string name in repairedNames)
+        {
+            float value = oldWeights.TryGetValue(name, out Queue<float> values) && values.Count > 0
+                ? values.Dequeue()
+                : 0f;
+            renderer.BlendShapeWeights.Add();
+            renderer.BlendShapeWeights.GetElement(renderer.BlendShapeWeights.Count - 1).Value = value;
+        }
+
+        UniLog.Log($"Restored blendshape order on {renderer.Slot.Name} ({inserted} inserted, {renamed} renamed).");
+        return true;
     }
 
     private static async Task WaitForRendererMeshes(Slot root)

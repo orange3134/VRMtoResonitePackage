@@ -68,16 +68,22 @@ internal static class NamedShapeRepairChecks
             Check(face.Mesh.Asset.Data.GetBlendShape(1).Frames.Single().RawPositions.All(p => p == float3.Zero), "restored frame is empty");
             Check(await VrchatBlendShapeRepair.Apply(root, avatar, new Dictionary<Slot, string>(),
                 new Dictionary<string, Slot>(), expressionRoot: descriptor) == 0, "repair is idempotent");
-            avatar.ModelBlendShapeNamesByPath[new(null, "Face")] = new[] { "eye.Existing", "Stripped", "Unreferenced" };
+            var shared = descriptor.AddSlot("Shared").AttachComponent<SkinnedMeshRenderer>();
+            shared.Mesh.Target = face.Mesh.Target;
+            for (int i = 0; i < 7200 && shared.BlendShapeWeights.Count != 2; i++) await default(NextUpdate);
+            shared.GetBlendShape("Existing").Value = 0.61f;
+            avatar.ModelBlendShapeNamesByPath[new(null, "Face")] = new[] { "Unreferenced", "eye.Existing", "Stripped" };
             avatar.ModelBlendShapeAliasesByPath[new(null, "Face")] = new Dictionary<string, string> { ["Existing"] = "eye.Existing" };
             var paths = new Dictionary<Slot, string> { [face.Slot] = "RootNode/Face" };
             Check(await VrchatBlendShapeRepair.Apply(root, avatar, new Dictionary<Slot, string>(),
                 new Dictionary<string, Slot>(), paths, descriptor) == 1, "channel name restored on the correct source path");
-            for (int i = 0; i < 7200 && face.BlendShapeName(0) != "eye.Existing"; i++) await default(NextUpdate);
-            Check(face.BlendShapeName(0) == "eye.Existing" && Math.Abs(face.GetBlendShapeWeight("eye.Existing") - 0.37f) < 0.0001f,
-                "canonical name retains weight and original index");
-            Check(face.Mesh.Asset.Data.GetBlendShape(0).Frames.Single().RawPositions[0] == new float3(0, 0.1f, 0),
+            for (int i = 0; i < 7200 && face.MeshBlendshapeCount != 3; i++) await default(NextUpdate);
+            Check(face.Mesh.Asset.Data.BlendShapes.Select(s => s.Name).SequenceEqual(new[] { "Unreferenced", "eye.Existing", "Stripped" }) &&
+                Math.Abs(face.GetBlendShapeWeight("eye.Existing") - 0.37f) < 0.0001f, "source order and named weight restored");
+            Check(face.Mesh.Asset.Data.GetBlendShape(1).Frames.Single().RawPositions[0] == new float3(0, 0.1f, 0),
                 "channel rename preserves actual vertex deltas instead of inserting an empty frame");
+            Check(shared.MeshBlendshapeCount == 2 && Math.Abs(shared.GetBlendShapeWeight("Existing") - 0.61f) < 0.0001f,
+                "another renderer sharing the original provider retains its channel order and weights");
             Check(renderers.Skip(1).All(r => r.BlendShapeName(0) == "Existing"), "same-named other meshes remain unchanged");
             var retained = Mesh(descriptor.AddSlot("Model").AddSlot("RootNode").AddSlot("BakedFace"));
             for (int i = 0; i < 7200 && retained.MeshBlendshapeCount != 1; i++) await default(NextUpdate);

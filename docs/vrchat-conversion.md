@@ -673,14 +673,21 @@ Resoniteは空または微小なshapeを除去するため、Unityのindex参照
   一時FBXでBlendShapeデフォーマからメッシュへの接続を外す。バイナリ・ASCIIともに
   スキンとボーンの接続は維持され、保存メッシュのshape数とrendererのweight数は0になる。
   ASCII FBXの接続元は符号付き64ビット整数として照合する。宣言の `30` と接続の `030` は同じIDを指す。
-- blinkやprefab weightが数値参照する最大indexまで、欠落shapeを空frameとして復元する。
-- 名前参照だけのrendererは大量の空frameを復元しない。
+- FBXのGUIDとrendererの元path、またはPrefabの明示的なメッシュ参照で元のチャンネル表を特定する。
+  表の名前が一意で、インポート済みの全チャンネルが別名解決後にその表にある場合は、欠けた名前を
+  空frameで補い、区切りや無音のshapeを含めてFBXの順に並べる。既存frameの頂点変位を保持し、
+  ウェイトを名前で対応させる。メッシュを共有する別のrendererには専用の変更を波及させない。
+  空frameの補完で、インポーターが捨てた微小な頂点変位までは復元できない。
+- 名前だけの候補ではblink・prefab weightが参照するindexまでと、対象rendererに解決できた
+  表情・口形名を補う。元の順序と矛盾する数値参照の修復は中止する。
 - FBX `BlendShapeChannel.DeformPercent` はModelImporterの `importBlendShapeDeformPercent` が
   有効な場合だけモデルprefabの既定weightとして読み込む。明示的な0では取り込まず、設定省略時は従来どおり有効。
   無効でもチャンネル名・順序・aliasは保持し、Prefabの明示的なweightは通常どおり適用する。
-- Scope FBX default weights by model occurrence and renderer name, and fill missing
-  weights on every corresponding renderer record. Explicit zero overrides remain authoritative.
+- モデル由来のRendererではFBXのGUIDと元の階層pathで既定ウェイトを引き、未指定の項目を補う。
+  明示された0や、別のインスタンスの上書きは区別する。
 - 明示的なprefab `m_BlendShapeWeights` は0を含めて既定値より優先する。
+  Prefab自身が定義した独立したRendererでは、空配列や配列末尾より先のチャンネルも0になる。
+  Shipilkaの髪とRitoriの制服は、参照先FBX上の既定値が100でも、Prefab上でこの値を継承しない。
   SkinnedMeshRenderer の配列を拡張する上書きでは、既存の値を保持し、追加された未指定要素を
   数値の0で初期化する。MANUKA DR_05 Variant 1では、未指定要素を空ノードにすると
   Unity参照との比較が途中で失敗する。元PrefabをUnityで採取し、修正後の値と照合した。

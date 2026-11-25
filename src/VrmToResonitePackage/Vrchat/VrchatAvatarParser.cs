@@ -362,7 +362,7 @@ public static partial class VrchatAvatarParser
                 {
                     continue;
                 }
-                renderer.InitialBlendShapes.Add((index, weight));
+                renderer.InitialBlendShapes.Add((index, renderer.HasAuthoredWeightArray ? 0f : weight));
             }
         }
     }
@@ -2365,6 +2365,7 @@ public static partial class VrchatAvatarParser
                 }
                 if (weights?.Seq != null)
                 {
+                    renderer.HasAuthoredWeightArray = (smr.Root["m_CorrespondingSourceObject"]?.FileID ?? 0) == 0;
                     renderer.InitialBlendShapes.Clear();
                     for (int index = 0; index < weights.Seq.Count; index++)
                     {

@@ -249,6 +249,9 @@ internal static class Converter
                 Console.WriteLine("アセットの読み込みを待機中...");
                 await WaitForAssets(assetsSlot);
 
+                if (await Vrchat.VrchatBlendShapeRepair.ApplyVrm(root, vrm) > 0)
+                    await WaitForAssets(assetsSlot);
+
                 if (options.NoAvatar)
                 {
                     await MaterialTuner.Apply(root, assetsSlot, vrm, vrmPath,

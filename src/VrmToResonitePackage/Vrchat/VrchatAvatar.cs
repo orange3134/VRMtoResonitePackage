@@ -357,6 +357,9 @@ public sealed class VrchatRendererMaterials
     public string RendererGameObjectName { get; set; }
     public List<string> MaterialGuids { get; } = new();
 
+    /// <summary>A standalone prefab renderer owns its weight array, including its implicit zero tail.</summary>
+    public bool HasAuthoredWeightArray { get; set; }
+
     /// <summary>Initial blendshape weights, including explicit zero overrides (index, Unity 0-100 weight).</summary>
     public List<(int Index, float Weight)> InitialBlendShapes { get; } = new();
 }

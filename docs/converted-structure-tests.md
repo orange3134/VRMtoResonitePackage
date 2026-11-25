@@ -136,7 +136,14 @@ Shape GeometryのオブジェクトIDを取得する。全チャンネルが一�
 
 Ex・Faとも保存メッシュの名前と添字はUnityと111件すべて一致し、各添字のフレームの頂点変位も
 修正前の保存パッケージと一致した。Faの `vrc.Dummy3` の初期ウェイトは従来からUnityの0%に対して
-保存側が100%で、名前とは別の差として記録する。
+保存側が100%で、両手Neutralで選ばれるクリップの先頭キーが1を指定する。
+起動時の表情を含む保存値とPrefabの静止値を比較したときは、この違いをウェイト差として記録する。
+
+チャンネル順の回帰検査では、Unity採取結果の各Rendererの `blendShapes` と、保存パッケージの
+対応するStaticMeshを復号した名前配列およびRendererの `BlendShapeWeights` を同じ添字で照合する。
+名前・順序・要素数は完全一致とし、ウェイトは `abs(Unity値 / 100 - 保存値) > 1e-5` を差とする。
+元のチャンネルが保持されたかは、名前で対応させて全frameのウェイトと全頂点の位置変位を
+修正前後で比較できる。Rendererの対応や参照先のメッシュを確かめられない場合は未検証として残す。
 
 登録全件の変換を `scripts/convert-all-local-avatars.py` で完了した後は、
 その実行の `report.json` と隣接する凍結済み `registry.json` を使って一括採取できる。
@@ -171,6 +178,9 @@ Unity/parserが外部プロジェクト依存を補って解析したアーカ�
   復元しても、インポートしたFBX内部の兄弟順まで一致するとは限らない。
 - `bone-count / bone-target` は未使用骨の除去・再index化を含む。
   配列差だけで誤接続とせず、使用ウェイト・bind pose・骨を動かした追従を別途検証する。
+  保存側はMeshXの各頂点の正のウェイトから骨indexを取得し、同じindexのMeshX骨名と
+  Renderer.Bonesの参照先Slotを照合できる。同名の骨が複数ある場合は名前だけで接続を確定できない。
+  変換後の配列にない骨がUnityでウェイトを持っていたかは、Unity側の頂点データで別に確認する。
   null参照は元骨が未対応でも件数を確認する。Ricorineでは尾の5骨がなくなり、複製rendererを
   含め同じnullが繰り返される事例がある。参照件数と欠落した骨の種類を区別し、保存メッシュの
   正のウェイトがnullを指すか調べる。ウェイトから使われないnullだけで変形破損と断定しない。
@@ -237,6 +247,9 @@ python -B scripts/compare-converted-structure.py unity.json parser.json `
    `siblingOrders` は元の兄弟同士の相対順序を比較する。補助階層を経由したSlotの位置も考慮し、
    未対応の親・子や親関係の不一致がある群は `unverified` にする。差は `sibling-order` として
    報告する。生成補助Slotを含む絶対indexの一致や、skinのBones配列順とは区別する。
+   UnityのRendererに対応するSlotで件数が0なら、その子のFBX階層も調べる。たとえば
+   KipfelのFishToyでは同名の子、HinaのFY_TulipではRootNode配下の同名の子にRendererがある。
+   元メッシュと配置の対応が確認できるまでは、同名の子を自動的に一致へ変更しない。
    `differences` と `unverified` を分け、未対応骨をnull一致と見なさない。
    bone数・順序の差にはインポータの未使用骨除去やスキン再構成もあり、差分だけで不具合とは断定しない。
 6. 原因の変換工程を修正し、自作fixtureまたは明示したパッケージ期待条件を回帰検査に追加する。

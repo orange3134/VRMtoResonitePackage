@@ -73,6 +73,13 @@ internal static class DefaultBlendShapeChecks
                 avatar.RendererMaterials.Single(r => r.PrefabObjectKey == null && r.SourcePath == "RootNode/Right/Body")
                     .InitialBlendShapes.Single().Weight == 75,
                 "Renamed copies inherit only their source path, explicit zero wins, and untouched models retain defaults");
+            explicitZero.InitialBlendShapes.Clear();
+            explicitZero.HasAuthoredWeightArray = true;
+            Call("ApplyFbxDefaultBlendShapeWeights", avatar);
+            Require(explicitZero.InitialBlendShapes.Single() == (0, 0f) &&
+                avatar.RendererMaterials.Single(r => r.PrefabObjectKey == null && r.SourcePath == "RootNode/Right/Body")
+                    .InitialBlendShapes.Single().Weight == 75,
+                "An empty standalone renderer array uses zero while its source model keeps its nonzero default");
             avatar.ModelBlendShapeNames[new(modelGuid, "Body")] = new[] { "Wrong branch" };
             avatar.ModelBlendShapeNamesByPath[new(modelGuid, "Right/Body")] = new[] { "Right only" };
             Require(avatar.BlendShapeNamesFor(modelGuid, "Body", rendererPath: "Right/Body").Single() == "Right only" &&
