@@ -90,3 +90,9 @@ Proxyはヘッドセット位置、Targetは頭ボーンを駆動するIK接続�
 Rengyo v1.3は展開済みPrefabの回帰例。Descriptorの設定値は Unity と一致していても、
 これを変換後の座標として使うとHead Proxyが約70.19 mmずれた。保存姿勢から視点を写すと、
 再読込したパッケージでUnity基準との距離は0.001 mm未満になった。
+
+Nagma（2022-05-14）の通常版とPhysBone版は、Prefab側にDescriptorと人体骨があり、
+追加FBXも持つ。ResoPon `d0d982e` は両方をFBX variantとして解析し、Prefab側の4骨を
+それぞれ一意に特定できても視点補正を適用しない。UnityのDescriptor設定値と頭のIK接続点は一致する一方、
+保存したHead Proxyは人体骨で位置合わせしたUnity視点より109.91 mm後方、8.14 mm上方にあった。
+同じ構成の回帰では、元のPrefabをUnity Editorで開き、通常版・PhysBone版の両方でProxyとTargetを個別に比較する。
