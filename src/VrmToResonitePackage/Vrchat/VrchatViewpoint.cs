@@ -64,7 +64,7 @@ internal sealed record VrchatViewpoint(Vector3 View, Vector3[] Anchors)
 
     internal static VrchatViewpoint CaptureUnpacked(VrchatAvatar avatar, UnityScene scene, string guid, long owner)
     {
-        var root = scene.TransformOfGameObject(owner);
+        var root = scene?.TransformOfGameObject(owner);
         if (avatar.ViewPosition is not {} view || root?.Root?["m_Father"]?.FileID != 0) return null;
 
         var bonesByPath = avatar.AuthoredImportedBones

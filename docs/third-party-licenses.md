@@ -111,6 +111,8 @@ DataTree公開APIを反射で確認し、保存済みローカルパッケージ
 EkuのRenderTexture判定とNagmaのFBX骨階層採取の修正、保存スキンの追従テストは、既存の
 本リポジトリ実装とUnity 2022.3.22f1・インストール済みFrooxEngineのAPIを用いた独立実装。
 Unity側の骨行列・bind pose・ウェイト採取にも外部サンプルのコピーはない。
+Nagmaの視点補正は既存の骨座標変換を利用し、通常版・PhysBone版のPrefabでUnityが採取した
+Descriptorと人体骨の座標をローカルで照合した。
 素材ごとの既存の利用条件確認を引き継いでローカル検証だけに利用し、新たな配布物や通知対象は増えない。
 
 骨格参照用FBXの余分なrendererを除く修正は既存Prefab解析・FrooxEngine APIによる独立実装。

@@ -272,9 +272,10 @@ public static partial class VrchatAvatarParser
         profile?.Mark("expressions");
         ParsePhysics(package, selected.Source.Guid, avatar);
         profile?.Mark("physics");
-        // Unpacked prefabs use the skeleton paths verified while collecting physics and placements.
-        avatar.RigViewpoint = avatar.HasUnpackedRootPlacement && descriptorRoot.Guid == selected.Source.Guid
-            ? VrchatViewpoint.CaptureUnpacked(avatar, selected.Scene, descriptorRoot.Guid, descriptorRoot.Id)
+        // An accessory FBX changes model placement, but the descriptor and skeleton
+        // can still be authored on the selected prefab. Use their owning occurrence.
+        avatar.RigViewpoint = descriptorRoot.Guid == selected.Source.Guid
+            ? VrchatViewpoint.CaptureUnpacked(avatar, package.PrefabGraph.Scene(descriptorRoot.Guid), descriptorRoot.Guid, descriptorRoot.Id)
             : VrchatViewpoint.Capture(package, avatar, descriptorRoot.Guid, descriptorRoot.Id);
         profile?.Mark("viewpoint");
         ParseModularAvatarComponents(package, selected.Source.Guid, avatar);
