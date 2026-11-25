@@ -109,10 +109,27 @@ AvatarSample_C.v0ではUniVRM 0.128.3の顔が57 shape、保存メッシュが55
 添字が2ずつずれる。5母音の名前・接続先・発話後のリセットは個別に検査できる。
 元のshape列の欠落と、口パクが意図したshapeに届くかを別々に記録する。
 
-FBXでもshapeの件数と初期値だけでは名前の差を検出できない。Lyphos 1.10 Ex・Faの
-`Body` は両側とも111 shapeだが、Unityの `mouth.smile1` と `sample.smile1` が
-保存メッシュでは `smile1` と `smile1_` になる。比較には選択したRendererの埋め込み
-MeshXから順に読み出した名前を使い、同名の表情制御用Slotを件数に含めない。
+FBXのshape名を検証するときは、Unityの選択Rendererと、対応する保存メッシュ（埋め込みMeshX）の
+名前を添字ごとに比較する。同名の表情制御用Slotを件数に含めない。
+
+#### Lyphos 1.10 Ex・Fa の Body
+
+Ex・Faは同じFBXの同じメッシュ（fileID `4300044`）を参照する。Unityで採取した111件の名前は
+すべて元FBXの `BlendShapeChannel` 名と一致した。一方、このBodyをResonite付属のAssimpで
+読み込むと、マテリアル別の3つのメッシュすべてで、111件のattachment名はチャンネルに接続された
+Shape Geometryの名前と一致する。たとえば `mouth.smile1` と `sample.smile1` のGeometry名はどちらも `smile1`。
+
+Resoniteの `ModelImporter.ImportMesh` はattachment名でMeshXにshapeを追加し、同名があれば
+空くまで末尾に `_` を付ける。ResoPonの `BlendShapeNameNormalizer.ChannelAliases` は
+Geometry名から元チャンネルを一意に引ける場合に別名を登録する。Ex・Faとも変換ログで103件の
+チャンネル名の復元を確認した。重複する3種類のGeometry名に属する次の8件には別名が登録されず、
+保存パッケージを再読込しても両Prefabで同じ差が残る。
+
+| Bodyの添字（0始まり） | Unityのチャンネル名（添字順） | 保存MeshXの名前（同順） |
+|---|---|---|
+| 14, 104 | `mouth.smile1`, `sample.smile1` | `smile1`, `smile1_` |
+| 15, 105 | `mouth.smile2`, `sample.smile2` | `smile2`, `smile2_` |
+| 57, 85, 89, 97 | `eye.hide`, `brow.hide`, `tongre.hide`, `nose.hide` | `hide`, `hide_`, `hide__`, `hide___` |
 
 登録全件の変換を `scripts/convert-all-local-avatars.py` で完了した後は、
 その実行の `report.json` と隣接する凍結済み `registry.json` を使って一括採取できる。

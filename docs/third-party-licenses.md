@@ -13,7 +13,7 @@
 | Resonite.UnitySDK | MaterialTuner、LilToonConverter、VrchatMaterialBuilder、ShaderPropertyFallbackConverter、ベイク計画。MToon・lilToon変換を照合 |
 | lilToon | VrchatMainTextureBaker とレイヤー処理。lil_common_functions.hlsl 等の色補正・グラデーション・アルファマスク・合成 |
 | Unity-Chan Toon Shader 2.0.9 | Unity Technologies Japan、Unity-Chan License 2.0。シェーダー宣言、メインテクスチャの参照先、NoOutline 透明シェーダーの GUID と色描画パスの状態を確認し、変換を独立実装。シェーダーのソースは同梱しない |
-| Lyphos 1.10（Kocha_no_omise） | 作者規約 Ver1.00 に基づき、ユーザー提供の Ex・Fa のマテリアル、口の初期値、音素の共有先をローカルで照合。無音時の接続処理と信号試験は独立実装。アバター、画像、変換パッケージは配布物・テストコードに含めない |
+| Lyphos 1.10（Kocha_no_omise） | 作者規約 Ver1.00 に基づき、ユーザー提供の Ex・Fa のマテリアル、口の初期値、音素の共有先、BodyのFBXチャンネル名・Shape Geometry名とUnity・保存メッシュの名前をローカルで照合。無音時の接続処理と信号試験は独立実装。アバター、画像、変換パッケージは配布物・テストコードに含めない |
 | UniVRM / MToon | VrmParser の MToon 0.x → 1.0 変換。MToon10Migrator のシェーディング範囲・中心変換 |
 | Modular Avatar | VrchatSkinRetargeter の bind pose 補正。数式の互換実装と大規模なコード移植は区別し、参照元 MeshRetargeter のMIT通知を保持 |
 | Modular Avatar for Resonite | AvatarSetup の識別グラフ、SpringBoneSetup、MeshLoadingSetup、LoadingStandInSetup、LoadingFallback.png、UnityNativeMeshのMeshX変換規約。構成・設定の移植と素材の再利用 |
