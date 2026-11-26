@@ -97,3 +97,14 @@ Nagma（2022-05-14）の通常版とPhysBone版は、Prefab側にDescriptorと�
 保存したHead Proxyは人体骨で位置合わせしたUnity視点より109.91 mm後方、8.14 mm上方にあった。
 Descriptorの所属先からPrefabの保存姿勢を使うようにすると、両版とも再読込後の視点誤差は0.006 mm未満になった。
 同じ構成の回帰では、元のPrefabをUnity Editorで開き、通常版・PhysBone版の両方でProxyとTargetを個別に比較する。
+
+Legnia 4PではDescriptor設定値と保存Head Proxyの座標がともに `(0, 1.15678, 0.06751)` になる。
+4本の人体骨でUnityの視点を保存姿勢へ写すと、期待位置は `(0, 1.14752, 0.16087)` mで、
+Proxyとの距離は93.82 mmある。Targetと頭骨は一致する。設定値の転記と、装着者から見た
+目の位置の再現は別々に調べる。
+
+VRM 0.xの視点を照合する場合は、UniVRMで取り込んだ同一入力の `VRMFirstPerson` から
+`FirstPersonBone.TransformPoint(FirstPersonOffset)` をUnity側の基準位置として採取する。
+その位置を同じ4本の人体骨で保存姿勢に写してHead Proxyとの距離を測る。VRChat用の
+Descriptor比較CLIはこのVRM基準を扱わない。AvatarSample_Cでは、頭骨から上へ60 mmの
+UniVRM設定と、ResoPonが目の位置から求める自動視点の間に50.98 mmの差があった。
