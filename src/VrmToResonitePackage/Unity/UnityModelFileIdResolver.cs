@@ -26,6 +26,8 @@ public sealed class UnityModelFileIdResolver
     public Dictionary<string, string[]> MeshBoneNames { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, string[]> MeshBoneNamesByPath { get; } = new(StringComparer.Ordinal);
     internal Dictionary<string, bool[]> MeshWeightedBonesByPath { get; } = new(StringComparer.Ordinal);
+    internal Dictionary<string, HashSet<string>> UnusedWeightBonesByPath { get; } = new(StringComparer.Ordinal);
+    private float _minBoneWeight = .001f;
     private readonly Dictionary<string, IReadOnlyList<string>> _blendShapeNames =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _blendShapeAliasesByPath = new(StringComparer.Ordinal);
@@ -145,6 +147,36 @@ public sealed class UnityModelFileIdResolver
 
     public readonly record struct ModelMaterial(string Name, string MainTexturePath);
 
+    // Unity thresholds the original cluster weights before normalizing a vertex.
+    // Material-split Assimp meshes have independent vertex indices but share the bone palette.
+    internal static HashSet<string> FindUnusedWeightBones(IEnumerable<Mesh> meshes, float minimum)
+    {
+        var candidates = new HashSet<string>(StringComparer.Ordinal);
+        var keep = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var mesh in meshes)
+        {
+            if (!mesh.HasBones) continue;
+            var hasSurvivor = new bool[mesh.VertexCount];
+            foreach (var bone in mesh.Bones)
+                foreach (var w in bone.VertexWeights)
+                    if (w.Weight >= minimum && w.Weight > 0)
+                    {
+                        keep.Add(bone.Name);
+                        hasSurvivor[w.VertexID] = true;
+                    }
+            foreach (var bone in mesh.Bones)
+                foreach (var w in bone.VertexWeights)
+                    if (w.Weight > 0 && w.Weight < minimum)
+                    {
+                        candidates.Add(bone.Name);
+                        // Keep the original influences if filtering would leave a vertex unbound.
+                        if (!hasSurvivor[w.VertexID]) keep.Add(bone.Name);
+                    }
+        }
+        candidates.ExceptWith(keep);
+        return candidates;
+    }
+
     private void AddMetaMappings(UnityAsset model)
     {
         if (model.MetaPath == null || !File.Exists(model.MetaPath))
@@ -152,6 +184,9 @@ public sealed class UnityModelFileIdResolver
             return;
         }
         YamlNode importer = UnityYaml.ParseFlatDocument(File.ReadAllText(model.MetaPath))?["ModelImporter"];
+        var meshes = importer?["meshes"];
+        if (meshes?["skinWeightsMode"]?.AsInt() == 1)
+            _minBoneWeight = meshes["minBoneWeight"]?.AsFloat(.001f) ?? .001f;
         ImportBlendShapes = importer?["meshes"]?["importBlendShapes"]?.AsBool(true) ?? true;
         _importBlendShapeDeformPercent = importer?["importBlendShapeDeformPercent"]?.AsBool(true) ?? true;
         YamlNode table = importer?["internalIDToNameTable"];
@@ -278,14 +313,22 @@ public sealed class UnityModelFileIdResolver
                     names.Add(pathKey);
                 }
             }
+            var seenMeshPaths = new HashSet<string>(StringComparer.Ordinal);
             foreach ((Node node, List<string> nodePath) in roots.Where(entry => entry.Node.MeshCount > 0))
             {
+                string meshPath = string.Join("/", nodePath.Select(NormalizeName));
+                if (seenMeshPaths.Add(meshPath))
+                {
+                    var unused = FindUnusedWeightBones(node.MeshIndices.Select(i => scene.Meshes[i]), _minBoneWeight);
+                    if (unused.Count > 0) UnusedWeightBonesByPath[meshPath] = unused;
+                }
+                else UnusedWeightBonesByPath.Remove(meshPath); // Identical sibling paths cannot identify a mesh.
                 for (int depth = 1; depth <= nodePath.Count; depth++)
                 {
                     string ancestor = string.Join("/", nodePath.Take(depth).Select(NormalizeName));
                     if (!_subtreeRenderers.TryGetValue(ancestor, out var names))
                         _subtreeRenderers[ancestor] = names = new HashSet<string>(StringComparer.Ordinal);
-                    names.Add(string.Join("/", nodePath.Select(NormalizeName)));
+                    names.Add(meshPath);
                 }
             }
             foreach ((Node node, List<string> nodePath) in roots)

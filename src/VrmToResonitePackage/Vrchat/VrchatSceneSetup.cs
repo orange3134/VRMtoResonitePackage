@@ -73,6 +73,16 @@ internal static class VrchatSceneSetup
         var sourceBoneIndices = new Dictionary<Slot, int[]>();
         var staticScaleCorrections = new Dictionary<Slot, float>();
         var replacedRenderers = new HashSet<MeshRenderer>();
+        var skins = new VrchatSkinRetargeter();
+        void QueueUnusedWeights(Slot source, Slot destination, string guid)
+        {
+            if (importedPaths.TryGetValue(source, out string path) &&
+                avatar.UnusedWeightBones.TryGetValue(new(guid, path), out var unused))
+                foreach (var renderer in destination.GetComponents<SkinnedMeshRenderer>())
+                    skins.ExcludeUnusedBones(renderer, unused);
+        }
+        foreach (var (slot, guid) in importedSources)
+            if (!slot.IsDestroyed) QueueUnusedWeights(slot, slot, guid);
         foreach (VrchatMeshCopy copy in avatar.MeshCopies)
         {
             var matchesBySource = importedSources.Where(entry => !entry.Key.IsDestroyed && entry.Value == copy.FbxGuid &&
@@ -129,6 +139,7 @@ internal static class VrchatSceneSetup
                 foreach (var material in materials) meshRenderer.Materials.Add().Target = material;
             }
             meshRenderer.Enabled = copy.Enabled;
+            if (copy.GeneratedMesh == null) QueueUnusedWeights(source, duplicate, copy.FbxGuid);
             foreach (Slot slot in EnumerateSlots(duplicate)) sources[slot] = copy.FbxGuid;
             UniLog.Log($"Prefab mesh copy: {copy.Name} <- {copy.SourceName} (fbx={copy.FbxGuid})");
         }
@@ -170,7 +181,6 @@ internal static class VrchatSceneSetup
 
         VrchatSkinRetargeter Bind()
         {
-            var skins = new VrchatSkinRetargeter();
             var capturedSources = importedSources.ToDictionary(entry => entry.Key, entry => entry.Value);
             foreach (var (copy, slot) in copies)
             {

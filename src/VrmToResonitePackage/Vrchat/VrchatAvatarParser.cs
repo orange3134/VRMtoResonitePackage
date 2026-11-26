@@ -296,6 +296,8 @@ public static partial class VrchatAvatarParser
             }
             var resolver = package.ModelFileIds(guid);
             if (!resolver.ImportBlendShapes) avatar.ModelsWithoutBlendShapes.Add(guid);
+            foreach (var (path, unused) in resolver.UnusedWeightBonesByPath)
+                avatar.UnusedWeightBones[new(guid, path)] = unused;
             if (resolver.ShapeGeometryNames is { Count: > 0 } geometryNames)
                 avatar.ShapeGeometryNamesByModel.Add(guid, geometryNames);
             foreach ((string rendererName, IReadOnlyList<string> names) in resolver.BlendShapeNames)
@@ -2156,7 +2158,11 @@ public static partial class VrchatAvatarParser
                             bones[i].FileID ?? 0, avatar.FbxGuid, modelResolvers, new());
                         if ((bones[i].FileID ?? 0) != 0 && bone?.Name == null)
                             throw new InvalidDataException($"複製メッシュのボーン参照を解決できません: {rendererName} / {i}");
-                        copy.BoneTargets[sourceIndices?[i] ?? i] = bone;
+                        // Mesh weights address m_Bones by index even when the prefab predates
+                        // the FBX. Only recover targets beyond the end of the authored array.
+                        copy.BoneTargets[i] = bone;
+                        if (sourceIndices != null && sourceIndices[i] >= bones.Count)
+                            copy.BoneTargets[sourceIndices[i]] = bone;
                     }
                 }
                 avatar.MeshCopies.Add(copy);
@@ -2201,8 +2207,8 @@ public static partial class VrchatAvatarParser
             indices[i] = index;
         }
         if (weighted.Where((used, index) => used && !included.Contains(index)).Any()) throw Mismatch();
-        UniLog.Warning($"Prefab skin bone table restored: {copy.Name}, {bones.Count} -> {original.Count}; " +
-                       $"{original.Count - bones.Count} omitted bone(s) have no vertex weights.");
+        UniLog.Warning($"Short prefab skin bone table: {copy.Name}, {bones.Count} references for {original.Count} mesh bones; " +
+                       "using authored indices and recovering out-of-range bindings by FBX identity.");
         return indices;
 
         InvalidDataException Mismatch() => new(

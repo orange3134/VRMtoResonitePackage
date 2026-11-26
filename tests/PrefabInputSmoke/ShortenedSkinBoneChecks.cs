@@ -66,9 +66,11 @@ SkinnedMeshRenderer:
         foreach (var references in new[] { new[] { hips, tail }, new[] { tail, hips } })
         {
             var copy = Read(references, stripped);
-            if (copy.SourceBoneNames.Count != 3 || copy.BoneTargets.Count != 2 ||
-                copy.BoneTargets[0].Name != "Hips" || copy.BoneTargets[2].Name != "Tail" ||
-                copy.BoneTargets.ContainsKey(1)) throw new Exception("Shortened skin must map exact FBX identities to original indices");
+            if (copy.SourceBoneNames.Count != 3 || copy.BoneTargets.Count != 3 ||
+                copy.BoneTargets[0].Name != (references[0] == hips ? "Hips" : "Tail") ||
+                copy.BoneTargets[1].Name != (references[1] == hips ? "Hips" : "Tail") ||
+                copy.BoneTargets[2].Name != "Tail")
+                throw new Exception("Short skins must retain authored slots and recover only absent indices by FBX identity");
         }
         void Reject(string[] references, bool local = false)
         {

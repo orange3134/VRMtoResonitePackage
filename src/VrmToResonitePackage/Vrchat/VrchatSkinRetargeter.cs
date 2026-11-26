@@ -8,6 +8,34 @@ namespace VrmToResonitePackage.Vrchat;
 internal sealed class VrchatSkinRetargeter
 {
     private readonly Dictionary<SkinnedMeshRenderer, Dictionary<int, float4x4>> _corrections = new();
+    private readonly Dictionary<SkinnedMeshRenderer, HashSet<string>> _unusedBones = new();
+
+    public void ExcludeUnusedBones(SkinnedMeshRenderer renderer, HashSet<string> unused)
+        => _unusedBones[renderer] = unused;
+
+    internal static int RemoveUnusedWeights(MeshX mesh, HashSet<string> unused)
+    {
+        if (!mesh.HasBoneBindings) return 0;
+        var excluded = Enumerable.Range(0, mesh.BoneCount).Select(i => unused.Contains(mesh.GetBone(i).Name)).ToArray();
+        int changed = 0;
+        for (int v = 0; v < mesh.VertexCount; v++)
+        {
+            var binding = mesh.RawBoneBindings[v];
+            bool removed = false;
+            for (int i = 0; i < 4; i++)
+                if (binding.GetWeight(i) > 0 && excluded[binding.GetBoneIndex(i)])
+                {
+                    binding.SetBinding(i, -1, 0);
+                    removed = true;
+                }
+            if (!removed || binding.TotalWeight <= 0) continue;
+            binding.Sort();
+            binding.Normalize();
+            mesh.RawBoneBindings[v] = binding;
+            changed++;
+        }
+        return changed;
+    }
 
     public void CorrectBindPose(SkinnedMeshRenderer renderer, int index, float4x4 correction)
     {
@@ -37,7 +65,7 @@ internal sealed class VrchatSkinRetargeter
 
     public async Task SaveMeshes()
     {
-        foreach (var (renderer, corrections) in _corrections)
+        foreach (var renderer in _corrections.Keys.Union(_unusedBones.Keys))
         {
             // Prefab filtering can remove a renderer after its initial binding.
             if (renderer.IsDestroyed) continue;
@@ -52,12 +80,19 @@ internal sealed class VrchatSkinRetargeter
             await asset.RequestReadLock(readLock).ConfigureAwait(false);
             try { mesh = new MeshX(asset.Data); }
             finally { asset.ReleaseReadLock(readLock); }
-            foreach (var (index, correction) in corrections)
+            var corrections = _corrections.GetValueOrDefault(renderer);
+            foreach (var (index, correction) in corrections ?? [])
             {
                 if (index >= mesh.BoneCount) continue;
                 mesh.GetBone(index).BindPose = correction * mesh.GetBone(index).BindPose;
             }
-            Uri uri = await renderer.Engine.LocalDB.SaveAssetAsync(mesh).ConfigureAwait(false);
+            int changed = _unusedBones.TryGetValue(renderer, out var unused) ? RemoveUnusedWeights(mesh, unused) : 0;
+            if (changed == 0 && corrections == null)
+            {
+                await default(ToWorld);
+                continue;
+            }
+            Uri uri = await MeshAssetWriter.SaveAsync(renderer.Engine.LocalDB, mesh).ConfigureAwait(false);
             await default(ToWorld);
             if (uri == null) throw new IOException($"Failed to save retargeted mesh: {renderer.Slot.Name}");
             // Source providers can be shared by different occurrences of the same clothing.
@@ -74,7 +109,7 @@ internal sealed class VrchatSkinRetargeter
             }
             for (int i = 0; i < Math.Min(weights.Length, renderer.BlendShapeWeights.Count); i++)
                 renderer.BlendShapeWeights[i] = weights[i];
-            UniLog.Log($"Retargeted bind poses on {renderer.Slot.Name}: {corrections.Count} bone(s).");
+            UniLog.Log($"Updated skin on {renderer.Slot.Name}: {corrections?.Count ?? 0} bind poses, {changed} vertices with unused influences.");
         }
     }
 }
