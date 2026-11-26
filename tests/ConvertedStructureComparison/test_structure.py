@@ -66,6 +66,110 @@ def remap_slots(converted, changes):
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_builtin_sphere_requires_the_referenced_provider_and_radius(self):
+        unity, converted = fixtures()
+        skin, = unity['sections']['renderers']
+        skin.update(type='UnityEngine.MeshRenderer', id='r/1/c:UnityEngine.MeshRenderer:0',
+                    mesh={'guid': '0000000000000000e000000000000000', 'fileId': '10207'}, bones=[], rootBone='')
+        del unity['skinSizes'], unity['skinBindings']
+        component, = converted['slots'][-1]['components']
+        component.update(type='[FrooxEngine]FrooxEngine.MeshRenderer', bones=None, blendShapeWeights=None)
+        def check():
+            return comparison.compare(unity, unity, converted, {'r/1': 'r/1'})
+        self.assertIn('builtin-sphere', [item['kind'] for item in check()['unverified']])
+        with mock.patch.dict(component, sphereRadius=.5):
+            self.assertEqual([], check()['differences'])
+        with mock.patch.dict(component, sphereRadius=None):
+            self.assertEqual('builtin-sphere', check()['differences'][0]['kind'])
+
+    def test_merged_collider_at_origin_does_not_inherit_other_colliders_activation(self):
+        unity, converted = fixtures()
+        transforms = unity['sections']['transforms']
+        def add(parent, name, also_saved):
+            index = sum(t['parent'] == parent for t in transforms)
+            sid = parent + '/' + str(index)
+            path = next(t['path'] for t in transforms if t['id'] == parent)
+            t = dict(copy.deepcopy(transforms[1]), id=sid, parent=parent, siblingIndex=index, name=name,
+                     path=(path + '/' + name).lstrip('/'))
+            transforms.append(t)
+            if also_saved:
+                owner = next(s for s in converted['slots'] if s['id'] == parent)
+                converted['slots'].append(dict(copy.deepcopy(converted['slots'][1]), id=sid, parent=parent,
+                    siblingIndex=index, path=owner['path'] + [name], serializedId='saved:' + sid, components=[]))
+            return t
+        body = add('r/0', 'Collider', True)
+        other = add(add('r/1', 'Bone', False)['id'], 'Collider', False)
+        for t in (body, other):
+            unity['sections']['colliders'].append(dict(t, id=t['id']+'/c:Collider:0', transform=t['id'],
+                root=t['id'], type='Collider', enabled=True, colliders=[], parameters=[]))
+        body.update(activeSelf=False, activeInHierarchy=False)
+        body['localPosition']['x'] = .05
+        def check(overrides=None):
+            return comparison.compare(unity, unity, converted, overrides)
+        result = check()
+        self.assertEqual('ambiguous', next(r for r in result['transforms'] if r['sourceId']==body['id'])['status'])
+        self.assertEqual([], result['differences'])
+        self.assertIn('activeSelf',[i['kind'] for i in check({body['id']: body['id']})['differences']])
+
+    def test_only_proven_export_exclusions_allow_a_missing_renderer(self):
+        unity, converted = fixtures()
+        converted['slots'][-1]['components'] = []
+        renderer, = unity['sections']['renderers']
+        def check():
+            return comparison.compare(unity, unity, converted, {'r/1': 'r/1'})
+        self.assertEqual('renderer-count', check()['differences'][0]['kind'])
+        with mock.patch.dict(unity, editorOnlyTransforms=['r']):
+            self.assertEqual('excluded', check()['renderers'][0]['status'])
+            self.assertEqual([], check()['differences'])
+        with mock.patch.dict(renderer, mesh={'guid': '', 'fileId': '0'}):
+            self.assertEqual('excluded', check()['renderers'][0]['status'])
+        with mock.patch.dict(unity, emptyMeshRenderers=[renderer['id']]):
+            self.assertEqual('excluded', check()['renderers'][0]['status'])
+        renderer['activeInHierarchy'] = False
+        self.assertEqual('renderer-count', check()['differences'][0]['kind'])
+
+    def test_neutral_only_replaces_the_named_renderer_channel(self):
+        unity, converted = fixtures()
+        skin, = unity['sections']['renderers']
+        component, = converted['slots'][-1]['components']
+        skin['blendShapes'] = [dict(index=i, name=n, weight=0.) for i, n in enumerate(('Smile', 'Blink'))]
+        component.update(blendShapeNames=['Smile', 'Blink'], blendShapeWeights=[1., .5])
+        unity['initialPoseWeights'] = {skin['id']: {'Smile': 1.}}
+        report = comparison.compare(unity, unity, converted)
+        self.assertEqual(['Blink'], [d['shape'] for d in report['differences']])
+        component['blendShapeWeights'][0] = .4
+        self.assertEqual(2, len(comparison.compare(unity, unity, converted)['differences']))
+
+    def test_silence_may_share_a_vowel_only_while_undriven(self):
+        unity, converted = fixtures()
+        renderer = unity['sections']['renderers'][0]['id']
+        bindings = [dict(phoneme=p, renderer=renderer, shape='Open') for p in (0, 10)]
+        unity['lipSync'] = [dict(mode=3, bindings=bindings)]
+        actual = [dict(phoneme='aa', renderer='r/1:0', index=0, shape='Open')]
+        converted['visemeDrivers'] = [dict(component='r/1:1', enabled=True, analyzer='r/0:2', bindings=actual)]
+        def result():
+            return comparison.compare(unity, unity, converted)['visemes']['status']
+        self.assertEqual('matched', result())
+        actual.append(dict(actual[0], phoneme='Silence'))
+        self.assertEqual('different', result())
+        actual.pop()
+        bindings[0]['shape'] = 'Closed'
+        self.assertEqual('different', result())
+
+    def test_unique_imported_child_renderer_checks_activation_and_identity(self):
+        unity, converted = fixtures()
+        owner = converted['slots'][-1]
+        child = dict(copy.deepcopy(owner), parent='r/1', id='r/1/0', siblingIndex=0,
+                     serializedId='saved:child', path=owner['path'] + ['Mesh'])
+        child['components'][0]['id'] = 'r/1/0:0'
+        owner['components'] = []
+        converted['slots'].append(child)
+        def report():
+            return comparison.compare(unity, unity, converted, {'r/1': 'r/1'})
+        self.assertEqual('r/1/0:0', report()['renderers'][0]['targetComponent'])
+        child.update(activeSelf=False, activeInHierarchy=False)
+        self.assertEqual('renderer-count', report()['differences'][0]['kind'])
+
     def test_renderer_enabled_is_ignored_with_old_and_new_unity_captures(self):
         unity, converted = fixtures()
         converted['slots'][-1]['components'][0]['enabled'] = False

@@ -389,7 +389,8 @@ internal static class Converter
             // ModelImporter always welds vertices using base attributes. Retain distinct
             // control points where morph deltas differ, before handing it the temporary FBX.
             string PrepareModel(string path, string guid) => Unity.UnityFbxMorphSeams.Prepare(path,
-                !avatar.ModelsWithoutBlendShapes.Contains(guid), shapeGeometryNames: avatar.ShapeGeometryNamesByModel.GetValueOrDefault(guid));
+                !avatar.ModelsWithoutBlendShapes.Contains(guid), shapeGeometryNames: avatar.ShapeGeometryNamesByModel.GetValueOrDefault(guid),
+                matchUnityPolygons: true);
             fbxPath = PrepareModel(fbxPath, avatar.FbxGuid);
             for (int i = 0; i < additionalFbxPaths.Count; i++)
             {
@@ -761,7 +762,12 @@ internal static class Converter
             !string.IsNullOrEmpty(parentNodeName) &&
             importedFbxRoots.TryGetValue(parentFbxGuid, out Slot parentFbxRoot))
         {
-            parent = SlotIndex.Build(parentFbxRoot).GetValueOrDefault(parentNodeName) ?? parentFbxRoot;
+            // After collapsing an FBX wrapper its synthetic root can be renamed.
+            // A nested model may still have a slot called RootNode of its own.
+            parent = IsUnityRootNode(parentNodeName) && importedSources is { Count: > 0 } && importedPaths is { Count: > 0 }
+                ? Vrchat.VrchatSceneSetup.ResolveImportedTarget(new(parentFbxGuid, "RootNode", ""),
+                    importedSources, importedPaths) ?? parentFbxRoot
+                : SlotIndex.Build(parentFbxRoot).GetValueOrDefault(parentNodeName) ?? parentFbxRoot;
         }
 
         foreach (Vrchat.VrchatPrefabTransform transform in parentTransforms)

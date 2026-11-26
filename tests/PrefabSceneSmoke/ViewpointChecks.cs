@@ -78,7 +78,7 @@ internal static class ViewpointChecks
         var rig = parent.AttachComponent<BipedRig>();
         rig[Renderite.Shared.BodyNode.LeftEye] = parent.AddSlot("Left eye pivot");
         rig[Renderite.Shared.BodyNode.RightEye] = parent.AddSlot("Right eye pivot");
-        float3 Compute() => (float3)compute.Invoke(null, new object[] { rig, null, float3.Up, float3.Forward, options })!;
+        float3 Compute() => (float3)compute.Invoke(null, new object[] { rig, null, float3.Up, float3.Forward, options, null })!;
         Near(Compute(), expected, "Authored viewpoint takes precedence over eye pivot positions without auto offsets");
         setupType.GetProperty("ViewForward")!.SetValue(options, -.02f);
         setupType.GetProperty("ViewUp")!.SetValue(options, .01f);
@@ -86,6 +86,17 @@ internal static class ViewpointChecks
         setupType.GetProperty("ViewPosition")!.SetValue(options, null);
         Near(Compute(), parent.GlobalPosition + new float3(0, .01f, -.02f),
             "Absent authored viewpoint retains the eye-based path for VRM and incomplete descriptors");
+        var vrm = new VrmToResonitePackage.Vrm.VrmModel { FirstPersonOffset = new(.04f, -.03f, .02f) };
+        var viewBone = parent.AddSlot("First person bone");
+        viewBone.LocalRotation = floatQ.Euler(30f, 10f, -20f);
+        foreach (bool baked in new[] { false, true })
+        {
+            vrm.OrientationBaked = baked;
+            var local = new float3(baked ? .04f : -.04f, -.03f, baked ? .02f : -.02f);
+            var point = (float3)compute.Invoke(null, new object[] { rig, vrm, float3.Up, float3.Forward, options, viewBone })!;
+            Near(point, viewBone.LocalPointToGlobal(local) + new float3(0, .01f, -.02f),
+                "VRM0 applies the signed local offset to the selected bone before user offsets");
+        }
         avatar.ViewPosition = null;
         Check(Resolve(parent) == null, "Missing ViewPosition retains fallback");
         avatar.ViewPosition = new System.Numerics.Vector3(float.NaN, 1, 0);

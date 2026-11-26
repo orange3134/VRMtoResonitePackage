@@ -304,6 +304,8 @@ public static class VrmParser
 
         if (vrm.TryGetProperty("firstPerson", out JsonElement firstPerson))
         {
+            if (firstPerson.TryGetProperty("firstPersonBone", out var bone) && bone.TryGetInt32(out int index))
+                model.FirstPersonBoneIndex = index;
             if (firstPerson.TryGetProperty("firstPersonBoneOffset", out JsonElement fpOffset))
             {
                 model.FirstPersonOffset = ReadVec3Object(fpOffset);

@@ -25,7 +25,7 @@ comparison = load_module('compare-converted-structure')
 replay = load_module('test-unity-resolved')
 
 
-def review_saved_run(directory, mapping, unity, expected, report, output):
+def review_saved_run(directory, mapping, unity, expected, report, output, initial_pose=None):
     previous_path = directory / 'report.json'
     previous_hash = comparison.sha256(previous_path)
     previous = comparison.snapshot_check.load(previous_path)
@@ -47,7 +47,7 @@ def review_saved_run(directory, mapping, unity, expected, report, output):
     require(evidence['packageSha256'] == converted['packageSha256'] == previous['packageSha256'],
             'Saved structure belongs to a different package')
     result = comparison.compare_captures(unity, comparison.unity_compare.load_snapshot(paths['parser']),
-                                         converted, paths, mapping)
+                                         converted, paths, mapping, initial_pose)
     require(all(result['inputs'][key]['sha256'] == evidence['inputs'][key]['sha256'] for key in paths) and
             comparison.sha256(previous_path) == previous_hash and comparison.sha256(package) == previous['packageSha256'],
             'Saved conversion evidence changed during review')
@@ -65,6 +65,7 @@ def main(argv=None):
     ap.add_argument('--output', type=Path, required=True, help='new directory under .tmp_verify')
     ap.add_argument('--timeout', type=int, default=1800, help='seconds per process')
     ap.add_argument('--mapping', type=Path, help='reviewed mapping bound to this Unity capture and saved package')
+    ap.add_argument('--initial-pose', type=Path, help='source neutral weights bound to this Unity capture')
     ap.add_argument('--review-run', type=Path, help='apply a mapping to outputs of a completed conversion without rebuilding')
     args = ap.parse_args(argv)
     repo = Path(__file__).resolve().parents[1]
@@ -79,7 +80,7 @@ def main(argv=None):
         case = cases[0]
         require(repo / '.tmp_verify' in output.parents and not output.exists(), 'output must be new under .tmp_verify')
         require(args.timeout > 0, 'timeout must be positive')
-        require(not args.review_run or args.mapping, '--review-run requires --mapping')
+        require(not args.review_run or args.mapping or args.initial_pose, '--review-run requires --mapping or --initial-pose')
         source = Path(case['inputPath']).resolve()
         expected = Path(case['expectedPath']).resolve()
         require(source.suffix.lower() in ('.unitypackage', '.prefab'), 'unsupported input')
@@ -113,7 +114,7 @@ def main(argv=None):
               'commands': [], 'errors': []}
     if args.review_run:
         try:
-            status = review_saved_run(args.review_run.resolve(), args.mapping, unity, expected, report, output)
+            status = review_saved_run(args.review_run.resolve(), args.mapping, unity, expected, report, output, args.initial_pose)
             verify()
             report['status'] = status
         except (OSError, ValueError, KeyError, TypeError) as error:
@@ -197,7 +198,7 @@ def main(argv=None):
             if parser is not None:
                 paths['parser'] = actual
             report['stages']['structureComparison'] = 'failed'
-            result = comparison.compare_captures(unity, parser, structure, paths, args.mapping)
+            result = comparison.compare_captures(unity, parser, structure, paths, args.mapping, args.initial_pose)
             replay.write_json(output / 'comparison.json', result)
             report['stages']['structureComparison'] = result['status']
             report['summary'] = result['summary']

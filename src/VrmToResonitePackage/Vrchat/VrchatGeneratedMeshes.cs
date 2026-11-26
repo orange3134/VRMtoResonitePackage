@@ -11,9 +11,19 @@ internal static class VrchatGeneratedMeshes
         Dictionary<Slot, string> sources, Dictionary<Slot, string> paths)
     {
         var providers = new List<StaticMesh>();
-        foreach (var copy in avatar.MeshCopies.Where(c => c.GeneratedMesh != null)
+        foreach (var copy in avatar.MeshCopies.Where(c => c.HasGeneratedTemplate)
                      .GroupBy(c => (c.FbxGuid, c.SourcePath)).Select(g => g.OrderByDescending(c => c.IsSkinned).First()))
         {
+            if (copy.BuiltInSphere)
+            {
+                var sphere = assets.AddSlot("Unity Sphere").AttachComponent<SphereMesh>();
+                sphere.Radius.Value = .5f;
+                var template = root.AddSlot(copy.SourceName);
+                template.AttachComponent<MeshRenderer>().Mesh.Target = sphere;
+                sources[template] = copy.FbxGuid;
+                paths[template] = copy.SourcePath;
+                continue;
+            }
             var mesh = UnityNativeMesh.Decode(copy.GeneratedMesh);
             var provider = assets.AddSlot("Generated Mesh: " + copy.SourceName).AttachComponent<StaticMesh>();
             provider.URL.Value = await root.Engine.LocalDB.SaveAssetAsync(mesh);

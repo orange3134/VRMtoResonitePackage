@@ -139,7 +139,7 @@ internal static class VrchatSceneSetup
                 foreach (var material in materials) meshRenderer.Materials.Add().Target = material;
             }
             meshRenderer.Enabled = copy.Enabled;
-            if (copy.GeneratedMesh == null) QueueUnusedWeights(source, duplicate, copy.FbxGuid);
+            if (!copy.HasGeneratedTemplate) QueueUnusedWeights(source, duplicate, copy.FbxGuid);
             foreach (Slot slot in EnumerateSlots(duplicate)) sources[slot] = copy.FbxGuid;
             UniLog.Log($"Prefab mesh copy: {copy.Name} <- {copy.SourceName} (fbx={copy.FbxGuid})");
         }
@@ -166,7 +166,7 @@ internal static class VrchatSceneSetup
                 ImportScale(copy.ParentFbxGuid);
             slot.LocalRotation = new floatQ(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W);
             slot.LocalScale = new float3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z);
-            if (!copy.IsSkinned && !copy.RendererRemoved && copy.GeneratedMesh == null)
+            if (!copy.IsSkinned && !copy.RendererRemoved && !copy.HasGeneratedTemplate)
             {
                 float correction = ImportScale(copy.FbxGuid) / ImportScale(copy.ParentFbxGuid);
                 if (!float.IsFinite(correction) || correction == 0)

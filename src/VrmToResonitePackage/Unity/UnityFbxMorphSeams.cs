@@ -5,18 +5,25 @@ using Elements.Core;
 namespace VrmToResonitePackage.Unity;
 
 /// <summary>Applies the model's morph import policy before Assimp welds vertices and chooses renderer types.</summary>
-internal static class UnityFbxMorphSeams
+internal static partial class UnityFbxMorphSeams
 {
     public static string Prepare(string path, bool importBlendShapes = true, string outputPath = null,
-        IReadOnlyDictionary<long, string> shapeGeometryNames = null)
+        IReadOnlyDictionary<long, string> shapeGeometryNames = null, bool matchUnityPolygons = false)
     {
         byte[] bytes = File.ReadAllBytes(path);
         if (bytes.Length < 27 || !bytes.AsSpan().StartsWith("Kaydara FBX Binary"u8))
             return importBlendShapes ? path : DisconnectAsciiBlendShapes(path, bytes);
-        var document = new Document(bytes, importBlendShapes);
+        var document = new Document(bytes, importBlendShapes || matchUnityPolygons);
         var objects = document.Roots.FirstOrDefault(n => n.Name == "Objects")?.Children;
         var connections = document.Roots.FirstOrDefault(n => n.Name == "Connections")?.Children;
         if (objects == null || connections == null) return path;
+        bool topologyChanged = false;
+        if (matchUnityPolygons)
+            foreach (var mesh in objects.Where(n => IsGeometry(n, "Mesh")))
+            {
+                topologyChanged |= TriangulateNgons(mesh);
+                topologyChanged |= RotateQuadCorners(mesh);
+            }
         if (!importBlendShapes)
         {
             var deformers = objects.Where(n => n.Name == "Deformer" && n.Values is [int or long, _, "BlendShape", ..])
@@ -25,7 +32,7 @@ internal static class UnityFbxMorphSeams
                     deformers.Contains(Convert.ToInt64(n.Values[1])));
             foreach (var mesh in objects.Where(n => IsGeometry(n, "Mesh")))
                 removed += mesh.Children.RemoveAll(n => n.Name == "Shape");
-            if (removed == 0) return path;
+            if (removed == 0 && !topologyChanged) return path;
             string filtered = Path.ChangeExtension(path, ".no-morphs.fbx");
             document.Save(filtered);
             return filtered;
@@ -94,7 +101,7 @@ internal static class UnityFbxMorphSeams
             layer.Children.Add(Node.New("LayerElement", null, Node.New("Type", "LayerElementColor"), Node.New("TypedIndex", channel)));
             protectedMeshes++;
         }
-        if (protectedMeshes == 0 && embeddedShapes == 0 && shapeGeometryNames is not { Count: > 0 }) return path;
+        if (!topologyChanged && protectedMeshes == 0 && embeddedShapes == 0 && shapeGeometryNames is not { Count: > 0 }) return path;
         string output = outputPath ?? Path.ChangeExtension(path, ".morph-seams.fbx");
         document.Save(output);
         if (protectedMeshes > 0) UniLog.Log($"Protected morph seams in {protectedMeshes} FBX mesh(es): {Path.GetFileName(path)}.");

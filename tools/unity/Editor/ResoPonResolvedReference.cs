@@ -80,6 +80,8 @@ public static class ResoPonResolvedReference
         public List<SkinSize> skinSizes = new List<SkinSize>();
         public List<SkinBindings> skinBindings = new List<SkinBindings>();
         public List<LipSyncRecord> lipSync = new List<LipSyncRecord>();
+        public List<string> editorOnlyTransforms = new List<string>();
+        public List<string> emptyMeshRenderers = new List<string>();
     }
     [Serializable] private sealed class Sections
     {
@@ -383,6 +385,7 @@ public static class ResoPonResolvedReference
             };
             Identify(record, transform, root, ids);
             snapshot.sections.transforms.Add(record);
+            if (transform.CompareTag("EditorOnly")) snapshot.editorOnlyTransforms.Add(record.id);
             foreach (Component component in transform.GetComponents<Component>())
             {
                 if (component == null) throw new InvalidOperationException("Missing script at " + record.path);
@@ -399,6 +402,9 @@ public static class ResoPonResolvedReference
                         mesh = Asset(mesh),
                     };
                     Identify(r, component, root, ids);
+                    if (mesh != null && (mesh.vertexCount == 0 ||
+                        Enumerable.Range(0, mesh.subMeshCount).All(i => mesh.GetIndexCount(i) == 0)))
+                        snapshot.emptyMeshRenderers.Add(r.id);
                     foreach (var material in renderer.sharedMaterials) r.materials.Add(Asset(material));
                     if (skin != null)
                     {

@@ -14,6 +14,23 @@ prefab合成、初期状態、マテリアルはVRChat専用処理で補う。
 
 ### Prefab解決と変換の責務
 
+視点の基準姿勢は Descriptor の所有元に従う。アクセサリが追加FBXとして存在する場合や
+Prefab variantを選択した場合も、所有元がPrefabなら、その配置に属する展開済みTransformを使う。
+
+バイナリFBXを実変換する際は、四角形の開始角を一つ巡回させる。Resoniteのインポート時に
+巻き順が反転しても、非平面四角形がUnityと同じ対角線で分割される。五角形以上は
+Windows GLUで三角形化し、元の境界と巻き順を検査する。頂点ID、角単位のUV・法線、
+面単位の属性と既存の辺参照をそれぞれ対応付ける。連続する同位置の角はGLUが選んだ
+角の属性を使う。交点の新規生成が必要でGLUが面を返さない輪郭は、Unity同様に省く。
+その面を基準に登録されていた共有辺は、隣接する残存面に付け直す。未知の辺属性などは
+元のインポート経路で処理する。入力FBXは変更しない。
+
+Unityの組み込みSphereをMeshFilterで参照する場合は、半径0.5 mのResonite `SphereMesh`
+を生成し、元のRendererの有効状態、GameObjectの配置とマテリアルを適用する。
+これによりEkuのFresnelなど、初期状態では無効なFXの描画対象も残る。球の分割とUVは
+Resoniteの生成方式による。FBXのRootNodeが配置名に改名された後も、親を解決するときは
+元FBXの識別子を使う。子モデルにある別のRootNodeへ配置するとエフェクトの位置がずれる。
+
 Unity Editorを起動せず、プロジェクトの保存済みYAML・meta・FBXから次の順序で変換する。
 UnityのLibraryやVRChat SDKの実行環境は不要。
 

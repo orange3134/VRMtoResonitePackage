@@ -226,3 +226,12 @@ Resonite.UnityShaders のシェーダーソースやテクスチャ、NDMF の�
   この調査だけでは断定しない。
 
 これらにOSSライセンスを推定して付けたり、通知追加だけで利用条件を満たしたと扱ったりしない。
+
+バイナリFBXの面の再分割は、ローカルのUnity採取値と自作FBXで出力を検証した独立実装。
+五角形以上ではWindowsのシステムディレクトリから `glu32.dll` のテセレーションAPIを呼ぶ。
+GLU実装、Autodesk FBX SDK、テストアバターのデータを配布物に追加しないため、
+この変更で追加する第三者通知はない。[Windows GLU API](https://learn.microsoft.com/en-us/windows/win32/opengl/glutessbeginpolygon)
+
+Unity組み込みSphereはローカルUnity 2022.3.22f1で参照IDと寸法を確認し、出力先では
+インストール済みFrooxEngineの公開SphereMeshを呼び出す。Unityの頂点・UV・三角形配列や
+Resoniteの実装コードを製品と生成パッケージに取り込まない。

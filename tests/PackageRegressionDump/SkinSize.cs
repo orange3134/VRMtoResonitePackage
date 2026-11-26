@@ -28,8 +28,9 @@ internal sealed record SkinBindings(string[] names, int[] used, float[] maxWeigh
 internal sealed record SkinSize(float[] sizeMeters, int weightedVertices, string reason = null, SkinBindings bindings = null)
 {
     internal static SkinSize Measure(RecordPackage package, string url, string[] boneIds,
-        IReadOnlyDictionary<string, float4x4> world)
+        IReadOnlyDictionary<string, float4x4> world, out string[] shapeNames)
     {
+        shapeNames = null;
         try
         {
             if (!Uri.TryCreate(url?.TrimStart('@'), UriKind.Absolute, out var uri) || uri.Scheme != "packdb")
@@ -40,6 +41,7 @@ internal sealed record SkinSize(float[] sizeMeters, int weightedVertices, string
             buffer.Position = 0;
             var mesh = new MeshX();
             mesh.Decode(buffer);
+            shapeNames = mesh.BlendShapes.Select(s => s.Name).ToArray();
             var bindings = SkinBindings.Read(mesh);
             if (!mesh.HasBoneBindings) return new(null, 0, "no bone bindings", bindings);
             var frames = new float4x4?[mesh.BoneCount];

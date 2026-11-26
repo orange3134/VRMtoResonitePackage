@@ -136,7 +136,9 @@ internal static class AvatarSetup
         try
         {
             Slot headsetRef = refs.AddSlot("Headset");
-            headsetRef.GlobalPosition = ComputeEyePosition(rig, vrm, up, forward, options);
+            Slot viewBone = vrm.Source == ModelSource.Vrm0 && vrm.FirstPersonBoneIndex >= 0
+                ? ResolveModelNode(vrm, vrm.FirstPersonBoneIndex, slotsByName, nodeSlots) : head;
+            headsetRef.GlobalPosition = ComputeEyePosition(rig, vrm, up, forward, options, viewBone);
             UniLog.Log($"Avatar viewpoint: position={headsetRef.GlobalPosition}, head={head.GlobalPosition}, " +
                        $"leftEye={rig.TryGetBone(BodyNode.LeftEye)?.GlobalPosition}, rightEye={rig.TryGetBone(BodyNode.RightEye)?.GlobalPosition}, up={up}, forward={forward}");
             headsetRef.GlobalRotation = floatQ.LookRotation(forward, up);
@@ -326,9 +328,15 @@ internal static class AvatarSetup
     /// The offsets scale with the distance between the eye bones unless overridden.
     /// </summary>
     private static float3 ComputeEyePosition(BipedRig rig, VrmModel vrm, float3 up, float3 forward,
-        AvatarSetupOptions options)
+        AvatarSetupOptions options, Slot viewBone)
     {
-        if ((options.RigViewpoint?.Resolve(rig) ?? options.ViewPosition) is float3 authoredPosition)
+        float3? viewpoint = options.RigViewpoint?.Resolve(rig) ?? options.ViewPosition;
+        if (viewpoint == null && vrm?.Source == ModelSource.Vrm0 && vrm.FirstPersonOffset is {} local && viewBone != null)
+        {
+            var offset = vrm.OrientationBaked ? new float3(local.X, local.Y, local.Z) : new float3(-local.X, local.Y, -local.Z);
+            viewpoint = viewBone.LocalPointToGlobal(offset);
+        }
+        if (viewpoint is float3 authoredPosition)
         {
             return authoredPosition + forward * (options.ViewForward ?? 0f) + up * (options.ViewUp ?? 0f);
         }

@@ -240,6 +240,12 @@ def compare(expected, actual, abs_tol=1e-6, rel_tol=1e-6):
         excluded.add("skinSizes")
     if expected["schemaVersion"] == 2 and ("lipSync" not in expected or "lipSync" not in actual):
         excluded.add("lipSync")  # Unity FX observation is compared to the saved driver.
+    if expected["schemaVersion"] == 2 and ("initialPoseWeights" not in expected or "initialPoseWeights" not in actual):
+        excluded.add("initialPoseWeights")  # Source neutral pose is compared to the saved weights.
+    if expected["schemaVersion"] == 2 and ("editorOnlyTransforms" not in expected or "editorOnlyTransforms" not in actual):
+        excluded.add("editorOnlyTransforms")  # Optional Unity evidence for export exclusions.
+    if expected["schemaVersion"] == 2 and ("emptyMeshRenderers" not in expected or "emptyMeshRenderers" not in actual):
+        excluded.add("emptyMeshRenderers")
     walk({k: v for k, v in expected.items() if k not in excluded},
          {k: v for k, v in actual.items() if k not in excluded}, "$")
     def indexed_records(records, section):

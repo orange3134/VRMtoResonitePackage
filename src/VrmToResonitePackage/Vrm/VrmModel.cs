@@ -71,7 +71,10 @@ public sealed class VrmModel
     /// <summary>VRM humanoid bone name (normalized VRM1 style, camelCase) -> node index.</summary>
     public Dictionary<string, int> HumanBones { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Offset of the first-person viewpoint from the head bone, in model space (meters).</summary>
+    /// <summary>VRM 0.x first-person bone. A missing or negative index selects the humanoid head.</summary>
+    public int FirstPersonBoneIndex { get; set; } = -1;
+
+    /// <summary>VRM0 first-person bone-local offset, or VRM1 look-at offset from the head.</summary>
     public System.Numerics.Vector3? FirstPersonOffset { get; set; }
 
     public List<VrmFirstPersonMeshAnnotation> FirstPersonMeshAnnotations { get; } = new();

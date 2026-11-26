@@ -12,6 +12,11 @@
 4. `AvatarSetup` がBipedRig、VRIK、視点、口パク・瞬き・視線の追跡、FirstPersonを構築する。
 5. `MaterialTuner` と `SpringBoneSetup` がマテリアルと揺れものを設定する。
 
+VRM 0.x の視点には `firstPerson.firstPersonBone` のローカル座標で
+`firstPersonBoneOffset` を適用する。骨番号の省略・負値は humanoid の head を使う。
+インポート時の向き補正を反映し、指定した骨でワールド座標に変換してから、
+ユーザーの上下・前後調整をメートル単位で加える。両眼の骨があっても明示視点を優先する。
+
 共通処理の責務と呼び出し順の制約は[共通モデルと処理の責務](avatar-conversion.md#共通モデルと処理の責務)を参照する。
 
 ## GLB前処理

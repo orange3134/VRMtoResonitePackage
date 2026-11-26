@@ -12,6 +12,7 @@ internal static class StructureSnapshot
         var ids = new Dictionary<string, string>(StringComparer.Ordinal);
         var world = new Dictionary<string, float4x4>();
         var meshes = new Dictionary<string, string>();
+        var spheres = new Dictionary<string, float>();
         Index(root, "r", null, 0, System.Array.Empty<string>(), true, float4x4.Identity);
         foreach (var asset in Array(assets).OfType<DataTreeDictionary>()) IndexMesh(asset);
         var slots = nodes.Select(n => new
@@ -175,14 +176,17 @@ internal static class StructureSnapshot
                     throw new InvalidDataException("Missing rig bones.");
                 foreach (var bone in bones.Children) rigBones.Add(bone.Key, Reference(bone.Value));
             }
+            string[] shapeNames = null;
+            var skinSize = skin && package != null ? SkinSize.Measure(package,
+                meshes.GetValueOrDefault(Scalar(data.TryGetNode("Mesh")) ?? ""),
+                Array(data.TryGetNode("Bones")).Select(Scalar).ToArray(), world, out shapeNames) : null;
+            float? sphereRadius = spheres.TryGetValue(Scalar(data.TryGetNode("Mesh")) ?? "", out float radius) ? radius : null;
             return new
             {
                 id = slotId + ":" + index, type,
                 enabled = data.TryGetNode("Enabled") is {} enabled ? (bool?)Value<bool>(enabled) : null,
                 bones = skin ? Array(data.TryGetNode("Bones")).Select(Reference).ToArray() : null,
-                skinSize = skin && package != null ? SkinSize.Measure(package,
-                    meshes.GetValueOrDefault(Scalar(data.TryGetNode("Mesh")) ?? ""),
-                    Array(data.TryGetNode("Bones")).Select(Scalar).ToArray(), world) : null,
+                skinSize, blendShapeNames = shapeNames, sphereRadius,
                 rigBones = rig ? rigBones : null,
                 blendShapeWeights = skin ? Array(data.TryGetNode("BlendShapeWeights")).Select(Value<float>).ToArray() : null,
                 slotReferences = references
@@ -223,9 +227,12 @@ internal static class StructureSnapshot
 
         void IndexMesh(DataTreeDictionary component)
         {
-            if (TypeName(component) != "[FrooxEngine]FrooxEngine.StaticMesh") return;
-            if (component.TryGetNode("Data") is DataTreeDictionary data)
+            if (component.TryGetNode("Data") is not DataTreeDictionary data) return;
+            string type = TypeName(component);
+            if (type == "[FrooxEngine]FrooxEngine.StaticMesh")
                 meshes.Add(Scalar(data.TryGetNode("ID")), Scalar(data.TryGetNode("URL")));
+            else if (type == "[FrooxEngine]FrooxEngine.SphereMesh")
+                spheres.Add(Scalar(data.TryGetNode("ID")), Value<float>(data.TryGetNode("Radius")));
         }
     }
 

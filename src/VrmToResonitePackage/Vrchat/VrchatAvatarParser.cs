@@ -274,9 +274,9 @@ public static partial class VrchatAvatarParser
         profile?.Mark("physics");
         // An accessory FBX changes model placement, but the descriptor and skeleton
         // can still be authored on the selected prefab. Use their owning occurrence.
-        avatar.RigViewpoint = descriptorRoot.Guid == selected.Source.Guid
-            ? VrchatViewpoint.CaptureUnpacked(avatar, package.PrefabGraph.Scene(descriptorRoot.Guid), descriptorRoot.Guid, descriptorRoot.Id)
-            : VrchatViewpoint.Capture(package, avatar, descriptorRoot.Guid, descriptorRoot.Id);
+        avatar.RigViewpoint = package.ByGuid(descriptorRoot.Guid)?.Extension == ".fbx"
+            ? VrchatViewpoint.Capture(package, avatar, descriptorRoot.Guid, descriptorRoot.Id)
+            : VrchatViewpoint.CaptureUnpacked(avatar, package.PrefabGraph.Scene(descriptorRoot.Guid), descriptorRoot.Guid, descriptorRoot.Id);
         profile?.Mark("viewpoint");
         ParseModularAvatarComponents(package, selected.Source.Guid, avatar);
         profile?.Mark("modular-avatar");
@@ -2093,13 +2093,16 @@ public static partial class VrchatAvatarParser
         if ((meshReference?.FileID ?? 0) == 0) return;
         var generated = package.ByGuid(fbxGuid)?.Extension == ".asset"
             ? package.ReadAssetDocument(fbxGuid, meshReference.FileID ?? 0) : null;
+        bool builtInSphere = smr.ClassId == 23 && meshReference.FileID == 10207 &&
+            string.Equals(fbxGuid, "0000000000000000e000000000000000", StringComparison.OrdinalIgnoreCase);
+        bool generatedTemplate = generated != null || builtInSphere;
         if (package.ByGuid(fbxGuid)?.Extension == ".asset" && generated == null)
             throw new InvalidDataException($"Generated Unity Mesh subasset missing: {rendererName} ({fbxGuid}, {meshReference.FileID})");
         if (generated != null && generated.ClassId != 43)
             throw new InvalidDataException($"Renderer does not reference a Mesh: {rendererName}");
-        if (!string.IsNullOrEmpty(rendererName) && (generated != null || package.ByGuid(fbxGuid)?.Extension == ".fbx"))
+        if (!string.IsNullOrEmpty(rendererName) && (generatedTemplate || package.ByGuid(fbxGuid)?.Extension == ".fbx"))
         {
-            string sourceName = generated?.Root["m_Name"]?.AsString() ??
+            string sourceName = builtInSphere ? "Sphere" : generated?.Root["m_Name"]?.AsString() ??
                 ResolveReferenceGameObjectName(package, scene, meshReference, modelResolvers);
             if (!string.IsNullOrEmpty(sourceName) && (smr.Root["m_CorrespondingSourceObject"]?.FileID ?? 0) == 0 &&
                 avatar.ShouldKeepRenderer(fbxGuid, rendererName))
@@ -2110,11 +2113,11 @@ public static partial class VrchatAvatarParser
                     smr.Root["m_Enabled"]?.AsBool(true) ?? true)
                 {
                     PrefabGuid = sceneGuid, RendererFileId = smr.FileId,
-                    GeneratedMesh = generated?.Root,
+                    GeneratedMesh = generated?.Root, BuiltInSphere = builtInSphere,
                     IsSkinned = smr.ClassId == 137,
                     GameObjectFileId = smr.Root["m_GameObject"]?.FileID ?? 0,
                     ReplaceSourceRenderer = replaceSourceRenderer,
-                    SourcePath = generated != null ? generated.FileId.ToString() :
+                    SourcePath = generatedTemplate ? meshReference.FileID.Value.ToString() :
                         modelResolvers[fbxGuid].ResolveNodePath(meshReference.FileID ?? 0),
                 };
                 var transform = scene.TransformOfGameObject(smr.Root["m_GameObject"]?.FileID ?? 0)?.Root;
@@ -2139,8 +2142,8 @@ public static partial class VrchatAvatarParser
                 var bones = smr.Root["m_Bones"]?.Seq;
                 if (generated != null && copy.IsSkinned && bones == null && (generated.Root["m_BindPose"]?.Items.Count ?? 0) > 0)
                     throw new InvalidDataException($"Generated skinned renderer has no bone references: {rendererName}");
-                var resolver = generated == null ? modelResolvers[fbxGuid] : null;
-                string[] originalBones = generated != null
+                var resolver = generatedTemplate ? null : modelResolvers[fbxGuid];
+                string[] originalBones = builtInSphere ? null : generated != null
                     ? Enumerable.Range(0, generated.Root["m_BindPose"]?.Items.Count ?? 0).Select(i => $"Bone{i}").ToArray()
                     : copy.SourcePath != null
                     ? resolver.MeshBoneNamesByPath.GetValueOrDefault(copy.SourcePath)
@@ -2166,7 +2169,7 @@ public static partial class VrchatAvatarParser
                     }
                 }
                 avatar.MeshCopies.Add(copy);
-                var shapeNames = generated != null
+                var shapeNames = builtInSphere ? null : generated != null
                     ? generated.Root["m_Shapes"]?["channels"]?.Items.Select(c => c["name"].AsString()).ToArray()
                     : copy.SourcePath != null
                     ? resolver.BlendShapeNamesByPath.GetValueOrDefault(copy.SourcePath)

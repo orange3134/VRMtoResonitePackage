@@ -38,6 +38,7 @@ internal static class FbxMorphSeamChecks
         }
         foreach (int version in new[] { 7400, 7500 })
         {
+            CheckPolygonCorners(directory, version);
             string binary = Path.Combine(directory, $"disable-{version}.fbx");
             Write(binary, version, false, true, false);
             Require(UnityFbxBlendShapeDefaults.Read(binary).Single().Weight == 25,
@@ -180,8 +181,33 @@ internal static class FbxMorphSeamChecks
 
     private sealed record Node(string Name, object[] Values, params Node[] Children);
     private static Node N(string name, object value) => new(name, new[] { value });
+
+    private static void CheckPolygonCorners(string directory, int version)
+    {
+        string source = Path.Combine(directory, $"polygon-{version}.fbx");
+        Write(source, version, false, false, false, polygons: true);
+        using var context = new AssimpContext();
+        var input = context.ImportFile(source, PostProcessSteps.None).Meshes.Single();
+        string prepared = UnityFbxMorphSeams.Prepare(source, importBlendShapes: false, matchUnityPolygons: true);
+        var output = context.ImportFile(prepared, PostProcessSteps.None).Meshes.Single();
+        Require(input.Faces.Select(f => f.IndexCount).SequenceEqual(new[] { 4, 5, 5, 5 }) &&
+            output.Faces.Select(f => f.IndexCount).SequenceEqual(new[] { 4, 3, 3, 3, 3, 3 }),
+            "FBX quad, concave pentagon, coalesced edge and intersecting contour");
+        var quad = input.Faces[0].Indices.Select(i => input.Vertices[i]).ToArray();
+        Require(output.Faces[0].Indices.Select(i => output.Vertices[i]).SequenceEqual(quad.Skip(1).Append(quad[0])),
+            "Quad rotates one corner without reversing its winding");
+        foreach (var face in output.Faces)
+        foreach (int corner in face.Indices)
+        {
+            Require(Enumerable.Range(0, input.VertexCount).Any(before => input.Vertices[before] == output.Vertices[corner] &&
+                input.Normals[before] == output.Normals[corner] &&
+                input.TextureCoordinateChannels[0][before] == output.TextureCoordinateChannels[0][corner]),
+                "Direct normals and indexed UVs remain attached to their original corners");
+        }
+    }
+
     private static void Write(string path, int version, bool color, bool seam, bool duplicateTextures, bool embedded = false,
-        bool collidingNames = false)
+        bool collidingNames = false, bool polygons = false)
     {
         // Two overlapping triangles have identical base attributes. Only control point 0
         // moves; point 3 must stay still, despite occupying the same base position.
@@ -239,6 +265,24 @@ internal static class FbxMorphSeamChecks
         {
             geometry.Add(new Node("Shape", ["Sweat"], objects.Children[4].Children.Skip(1).ToArray()));
             geometry.Add(new Node("Properties70", [], new Node("P", ["Sweat", "Number", "", "A", 25d])));
+            objects = new Node("Objects", [], objects.Children[0] with { Children = geometry.ToArray() }, objects.Children[1]);
+            connections = connections with { Children = connections.Children.Take(2).ToArray() };
+        }
+        if (polygons)
+        {
+            geometry = [
+                N("Vertices", new double[] { 0,0,0, 1,0,0, 1,1,.2, 0,1,0, 2,0,0, 4,0,0, 4,2,0, 3,1,0, 2,2,0,
+                    5,0,0, 6,0,0, 6,1,.1, 6,1,.1, 5,1,0, 7,0,0, 9,2,0, 7,2,0, 9,0,0, 8,-1,0 }),
+                N("PolygonVertexIndex", new[] { 0,1,2,~3, 4,5,6,7,~8, 9,10,11,12,~13, 14,15,16,17,~18 }),
+                N("Edges", Enumerable.Range(0, 19).ToArray()),
+                new("LayerElementNormal", [0], N("MappingInformationType", "ByPolygonVertex"), N("ReferenceInformationType", "Direct"),
+                    N("Normals", Enumerable.Range(0, 19).SelectMany(i => new double[] { i * .01, 0, 1 }).ToArray())),
+                new("LayerElementUV", [0], N("MappingInformationType", "ByPolygonVertex"), N("ReferenceInformationType", "IndexToDirect"),
+                    N("UV", Enumerable.Range(0, 19).SelectMany(i => new double[] { i * .1, .4 }).ToArray()),
+                    N("UVIndex", Enumerable.Range(0, 19).Reverse().ToArray())),
+                new("Layer", [0], N("Version", 100),
+                    new Node("LayerElement", [], N("Type", "LayerElementNormal"), N("TypedIndex", 0)),
+                    new Node("LayerElement", [], N("Type", "LayerElementUV"), N("TypedIndex", 0)))];
             objects = new Node("Objects", [], objects.Children[0] with { Children = geometry.ToArray() }, objects.Children[1]);
             connections = connections with { Children = connections.Children.Take(2).ToArray() };
         }

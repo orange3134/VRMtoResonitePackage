@@ -252,6 +252,13 @@ static async Task Run(string fbxPath, string rendererName, string nativePrefab, 
             (Slot)Call("VrmToResonitePackage.Vrchat.VrchatSceneSetup", "ResolveImportedTarget",
                 new VrchatBoneTarget("additional", "RootNode", ""), additionalSources, additionalPaths) == additionalNode,
             "Additional synthetic-root physics identity survives wrapper collapse");
+        var nestedRoot = additionalNode.AddSlot("Nested model").AddSlot("RootNode");
+        additionalSources[nestedRoot] = "nested";
+        additionalPaths[nestedRoot] = "RootNode";
+        Check((Slot)Call("VrmToResonitePackage.Converter", "ResolvePrefabParent", root,
+            "additional", "RootNode", new List<VrchatPrefabTransform>(), additionalRoots,
+            new Dictionary<string, Slot>(), additionalSources, additionalPaths, 1f) == additionalNode,
+            "A nested FBX root cannot claim attachments belonging to the renamed parent model");
         var localBone = additionalNode.AddSlot("Head");
         additionalSources[localBone] = "additional";
         additionalPaths[localBone] = "Head";
