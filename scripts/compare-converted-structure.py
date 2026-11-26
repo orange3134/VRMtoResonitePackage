@@ -192,6 +192,82 @@ def compare_skin_size(source, saved):
     return dict(result, status='no-scale-outlier')
 
 
+def weighted_palette(record):
+    if not record or record.get('reason'):
+        return None
+    names, used = record.get('names'), record.get('used')
+    require(isinstance(names, list) and all(n is None or isinstance(n, str) for n in names)
+            and isinstance(used, list) and all(type(i) is int and 0 <= i < len(names) for i in used)
+            and len(set(used)) == len(used), 'invalid weighted bone palette')
+    maxima = record.get('maxWeights')
+    if maxima is not None:
+        require(isinstance(maxima, list) and len(maxima) == len(names)
+                and all(type(w) in (float, int) and math.isfinite(w) and w >= 0 for w in maxima)
+                and {i for i, w in enumerate(maxima) if w > 0} == set(used), 'invalid bone weight maxima')
+    return names, used
+
+
+def compare_bone_targets(renderer, component, source_record, mapping, differences, unverified):
+    bones, refs = renderer['bones'], component['bones']
+    expected = [mapping.get(b) for b in bones]
+    actual = [r['target'] for r in refs]
+    layout = {'sourceCount': len(bones), 'savedCount': len(refs),
+              'sameIndexDifferences': sum(a != b for a, b in zip(expected, actual))}
+    source = weighted_palette(source_record)
+    saved_record = (component.get('skinSize') or {}).get('bindings')
+    saved = weighted_palette(saved_record)
+    issues, unknown = [], []
+    if saved is not None:
+        saved_names, saved_used = saved
+        for j in saved_used:
+            if j >= len(refs) or refs[j]['status'] != 'resolved':
+                issues.append(dict(kind='bone-target', savedIndex=j, name=saved_names[j],
+                                   reason='weighted saved bone has no resolved target'))
+    if source is None or saved is None:
+        unknown.append(dict(reason='missing positive-weight palette', missingUnity=source is None,
+                            missingSaved=saved is None, unityReason=(source_record or {}).get('reason'),
+                            savedReason=(component.get('skinSize') or {}).get('reason')))
+    else:
+        names, used = source
+        source_counts = collections.Counter(names)
+        saved_counts = collections.Counter(saved_names)
+        saved_by_name = {saved_names[j]: j for j in saved_used if saved_counts[saved_names[j]] == 1}
+        expected_targets = {expected[i] if i < len(expected) else None for i in used}
+        actual_targets = {actual[j] for j in saved_used if j < len(actual)}
+        paired = set()
+        for i in used:
+            name = names[i]
+            target = expected[i] if i < len(expected) else None
+            j = saved_by_name.get(name) if name and source_counts[name] == 1 else None
+            detail = dict(sourceIndex=i, name=name, expected=target)
+            if j is not None:
+                paired.add(j)
+            if target is None:
+                unknown.append(dict(**detail, reason='weighted Unity bone has no mapped target'))
+            elif j is not None:
+                if j < len(actual) and actual[j] is not None and actual[j] != target:
+                    issues.append(dict(kind='bone-target', **detail, savedIndex=j, actual=actual[j]))
+            elif target not in actual_targets:
+                issues.append(dict(kind='missing-weighted-bone', **detail))
+            else:
+                unknown.append(dict(**detail, reason='weighted palette entry cannot be uniquely paired'))
+        for j in saved_used:
+            if j in paired or j >= len(actual) or actual[j] is None:
+                continue
+            detail = dict(savedIndex=j, name=saved_names[j], actual=actual[j])
+            if actual[j] not in expected_targets and None not in expected_targets:
+                issues.append(dict(kind='extra-weighted-bone', **detail))
+            else:
+                unknown.append(dict(**detail, reason='saved weighted palette entry cannot be uniquely paired'))
+    for issue in issues:
+        if 'savedIndex' in issue and saved_record.get('maxWeights') is not None:
+            issue['maxSavedWeight'] = saved_record['maxWeights'][issue['savedIndex']]
+        differences.append(dict(sourceId=renderer['id'], **issue))
+    if unknown:
+        unverified.append(dict(kind='bone-target', sourceId=renderer['id'], entries=unknown))
+    return dict(**layout, status='different' if issues else 'unverified' if unknown else 'matched')
+
+
 def compare(unity, parser, converted, overrides=None):
     unity_compare.validate_snapshot(unity)
     require(unity['schemaVersion'] == 2, 'resolved v2 reference required')
@@ -313,6 +389,11 @@ def compare(unity, parser, converted, overrides=None):
                 size['rendererId'] not in sizes, 'unknown or duplicate skin size record')
         sizes[size['rendererId']] = size
     skin_counts = collections.Counter()
+    palettes = {}
+    for record in unity.get('skinBindings', []):
+        require(isinstance(record, dict) and record.get('rendererId') in source_skins and
+                record['rendererId'] not in palettes, 'unknown or duplicate skin binding record')
+        palettes[record['rendererId']] = record
     supported_renderers = {'UnityEngine.MeshRenderer': '[FrooxEngine]FrooxEngine.MeshRenderer',
                            'UnityEngine.SkinnedMeshRenderer': '[FrooxEngine]FrooxEngine.SkinnedMeshRenderer'}
     expected_counts = collections.Counter((r['transform'], supported_renderers[r['type']])
@@ -351,18 +432,8 @@ def compare(unity, parser, converted, overrides=None):
         component = candidates[0]
         row.update(targetComponent=component['id'], convertedBones=component['bones'], status='compared')
         if component['bones'] is not None:
-            expected = [mapping.get(b) if b else None for b in renderer['bones']]
-            actual = [b['target'] for b in component['bones']]
-            if len(expected) != len(actual):
-                differences.append({'kind': 'bone-count', 'sourceId': renderer['id'],
-                                    'expected': len(expected), 'actual': len(actual)})
-            for i, (bone, ref) in enumerate(zip(renderer['bones'], component['bones'])):
-                if bone and bone not in mapping:
-                    unverified.append({'kind': 'bone', 'sourceId': renderer['id'], 'index': i,
-                                       'sourceBone': bone, 'reason': 'source bone is unmapped'})
-                elif ref['status'] == 'unresolved' or expected[i] != ref['target']:
-                    differences.append({'kind': 'bone-target', 'sourceId': renderer['id'], 'index': i,
-                                        'expected': expected[i], 'actual': ref})
+            row['boneTargets'] = compare_bone_targets(renderer, component, palettes.get(renderer['id']),
+                                                      mapping, differences, unverified)
     incoming = collections.defaultdict(list)
     unresolved = []
     for slot in slots.values():
@@ -370,9 +441,12 @@ def compare(unity, parser, converted, overrides=None):
             for ref in component['slotReferences']:
                 incoming[ref['target']].append({'slot': slot['id'], 'component': component['id'],
                                                 'type': component['type'], 'field': ref['field']})
-            for index, ref in enumerate(component['bones'] or []):
-                if ref['status'] != 'resolved':
-                    unresolved.append({'component': component['id'], 'index': index, **ref})
+            invalid_refs = [(i, ref) for i, ref in enumerate(component['bones'] or []) if ref['status'] != 'resolved']
+            if invalid_refs:
+                palette = weighted_palette((component.get('skinSize') or {}).get('bindings'))
+                used = set(palette[1]) if palette else None
+                unresolved.extend({'component': component['id'], 'index': i,
+                                   'weighted': i in used if used is not None else None, **ref} for i, ref in invalid_refs)
             for bone, ref in (component['rigBones'] or {}).items():
                 if ref['status'] != 'resolved':
                     unresolved.append({'component': component['id'], 'bone': bone, **ref})
@@ -401,19 +475,22 @@ def compare(unity, parser, converted, overrides=None):
         differences.append({'kind': 'viseme-bindings', **visemes})
     elif visemes['status'] == 'unverified' and 'lipSync' in unity:
         unverified.append({'kind': 'viseme-bindings', **visemes})
-    review = parser is None or bool(before_diffs or differences or unverified or extras or unmatched_sources or unresolved)
+    review = parser is None or bool(before_diffs or differences or unverified or extras or unmatched_sources
+                                    or any(r.get('weighted') is not False for r in unresolved))
+    bone_counts = collections.Counter(r['boneTargets']['status'] if 'boneTargets' in r else 'unpaired'
+                                     for r in renderer_rows if r['sourceId'] in source_skins)
     return {'format': 'resopon.structure-comparison', 'schemaVersion': 1,
             'status': 'needs-review' if review else 'matched-covered-fields',
             'parserParity': {'status': 'unverified' if parser is None else 'different' if before_diffs else 'matched', 'differences': before_diffs},
             'visemes': visemes,
-            'summary': {'visemeStatus': visemes['status'], 'skinScale': dict(skin_counts),
+            'summary': {'visemeStatus': visemes['status'], 'skinScale': dict(skin_counts), 'boneTargets': dict(bone_counts),
                         'unityTransforms': len(sources), 'convertedSlots': len(slots),
                         'mappingCandidates': len(mapping), 'unmappedSources': len(unmatched_sources),
                         'unmappedSlots': len(extras), 'differences': len(differences),
                         'unverified': len(unverified), 'unresolvedOrNullBones': len(unresolved)},
             'limitations': ['Name paths are candidates, not source provenance; duplicate paths stay ambiguous.',
                             'Local TRS is captured but not compared across different coordinate spaces/parents.',
-                            'Mesh bind poses, vertex weights, rootBone equivalence, physics behavior and visuals are unverified.',
+                            'Weighted bone targets are compared. Per-vertex weights, bind poses, rootBone equivalence, physics behavior and visuals are unverified.',
                             'Extra slots can be required converter support; do not delete based on this report alone.'],
             'transforms': rows, 'siblingOrders': sibling_orders, 'renderers': renderer_rows,
             'differences': differences, 'unverified': unverified,

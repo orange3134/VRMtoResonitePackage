@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
@@ -77,6 +78,7 @@ public static class ResoPonResolvedReference
         public string prefabGuid;
         public Sections sections = new Sections();
         public List<SkinSize> skinSizes = new List<SkinSize>();
+        public List<SkinBindings> skinBindings = new List<SkinBindings>();
         public List<LipSyncRecord> lipSync = new List<LipSyncRecord>();
     }
     [Serializable] private sealed class Sections
@@ -114,6 +116,49 @@ public static class ResoPonResolvedReference
         public string rendererId, reason;
         public Vector3 sizeMeters;
         public int weightedVertices;
+    }
+
+    [Serializable] internal sealed class SkinBindings
+    {
+        public string rendererId, reason;
+        public string[] names;
+        public int[] used;
+    }
+
+    internal static SkinBindings ReadSkinBindings(Mesh mesh, string rendererId)
+    {
+        var result = new SkinBindings { rendererId = rendererId };
+        try
+        {
+            if (mesh == null) throw new InvalidOperationException("missing mesh");
+            int count = mesh.bindposes.Length;
+            result.names = new string[count];
+            // Prefabs can reassign bones. Identify palette entries from the source model
+            // that owns this exact Mesh subasset, independently of the instance's targets.
+            string path = AssetDatabase.GetAssetPath(mesh);
+            if (AssetImporter.GetAtPath(path) is ModelImporter)
+            {
+                var model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                var palettes = model.GetComponentsInChildren<SkinnedMeshRenderer>(true)
+                    .Where(s => s.sharedMesh == mesh)
+                    .Select(s => s.bones.Select(b => b == null ? "" : b.name).ToArray()).ToArray();
+                if (palettes.Length > 0 && palettes[0].Length == count && palettes.All(p => p.SequenceEqual(palettes[0])))
+                    result.names = palettes[0];
+            }
+            var used = new SortedSet<int>();
+            foreach (var binding in mesh.GetAllBoneWeights())
+            {
+                if (float.IsNaN(binding.weight) || float.IsInfinity(binding.weight) || binding.weight < 0)
+                    throw new InvalidOperationException("invalid bone weight");
+                if (binding.weight == 0) continue;
+                if (binding.boneIndex < 0 || binding.boneIndex >= count)
+                    throw new InvalidOperationException("weight outside mesh palette");
+                used.Add(binding.boneIndex);
+            }
+            result.used = used.ToArray();
+        }
+        catch (Exception e) { result.reason = e.Message; }
+        return result;
     }
 
     // Both projections measure the base mesh in its authored skeletal pose, before morphs.
@@ -358,6 +403,7 @@ public static class ResoPonResolvedReference
                     if (skin != null)
                     {
                         snapshot.skinSizes.Add(MeasureSkin(skin, r.id));
+                        snapshot.skinBindings.Add(ReadSkinBindings(mesh, r.id));
                         foreach (var bone in skin.bones) r.bones.Add(Ref(bone, ids));
                         if (mesh != null)
                             for (int i = 0; i < mesh.blendShapeCount; ++i)

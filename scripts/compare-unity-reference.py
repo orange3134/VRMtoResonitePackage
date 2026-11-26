@@ -234,6 +234,8 @@ def compare(expected, actual, abs_tol=1e-6, rel_tol=1e-6):
     # Unity alone can measure posed vertices. Repeated captures may compare the
     # measurement, while parser parity covers only their common projection.
     excluded = {"sections"}
+    if expected["schemaVersion"] == 2 and ("skinBindings" not in expected or "skinBindings" not in actual):
+        excluded.add("skinBindings")  # Mesh palette evidence is collected by Unity.
     if expected["schemaVersion"] == 2 and ("skinSizes" not in expected or "skinSizes" not in actual):
         excluded.add("skinSizes")
     if expected["schemaVersion"] == 2 and ("lipSync" not in expected or "lipSync" not in actual):

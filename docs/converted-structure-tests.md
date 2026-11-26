@@ -176,14 +176,22 @@ Unity/parserが外部プロジェクト依存を補って解析したアーカ�
   改名・複数インスタンス・別FBX由来の配置を区別できるか確認が必要。
 - `sibling-order` は同じ親の対応済み子同士の順を確認する。Prefabの `m_Children` を
   復元しても、インポートしたFBX内部の兄弟順まで一致するとは限らない。
-- `bone-count / bone-target` は未使用骨の除去・再index化を含む。
-  配列差だけで誤接続とせず、使用ウェイト・bind pose・骨を動かした追従を別途検証する。
-  保存側はMeshXの各頂点の正のウェイトから骨indexを取得し、同じindexのMeshX骨名と
-  Renderer.Bonesの参照先Slotを照合できる。同名の骨が複数ある場合は名前だけで接続を確定できない。
-  変換後の配列にない骨がUnityでウェイトを持っていたかは、Unity側の頂点データで別に確認する。
-  null参照は元骨が未対応でも件数を確認する。Ricorineでは尾の5骨がなくなり、複製rendererを
-  含め同じnullが繰り返される事例がある。参照件数と欠落した骨の種類を区別し、保存メッシュの
-  正のウェイトがnullを指すか調べる。ウェイトから使われないnullだけで変形破損と断定しない。
+- `renderers[].boneTargets` は、Unityの `Mesh.GetAllBoneWeights()` と保存したMeshXの頂点から、
+  ウェイトが **0より大きい** 骨番号をそれぞれ列挙する。Unity側は同じMeshを所有する元モデルの
+  骨名、保存側はMeshXの骨名で、各表内で一意な項目を対応させる。その後、Prefabインスタンスで
+  実際に指定されたTransformと保存Rendererの参照先Slotを比較する。Prefabで骨を差し替えた場合も
+  元モデルの骨名とインスタンスの参照先を区別する。配列長・同じ添字での不一致数は診断情報に残す。
+  使用骨の対応がすべて一致すれば、並べ替え・未使用骨の増減は差分にならない。
+- `bone-target` は使用骨の参照先の変更、または保存側で使用する骨参照の欠落・null・未解決を表す。
+  `missing-weighted-bone` と `extra-weighted-bone` は、一方で使用される参照先が反対側の使用骨に
+  存在しないことを表す。保存側の該当indexが分かる場合は、その骨の頂点ウェイトの最大値も記録する。
+  元モデルの骨名が重複・不明、Transformが未対応、旧スナップショットに使用骨の記録がない場合など、
+  証明できない対応は `unverified` に残す。全null参照は `unresolvedOrNullBones` で調査できる。
+  ここでの一致は骨参照の一致を示す。頂点ごとのウェイト配分とbind pose、実際に動かした際の変形は別途確認する。
+- Yuzukiの `tail-dog` はPrefabの骨参照が174本、現行FBXの骨表が183本で、Unityでは使用骨の
+  `tail-dog_02` が `tail-dog_11` を指す。ResoPonの `ResolveShortenedBoneArray` は同一FBXの
+  オブジェクトID・一意なパス・省略骨が未使用であることを確認して対応を復元する。こうした意図した
+  復元もUnity実測値との差として記録し、古い参照順に戻す修正は行わない。
 - `Renderer.Enabled` はResoPonのメッシュ読み込み制御が駆動するため、Unity解析と差分比較の対象から除く。
   読み込み中・完了後の表示切替はResoPonの動作試験で確認する。
 
@@ -237,7 +245,7 @@ python -B scripts/compare-converted-structure.py unity.json parser.json `
    `--output` に新しいディレクトリを指定する。元の変換・inspect・採取の完了と入力・パッケージ・
    比較用JSONのハッシュを検査し、そのパッケージを再ビルドや再変換なしで照合する。
    全件runnerは `--mapping ケースID FILE` を必要なケースごとに指定する。
-5. 対応候補上の有効状態、対応した祖先、同型Renderer、順序付きbone接続を比較する。
+5. 対応候補上の有効状態、対応した祖先、同型Renderer、頂点が使用する骨の参照先を比較する。
    対応先ごとにMeshRendererとSkinnedMeshRendererの数を双方向に照合し、増減を
    `renderer-count` として記録する。骨の個別照合は同型Rendererが両側で一つずつの場合に行う。
    `siblingOrders` は元の兄弟同士の相対順序を比較する。補助階層を経由したSlotの位置も考慮し、

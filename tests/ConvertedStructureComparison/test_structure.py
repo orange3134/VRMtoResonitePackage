@@ -47,7 +47,9 @@ def fixtures(names=('Bone', 'Mesh')):
                  prefabGuid='b' * 32, sections=dict(transforms=transforms, renderers=[renderer], physBones=[], colliders=[]))
     converted = dict(format='resopon.converted-structure', schemaVersion=1, packageSha256='a' * 64, slots=slots)
     unity['skinSizes'] = [dict(rendererId=renderer['id'], weightedVertices=3, sizeMeters=dict(x=.3, y=.1, z=.2))]
-    slots[-1]['components'][0]['skinSize'] = dict(weightedVertices=4, sizeMeters=[.1, .2, .3])
+    palette = dict(names=['First', 'Second'], used=[0, 1])
+    unity['skinBindings'] = [dict(rendererId=renderer['id'], **copy.deepcopy(palette))]
+    slots[-1]['components'][0]['skinSize'] = dict(weightedVertices=4, sizeMeters=[.1, .2, .3], bindings=palette)
     return unity, converted
 
 
@@ -206,6 +208,49 @@ class ComparisonTests(unittest.TestCase):
         converted['slots'][-1]['components'][0]['bones'].reverse()
         report = comparison.compare(unity, unity, converted, {'r': 'r'})
         self.assertEqual(2, sum(d['kind'] == 'bone-target' for d in report['differences']))
+
+    def test_weighted_targets_survive_reindex_and_unused_tail_removal(self):
+        unity, converted = fixtures()
+        renderer, = unity['sections']['renderers']
+        renderer['bones'].append('r')
+        unity['skinBindings'][0]['names'].append('Unused')
+        component = converted['slots'][-1]['components'][0]
+        component['bones'].reverse()
+        component['skinSize']['bindings']['names'].reverse()
+        report = comparison.compare(unity, unity, converted, {'r': 'r'})
+        self.assertEqual('matched-covered-fields', report['status'])
+        self.assertEqual(2, report['renderers'][0]['boneTargets']['sameIndexDifferences'])
+        unity['skinBindings'][0]['used'].append(2)
+        issue, = comparison.compare(unity, unity, converted, {'r': 'r'})['differences']
+        self.assertEqual(('missing-weighted-bone', 2), (issue['kind'], issue['sourceIndex']))
+
+    def test_positive_extra_target_and_ambiguous_bindings(self):
+        unity, converted = fixtures()
+        source = unity['skinBindings'][0]
+        source['used'] = [0]
+        report = comparison.compare(unity, unity, converted)
+        self.assertEqual(['extra-weighted-bone'], [d['kind'] for d in report['differences']])
+        source.update(names=['Twin', 'Twin'], used=[0, 1])
+        converted['slots'][-1]['components'][0]['bones'].reverse()
+        report = comparison.compare(unity, unity, converted)
+        self.assertEqual([], report['differences'])
+        self.assertEqual('unverified', report['renderers'][0]['boneTargets']['status'])
+        del unity['skinBindings']
+        report = comparison.compare(unity, unity, converted)
+        self.assertTrue(report['unverified'][-1]['entries'][0]['missingUnity'])
+
+    def test_null_reference_only_fails_when_weighted(self):
+        unity, converted = fixtures()
+        saved = converted['slots'][-1]['components'][0]
+        saved['bones'][1] = dict(target=None, status='null', serializedId=None)
+        for palette in (unity['skinBindings'][0], saved['skinSize']['bindings']):
+            palette['used'] = [0]
+        report = comparison.compare(unity, unity, converted, {'r': 'r'})
+        self.assertEqual('matched-covered-fields', report['status'])
+        self.assertFalse(report['unresolvedOrNullBones'][0]['weighted'])
+        saved['skinSize']['bindings']['used'].append(1)
+        issue, = comparison.compare(unity, unity, converted)['differences']
+        self.assertEqual(('bone-target', 1), (issue['kind'], issue['savedIndex']))
 
     def test_sibling_order_is_separate_from_skin_indices(self):
         unity, converted = fixtures()

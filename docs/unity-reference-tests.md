@@ -202,6 +202,9 @@ Unity依存ハッシュは採取前後の変化検出用であり、プロジェ
 - Transform: 名前・親・兄弟順、ローカル位置・回転・スケール、有効状態。
 - MeshRenderer / SkinnedMeshRenderer: GameObjectの有効状態、メッシュ・材質参照、rootBone、
   順序付きbones、BlendShapeのindex・名前・初期weight。
+  Unityと変換前パーサーは同じPrefabのbones配列を添字ごとに比較する。保存パッケージとの
+  比較用には、Unityで頂点が使用する骨番号と元モデルの骨名を `skinBindings` に別途採取する。
+  [変換後の階層比較](converted-structure-tests.md)を参照。
 - VRCPhysBone / VRCPhysBoneCollider: 有効状態、root参照（未指定時は所有Transform）。
   PhysBoneは順序付きコライダー参照と `pull / spring / stiffness / gravity / gravityFalloff / immobile / radius`。
   Colliderの形状・寸法など、他の物理設定は未採取。
