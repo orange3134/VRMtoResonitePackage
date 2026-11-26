@@ -129,7 +129,7 @@ def main():
               'dumpSha256': comparison.sha256(dump),
               'comparisonSourceSha256': comparison.sha256(Path(comparison.__file__)), 'cases': [],
               'limitations': ['Name/path candidates are not provenance; unmapped slots can be required support.',
-                              'Saved Enabled, skin bone pruning, merged hierarchies and unsupported fields need review.',
+                              'Skin bone pruning, merged hierarchies and unsupported fields need review.',
                               'World pose, bind poses, visuals and runtime behavior need separate checks.']}
     for case in batch['cases']:
         result = check_case(case, output / case['caseId'], dump, args.timeout, mappings.get(case['caseId']))

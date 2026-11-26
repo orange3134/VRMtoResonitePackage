@@ -65,7 +65,7 @@ internal sealed class ResolvedSnapshot
                 if (!model.Documents.TryGetValue(model.Canonical(modification.Target.FileId), out var document)) continue;
                 string property = modification.Value["propertyPath"]?.AsString()?.Split('.')[0];
                 if (property is "m_Name" or "m_IsActive" or "m_LocalPosition" or "m_LocalRotation" or "m_LocalScale" or
-                    "m_Children" or "m_Father" or "m_RootOrder" or "m_Materials" or "m_Enabled" or "m_Mesh" or
+                    "m_Children" or "m_Father" or "m_RootOrder" or "m_Materials" or "m_Mesh" or
                     "m_Bones" or "m_RootBone" or "m_BlendShapeWeights")
                     UnityPropertyOverrides.Apply(document, modification.Value, modification.DeclaringGuid);
             }
@@ -184,7 +184,6 @@ internal sealed class ResolvedSnapshot
                 string type = Type(doc);
                 var record = Identity(key, node, type);
                 record["transform"] = node.Id;
-                record["enabled"] = doc.Root["m_Enabled"]?.AsBool(true) ?? true;
                 record["activeInHierarchy"] = node.Active;
                 if (doc.ClassId is 23 or 137)
                 {
@@ -201,6 +200,7 @@ internal sealed class ResolvedSnapshot
                 }
                 else
                 {
+                    record["enabled"] = doc.Root["m_Enabled"]?.AsBool(true) ?? true;
                     record["root"] = (doc.Root["rootTransform"]?.FileID ?? 0) == 0 ? node.Id : Address(key, doc.Root["rootTransform"]);
                     record["colliders"] = type == Bone ? Items(doc.Root["colliders"]).Select(n => Address(key, n)).ToArray() : Array.Empty<string>();
                     record["parameters"] = type == Bone ? new[] { "pull", "spring", "stiffness", "gravity", "gravityFalloff", "immobile", "radius" }

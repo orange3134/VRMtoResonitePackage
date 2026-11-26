@@ -184,12 +184,8 @@ Unity/parserが外部プロジェクト依存を補って解析したアーカ�
   null参照は元骨が未対応でも件数を確認する。Ricorineでは尾の5骨がなくなり、複製rendererを
   含め同じnullが繰り返される事例がある。参照件数と欠落した骨の種類を区別し、保存メッシュの
   正のウェイトがnullを指すか調べる。ウェイトから使われないnullだけで変形破損と断定しない。
-- 保存時のrenderer Enabled差は、読み込み後のmesh可用性とdriverの値で切り分ける。
-  再読込時はアバターの `MeshRendererLoadStatus.IsLoaded` を期限付きで待ち、
-  完了後に各rendererのパス・mesh可用性・Enabledを照合する。Bel AlbinoやOmanekoでは
-  個々のmeshが利用可能になっても、読み込み待ちのdriverがまだEnabledをfalseに保つ時間がある。
-  期限内に完了しなければ未検証とする。
-  一つのモデルで正常なdriverを確認しても、他モデル全件の差を自動的に承認しない。
+- `Renderer.Enabled` はResoPonのメッシュ読み込み制御が駆動するため、Unity解析と差分比較の対象から除く。
+  読み込み中・完了後の表示切替はResoPonの動作試験で確認する。
 
 ```powershell
 dotnet build tests/PackageRegressionDump -c Release -o .tmp_verify/structure-tools
@@ -243,7 +239,7 @@ python -B scripts/compare-converted-structure.py unity.json parser.json `
    全件runnerは `--mapping ケースID FILE` を必要なケースごとに指定する。
 5. 対応候補上の有効状態、対応した祖先、同型Renderer、順序付きbone接続を比較する。
    対応先ごとにMeshRendererとSkinnedMeshRendererの数を双方向に照合し、増減を
-   `renderer-count` として記録する。骨・有効状態の個別照合は同型が両側で一つずつの場合に行う。
+   `renderer-count` として記録する。骨の個別照合は同型Rendererが両側で一つずつの場合に行う。
    `siblingOrders` は元の兄弟同士の相対順序を比較する。補助階層を経由したSlotの位置も考慮し、
    未対応の親・子や親関係の不一致がある群は `unverified` にする。差は `sibling-order` として
    報告する。生成補助Slotを含む絶対indexの一致や、skinのBones配列順とは区別する。
@@ -282,8 +278,8 @@ Omanekoの余分な骨格には二つの原因があった。ウェイトを持�
 眼球PivotやAligned Handが挿入された部分は名前pathだけの自動照合では未対応になる。
 EyeRotationDriverのRoot、VRIKのhand参照などから補助Slotの用途を確認し、元Transformへの
 対応表を作る。補助Slot自体を元の親へ多対一対応させない。元骨の一意な対応・祖先関係、
-順序付きskin bone接続、Unityにある末端の欠落と重複を確認する。保存Enabledの差は
-実行時driverの値と区別し、補助階層・外観・物理などの未検証項目は報告に残す。
+順序付きskin bone接続、Unityにある末端の欠落と重複を確認する。
+補助階層・外観・物理などの未検証項目は報告に残す。
 
 未使用のラッパーを畳んだ出力では、元Prefabルートの対応先が残る親Slotへ変わり得る。
 古い対応表を流用せず新しいパッケージに対して採取し直す。子のワールド基底、スキンの

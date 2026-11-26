@@ -152,7 +152,7 @@ class ReplayTests(unittest.TestCase):
     def test_actual_difference_fails_replay(self):
         def producer(command, **kwargs):
             actual = snapshot()
-            actual["sections"]["renderers"][0]["enabled"] = False
+            actual["sections"]["renderers"][0]["activeSelf"] = False
             replay.write_json(Path(command[-1]), actual)
             return types.SimpleNamespace(returncode=0)
         code, report, _ = self.run_replay(producer)

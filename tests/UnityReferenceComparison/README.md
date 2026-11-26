@@ -39,7 +39,8 @@ python -m unittest discover -s tests/UnityReferenceComparison -v
 
 Exit status: `0` matching captured fields, `1` differences, `2` malformed input or
 I/O failure. Output contains individual field paths and expected/actual values.
-Missing and unexpected fields or records are failures, never a silent skip.
+Missing and unexpected comparable fields or records are failures. Both projections
+ignore the legacy renderer `enabled` field because ResoPon drives it during mesh loading.
 The report path cannot overwrite either input.
 
 For v1, records in `renderers`, `physBones`, and `colliders` are matched by their exact

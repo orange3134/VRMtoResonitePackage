@@ -90,12 +90,10 @@ def validate_snapshot(data):
             for field in ("path", "type"):
                 if not isinstance(record.get(field), str):
                     raise ValueError(name + " " + identity + ": " + field + " must be a string")
-            for field in ("enabled", "activeInHierarchy"):
+            for field in ("activeSelf" if name == "renderers" else "enabled", "activeInHierarchy"):
                 if type(record.get(field)) is not bool:
                     raise ValueError(name + " " + identity + ": " + field + " must be a boolean")
             if name == "renderers":
-                if type(record.get("activeSelf")) is not bool:
-                    raise ValueError("renderer activeSelf must be a boolean")
                 materials = record.get("materials")
                 if not isinstance(materials, list):
                     raise ValueError("renderer materials must be an array")
@@ -144,7 +142,7 @@ def _validate_resolved(data):
                     raise ValueError("invalid source identity")
             if type(record.get("activeInHierarchy")) is not bool:
                 raise ValueError("invalid activeInHierarchy")
-            if name != "transforms" and type(record.get("enabled")) is not bool:
+            if name in ("physBones", "colliders") and type(record.get("enabled")) is not bool:
                 raise ValueError("invalid enabled")
     transforms = maps["transforms"]
     if "r" not in transforms or not any(maps[name] for name in SECTIONS):
@@ -242,10 +240,14 @@ def compare(expected, actual, abs_tol=1e-6, rel_tol=1e-6):
         excluded.add("lipSync")  # Unity FX observation is compared to the saved driver.
     walk({k: v for k, v in expected.items() if k not in excluded},
          {k: v for k, v in actual.items() if k not in excluded}, "$")
+    def indexed_records(records, section):
+        if section == "renderers":
+            # Older captures included a field controlled by ResoPon's mesh loading driver.
+            return {r["id"]: {k: v for k, v in r.items() if k != "enabled"} for r in records}
+        return {r["id"]: r for r in records}
     for section in expected["sections"]:
-        left = {r["id"]: r for r in expected["sections"][section]}
-        right = {r["id"]: r for r in actual["sections"][section]}
-        walk(left, right, "$.sections." + section)
+        walk(indexed_records(expected["sections"][section], section),
+             indexed_records(actual["sections"][section], section), "$.sections." + section)
     return differences
 
 

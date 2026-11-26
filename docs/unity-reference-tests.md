@@ -200,7 +200,7 @@ Unity依存ハッシュは採取前後の変化検出用であり、プロジェ
 非アクティブな階層を含め、次のフィールドを採取する。
 
 - Transform: 名前・親・兄弟順、ローカル位置・回転・スケール、有効状態。
-- MeshRenderer / SkinnedMeshRenderer: 有効状態、メッシュ・材質参照、rootBone、
+- MeshRenderer / SkinnedMeshRenderer: GameObjectの有効状態、メッシュ・材質参照、rootBone、
   順序付きbones、BlendShapeのindex・名前・初期weight。
 - VRCPhysBone / VRCPhysBoneCollider: 有効状態、root参照（未指定時は所有Transform）。
   PhysBoneは順序付きコライダー参照と `pull / spring / stiffness / gravity / gravityFalloff / immobile / radius`。
@@ -468,7 +468,8 @@ Missing scriptで失敗した場合もコンポーネントを削除して採取
 ## 比較する範囲（v1）
 
 - 選択した通常Prefab自体に記録された `MeshRenderer` / `SkinnedMeshRenderer`:
-  有効状態、GameObjectの有効状態（自分と階層全体）、メッシュと材質スロットの参照。
+  GameObjectの有効状態（自分と階層全体）、メッシュと材質スロットの参照。
+  v1・v2ともに `Renderer.enabled` は採取・比較から除く。旧JSONにこのフィールドがあっても比較時に無視する。
 - 選択したPrefab自体の `VRCPhysBone` / `VRCPhysBoneCollider`: 有効状態、階層の
   有効状態、root参照、PhysBoneのコライダー参照。rootが未指定なら所有Transformを記録する。
   これはUnity側の参照であり、ResoPonが出力時にコライダーを親ボーンへ付け替える処理とは別。

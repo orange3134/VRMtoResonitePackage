@@ -350,9 +350,6 @@ def compare(unity, parser, converted, overrides=None):
             continue
         component = candidates[0]
         row.update(targetComponent=component['id'], convertedBones=component['bones'], status='compared')
-        if renderer['enabled'] != component['enabled']:
-            differences.append({'kind': 'renderer-enabled', 'sourceId': renderer['id'],
-                                'expected': renderer['enabled'], 'actual': component['enabled']})
         if component['bones'] is not None:
             expected = [mapping.get(b) if b else None for b in renderer['bones']]
             actual = [b['target'] for b in component['bones']]

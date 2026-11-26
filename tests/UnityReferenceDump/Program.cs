@@ -162,7 +162,7 @@ static void AddCapturedDependencies(UnityPackage source, string manifest)
 }
 
 internal sealed record AssetReference(string Guid, string FileId);
-internal sealed record RendererRecord(string Id, string Path, string Type, bool Enabled,
+internal sealed record RendererRecord(string Id, string Path, string Type,
     bool ActiveSelf, bool ActiveInHierarchy, AssetReference Mesh, AssetReference[] Materials);
 internal sealed record PhysBoneRecord(string Id, string Path, string Type, bool Enabled,
     bool ActiveInHierarchy, string Root, string[] Colliders);
@@ -194,7 +194,7 @@ internal static class ReferenceSnapshot
                 throw new InvalidDataException($"Renderer {renderer.FileId}: invalid material list.");
             renderers.Add(new(Id(renderer.FileId), owner.Path,
                 renderer.ClassId == 137 ? "UnityEngine.SkinnedMeshRenderer" : "UnityEngine.MeshRenderer",
-                Enabled(renderer), owner.ActiveSelf, owner.ActiveInHierarchy,
+                owner.ActiveSelf, owner.ActiveInHierarchy,
                 Asset(scene.RendererMesh(renderer)), (materials?.Items ?? Array.Empty<YamlNode>())
                     .Select(Asset).ToArray()));
         }

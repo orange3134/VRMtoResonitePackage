@@ -20,7 +20,7 @@ def snapshot():
             'prefabGuid': '00000000000000000000000000000001', 'projection': comparison.PROJECTION, 'sections': {
                 'renderers': [{'id': '1001',
                     'path': 'Body', 'type': 'UnityEngine.SkinnedMeshRenderer',
-                    'enabled': True, 'activeSelf': True, 'activeInHierarchy': True,
+                    'activeSelf': True, 'activeInHierarchy': True,
                     'mesh': {'guid': '00000000000000000000000000000003', 'fileId': '4300000'},
                     'materials': [{'guid': '00000000000000000000000000000002', 'fileId': '2100000'}]}],
                 'physBones': [{'id': '2001', 'path': 'Hair',

@@ -43,7 +43,7 @@ public static class ResoPonReferenceExporter
     [Serializable] private sealed class RendererRecord
     {
         public string id, path, type;
-        public bool enabled, activeSelf, activeInHierarchy;
+        public bool activeSelf, activeInHierarchy;
         public AssetReference mesh;
         public List<AssetReference> materials = new List<AssetReference>();
     }
@@ -192,7 +192,7 @@ public static class ResoPonReferenceExporter
                     if (renderer is MeshRenderer && meshFilter != null) LocalId(meshFilter, guid);
                     var record = new RendererRecord
                     {
-                        id = id, path = path, type = type, enabled = renderer.enabled,
+                        id = id, path = path, type = type,
                         activeSelf = transform.gameObject.activeSelf,
                         activeInHierarchy = transform.gameObject.activeInHierarchy,
                         mesh = AssetId(renderer is SkinnedMeshRenderer ?

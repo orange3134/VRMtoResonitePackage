@@ -14,7 +14,7 @@ public static class ResoPonResolvedReferenceSmoke
     [Serializable] private class Record
     {
         public string id, path, name, root;
-        public bool enabled, activeInHierarchy;
+        public bool activeInHierarchy;
         public Vector3 localScale;
         public Asset[] materials;
         public string[] colliders;
@@ -97,7 +97,6 @@ public static class ResoPonResolvedReferenceSmoke
         Check(twins.Length == 2 && twins[0].id != twins[1].id, "Repeated instance identity collision");
         Check(twins.Count(r => !r.activeInHierarchy) == 1, "Inactive nested prefab missing");
         var capturedFace = snapshot.sections.renderers.Single(r => r.path == "Face");
-        Check(!capturedFace.enabled, "Renderer override missing");
         Check(capturedFace.materials[0].guid == AssetDatabase.AssetPathToGUID(directory + "/b.mat"), "Material order override missing");
         Check(snapshot.sections.physBones.Length == 3 && snapshot.sections.colliders.Length == 3, "Inherited/nested physics missing");
         var rootBone = snapshot.sections.physBones.Single(r => r.path == "");

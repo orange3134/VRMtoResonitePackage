@@ -37,7 +37,7 @@ def fixtures(names=('Bone', 'Mesh')):
                           localRotation=[0, 0, 0, 1], localScale=[1, 1, 1], components=[]))
     renderer = dict(id='r/1/c:UnityEngine.SkinnedMeshRenderer:0', transform='r/1', path=names[1],
                     type='UnityEngine.SkinnedMeshRenderer', source=reference.copy(), originalSource=reference.copy(),
-                    enabled=True, activeSelf=True, activeInHierarchy=True, mesh=reference.copy(), materials=[],
+                    activeSelf=True, activeInHierarchy=True, mesh=reference.copy(), materials=[],
                     rootBone='r/0', bones=['r/0', 'r/1'], blendShapes=[])
     refs = [dict(target=sid, status='resolved', serializedId='saved:' + sid) for sid in ['r/0', 'r/1']]
     slots[-1]['components'] = [dict(id='r/1:0', type='[FrooxEngine]FrooxEngine.SkinnedMeshRenderer',
@@ -64,6 +64,13 @@ def remap_slots(converted, changes):
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_renderer_enabled_is_ignored_with_old_and_new_unity_captures(self):
+        unity, converted = fixtures()
+        converted['slots'][-1]['components'][0]['enabled'] = False
+        self.assertEqual([], comparison.compare(unity, unity, converted)['differences'])
+        unity['sections']['renderers'][0]['enabled'] = True
+        self.assertEqual([], comparison.compare(unity, unity, converted)['differences'])
+
     def test_viseme_compares_the_field_owner_and_saved_mesh_channel(self):
         unity, converted = fixtures()
         renderer = unity['sections']['renderers'][0]['id']

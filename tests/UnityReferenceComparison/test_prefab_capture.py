@@ -72,7 +72,7 @@ class PrefabCaptureTests(unittest.TestCase):
             self.called_producer = True
             value = snapshot()
             if self.different:
-                value["sections"]["renderers"][0]["enabled"] = False
+                value["sections"]["renderers"][0]["activeSelf"] = False
             self.assertEqual(["--verify-selection", self.args[self.args.index("--avatar") + 1]
                               if "--avatar" in self.args else ""], command[5:])
             capture.write(Path(command[4]), value)

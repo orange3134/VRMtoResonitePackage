@@ -141,7 +141,7 @@ internal sealed class ModelSnapshot
                 // itself in this skin. ResoPonSkinRootSmoke checks reversed cluster order
                 // and a skin that explicitly includes the common ancestor in Unity.
                 if (rootBone != null && !bonePaths.Contains(rootBone)) rootBone = bonePaths[^1];
-                var fields = Map(("m_GameObject", Ref(go)), ("m_Enabled", Scalar(1)),
+                var fields = Map(("m_GameObject", Ref(go)),
                     ("m_Materials", Sequence(node.MaterialNames.Select(Material))), ("m_Mesh", Ref(mesh)),
                     ("m_RootBone", Ref(rootBone == null ? 0 : Identity(rootBone, 4))),
                     ("m_Bones", Sequence(bonePaths.Select(p => Ref(Identity(p, 4))))),

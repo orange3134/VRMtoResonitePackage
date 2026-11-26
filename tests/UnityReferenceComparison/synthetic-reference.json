@@ -9,7 +9,6 @@
         "id": "1001",
         "path": "Body",
         "type": "UnityEngine.SkinnedMeshRenderer",
-        "enabled": true,
         "activeSelf": true,
         "activeInHierarchy": true,
         "mesh": {

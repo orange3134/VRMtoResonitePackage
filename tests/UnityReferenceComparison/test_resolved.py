@@ -18,13 +18,25 @@ def snapshot():
     bone = dict(identity("r/c:Bone:0", "", "Bone"), transform="r", root="r", enabled=True,
                 colliders=[colliders[1]["id"], colliders[0]["id"]], parameters=[dict(name="pull", value=.2)])
     renderer = dict(identity("r/0/c:Renderer:0", "Twin", "Renderer"), transform="r/0", rootBone="r",
-                    enabled=True, activeSelf=True, mesh=source.copy(), materials=[source.copy()], bones=["r/0", "r/1"],
+                    activeSelf=True, mesh=source.copy(), materials=[source.copy()], bones=["r/0", "r/1"],
                     blendShapes=[dict(index=0, name="Smile", weight=20.)])
     return dict(format=comparison.FORMAT, schemaVersion=2, projection="unity-resolved-prefab", prefabGuid="b" * 32,
                 sections=dict(transforms=transforms, renderers=[renderer], physBones=[bone], colliders=colliders))
 
 
 class ResolvedTests(unittest.TestCase):
+    def test_renderer_enabled_is_ignored_across_capture_versions(self):
+        for fixture in (authored, snapshot):
+            older = fixture()
+            renderer = older["sections"]["renderers"][0]
+            renderer["enabled"] = True
+            newer = copy.deepcopy(older)
+            del newer["sections"]["renderers"][0]["enabled"]
+            self.assertEqual([], comparison.compare(older, newer))
+            self.assertEqual([], comparison.compare(newer, older))
+            newer["sections"]["renderers"][0]["enabled"] = False
+            self.assertEqual([], comparison.compare(older, newer))
+
     def test_quaternion_sign_is_equivalent_but_rotation_changes_fail(self):
         original = snapshot()
         changed = copy.deepcopy(original)

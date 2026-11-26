@@ -103,7 +103,7 @@ public static class ResoPonResolvedReference
     [Serializable] private sealed class RendererRecord : Identity
     {
         public string transform, rootBone;
-        public bool enabled, activeSelf, activeInHierarchy;
+        public bool activeSelf, activeInHierarchy;
         public AssetRef mesh;
         public List<AssetRef> materials = new List<AssetRef>();
         public List<string> bones = new List<string>();
@@ -350,7 +350,7 @@ public static class ResoPonResolvedReference
                     var r = new RendererRecord
                     {
                         transform = ids[transform], rootBone = skin == null ? "" : Ref(skin.rootBone, ids),
-                        enabled = renderer.enabled, activeSelf = record.activeSelf, activeInHierarchy = record.activeInHierarchy,
+                        activeSelf = record.activeSelf, activeInHierarchy = record.activeInHierarchy,
                         mesh = Asset(mesh),
                     };
                     Identify(r, component, root, ids);
