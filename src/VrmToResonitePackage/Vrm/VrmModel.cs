@@ -37,6 +37,21 @@ public sealed class VrmModel
     /// </summary>
     public bool OrientationMirroredX { get; set; }
 
+    /// <summary>Maps a source bone-local offset into the local axes of the imported bone.</summary>
+    internal System.Numerics.Vector3 ToImportedBoneOffset(System.Numerics.Vector3 offset)
+    {
+        // ModelImporter flips glTF X. VRM0 stores Unity offsets (ReverseZ on export);
+        // the optional Y180 bake cancels both flips. VRM1 stores glTF offsets and its
+        // optional pre-import X mirror cancels the importer's X flip.
+        return Source switch
+        {
+            ModelSource.Vrm0 when !OrientationBaked => new(-offset.X, offset.Y, -offset.Z),
+            ModelSource.Vrm0 => offset,
+            ModelSource.Vrm1 when OrientationMirroredX => offset,
+            _ => new(-offset.X, offset.Y, offset.Z),
+        };
+    }
+
     public string Title { get; set; }
     public string Author { get; set; }
 

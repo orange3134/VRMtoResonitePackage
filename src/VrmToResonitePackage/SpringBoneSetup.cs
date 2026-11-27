@@ -340,12 +340,12 @@ internal static class SpringBoneSetup
                 return result;
             }
             // Resonite's sphere collider has no offset field; the slot position is the offset.
-            float3 offset = ConvertVector(collider.Offset, vrm);
+            float3 offset = vrm.ToImportedBoneOffset(collider.Offset);
             result.Add(CreateSphere(slot, offset, collider.Radius));
             if (collider.Tail.HasValue)
             {
                 // VRM1 capsule: approximate with extra spheres along the capsule axis.
-                float3 tail = ConvertVector(collider.Tail.Value, vrm);
+                float3 tail = vrm.ToImportedBoneOffset(collider.Tail.Value);
                 float3 axis = tail - offset;
                 int segments = MathX.Clamp((int)MathX.Ceil(axis.Magnitude / MathX.Max(collider.Radius, 0.01f)), 1, 4);
                 for (int i = 1; i <= segments; i++)
@@ -376,43 +376,6 @@ internal static class SpringBoneSetup
             }
             _slotsByName.TryGetValue(name, out Slot slot);
             return slot;
-        }
-
-        /// <summary>
-        /// Converts a VRM collider offset (stored in the VRM's native coordinates) into the
-        /// engine slot-local space, matching how the model itself ends up oriented.
-        ///
-        /// Resonite's ModelImporter mirrors the whole scene by scale(-1,1,1) (RH->LH), so the
-        /// engine's slot-local value is always the glTF-node-local value with X flipped.
-        /// - VRM1: VRMC_springBone offsets are glTF-node-local already, so apply only that X
-        ///   flip: (-x, y, z).
-        /// - VRM1 X-mirrored (proper-handed Blender export): our pre-import X mirror composed with
-        ///   the importer's X mirror collapses to identity, so each engine bone-local frame equals
-        ///   the raw glTF-node-local frame and the offset passes through unchanged: (x, y, z).
-        /// - VRM0 with the orientation baked to +Z: the bake (Y180) composed with the importer's
-        ///   X mirror and UniVRM's ReverseZ export collapses to identity, so the engine sees raw
-        ///   Unity coordinates. VRM0 offsets are Unity values, so pass them through: (x, y, z).
-        /// - VRM0 without the bake (fallback): only FlipX∘ReverseZ applies, mapping the Unity
-        ///   offset to (-x, y, -z).
-        /// </summary>
-        private static float3 ConvertVector(System.Numerics.Vector3 v, VrmModel vrm)
-        {
-            // VRChat FBX: Resonite's Assimp import mirrors the scene by scale(-1,1,1) just like
-            // glTF, and Unity FBX bone-local offsets are already +Z-forward, so the engine
-            // slot-local value is the Unity value with X flipped (same as VRM1). Validated on hardware.
-            if (vrm.Source == ModelSource.VrchatFbx)
-            {
-                return new float3(-v.X, v.Y, v.Z);
-            }
-            if (vrm.SpecVersionMajor != 0)
-            {
-                return vrm.OrientationMirroredX
-                    ? new float3(v.X, v.Y, v.Z)
-                    : new float3(-v.X, v.Y, v.Z);
-            }
-            return vrm.OrientationBaked
-                ? new float3(v.X, v.Y, v.Z)
-                : new float3(-v.X, v.Y, -v.Z);
         }
     }
 }

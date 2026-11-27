@@ -3,6 +3,9 @@ using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.CommonAvatar;
 using FrooxEngine.FinalIK;
+using Renderite.Shared;
+using VrmToResonitePackage;
+using VrmToResonitePackage.Vrm;
 using VrmToResonitePackage.Vrchat;
 
 internal static class ViewpointChecks
@@ -30,6 +33,7 @@ internal static class ViewpointChecks
     public static void Run(Slot root)
     {
         CheckRigViewpoint();
+        CheckVrmViews(root);
         var assembly = typeof(VrchatAvatar).Assembly;
         var resolve = assembly.GetType("VrmToResonitePackage.Vrchat.VrchatSceneSetup")!
             .GetMethod("ResolveViewPosition", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -70,30 +74,26 @@ internal static class ViewpointChecks
 
         // The capture must survive root collapse. The full avatar setup uses this world point
         // even when both eye pivots exist far behind the visible eyes (NoraMiaree).
-        var setupType = assembly.GetType("VrmToResonitePackage.AvatarSetupOptions")!;
-        var options = Activator.CreateInstance(setupType)!;
-        setupType.GetProperty("ViewPosition")!.SetValue(options, actual);
-        var compute = assembly.GetType("VrmToResonitePackage.AvatarSetup")!
-            .GetMethod("ComputeEyePosition", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var options = new AvatarSetupOptions { ViewPosition = actual };
         var rig = parent.AttachComponent<BipedRig>();
         rig[Renderite.Shared.BodyNode.LeftEye] = parent.AddSlot("Left eye pivot");
         rig[Renderite.Shared.BodyNode.RightEye] = parent.AddSlot("Right eye pivot");
-        float3 Compute() => (float3)compute.Invoke(null, new object[] { rig, null, float3.Up, float3.Forward, options, null })!;
+        float3 Compute() => AvatarSetup.ComputeEyePosition(rig, null, float3.Up, float3.Forward, options, null);
         Near(Compute(), expected, "Authored viewpoint takes precedence over eye pivot positions without auto offsets");
-        setupType.GetProperty("ViewForward")!.SetValue(options, -.02f);
-        setupType.GetProperty("ViewUp")!.SetValue(options, .01f);
+        options.ViewForward = -.02f;
+        options.ViewUp = .01f;
         Near(Compute(), expected + new float3(0, .01f, -.02f), "Explicit viewpoint offsets adjust the authored viewpoint in meters");
-        setupType.GetProperty("ViewPosition")!.SetValue(options, null);
+        options.ViewPosition = null;
         Near(Compute(), parent.GlobalPosition + new float3(0, .01f, -.02f),
             "Absent authored viewpoint retains the eye-based path for VRM and incomplete descriptors");
-        var vrm = new VrmToResonitePackage.Vrm.VrmModel { FirstPersonOffset = new(.04f, -.03f, .02f) };
+        var vrm = new VrmModel { FirstPersonOffset = new(.04f, -.03f, .02f) };
         var viewBone = parent.AddSlot("First person bone");
         viewBone.LocalRotation = floatQ.Euler(30f, 10f, -20f);
         foreach (bool baked in new[] { false, true })
         {
             vrm.OrientationBaked = baked;
             var local = new float3(baked ? .04f : -.04f, -.03f, baked ? .02f : -.02f);
-            var point = (float3)compute.Invoke(null, new object[] { rig, vrm, float3.Up, float3.Forward, options, viewBone })!;
+            var point = AvatarSetup.ComputeEyePosition(rig, vrm, float3.Up, float3.Forward, options, viewBone);
             Near(point, viewBone.LocalPointToGlobal(local) + new float3(0, .01f, -.02f),
                 "VRM0 applies the signed local offset to the selected bone before user offsets");
         }
@@ -102,6 +102,47 @@ internal static class ViewpointChecks
         avatar.ViewPosition = new System.Numerics.Vector3(float.NaN, 1, 0);
         Check(Resolve(parent) == null, "Nonfinite authored viewpoints retain fallback");
         alignment.Destroy();
+    }
+
+    private static void CheckVrmViews(Slot root)
+    {
+        var fixture = root.AddSlot("VRM headset placement");
+        var rig = fixture.AttachComponent<BipedRig>();
+        var head = fixture.AddSlot("Head");
+        var left = fixture.AddSlot("Left eye");
+        var right = fixture.AddSlot("Right eye");
+        rig[BodyNode.Head] = head;
+        rig[BodyNode.LeftEye] = left;
+        rig[BodyNode.RightEye] = right;
+        left.LocalPosition = new float3(-.02f, .06f, .025f);
+        right.LocalPosition = new float3(.02f, .06f, .025f);
+        var options = new AvatarSetupOptions();
+        var vrm = new VrmModel { FirstPersonOffset = new(0, .06f, 0) };
+        float3 Compute() => AvatarSetup.ComputeEyePosition(rig, vrm, float3.Up, float3.Forward, options, head);
+        foreach (var source in new[] { ModelSource.Vrm0, ModelSource.Vrm1 })
+        {
+            vrm.Source = source;
+            Near(Compute(), head.LocalPointToGlobal(new float3(0, .06f, 0)),
+                $"{source} preserves the recorded headset position even when it sits behind both eyes");
+        }
+        vrm.FirstPersonOffset = System.Numerics.Vector3.Zero;
+        Near(Compute(), head.GlobalPosition, "An explicit zero VRM1 offset selects the head origin");
+        vrm.FirstPersonOffset = null;
+        Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .068f, .055f)),
+            "VRM1 without a recorded offset still estimates the viewpoint from the eyes");
+        rig[BodyNode.RightEye] = null;
+        head.LocalRotation = floatQ.Euler(20f, 30f, -10f);
+        head.LocalScale = new float3(2, 1, .5f);
+        vrm.FirstPersonOffset = new(.04f, -.03f, -.02f);
+        options.ViewUp = .01f;
+        foreach (bool mirrored in new[] { false, true })
+        {
+            vrm.OrientationMirroredX = mirrored;
+            float3 local = new(mirrored ? .04f : -.04f, -.03f, -.02f);
+            Near(Compute(), head.LocalPointToGlobal(local) + float3.Up * .01f,
+                "VRM1 honors a signed custom look-at offset on a rotated, scaled head without a pair of eyes");
+        }
+        fixture.Destroy();
     }
 
     private static void CheckRigViewpoint()

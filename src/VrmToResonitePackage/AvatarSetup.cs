@@ -322,19 +322,17 @@ internal static class AvatarSetup
     // ---------------------------------------------------------------- alignment
 
     /// <summary>
-    /// Computes the first-person view position. The raw eye-bone midpoint sits inside
-    /// the face mesh, so the view is pushed out to roughly the glabella (between the
-    /// eyebrows, on the face surface) — the common convention for Resonite avatars.
-    /// The offsets scale with the distance between the eye bones unless overridden.
+    /// Uses a source viewpoint when available, otherwise estimates a headset position from the rig.
     /// </summary>
-    private static float3 ComputeEyePosition(BipedRig rig, VrmModel vrm, float3 up, float3 forward,
+    internal static float3 ComputeEyePosition(BipedRig rig, VrmModel vrm, float3 up, float3 forward,
         AvatarSetupOptions options, Slot viewBone)
     {
         float3? viewpoint = options.RigViewpoint?.Resolve(rig) ?? options.ViewPosition;
-        if (viewpoint == null && vrm?.Source == ModelSource.Vrm0 && vrm.FirstPersonOffset is {} local && viewBone != null)
+        if (viewpoint == null && viewBone != null && vrm?.FirstPersonOffset is {} local)
         {
-            var offset = vrm.OrientationBaked ? new float3(local.X, local.Y, local.Z) : new float3(-local.X, local.Y, -local.Z);
-            viewpoint = viewBone.LocalPointToGlobal(offset);
+            float3 point = viewBone.LocalPointToGlobal(vrm.ToImportedBoneOffset(local));
+            if (!point.IsNaN && !point.IsInfinity)
+                viewpoint = point;
         }
         if (viewpoint is float3 authoredPosition)
         {
@@ -354,18 +352,7 @@ internal static class AvatarSetup
 
         Slot head = rig[BodyNode.Head];
         float scale = MathX.Abs(head.GlobalScale.y);
-        float3 basePosition;
-        if (vrm.FirstPersonOffset.HasValue)
-        {
-            System.Numerics.Vector3 offset = vrm.FirstPersonOffset.Value;
-            basePosition = head.GlobalPosition
-                           + up * offset.Y * scale
-                           + forward * MathX.Abs(offset.Z) * scale;
-        }
-        else
-        {
-            basePosition = head.GlobalPosition + up * 0.06f * scale;
-        }
+        float3 basePosition = head.GlobalPosition + up * 0.06f * scale;
         return basePosition
                + forward * (options.ViewForward ?? 0.06f * scale)
                + up * (options.ViewUp ?? 0.01f * scale);

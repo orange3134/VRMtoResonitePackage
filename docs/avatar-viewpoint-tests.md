@@ -93,5 +93,8 @@ Proxyはヘッドセット位置、Targetは頭ボーンを駆動するIK接続�
 
 VRM 0.xの視点を照合する場合は、UniVRMで取り込んだ同一入力の `VRMFirstPerson` から
 `FirstPersonBone.TransformPoint(FirstPersonOffset)` をUnity側の基準位置として採取する。
-その位置を同じ4本の人体骨で保存姿勢に写してHead Proxyとの距離を測る。VRChat用の
-Descriptor比較CLIはこのVRM基準を扱わない。
+その位置を同じ4本の人体骨で保存姿勢に写してHead Proxyとの距離を測る。
+VRM 1.0では同じ入力のglTF上でheadのワールド変換を `lookAt.offsetFromHeadBone` に適用し、
+人体骨で保存姿勢に位置合わせする。Head Proxyを元の視点、Targetを保存後のHeadとそれぞれ照合する。
+AvatarSample_Cは両形式ともheadのローカル座標で `(0, 0.06, 0)`。両目との距離を確認する場合も、
+視点の期待値はVRMから求める。VRChat用のDescriptor比較CLIはこのVRM基準を扱わない。
