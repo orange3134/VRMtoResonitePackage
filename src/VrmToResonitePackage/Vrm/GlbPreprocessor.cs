@@ -378,51 +378,11 @@ internal static class GlbPreprocessor
             return false;
         }
         bool changed = false;
-        foreach (JsonNode meshNode in meshes)
+        foreach (JsonObject mesh in meshes.OfType<JsonObject>())
         {
-            if (meshNode is not JsonObject mesh ||
-                mesh["primitives"] is not JsonArray primitives ||
-                primitives.Count == 0)
-            {
-                continue;
-            }
-            int targetCount = 0;
-            if (primitives[0] is JsonObject firstPrimitive &&
-                firstPrimitive["targets"] is JsonArray targets)
-            {
-                targetCount = targets.Count;
-            }
-            if (targetCount == 0)
-            {
-                continue;
-            }
-
-            List<string> existing = ReadNames(mesh["extras"]) ?? ReadPrimitiveNames(primitives);
-            var unique = new List<string>(targetCount);
-            var used = new HashSet<string>(StringComparer.Ordinal);
-            bool meshChanged = existing == null || existing.Count < targetCount;
-            for (int i = 0; i < targetCount; i++)
-            {
-                string name = existing != null && i < existing.Count ? existing[i] : null;
-                if (string.IsNullOrEmpty(name))
-                {
-                    name = $"morph_{i}";
-                    meshChanged = true;
-                }
-                // Same disambiguation FrooxEngine itself uses for duplicate names.
-                while (!used.Add(name))
-                {
-                    name += "_";
-                    meshChanged = true;
-                }
-                unique.Add(name);
-            }
-            // mesh.extras.targetNames missing entirely also counts as a change.
-            if (mesh["extras"] is not JsonObject || ReadNames(mesh["extras"]) == null)
-            {
-                meshChanged = true;
-            }
-            if (!meshChanged)
+            var names = VrmParser.GetMeshTargetNames(mesh);
+            var existing = (mesh["extras"] as JsonObject)?["targetNames"] as JsonArray;
+            if (names.SequenceEqual(existing?.Select(n => n?.GetValue<string>()) ?? []))
             {
                 continue;
             }
@@ -433,7 +393,7 @@ internal static class GlbPreprocessor
                 mesh["extras"] = extras;
             }
             var array = new JsonArray();
-            foreach (string name in unique)
+            foreach (string name in names)
             {
                 array.Add(JsonValue.Create(name));
             }
@@ -1093,31 +1053,5 @@ internal static class GlbPreprocessor
         {
             matrix[floatIndex] = JsonValue.Create(-matrix[floatIndex].GetValue<float>());
         }
-    }
-
-    private static List<string> ReadNames(JsonNode extras)
-    {
-        if (extras is JsonObject extrasObject &&
-            extrasObject["targetNames"] is JsonArray names)
-        {
-            return names.Select(n => n?.GetValue<string>() ?? "").ToList();
-        }
-        return null;
-    }
-
-    private static List<string> ReadPrimitiveNames(JsonArray primitives)
-    {
-        foreach (JsonNode primitive in primitives)
-        {
-            if (primitive is JsonObject primitiveObject)
-            {
-                List<string> names = ReadNames(primitiveObject["extras"]);
-                if (names != null)
-                {
-                    return names;
-                }
-            }
-        }
-        return null;
     }
 }

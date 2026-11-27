@@ -9,6 +9,7 @@ using FrooxEngine.Store;
 using SkyFrost.Base;
 using VrmToResonitePackage;
 using VrmToResonitePackage.Expressions;
+using VrmToResonitePackage.Vrchat;
 using VrmToResonitePackage.Vrm;
 using static ExpressionTestFields;
 
@@ -19,6 +20,7 @@ internal static class VrmExpressionChecks
 
     public static async Task Run(Slot parent, string artifacts)
     {
+        await CheckUnnamedMorphs(parent, artifacts);
         foreach (var (version, sparse) in new[] { (0, false), (0, true), (1, false), (1, true) })
         {
             string name = $"VRM{version}-{(sparse ? "missing" : "full")}";
@@ -176,6 +178,11 @@ internal static class VrmExpressionChecks
             meshes = new[] { new { extras = new { targetNames = Shapes } } },
             extensions = new Dictionary<string, object> { [version == 0 ? "VRM" : "VRMC_vrm"] = extension }
         });
+        return WriteFixture(path, json);
+    }
+
+    private static VrmModel WriteFixture(string path, string json)
+    {
         byte[] bytes = Encoding.UTF8.GetBytes(json.PadRight((json.Length + 3) / 4 * 4));
         using (var writer = new BinaryWriter(File.Create(path)))
         {
@@ -183,6 +190,46 @@ internal static class VrmExpressionChecks
             writer.Write((uint)bytes.Length); writer.Write(0x4E4F534Au); writer.Write(bytes);
         }
         return VrmParser.Parse(path);
+    }
+
+    private static async Task CheckUnnamedMorphs(Slot parent, string artifacts)
+    {
+        var vrm = WriteFixture(Path.Combine(artifacts, "unnamed-shapes.vrm"), """
+            {"nodes":[{"name":"Face","mesh":0}],"meshes":[
+              {"primitives":[{"targets":[{},{},{}]}]},
+              {"primitives":[{"targets":[{},{},{},{}],"extras":{"targetNames":["","morph_0"]}},{"targets":[{},{},{}]}]}
+            ],"extensions":{"VRM":{"blendShapeMaster":{"blendShapeGroups":[
+              {"name":"Smile","presetName":"joy","binds":[{"mesh":0,"index":1,"weight":100}]}
+            ]}}}}
+            """);
+        Check(vrm.MeshTargetNames[1].SequenceEqual(new[] { "morph_0", "morph_0_", "morph_2" }),
+            "partial primitive names are filled and disambiguated within the merged target count");
+        var root = parent.AddSlot("Unnamed VRM morphs");
+        try
+        {
+            var mesh = new MeshX();
+            mesh.AddVertex(new float3(0, 0, 0));
+            mesh.AddVertex(new float3(1, 0, 0));
+            mesh.AddVertex(new float3(0, 1, 0));
+            mesh.AddSubmesh<TriangleSubmesh>().AddTriangle(0, 1, 2);
+            // ModelImporter removed the empty first channel.
+            foreach (string name in new[] { "morph_1", "morph_2" })
+                mesh.AddBlendShape(name).AddFrame(1).SetPositionDelta(0, new float3(0, 0, .1f));
+            var provider = root.AttachComponent<StaticMesh>();
+            provider.URL.Value = await root.Engine.LocalDB.SaveAssetAsync(mesh);
+            await default(ToWorld);
+            var face = root.AddSlot("Face").AttachComponent<SkinnedMeshRenderer>();
+            face.Mesh.Target = provider;
+            for (int i = 0; i < 7200 && face.MeshBlendshapeCount != 2; i++) await default(NextUpdate);
+            Check(await VrchatBlendShapeRepair.ApplyVrm(root, vrm) == 1, "restore the empty unnamed VRM morph");
+            for (int i = 0; i < 7200 && face.MeshBlendshapeCount != 3; i++) await default(NextUpdate);
+            Check(face.Mesh.Asset.Data.BlendShapes.Select(s => s.Name).SequenceEqual(new[] { "morph_0", "morph_1", "morph_2" }),
+                "restored unnamed morphs retain source order");
+            var resolver = new BlendshapeResolver(root, vrm);
+            Check(resolver.Resolve(vrm.Expressions.Single().Binds.Single()) == face.GetBlendShape("morph_1"),
+                "the authored index still drives the second morph after repair");
+        }
+        finally { root.Destroy(); }
     }
 
     private static async Task Frames(int count) { for (int i = 0; i < count; i++) await default(NextUpdate); }

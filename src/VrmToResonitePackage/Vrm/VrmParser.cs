@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Vec3 = System.Numerics.Vector3;
 using Vec4 = System.Numerics.Vector4;
 
@@ -90,7 +91,7 @@ public static class VrmParser
         {
             foreach (JsonElement mesh in meshes.EnumerateArray())
             {
-                model.MeshTargetNames.Add(ExtractTargetNames(mesh));
+                model.MeshTargetNames.Add(GetMeshTargetNames(JsonObject.Create(mesh)));
             }
         }
 
@@ -242,26 +243,25 @@ public static class VrmParser
         }
     }
 
-    private static List<string> ExtractTargetNames(JsonElement mesh)
+    internal static List<string> GetMeshTargetNames(JsonObject mesh)
     {
-        // UniVRM convention: mesh.extras.targetNames, or per-primitive extras.targetNames.
-        if (mesh.TryGetProperty("extras", out JsonElement extras) &&
-            extras.TryGetProperty("targetNames", out JsonElement names))
+        static JsonArray Names(JsonNode node) => (node?["extras"] as JsonObject)?["targetNames"] as JsonArray;
+        var primitives = mesh["primitives"] as JsonArray;
+        var authored = Names(mesh) ?? primitives?.Select(Names).FirstOrDefault(names => names != null);
+        // The importer merges primitives. GLB preprocessing trims their targets to the common count.
+        int count = primitives is { Count: > 0 }
+            ? primitives.Min(p => (p?["targets"] as JsonArray)?.Count ?? 0)
+            : authored?.Count ?? 0;
+        var names = new List<string>(count);
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < count; i++)
         {
-            return names.EnumerateArray().Select(e => e.GetString() ?? "").ToList();
+            string name = i < (authored?.Count ?? 0) ? authored[i]?.GetValue<string>() : null;
+            if (string.IsNullOrEmpty(name)) name = $"morph_{i}";
+            while (!used.Add(name)) name += "_";
+            names.Add(name);
         }
-        if (mesh.TryGetProperty("primitives", out JsonElement primitives))
-        {
-            foreach (JsonElement primitive in primitives.EnumerateArray())
-            {
-                if (primitive.TryGetProperty("extras", out JsonElement pExtras) &&
-                    pExtras.TryGetProperty("targetNames", out JsonElement pNames))
-                {
-                    return pNames.EnumerateArray().Select(e => e.GetString() ?? "").ToList();
-                }
-            }
-        }
-        return new List<string>();
+        return names;
     }
 
     // ---------------------------------------------------------------- VRM 0.x

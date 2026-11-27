@@ -39,9 +39,22 @@ def compare_positioned(data):
     points, saved = data['positions'], data['savedPositions']
     validate_positions(points)
     validate_positions(saved)
+    def drawn_faces(positions, triangles):
+        result = []
+        for face in triangles:
+            validate_face(face, len(positions))
+            a, b, c = (positions[i] for i in face)
+            if any(cross(subtract(b, a), subtract(c, a))):
+                result.append(face)
+        return result
+    unity_faces = drawn_faces(points, data['unityTriangles'])
+    saved_faces = drawn_faces(saved, data['savedTriangles'])
     span = max((max(axis) - min(axis) for axis in zip(*points)), default=0)
-    if not span:
+    if not span and not saved_faces:
         return dict(status='unverified', reason='no mesh extent')
+    if not unity_faces or not saved_faces:
+        return dict(status='different' if unity_faces or saved_faces else 'matched', matchedTriangles=0,
+                    unmatchedUnity=len(unity_faces), unmatchedSaved=len(saved_faces))
     tolerance = span * 1e-5
     def cell(p):
         return tuple(math.floor(n / tolerance) for n in p)
@@ -55,21 +68,11 @@ def compare_positioned(data):
                            for i in grid.get((x+a, y+b, z+c), ()) if math.dist(p, points[i]) <= tolerance])
     # Each source triangle occurrence can be claimed once. An augmenting path
     # can revise an earlier choice when several near-coincident corners compete.
-    def has_area(positions, face):
-        validate_face(face, len(positions))
-        a, b, c = (positions[i] for i in face)
-        return any(cross(subtract(b, a), subtract(c, a)))
-    unity_drawn, saved_drawn = set(), set()
     source = defaultdict(list)
-    for i, face in enumerate(data['unityTriangles']):
-        if has_area(points, face):
-            unity_drawn.add(i)
+    for i, face in enumerate(unity_faces):
         source[tuple(sorted(face))].append(i)
     choices = []
-    for i, face in enumerate(data['savedTriangles']):
-        if has_area(saved, face):
-            saved_drawn.add(i)
-        a, b, c = face
+    for a, b, c in saved_faces:
         options = {index for corners in product(candidates[a], candidates[b], candidates[c])
                    for index in source.get(tuple(sorted(corners)), ())}
         choices.append(options)
@@ -78,7 +81,7 @@ def compare_positioned(data):
         stack, parents, visited = [start], {start: None}, set()
         while stack:
             current = stack.pop()
-            for index in sorted(choices[current] - visited, key=lambda j: j not in unity_drawn):
+            for index in choices[current] - visited:
                 visited.add(index)
                 if index not in owner:
                     while True:
@@ -91,14 +94,50 @@ def compare_positioned(data):
                     parents[occupant] = (current, index)
                     stack.append(occupant)
         return False
-    for i in sorted(range(len(choices)), key=lambda i: (i not in saved_drawn, len(choices[i]))):
+    for i in sorted(range(len(choices)), key=lambda i: len(choices[i])):
         assign(i)
     # When direct matching fails there may still be a planar retriangulation.
     # That requires a common position table before the boundary test below.
-    missing = len(unity_drawn - owner.keys())
-    extra = len(saved_drawn.difference(owner.values()))
+    missing = len(unity_faces) - len(owner)
+    extra = len(saved_faces) - len(owner)
     return dict(status='unverified' if missing or extra else 'matched',
                 matchedTriangles=len(owner), unmatchedUnity=missing, unmatchedSaved=extra)
+
+
+def patch_edges(points, faces):
+    # Represent the input coordinates on one exact binary grid. Parallel lines that
+    # are merely close together must stay separate, even on a very narrow triangle.
+    vertices = {i for face in faces for i in face}
+    ratios = {i: [n.as_integer_ratio() for n in points[i]] for i in vertices}
+    scale = max((den for point in ratios.values() for _, den in point), default=1)
+    grid = {i: tuple(num * (scale // den) for num, den in point) for i, point in ratios.items()}
+    lines = {}
+    intervals = defaultdict(list)
+    for face in faces:
+        for a, b in edges(face):
+            key = min(a, b), max(a, b)
+            start, end = sorted((grid[a], grid[b]))
+            if key not in lines:
+                delta = subtract(end, start)
+                divisor = math.gcd(*delta)
+                direction = tuple(d // divisor for d in delta)
+                # The cross product is constant along the line with this direction.
+                lines[key] = direction, cross(start, direction)
+            intervals[lines[key]].append((start, end, face))
+
+    # Connect faces sharing any positive length, including a long edge meeting
+    # two shorter edges. A single shared endpoint does not connect two patches.
+    neighbors = defaultdict(list)
+    for spans in intervals.values():
+        furthest = owner = None
+        for start, end, face in sorted(spans):
+            if furthest is not None and start < furthest:
+                neighbors[owner].append(face)
+                neighbors[face].append(owner)
+                if end <= furthest:
+                    continue
+            furthest, owner = end, face
+    return lines, neighbors
 
 
 def compare(data):
@@ -121,11 +160,8 @@ def compare(data):
     # Connected residual patches must lie on one plane and cover the same area.
     # After orienting each triangle toward that plane, its signed boundary counts
     # encode the jump in coverage (including overlaps and holes) across each edge.
-    owners = defaultdict(list)
     remaining = set(left) | set(right)
-    for face in remaining:
-        for a, b in edges(face):
-            owners[min(a, b), max(a, b)].append(face)
+    lines, neighbors = patch_edges(points, remaining)
     unmatched = [0, 0]
     equivalent = 0
     while remaining:
@@ -134,11 +170,10 @@ def compare(data):
         while stack:
             face = stack.pop()
             patch.append(face)
-            for a, b in edges(face):
-                for adjacent in owners.pop((min(a, b), max(a, b)), ()):
-                    if adjacent in remaining:
-                        remaining.remove(adjacent)
-                        stack.append(adjacent)
+            for adjacent in neighbors[face]:
+                if adjacent in remaining:
+                    remaining.remove(adjacent)
+                    stack.append(adjacent)
         ref = max(patch, key=lambda f: math.hypot(*normal(f)))
         axis = normal(ref)
         origin = points[ref[0]]
@@ -156,7 +191,11 @@ def compare(data):
                     break
                 count = (left[face] - right[face]) * (1 if orientation > 0 else -1)
                 for a, b in edges(face):
-                    boundary[min(a, b), max(a, b)] += count if a < b else -count
+                    # On each line, oriented coverage changes only at endpoints.
+                    # Splitting an edge adds equal and opposite changes at its new vertex.
+                    line = lines[min(a, b), max(a, b)]
+                    boundary[line, tuple(points[a])] += count
+                    boundary[line, tuple(points[b])] -= count
         if planar and not any(boundary.values()):
             equivalent += 1
         else:
