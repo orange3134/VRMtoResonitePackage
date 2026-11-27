@@ -1,16 +1,9 @@
 # ローカルアバター回帰テスト
 
-変換後に骨・スロットが増える問題は、[変換後の階層比較](converted-structure-tests.md)の
-一括runnerでUnity・変換前解析・保存パッケージを照合する。解析一致と変換後の一致は別に記録する。
+全件変換のコマンドと集約先は[登録アバターの一括変換](#登録アバターをすべて変換して一か所へ集約する)に記載する。
+Unity基準の採取には[Unity参照テスト](unity-reference-tests.md)、変換後の骨やメッシュの照合には[保存パッケージの階層比較](converted-structure-tests.md)を使う。
 
-Unityで継承を解決して採取したv2基準値は、[Unity参照データの直接比較](unity-reference-tests.md#resopon解析との直接比較v2)
-で再検証する。`.local/avatar-tests.json` の `unityResolvedParity` に比較レポートへのパス、状態、
-入力・期待値・実値のハッシュを追記できる。採取状態の `unityResolvedCollection` や既存の
-`analysisCollection` は保持し、比較成功と採取成功を区別する。
-
-Prefabの解析結果をUnity Editorの値と比較する場合は、[Unity参照データとの比較](unity-reference-tests.md)を参照。
-
-### テストアバターを追加する
+## テストアバターを追加する
 
 調査の最初に `.local/avatar-tests.json` にケースID、元の入力パス、変換引数を記録する。
 既存ケースは保持し、同じ入力・選択アバターのケースは更新して以後の回帰検証に再利用する。
@@ -78,7 +71,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-local-avatar.ps
 コミット前に `git check-ignore .local/avatar-tests.json` と `git diff --cached` で、
 パス・ログ・アバター本体がステージされていないことを確認する。
 
-### 収集した解析データを回帰テストで再利用する
+## 収集した解析データを回帰テストで再利用する
 
 継続利用するデータセットは `.local/avatar-analysis/<採取ID>/` に保存する。
 一時ビルド・展開したアバターは引き続き `.tmp_verify/` に置く。
@@ -123,7 +116,7 @@ Unity参照との一致も[採取対象のフィールド](unity-reference-tests
 `obj/Release` は共有されるため、ビルド工程は順番に実行して中間DLLのロック競合を避ける。
 また、実行中のDLLへビルド出力を上書きしない。
 
-### 登録アバターをすべて変換して一か所へ集約する
+## 登録アバターをすべて変換して一か所へ集約する
 
 Python 3.11以降で、登録済みの `arguments` を保った通常変換を全件実行する。
 相対 `inputPath` は登録ファイルの親ディレクトリを基準にする。Prefab採取、全件変換、
@@ -170,12 +163,11 @@ Unity参照がない、または依存が変わった場合は[Unity参照の採
 再採取し、登録先を更新して再実行する。期待値は比較結果から自動更新しない。
 解析比較はTransform・Renderer・骨接続・PhysBone等のv2投影の範囲を検証するものであり、
 生成パッケージの検査やResoniteクライアントでの外観・動作確認は引き続き別途行う。
-外観・装着・表情・揺れものの動作は、集約したパッケージをResoniteクライアントで確認する。
 
 この処理は利用条件を確認済みのローカル素材を使う。素材と結果はコミット・配布しない。
 スクリプトはPython標準ライブラリと既存の変換CLIを使う独立実装で、外部コードや依存の追加はない。
 
-### 登録アバターをすべてAlphaからCutoutへ変換する
+## 登録アバターをすべてAlphaからCutoutへ変換する
 
 「全材質をCutout」は、既存の不透明・加算などを変更せず、選択オプションの対象となる
 Alpha材質をすべて指定する。対象がないケースも通常どおり変換する。
@@ -199,7 +191,7 @@ Alpha材質をすべて指定する。対象がないケースも通常どおり
 構造検査の成功は外観の確認を意味しない。Cutout化では半透明の濃淡が失われるため、
 実際のライティングや輪郭の見え方はResoniteクライアントで確認する。
 
-### 利用中の EXE まで修正が反映されているか確認する
+## 利用中の EXE まで修正が反映されているか確認する
 
 専用ディレクトリでの回帰テストが成功しても、通常利用する `publish/ResoPon.exe` は更新されない。
 修正後も同じ症状が報告された場合は、まず実際の変換ログ冒頭の ResoPon バージョンと実行場所を
@@ -216,20 +208,7 @@ DLL を併置して直接実行・参照する環境では、同じ publish ビ�
 `bin/Release/win-x64/ResoPon.dll` も揃え、古い併置 DLL を検証対象にしない。
 EXE の実変換ログのバージョンと、参照する DLL のバージョン・SHA-256を確認する。
 
-### Unityで継承を解決した期待値の保存
-
-プロジェクト内 `.prefab` を直接指定する場合は `scripts/check-prefab-unity.py` で採取・解析・比較を
-一括実行できる。[実行手順](unity-reference-tests.md#プロジェクト内prefabから採取と比較を一括実行する)を参照。
-出力先の `report.json` と `unity/coverage.json` をケースから参照し、元の `inputPath` は保持する。
-
-Variantを含むPrefabの解決済み状態は[Unity参照データのv2採取](unity-reference-tests.md)を使い、
-`.local/unity-resolved/` に保存する。ケースの `unityResolvedCollection` には採取先・状態・失敗理由を記録する。
-`captured` はUnityの期待値を収集できた状態であり、ResoPonとの照合成功ではない。
-`test-avatar-analysis.py` と `UnityReferenceDump` は従来のv1照合を継続し、v2は入力に使わない。
-v2の再現性・構造検査には `compare-unity-reference.py expected.json repeat.json` を使う。
-元入力・依存物・Unity/SDK版・採取コードのハッシュも保存し、期待値は自動上書きしない。
-
-### 保存パッケージの構造を自動検査する
+## 保存パッケージの構造を自動検査する
 
 実変換後の `--inspect` に加え、開発用 `PackageRegressionDump` で保存値をJSONへ取り出し、
 `check-package-snapshot.py` で明示した条件を検査できる。エンジンは起動せず、RecordPackageの
@@ -288,7 +267,7 @@ Unityのshape weightは0–100、Resoniteの保存値は0–1であることに�
 変換およびinspectの終了コードを `.local/` に保存する。生成パッケージは `.tmp_verify/` に置く。
 一般条件の成功は、登録した全rendererや物理設定がUnityと一致したという意味ではない。
 
-### 保存スキンの追従を検査する
+## 保存スキンの追従を検査する
 
 `PrefabSceneSmoke --skin-motion-package <package> <expectations.json>` はパッケージを
 ヘッドレスエンジンへ再読込し、指定した骨を動かしたときに対象Rendererの全使用骨が追従するかを検査する。

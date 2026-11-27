@@ -99,7 +99,7 @@ CLI では従来どおり `--no-protection` を指定した実行で保護を外
   別の頂点の変形を参照してポリゴンが引き伸ばされたりする。
   入力側で識別用の頂点属性を付与して誤結合を防ぐが、GLBとFBXでは実装と対象条件が異なる。
   [GLBの対策](vrm-conversion.md#joinidenticalvertices対策)と
-  [FBXの対策](vrchat-conversion.md#同位置の頂点で異なる変形を保持する)を参照する。
+  [FBXの対策](vrchat-blendshapes.md#同位置の頂点で異なる変形を保持する)を参照する。
 
 ## アバターセットアップ
 
@@ -126,25 +126,7 @@ CLI では従来どおり `--no-protection` を指定した実行で保護を外
 - `SimpleAvatarProtection` は既定でrootと各SkinnedMeshRendererへ付与し、
   `--no-protection` で無効にする。
 
-### 元データからの視線可動範囲の取り込み（未実装）
-
-現在の `EyeSwing` 初期値はUnityPackage / Prefabが10、VRMが4で、元データの可動範囲はまだ取り込まない。
-取り込みを実装する場合の候補は次のとおり。
-
-- VRM 1.0の `lookAt.type=bone` は `rangeMapHorizontalInner/Outer`、
-  `rangeMapVerticalUp/Down` の `outputScale` が出力角度の上限。
-  `inputMaxValue` は入力角度の範囲であり、出力角度と混同しない。
-- VRM 0.xのBone方式は `firstPerson.lookAtHorizontalInner/Outer`、
-  `lookAtVerticalUp/Down` の `yRange` が候補。`xRange` とカーブは応答の再現にも関わる。
-- VRChatは `customEyeLookSettings.eyesLookingStraight` を基準に、
-  `eyesLookingUp/Down/Left/Right` の左右の目の回転差から可動角度を求められる。
-  SDKの `linked` 設定も考慮する。保存されたEuler角の単純な引き算では扱わない。
-- 単一の `MaxSwing` では方向別・左右別の範囲や応答カーブを完全には再現できない。
-  代表値の選び方は未決定。VRMのExpression方式の出力値は角度ではなく、直接流用できない。
-
-参照: [VRM 1.0 LookAt仕様](https://github.com/vrm-c/vrm-specification/blob/master/specification/VRMC_vrm-1.0/lookAt.ja.md)、
-[VRM 0.x DegreeMap](https://github.com/vrm-c/vrm-specification/blob/master/specification/0.0/schema/vrm.firstperson.degreemap.schema.json)、
-VRChat SDKの `VRCAvatarDescriptorEditor3EyeLook.cs`。
+元データの方向別・左右別の視線可動範囲と応答カーブの取り込みは未対応。
 
 ## 表情システムへの接続
 

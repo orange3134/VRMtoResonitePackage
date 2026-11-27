@@ -80,6 +80,8 @@ ModelImporterのDeformPercent設定、Prefabのルート命名、座標軸・行
 既存のUnity Editor API、OSのバージョン情報、リポジトリ内のFBXパーサを使用し、配布依存や第三者通知の追加はない。
 実アバターのローカル採取では、素材ごとの版・作者・利用条件と導入範囲を `.local/` に記録する。
 
+### FBXの姿勢とメッシュ参照
+
 FBX局所行列の復元は、[Autodesk FBX Developer Help 2020の変換行列の説明](https://help.autodesk.com/cloudhelp/2020/ENU/FBX-Developer-Help/files/nodes_and_scene_graph/fbx_nodes/FBX_Developer_Help_nodes_and_scene_graph_fbx_nodes_computing_transformation_matrix_html.html)
 の数式を仕様として参照した独立実装。SDKの実装やサンプルコードをコピー・翻訳・同梱しない。
 微小TRSのバイナリfixtureとskin rootの三角形モデルは自作で、既存のAssimpとUnity 2022.3.22f1で検証する。
@@ -93,6 +95,8 @@ Unity採取値を本リポジトリや配布EXEへ取り込まないため、THI
 共有Meshのv2回帰検査は自作の最小FBX・Prefabを既存のAssimpとパーサで読み取る。
 一括変換の相対パス回帰検査もPython標準ライブラリと自作データのみを使う。
 外部コード・素材の取り込み、新しい配布依存・第三者通知の追加はない。
+
+### 保存パッケージと実アバターの照合
 
 保存パッケージの `PackageRegressionDump` とPython比較器も独立実装で、既存の
 RecordPackage/DataTree APIを呼び出す。FrooxEngine 2026.11.16.1330のCollider調査は
@@ -142,17 +146,10 @@ ASCII接続IDの数値照合、Prefab部分木の採取、参照専用アセッ�
 TRS合成・参照保護のテストは自作シーンで行い、Omanekoの既存許諾の範囲内で非公開検証する。
 外部コード・素材・依存の追加や第三者通知の変更はない。
 
-全アバター変換のUnity比較工程は、既存の参照採取・比較ツールをPython標準ライブラリで
-接続した独立実装。回帰テストの入力は自作で、実データは既存の利用条件確認済みローカル参照のみ。
-登録パス・選択引数の共通処理、確認済み対応表とRendererの比較、FBX親子索引の変更も
-リポジトリ内の既存形式・実装を参照し、Python標準ライブラリと.NETのLINQを使う。
-新たな外部コード・素材・依存の取り込みや配布範囲の変更はなく、通知対象は増えない。
-
-全件の保存構造照合runnerとその回帰テストも、既存比較器・自作JSON fixture・Python標準
-ライブラリによる独立実装。参照範囲は本リポジトリの採取形式とインストール済みエンジンAPIで、
-外部サンプルの転載・移植はない。登録済みアバターは既存の利用条件確認を引き継ぎ、
-Unity再採取と実行時状態の調査を非公開ローカルで行う。入力・解析JSON・生成パッケージは
-配布せず、製品依存と通知対象は増えない。
+全件変換と保存構造の比較ツールは、リポジトリ内の採取形式・比較器、Python標準ライブラリ、
+.NETのLINQ、実行環境のエンジンAPIを使う独立実装。登録パス・選択引数、Renderer対応表、
+FBX親子索引の検証には自作fixtureを使う。実アバターによる検証は許諾範囲内でローカルに留め、
+入力・解析JSON・生成物は配布しない。これらのツールによる配布依存・通知対象の追加はない。
 
 全件比較で見つかったFBX兄弟順・有効状態の修正は、本リポジトリのモデル階層・Prefab graphと
 インストール済みFrooxEngineのSlot APIを使う独立実装。`sortHierarchyByName` の扱いは既存の
@@ -170,6 +167,8 @@ MANUKA DR_05の指定Prefabと衣装FBXは非公開のローカル比較に使�
 計測した頂点は取り込まない。配布する回帰テストは自作の骨と頂点を使い、追加の通知対象はない。
 比較ツールの寸法計測はUnity 2022.3のMesh APIと既存Resonite DLLのMeshX・行列APIを用いる
 独立実装。実アバターの検証結果はローカルに置き、配布EXEには計測コードや素材を追加しない。
+
+### テスト素材の利用条件の確認
 
 同梱規約の探索はunitypackage直下だけでなく、その商品のダウンロードディレクトリ内の
 Readme・Licenseフォルダーと `.url` も対象にする。リンク先は作者の公式販売ページと照合する。

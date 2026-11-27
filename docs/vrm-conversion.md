@@ -102,7 +102,7 @@ ResoPonでは同じ優先順位を固定Clip参照として表し、空の右手
 
 VRM 0.x / 1.0のうち、解析後の `IsMToon=true` かつ `AlphaMode="blend"` の材質が対象。
 元からOpaque / Cutoutの材質と、MToon以外の材質は対象外。
-UnityPackage / Prefabにも同じ選択機能があり、対象の判定は[VRChat変換](vrchat-conversion.md#半透明材質のalpha--cutout選択)を参照する。
+UnityPackage / Prefabにも同じ選択機能があり、対象の判定は[VRChatのマテリアル変換](vrchat-materials.md#半透明材質のalpha--cutout選択)を参照する。
 
 GUI設定「半透明マテリアルの変換先を手動で選ぶ」は既定OFF。
 ONの場合、VRMごとに対象材質があれば変換前に選択画面を表示する。

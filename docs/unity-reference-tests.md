@@ -375,16 +375,10 @@ FBX RendererとGameObjectの削除、通常GameObjectの追加、別配置への
 
 再採取で残差を調べるときは、旧期待値を上書きせず、新しい採取先で同じPrefabを2回取得する。
 元入力・依存ハッシュ・Unity版と、旧採取値に対するバイト一致を確認してからResoPonと比較する。
-Fyuett・Pilica・Sanatia・12B・Lina・NagiyaはUnity 2022.3.22f1で再採取しても旧期待値と
-バイト一致し、微小な局所Transformの数値差が再現した。採取の揺らぎで消える差ではない。
-当初、残差のある13件・181成分について `originalSource` のGUID/fileIDから元FBXのTransformを
-Unityで直接読み直すと、すべてPrefab採取値と一致した。差はPrefab合成前のFBXインポート時点に
-存在した。追加調査では、元の `PreRotation` の微小角度と `Lcl Scaling` の1付近の値が
-Assimpの行列ではidentityへ省略されることを確認した。Plumの約-0.000162度のPreRotationや
-Kipfelの約1.00001526のスケールも、バイナリFBXから読むと値が残っている。
+局所姿勢の残差は `originalSource` のGUID・fileIDでUnityの元FBX Transformを読み直し、Prefab合成の前後を切り分ける。
+微小な `PreRotation` や1付近の `Lcl Scaling` は、Assimpの行列でidentityへ丸められる場合がある。
 `UnityFbxLocalTransform` はFBXの回転順序・pre/post回転・pivot/offsetを含む局所行列を
 独立に復元し、既存の座標系変換と分解へ渡す。モデル別の補正値や許容差の拡大は使わない。
-修正後、アーカイブの依存が揃った元の不一致12件は既存のUnity期待値と一致した。
 
 AizaraのPAWSはskinのない末端Meshでrotation/scaling pivotを共有し、Unityはpivotを
 オブジェクト原点として残す。skinのcluster接続があるMeshへこの原点補正を適用しない。

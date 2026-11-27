@@ -88,23 +88,10 @@ Proxyはヘッドセット位置、Targetは頭ボーンを駆動するIK接続�
 骨・Descriptor・参照の欠落や曖昧さを一致にせず理由を残す。NagiyaRuriのように設定値とTargetが
 一致してもProxyだけがずれるケースを検出できる。外観・装着後の視点は別途確認する。
 
-Rengyo v1.3は展開済みPrefabの回帰例。Descriptorの設定値は Unity と一致していても、
-これを変換後の座標として使うとHead Proxyが約70.19 mmずれた。保存姿勢から視点を写すと、
-再読込したパッケージでUnity基準との距離は0.001 mm未満になった。
-
-Nagma（2022-05-14）の通常版とPhysBone版は、Prefab側にDescriptorと人体骨があり、
-追加FBXも持つ。ResoPon `d0d982e` ではFBX variantとしてのモデル配置が視点補正の分岐にも使われ、
-保存したHead Proxyは人体骨で位置合わせしたUnity視点より109.91 mm後方、8.14 mm上方にあった。
-Descriptorの所属先からPrefabの保存姿勢を使うようにすると、両版とも再読込後の視点誤差は0.006 mm未満になった。
-同じ構成の回帰では、元のPrefabをUnity Editorで開き、通常版・PhysBone版の両方でProxyとTargetを個別に比較する。
-
-Legnia 4PではDescriptor設定値と保存Head Proxyの座標がともに `(0, 1.15678, 0.06751)` になる。
-4本の人体骨でUnityの視点を保存姿勢へ写すと、期待位置は `(0, 1.14752, 0.16087)` mで、
-Proxyとの距離は93.82 mmある。Targetと頭骨は一致する。設定値の転記と、装着者から見た
-目の位置の再現は別々に調べる。
+展開済みPrefabや追加FBXを含むVariantでは、Descriptorを所有する配置の基準姿勢を使う。
+設定値とTargetが一致していても、人体骨で位置合わせした後のProxyにずれが残る場合がある。
 
 VRM 0.xの視点を照合する場合は、UniVRMで取り込んだ同一入力の `VRMFirstPerson` から
 `FirstPersonBone.TransformPoint(FirstPersonOffset)` をUnity側の基準位置として採取する。
 その位置を同じ4本の人体骨で保存姿勢に写してHead Proxyとの距離を測る。VRChat用の
-Descriptor比較CLIはこのVRM基準を扱わない。AvatarSample_Cでは、頭骨から上へ60 mmの
-UniVRM設定と、ResoPonが目の位置から求める自動視点の間に50.98 mmの差があった。
+Descriptor比較CLIはこのVRM基準を扱わない。

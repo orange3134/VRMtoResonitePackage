@@ -71,80 +71,6 @@ python -B scripts/compare-converted-structure.py unity.json converted.json --rep
 
 ## 保存済みパッケージから採取する
 
-Unity の新しい v2 採取には `lipSync` が入る。Descriptor の方式、参照 Renderer、宣言した
-shape 配列を記録する。パラメーター方式では独立したプレビュー階層で FX に音素0〜14を入力し、
-Voice=1 で1秒評価したとき、その音素だけで100になる shape を測る。既定状態で反応がなく、
-音素レイヤーの Any State に単一の真偽スイッチがある場合は、その反対値も測定して条件を残す。
-これらは指定条件での割当であり、動作中の音量曲線や表情の全組合せは測定しない。
-
-保存側は `PackageRegressionDump --structure` の `visemeDrivers` に、有効状態、Analyzer の接続先、
-各音素のフィールド参照、その所有 Renderer、ウェイト添字、埋め込みメッシュの shape 名を保存する。
-上記の一括実行または `compare-converted-structure.py` が `comparison.json` の `visemes` に
-一致数・欠落・余分な割当を出す。名前が同じ表情制御用 Slot もあるため、対象 Renderer を
-一意に識別できないときや、旧データに採取項目がないときは未検証になる。
-
-口形を全件照合するときは、次の回帰ケースを区別する。
-
-- GameVketChan は FBX インポーターが省略する `Silence` を含む。復元したチャンネル名と
-  保存後のドライバーの接続先をセットで確認する。
-- アイザラ、Omaneko、Tolass は複数の音素に同じ shape を指定する。期待値は
-  Renderer・音素・shape の組で数える。ユニークな shape 数だけを比較すると欠落を見逃す。
-  保存データでは `field` が音素の直結先、`weightField` が最大値を合成した後のメッシュの接続先。
-  `PrefabSceneSmoke --viseme-package <package> <expectations.json>` はヘッドレスエンジンに
-  パッケージを読み戻し、ドライバー出力に個別・同時入力・ゼロを与えて各 shape の応答を確認する。
-  期待値は Unity 等から得た音素名と shape 名の JSON オブジェクトで指定する。
-- Ricorine は Descriptor の宣言配列が空でも FX を評価すると15音素が得られる。
-  Bel Albino は `MouthMode=2`、`CN_MOUTH_MORPH_CANCEL_ENABLE=true`、`Voice=1` で
-  5母音の独立した応答を確認できる。接続の比較には FX で観測した対応を優先し、残りの音素は
-  Descriptor の指定先 Renderer に存在する宣言名で照合する。Bel Albino の接続期待数は15。
-  レポートの `declaredFallbacks` は宣言から補った数で、FX の測定条件と結果は別に記録する。
-- VRM 0.x は入力の母音プリセットから対象メッシュとモーフ添字を引き、保存先の Renderer・
-  shape 名と比較する。AvatarSample_C は5母音が比較対象になる。
-
-VRMのテストアバターを登録するときは、元の入力と同じSHA-256のVRMを隔離プロジェクトでUniVRMの
-該当世代のインポーターに読み込ませる。VRM 0.xでは、生成Prefabの `VRMBlendShapeProxy` から
-各母音クリップの `RelativePath` と `Index` を取り、対象の `SkinnedMeshRenderer.sharedMesh` で
-shape名を引く。保存側でも実際のメッシュ名・shape名とドライバーの接続先を照合する。
-AvatarSample_C.v0ではUniVRM 0.128.3の顔が57 shape、保存メッシュが55 shapeで、5母音の
-添字が2ずつずれる。5母音の名前・接続先・発話後のリセットは個別に検査できる。
-元のshape列の欠落と、口パクが意図したshapeに届くかを別々に記録する。
-
-FBXのshape名を検証するときは、Unityの選択Rendererと、対応する保存メッシュ（埋め込みMeshX）の
-名前を添字ごとに比較する。同名の表情制御用Slotを件数に含めない。
-
-#### Lyphos 1.10 Ex・Fa の Body
-
-Ex・Faは同じFBXの同じメッシュ（fileID `4300044`）を参照する。Unityで採取した111件の名前は
-すべて元FBXの `BlendShapeChannel` 名と一致した。一方、このBodyをResonite付属のAssimpで
-読み込むと、マテリアル別の3つのメッシュすべてで、111件のattachment名はチャンネルに接続された
-Shape Geometryの名前と一致する。たとえば `mouth.smile1` と `sample.smile1` のGeometry名はどちらも `smile1`。
-
-Resoniteの `ModelImporter.ImportMesh` はattachment名でMeshXにshapeを追加し、同名があれば
-空くまで末尾に `_` を付ける。従来は重複する3種類のGeometry名に対して元のチャンネルを
-選べず、次の8件に短い名前が残った。
-
-| Bodyの添字（0始まり） | Unityと修正後の保存MeshX | 修正前の保存MeshX |
-|---|---|---|
-| 14, 104 | `mouth.smile1`, `sample.smile1` | `smile1`, `smile1_` |
-| 15, 105 | `mouth.smile2`, `sample.smile2` | `smile2`, `smile2_` |
-| 57, 85, 89, 97 | `eye.hide`, `brow.hide`, `tongre.hide`, `nose.hide` | `hide`, `hide_`, `hide__`, `hide___` |
-
-現在は、同一Renderer内でGeometry名が重複する場合、FBXの接続から各チャンネルが専有する
-Shape GeometryのオブジェクトIDを取得する。全チャンネルが一意の名前と1対1の接続を持つ場合、
-解析と変換に使う一時FBXで、該当Geometryに接続先のチャンネル名を付けてからAssimpに渡す。
-共有Geometry、複数フレーム、同名チャンネルなどでこの条件を満たさない場合は従来の別名解決を使う。
-
-Ex・Faとも保存メッシュの名前と添字はUnityと111件すべて一致し、各添字のフレームの頂点変位も
-修正前の保存パッケージと一致した。Faの `vrc.Dummy3` の初期ウェイトは従来からUnityの0%に対して
-保存側が100%で、両手Neutralで選ばれるクリップの先頭キーが1を指定する。
-起動時の表情を含む保存値とPrefabの静止値を比較したときは、この違いをウェイト差として記録する。
-
-チャンネル順の回帰検査では、Unity採取結果の各Rendererの `blendShapes` と、保存パッケージの
-対応するStaticMeshを復号した名前配列およびRendererの `BlendShapeWeights` を同じ添字で照合する。
-名前・順序・要素数は完全一致とし、ウェイトは `abs(Unity値 / 100 - 保存値) > 1e-5` を差とする。
-元のチャンネルが保持されたかは、名前で対応させて全frameのウェイトと全頂点の位置変位を
-修正前後で比較できる。Rendererの対応や参照先のメッシュを確かめられない場合は未検証として残す。
-
 登録全件の変換を `scripts/convert-all-local-avatars.py` で完了した後は、
 その実行の `report.json` と隣接する凍結済み `registry.json` を使って一括採取できる。
 
@@ -224,6 +150,58 @@ python -B scripts/compare-converted-structure.py unity.json parser.json `
 骨参照は `resolved / null / unresolved` を区別し、順序、重複、nullを消さない。
 骨かどうかは名前で推定せず、スキンまたはrigの参照で判断する。
 
+## 口形とブレンドシェイプの照合
+
+Unity の新しい v2 採取には `lipSync` が入る。Descriptor の方式、参照 Renderer、宣言した
+shape 配列を記録する。パラメーター方式では独立したプレビュー階層で FX に音素0〜14を入力し、
+Voice=1 で1秒評価したとき、その音素だけで100になる shape を測る。既定状態で反応がなく、
+音素レイヤーの Any State に単一の真偽スイッチがある場合は、その反対値も測定して条件を残す。
+これらは指定条件での割当であり、動作中の音量曲線や表情の全組合せは測定しない。
+
+保存側は `PackageRegressionDump --structure` の `visemeDrivers` に、有効状態、Analyzer の接続先、
+各音素のフィールド参照、その所有 Renderer、ウェイト添字、埋め込みメッシュの shape 名を保存する。
+上記の一括実行または `compare-converted-structure.py` が `comparison.json` の `visemes` に
+一致数・欠落・余分な割当を出す。名前が同じ表情制御用 Slot もあるため、対象 Renderer を
+一意に識別できないときや、旧データに採取項目がないときは未検証になる。
+
+口形を全件照合するときは、次の回帰ケースを区別する。
+
+- GameVketChan は FBX インポーターが省略する `Silence` を含む。復元したチャンネル名と
+  保存後のドライバーの接続先をセットで確認する。
+- アイザラ、Omaneko、Tolass は複数の音素に同じ shape を指定する。期待値は
+  Renderer・音素・shape の組で数える。ユニークな shape 数だけを比較すると欠落を見逃す。
+  保存データでは `field` が音素の直結先、`weightField` が最大値を合成した後のメッシュの接続先。
+  `PrefabSceneSmoke --viseme-package <package> <expectations.json>` はヘッドレスエンジンに
+  パッケージを読み戻し、ドライバー出力に個別・同時入力・ゼロを与えて各 shape の応答を確認する。
+  期待値は Unity 等から得た音素名と shape 名の JSON オブジェクトで指定する。
+- Ricorine は Descriptor の宣言配列が空でも FX を評価すると15音素が得られる。
+  Bel Albino は `MouthMode=2`、`CN_MOUTH_MORPH_CANCEL_ENABLE=true`、`Voice=1` で
+  5母音の独立した応答を確認できる。接続の比較には FX で観測した対応を優先し、残りの音素は
+  Descriptor の指定先 Renderer に存在する宣言名で照合する。Bel Albino の接続期待数は15。
+  レポートの `declaredFallbacks` は宣言から補った数で、FX の測定条件と結果は別に記録する。
+- VRM 0.x は入力の母音プリセットから対象メッシュとモーフ添字を引き、保存先の Renderer・
+  shape 名と比較する。AvatarSample_C は5母音が比較対象になる。
+
+VRMのテストアバターを登録するときは、元の入力と同じSHA-256のVRMを隔離プロジェクトでUniVRMの
+該当世代のインポーターに読み込ませる。VRM 0.xでは、生成Prefabの `VRMBlendShapeProxy` から
+各母音クリップの `RelativePath` と `Index` を取り、対象の `SkinnedMeshRenderer.sharedMesh` で
+shape名を引く。保存側でも実際のメッシュ名・shape名とドライバーの接続先を照合する。
+AvatarSample_C.v0ではUniVRM 0.128.3の顔が57 shape、保存メッシュが55 shapeで、5母音の
+添字が2ずつずれる。5母音の名前・接続先・発話後のリセットは個別に検査できる。
+元のshape列の欠落と、口パクが意図したshapeに届くかを別々に記録する。
+
+FBXのshape名を検証するときは、Unityの選択Rendererと、対応する保存メッシュ（埋め込みMeshX）の
+名前を添字ごとに比較する。同名の表情制御用Slotを件数に含めない。
+
+Lyphosのように別チャンネルが同じGeometry名を持つケースでは、名前に加えて順序と頂点変位を照合する。
+前処理と別名解決の条件は[VRChatのブレンドシェイプ](vrchat-blendshapes.md)を参照する。
+
+チャンネル順の回帰検査では、Unity採取結果の各Rendererの `blendShapes` と、保存パッケージの
+対応するStaticMeshを復号した名前配列およびRendererの `BlendShapeWeights` を同じ添字で照合する。
+名前・順序・要素数は完全一致とし、ウェイトは `abs(Unity値 / 100 - 保存値) > 1e-5` を差とする。
+元のチャンネルが保持されたかは、名前で対応させて全frameのウェイトと全頂点の位置変位を
+修正前後で比較できる。Rendererの対応や参照先のメッシュを確かめられない場合は未検証として残す。
+
 ## 比較結果から修正する手順
 
 1. `parserParity` が不一致なら、先にUnityと変換前の `parser-comparison.json` を確認する。
@@ -274,25 +252,11 @@ RootBone相当、bind pose、頂点ウェイト、物理の挙動、実行時の
 
 ### 子スロットに移ったRendererと三角形の照合
 
-対応スロットでUnityのRendererが1個、保存側が0個なら、子孫にある未対応の同型Rendererと
-そのメッシュ参照を調べる。KipfelのFishToy、FyuettのFY_Tulip、EkuのTakt、
-Aizaraのベルト部品6個、Nagiya RuriのPokk左右では、同名の子孫に実体のあるメッシュがあり、
-階層上の有効状態も一致した。Takt配下には別の描画対象もあるため、子孫の総数だけでは照合できない。
+UnityのRendererが対応Slotに見つからない場合は、子孫の同型Rendererを調べる。親パスとメッシュ参照を使って同名の小物を区別する。
 
-形状を調べるには、入力と同梱のFBX・metaをUnityに読み込み、Rendererが参照するGUIDと
-メッシュのlocal fileIDから頂点と三角形を取得する。保存側は該当Rendererのメッシュ参照を
-パッケージ内のMeshXまでたどる。軸の順列・符号、一様スケール、平行移動をそろえて、
-使用頂点の位置を一対一に対応付ける。上記11件はメッシュの最長軸寸法の `1e-5` 以内で
-全使用位置が対応し、三角形数も一致した。面は頂点順を無視した位置3点の組を重複込みで比較する。
-この方法ではワールド配置、面の表裏、UV・法線の継ぎ目、マテリアルは別途検証が必要になる。
-
-面分割の修正前は、11件中9件で三角形の組み合わせが異なった。四角形の対角線が異なるときは、4点のうち
-面積最大の三角形を取り、残る1点からその平面までの距離を測る。最長軸寸法の `1e-5` を
-超えた四角形はFY_Tulipで1,585個、FishToyで96個、Aizaraのmag_beltで277個、
-mag_pouchで82個、mag_A (1)で14個あった。これらは頂点位置が同じでも面の形状が変わる。
-一方、Taktで異なる44三角形のうち4枚は平面とみなせる四角形2個の対角線違いで、
-残り40枚は外周と頂点が一致する平面領域3個（14枚・12枚・14枚）の内側の分割が異なる。
-Pokk左右では三角形の組み合わせも一致した。
+UnityではFBX・metaを読み込み、RendererのGUIDとlocal fileIDからメッシュを取得する。保存側はRendererの参照から埋め込みMeshXを引く。
+軸の順列・符号、一様スケール、平行移動を揃え、使用頂点の位置と、面を構成する3点の組を重複込みで比較する。
+四角形の対角線が異なる場合は、面積最大の三角形から残りの点までの距離を測る。非平面なら対角線の変更で表面が変わる。
 
 全Rendererを調べるときは、Unityの各Rendererを1行として、同じメッシュを参照する複数の
 インスタンスも個別に残す。Aizaraのナイフのように、同名部品の前にFBXのRootNodeと
@@ -302,12 +266,8 @@ Unityが採取した `editorOnlyTransforms` 配下、または参照がnullのRe
 存在しない場合は、除外理由を記録する。メッシュに頂点または描画インデックスがないと
 Unityが確認した場合も同様に扱う。非アクティブなだけで除外すると、
 衣装を後から有効にするアバターの欠落を見落とす。
-Yuzukiの2個のmerge用Rendererはメッシュ参照がnull、LilLeoの有効なBody_Base (naked)は
-EditorOnlyだった。
 
-三角形数が異なる場合は、面積ゼロの三角形を除いた枚数も記録する。たとえばAlconiaの
-gogglesはUnityが3,918枚、保存側が4,120枚で、差の202枚は退化面の枚数差と一致する。
-面積がある三角形の枚数がそろっても、対角線や頂点の組み合わせは個別に照合する。
+三角形数に差があれば、面積ゼロの退化面を除いて再集計する。
 近い頂点が複数ある場合は最近傍の衝突を記録し、許容距離内の候補から一対一対応を
 作れるかを調べる。対応が曖昧な位置をまとめても残る面の差は、その頂点の選び方だけでは説明できない。
 
