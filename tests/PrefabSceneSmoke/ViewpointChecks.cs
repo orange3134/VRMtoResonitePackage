@@ -111,13 +111,21 @@ internal static class ViewpointChecks
         foreach (var source in new[] { ModelSource.Vrm0, ModelSource.Vrm1 })
         {
             vrm.Source = source;
-            Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .0666f, .055f)),
+            Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .068f, .055f)),
                 $"{source} places the headset relative to the eyes even with a recorded viewpoint");
         }
         left.LocalPosition = new float3(-.04f, .06f, .025f);
         right.LocalPosition = new float3(.04f, .06f, .025f);
-        Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .0666f, .055f)),
-            "A wider VRM uses the same offsets in metres");
+        Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .076f, .081f)),
+            "An 8 cm eye distance places the viewpoint 5.6 cm forward and 1.6 cm up");
+        left.LocalPosition = new float3(-.10f, .06f, .025f);
+        right.LocalPosition = new float3(.10f, .06f, .025f);
+        Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .085f, .115f)),
+            "A wide eye distance caps both VRM offsets");
+        left.LocalPosition = new float3(-.01f, .06f, .025f);
+        right.LocalPosition = new float3(.01f, .06f, .025f);
+        Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .065f, .055f)),
+            "A narrow eye distance uses the minimum VRM offsets");
         options.ViewForward = 0f;
         options.ViewUp = -.01f;
         Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .05f, .025f)),
@@ -125,8 +133,10 @@ internal static class ViewpointChecks
         options.ViewForward = null;
         options.ViewUp = null;
         rig[BodyNode.RightEye] = null;
-        vrm.FirstPersonOffset = null;
         head.LocalScale = new float3(2f, 2f, 2f);
+        Near(Compute(), head.GlobalPosition + new float3(0, -.04f, .16f),
+            "A missing eye uses the VRM head offset with the legacy height and forward adjustments");
+        vrm.FirstPersonOffset = null;
         Near(Compute(), head.GlobalPosition + new float3(0, .14f, .12f),
             "A missing eye and missing source offset use the scaled head defaults");
         fixture.Destroy();

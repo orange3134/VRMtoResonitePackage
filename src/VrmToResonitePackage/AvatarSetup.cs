@@ -335,10 +335,6 @@ internal static class AvatarSetup
         if (leftEye != null && rightEye != null)
         {
             float3 eyeMid = (leftEye.GlobalPosition + rightEye.GlobalPosition) * 0.5f;
-            if (vrm?.Source is ModelSource.Vrm0 or ModelSource.Vrm1)
-            {
-                return eyeMid + forward * (options.ViewForward ?? .03f) + up * (options.ViewUp ?? .0066f);
-            }
             float eyeDistance = MathX.Distance(leftEye.GlobalPosition, rightEye.GlobalPosition);
             float forwardOffset = options.ViewForward ?? MathX.Clamp(eyeDistance * 0.7f, 0.03f, 0.09f);
             float upOffset = options.ViewUp ?? MathX.Clamp(eyeDistance * 0.2f, 0.005f, 0.025f);
@@ -347,7 +343,9 @@ internal static class AvatarSetup
 
         Slot head = rig[BodyNode.Head];
         float scale = MathX.Abs(head.GlobalScale.y);
-        float3 basePosition = head.GlobalPosition + up * 0.06f * scale;
+        float3 basePosition = vrm?.FirstPersonOffset is {} offset
+            ? head.GlobalPosition + up * offset.Y * scale + forward * MathX.Abs(offset.Z) * scale
+            : head.GlobalPosition + up * 0.06f * scale;
         return basePosition
                + forward * (options.ViewForward ?? 0.06f * scale)
                + up * (options.ViewUp ?? 0.01f * scale);
