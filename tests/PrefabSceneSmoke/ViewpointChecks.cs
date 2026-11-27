@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Collections.ObjectModel;
 using Elements.Core;
 using FrooxEngine;
 using FrooxEngine.CommonAvatar;
@@ -105,40 +106,38 @@ internal static class ViewpointChecks
         rig[BodyNode.RightEye] = right;
         left.LocalPosition = new float3(-.02f, .06f, .025f);
         right.LocalPosition = new float3(.02f, .06f, .025f);
-        var options = new AvatarSetupOptions();
         var vrm = new VrmModel { FirstPersonOffset = new(.04f, -.03f, -.02f) };
-        float3 Compute() => AvatarSetup.ComputeEyePosition(rig, vrm, float3.Up, float3.Forward, options);
+        float3 Compute(CliOptions offsets = null) => AvatarSetup.ComputeEyePosition(rig, vrm, float3.Up, float3.Forward,
+            new AvatarSetupOptions { ViewForward = offsets?.ViewForward, ViewUp = offsets?.ViewUp });
         foreach (var source in new[] { ModelSource.Vrm0, ModelSource.Vrm1 })
         {
             vrm.Source = source;
-            Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .068f, .055f)),
+            Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .0666f, .055f)),
                 $"{source} places the headset relative to the eyes even with a recorded viewpoint");
         }
         left.LocalPosition = new float3(-.04f, .06f, .025f);
         right.LocalPosition = new float3(.04f, .06f, .025f);
-        Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .076f, .081f)),
-            "An 8 cm eye distance places the viewpoint 5.6 cm forward and 1.6 cm up");
-        left.LocalPosition = new float3(-.10f, .06f, .025f);
-        right.LocalPosition = new float3(.10f, .06f, .025f);
-        Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .085f, .115f)),
-            "A wide eye distance caps both VRM offsets");
-        left.LocalPosition = new float3(-.01f, .06f, .025f);
-        right.LocalPosition = new float3(.01f, .06f, .025f);
-        Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .065f, .055f)),
-            "A narrow eye distance uses the minimum VRM offsets");
-        options.ViewForward = 0f;
-        options.ViewUp = -.01f;
-        Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .05f, .025f)),
-            "Explicit zero and negative offsets replace the VRM defaults at the eye midpoint");
-        options.ViewForward = null;
-        options.ViewUp = null;
+        Near(Compute(), fixture.LocalPointToGlobal(new float3(0, .0666f, .055f)),
+            "A wider VRM uses the same offsets in metres");
+        var forwardOnly = CliOptions.Parse(new[] { "--view-forward", "0" });
+        var gui = new GuiSettings { ViewUp = -.01f };
+        var arguments = new Collection<string>();
+        typeof(GuiApp).Assembly.GetType("VrmToResonitePackage.MainWindow")!
+            .GetMethod("AddCliArguments", BindingFlags.NonPublic | BindingFlags.Static)!
+            .Invoke(null, new object[] { arguments, gui.ToCliOptions(Array.Empty<string>()), "Resonite" });
+        var upOnly = CliOptions.Parse(arguments.ToArray());
+        Near(Compute(forwardOnly), fixture.LocalPointToGlobal(new float3(0, .0666f, .025f)),
+            "A CLI forward override keeps the default eye height");
+        Near(Compute(upOnly), fixture.LocalPointToGlobal(new float3(0, .05f, .055f)),
+            "A GUI height override keeps the default eye depth");
         rig[BodyNode.RightEye] = null;
-        head.LocalScale = new float3(2f, 2f, 2f);
-        Near(Compute(), head.GlobalPosition + new float3(0, -.04f, .16f),
-            "A missing eye uses the VRM head offset with the legacy height and forward adjustments");
-        vrm.FirstPersonOffset = null;
+        head.LocalScale = new float3(3f, 2f, 4f);
         Near(Compute(), head.GlobalPosition + new float3(0, .14f, .12f),
-            "A missing eye and missing source offset use the scaled head defaults");
+            "A missing eye uses the fixed defaults scaled by Head Y even with a recorded VRM offset");
+        Near(Compute(forwardOnly), head.GlobalPosition + new float3(0, .14f, 0),
+            "A forward override keeps the entire scaled head height");
+        Near(Compute(upOnly), head.GlobalPosition + new float3(0, .11f, .12f),
+            "A height override in metres starts from the scaled 6 cm head base");
         fixture.Destroy();
     }
 

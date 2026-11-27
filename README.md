@@ -14,7 +14,7 @@ VRMアバターを **.resonitepackage** に変換するWindows用ツールです
   - **ヒューマノイドリグ**: VRMのhumanoidボーンマップから正確にBipedRigを構築（名前推測に頼らない）
   - **視線・まばたき**: VRMのexpression（blink/blinkLeft/blinkRight）から目のセットアップ
     EyeRotationDriverのMaxSwingを自動調整
-  - **視点位置**: VRMは左右の目ボーンの中点から、眼間距離に応じて前方・上方へ配置。両目が揃わない場合は頭ボーンを使う。VRChatはDescriptorの視点を優先
+  - **視点位置**: VRMは左右の目ボーンの中点を基準に前方・上方へ配置。両目が揃わない場合は頭ボーンを使う。VRChatはDescriptorの視点を優先
   - **アバター保護**: SimpleAvatarProtectionを既定で付与。「アバター保護を付けない」は保存されないため、保護を外す場合はEXE起動ごとに選択してください。
   - **AvatarRenderSettings**: 前髪が一人称視点を遮る問題を回避
   - **手の向き**: ボーン位置から決定論的に計算（+Z=中指方向、+Y=手の甲）
