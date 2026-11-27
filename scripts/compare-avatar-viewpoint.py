@@ -28,36 +28,8 @@ def vector(value):
     return result
 
 
-def add(a, b): return [x + y for x, y in zip(a, b)]
-def sub(a, b): return [x - y for x, y in zip(a, b)]
-def mul(a, s): return [x * s for x in a]
-def dot(a, b): return sum(x * y for x, y in zip(a, b))
-def cross(a, b): return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]
-
-
-def unit(a):
-    length = math.sqrt(dot(a, a))
-    if length < 1e-8: raise ValueError('Degenerate humanoid reference frame')
-    return mul(a, 1 / length)
-
-
-def frame(anchors):
-    x = unit(sub(anchors['RightUpperArm'], anchors['LeftUpperArm']))
-    up = sub(anchors['Head'], anchors['Hips'])
-    y = unit(sub(up, mul(x, dot(up, x))))
-    return x, y, unit(cross(x, y))
-
-
-def world(slots, sid, point=None):
-    point = [0, 0, 0] if point is None else point
-    while sid:
-        slot = slots[sid]
-        p = [v * s for v, s in zip(point, slot['localScale'])]
-        q = slot['localRotation']
-        t = mul(cross(q[:3], p), 2)
-        point = add(add(add(p, mul(t, q[3])), cross(q[:3], t)), slot['localPosition'])
-        sid = slot['parent']
-    return point
+add, sub, dot = structure.geometry.add, structure.geometry.sub, structure.geometry.dot
+frame, world = structure.geometry.frame, structure.geometry.world
 
 
 def one(values, label):
@@ -154,6 +126,7 @@ def main():
                          args.tolerance, args.anchor_tolerance)
         result.update(format='resopon.avatar-viewpoint-comparison', schemaVersion=1, inputs=inputs,
                       comparisonSourceSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                      geometrySourceSha256=structure.sha256(structure.geometry.__file__),
                       scope='saved initial pose; runtime tracking, viewpoint overrides and package provenance require separate verification')
         with args.report.open('x', encoding='utf-8') as f: json.dump(result, f, ensure_ascii=False, indent=2)
         print(json.dumps({'status': result['status'], 'checks': result['checks'], 'report': str(args.report)}, ensure_ascii=False))

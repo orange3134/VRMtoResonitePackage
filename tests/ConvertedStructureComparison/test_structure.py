@@ -3,6 +3,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import math
 import sys
 from pathlib import Path
 import tempfile
@@ -65,22 +66,69 @@ def remap_slots(converted, changes):
     converted['slots'].sort(key=lambda slot: tuple(int(i) for i in slot['id'].split('/')[1:]))
 
 
+def sphere_fixture():
+    unity, converted = fixtures()
+    renderer, = unity['sections']['renderers']
+    renderer.update(type='UnityEngine.MeshRenderer', id='r/1/c:UnityEngine.MeshRenderer:0',
+                    mesh={'guid': '0000000000000000e000000000000000', 'fileId': '10207'}, bones=[], rootBone='')
+    del unity['skinSizes'], unity['skinBindings']
+    component, = converted['slots'][-1]['components']
+    component.update(type='[FrooxEngine]FrooxEngine.MeshRenderer', bones=None, blendShapeWeights=None, slotReferences=[])
+    return unity, converted, component
+
+
 class ComparisonTests(unittest.TestCase):
     def test_builtin_sphere_requires_the_referenced_provider_and_radius(self):
-        unity, converted = fixtures()
-        skin, = unity['sections']['renderers']
-        skin.update(type='UnityEngine.MeshRenderer', id='r/1/c:UnityEngine.MeshRenderer:0',
-                    mesh={'guid': '0000000000000000e000000000000000', 'fileId': '10207'}, bones=[], rootBone='')
-        del unity['skinSizes'], unity['skinBindings']
-        component, = converted['slots'][-1]['components']
-        component.update(type='[FrooxEngine]FrooxEngine.MeshRenderer', bones=None, blendShapeWeights=None)
+        unity, converted, component = sphere_fixture()
         def check():
-            return comparison.compare(unity, unity, converted, {'r/1': 'r/1'})
+            return comparison.compare(unity, unity, converted, {'r': 'r'})
         self.assertIn('builtin-sphere', [item['kind'] for item in check()['unverified']])
         with mock.patch.dict(component, sphereRadius=.5):
-            self.assertEqual([], check()['differences'])
+            self.assertEqual('matched-covered-fields', check()['status'])
+            row, = comparison.compare(unity, unity, converted)['renderers']
+            self.assertEqual('unverified', row['sphere']['status'])
         with mock.patch.dict(component, sphereRadius=None):
             self.assertEqual('builtin-sphere', check()['differences'][0]['kind'])
+
+    def test_sphere_center_and_dimensions_include_wrappers_and_parent_units(self):
+        unity, converted, component = sphere_fixture()
+        component['sphereRadius'] = .5
+        root, bone, mesh = converted['slots']
+        # Same avatar pose after a whole-package rotation/translation. The FBX
+        # wrapper uses centimeters and the authored sphere has unequal axis scales.
+        root.update(localPosition=[5, -2, 8], localRotation=[0, 1, 0, 0])
+        wrapper = dict(bone, id='r/1', siblingIndex=1, serializedId='wrapper', path=['Avatar', 'FBX'],
+                       localScale=[.01] * 3, localRotation=[0, 0, 1, 0])
+        mesh.update(id='r/1/0', siblingIndex=0, parent='r/1', path=['Avatar', 'FBX', 'Mesh'],
+                    localPosition=[-100, 200, 300], localScale=[200, 300, 400])
+        converted['slots'].insert(2, wrapper)
+        component['id'] = 'r/1/0:0'
+        source = unity['sections']['transforms'][-1]
+        source.update(localPosition=dict(x=1, y=-2, z=3), localScale=dict(x=2, y=3, z=4))
+        def check():
+            return comparison.compare(unity, unity, converted, {'r': 'r'})['renderers'][0]['sphere']
+        self.assertEqual('matched', check()['status'])
+        with mock.patch.dict(mesh, localScale=[2, 3, 4]):
+            self.assertEqual('different', check()['status'])
+            self.assertLess(check()['centerDistanceMeters'], .001)
+            without_anchors = comparison.compare(unity, unity, converted)['renderers'][0]['sphere']
+            self.assertEqual('different', without_anchors['status'])
+            self.assertAlmostEqual(.01, without_anchors['savedRmsRadiusMeters'] / without_anchors['unityRmsRadiusMeters'])
+        with mock.patch.dict(mesh, localPosition=[100, 200, 300]):
+            self.assertEqual('different', check()['status'])
+            self.assertAlmostEqual(2, check()['centerDistanceMeters'])
+
+    def test_sphere_diagonal_radii_distinguish_tilted_ellipsoids(self):
+        unity, converted, component = sphere_fixture()
+        component['sphereRadius'] = .5
+        source = unity['sections']['transforms'][-1]
+        mesh = converted['slots'][-1]
+        sine, cosine = math.sin(math.pi / 8), math.cos(math.pi / 8)
+        source.update(localScale=dict(x=2, y=1, z=1), localRotation=dict(x=0, y=0, z=sine, w=cosine))
+        mesh.update(localScale=[2, 1, 1], localRotation=[0, 0, -sine, cosine])
+        sphere = comparison.compare(unity, unity, converted, {'r': 'r'})['renderers'][0]['sphere']
+        self.assertEqual(sphere['unity']['radiiMeters'][:3], sphere['saved']['radiiMeters'][:3])
+        self.assertEqual('different', sphere['status'])
 
     def test_merged_collider_at_origin_does_not_inherit_other_colliders_activation(self):
         unity, converted = fixtures()
@@ -118,15 +166,42 @@ class ComparisonTests(unittest.TestCase):
         def check():
             return comparison.compare(unity, unity, converted, {'r/1': 'r/1'})
         self.assertEqual('renderer-count', check()['differences'][0]['kind'])
-        with mock.patch.dict(unity, editorOnlyTransforms=['r']):
-            self.assertEqual('excluded', check()['renderers'][0]['status'])
-            self.assertEqual([], check()['differences'])
         with mock.patch.dict(renderer, mesh={'guid': '', 'fileId': '0'}):
             self.assertEqual('excluded', check()['renderers'][0]['status'])
         with mock.patch.dict(unity, emptyMeshRenderers=[renderer['id']]):
             self.assertEqual('excluded', check()['renderers'][0]['status'])
         renderer['activeInHierarchy'] = False
         self.assertEqual('renderer-count', check()['differences'][0]['kind'])
+
+    def test_editor_only_subtree_is_required_to_be_absent(self):
+        unity, converted = fixtures()
+        unity['editorOnlyTransforms'] = ['r/1']
+        transforms = unity['sections']['transforms']
+        transforms.append(dict(transforms[1], id='r/1/0', parent='r/1', path='Mesh/Child', name='Child'))
+        transforms.append(dict(transforms[1], id='r/2', siblingIndex=2, path='Live', name='Live'))
+        def check():
+            return comparison.compare(unity, unity, converted, {'r': 'r'})
+        result = check()
+        self.assertEqual({'editor-only-transform', 'editor-only-renderer'}, {d['kind'] for d in result['differences']})
+        self.assertEqual('unexpected', result['renderers'][0]['status'])
+        converted['slots'][-1].update(activeSelf=False, activeInHierarchy=False)
+        self.assertIn('editor-only-renderer', [d['kind'] for d in check()['differences']])
+        converted['slots'][-1] = dict(converted['slots'][1], id='r/1', siblingIndex=1,
+                                      serializedId='live', path=['Avatar', 'Live'])
+        result = check()
+        self.assertEqual('matched-covered-fields', result['status'])
+        self.assertEqual('excluded', result['renderers'][0]['status'])
+        self.assertEqual(['r/0', 'r/2'], result['siblingOrders'][0]['expected'])
+        self.assertEqual(0, result['summary']['unmappedSources'])
+
+    def test_editor_only_namesake_cannot_claim_an_explicitly_mapped_live_object(self):
+        unity, converted = fixtures(('Mesh', 'Mesh'))
+        unity['editorOnlyTransforms'] = ['r/0']
+        converted['slots'].pop(1)
+        converted['slots'][-1]['components'][0]['bones'][0].update(target=None, status='null', serializedId=None)
+        converted['slots'][-1]['components'][0]['slotReferences'].pop(0)
+        report = comparison.compare(unity, unity, converted, {'r': 'r', 'r/1': 'r/1'})
+        self.assertFalse(any(d['kind'].startswith('editor-only') for d in report['differences'] + report['unverified']))
 
     def test_neutral_only_replaces_the_named_renderer_channel(self):
         unity, converted = fixtures()
@@ -155,6 +230,20 @@ class ComparisonTests(unittest.TestCase):
         actual.pop()
         bindings[0]['shape'] = 'Closed'
         self.assertEqual('different', result())
+
+    def test_partial_viseme_sampling_still_rejects_a_known_silence_to_vowel_drive(self):
+        unity, converted = fixtures()
+        renderer = unity['sections']['renderers'][0]['id']
+        unity['lipSync'] = [dict(mode=4, bindings=[dict(phoneme=p, renderer=renderer, shape='Open') for p in (0, 10)])]
+        vowel = dict(phoneme='aa', renderer='r/1:0', index=0, shape='Open')
+        actual = [vowel, dict(vowel, phoneme='PP', shape='Unknown')]
+        converted['visemeDrivers'] = [dict(component='r/1:1', enabled=True, analyzer='r/0:2', bindings=actual)]
+        def check():
+            return comparison.compare(unity, unity, converted)['visemes']
+        self.assertEqual('unverified', check()['status'])
+        actual.append(dict(vowel, phoneme='Silence'))
+        self.assertEqual('different', check()['status'])
+        self.assertTrue(check()['incompleteSampling'])
 
     def test_unique_imported_child_renderer_checks_activation_and_identity(self):
         unity, converted = fixtures()

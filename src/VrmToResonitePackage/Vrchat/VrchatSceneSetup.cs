@@ -166,7 +166,8 @@ internal static class VrchatSceneSetup
                 ImportScale(copy.ParentFbxGuid);
             slot.LocalRotation = new floatQ(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W);
             slot.LocalScale = new float3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z);
-            if (!copy.IsSkinned && !copy.RendererRemoved && !copy.HasGeneratedTemplate)
+            // The built-in SphereMesh uses meters, including when its parent FBX uses centimeters.
+            if (!copy.IsSkinned && !copy.RendererRemoved && copy.GeneratedMesh == null)
             {
                 float correction = ImportScale(copy.FbxGuid) / ImportScale(copy.ParentFbxGuid);
                 if (!float.IsFinite(correction) || correction == 0)

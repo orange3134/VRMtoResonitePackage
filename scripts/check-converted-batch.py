@@ -132,7 +132,8 @@ def main():
               'batchPath': str(batch_path), 'batchSha256': comparison.sha256(batch_path),
               'conversionGitHead': batch['gitHead'], 'converterSha256': batch['converterSha256'],
               'dumpSha256': comparison.sha256(dump),
-              'comparisonSourceSha256': comparison.sha256(Path(comparison.__file__)), 'cases': [],
+              'comparisonSourceSha256': comparison.sha256(Path(comparison.__file__)),
+              'geometrySourceSha256': comparison.sha256(comparison.geometry.__file__), 'cases': [],
               'limitations': ['Name/path candidates are not provenance; unmapped slots can be required support.',
                               'Skin bone pruning, merged hierarchies and unsupported fields need review.',
                               'World pose, bind poses, visuals and runtime behavior need separate checks.']}

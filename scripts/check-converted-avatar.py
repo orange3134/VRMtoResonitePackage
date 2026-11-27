@@ -148,6 +148,7 @@ def main(argv=None):
         report['binaries'] = {name: {'path': str(path), 'sha256': comparison.sha256(path)} for name, path in binaries.items()}
         report['sourceFiles'] = {str(p.relative_to(repo)): comparison.sha256(p) for p in
                                  [Path(__file__), Path(__file__).with_name('compare-converted-structure.py'),
+                                  Path(__file__).with_name('avatar_geometry.py'),
                                   *sorted((repo / 'tests/PackageRegressionDump').glob('*.cs'))]}
         actual = output / 'parser.json'
         try:

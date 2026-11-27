@@ -109,8 +109,41 @@ internal static class NativeMeshSceneChecks
         Console.WriteLine($"PASS: {expected.Count(c => c.GeneratedMesh != null)} generated meshes and {expected.Length} skin poses reloaded and compared with source assets");
     }
 
+    private static async Task CheckBuiltInSphere(Slot parent, float parentUnit)
+    {
+        var root = parent.AddSlot("Sphere unit regression");
+        var model = root.AddSlot("Model");
+        model.LocalScale = float3.One * parentUnit;
+        var avatar = new VrchatAvatar { FbxGuid = "model", FbxImportScale = parentUnit };
+        var sphereCopy = new VrchatMeshCopy("0000000000000000e000000000000000", "Sphere", "Effect", true, true)
+        {
+            IsSkinned = false, BuiltInSphere = true, ReplaceSourceRenderer = true,
+            SourcePath = "10207", ParentFbxGuid = avatar.FbxGuid,
+            Transform = new() { Key = "prefab:4", GameObjectKey = "prefab:1", LocalPosition = new(0, 1, 0) }
+        };
+        avatar.MeshCopies.Add(sphereCopy);
+        var sources = new Dictionary<Slot, string>();
+        var paths = new Dictionary<Slot, string>();
+        await VrchatGeneratedMeshes.AddTemplates(root, root.AddSlot("Assets"), avatar, sources, paths);
+        var copies = VrchatSceneSetup.InstantiateMeshCopies(avatar, sources, _ => model, paths);
+        var sphere = copies.AuthoredObjects[sphereCopy.Transform.GameObjectKey];
+        var child = sphere.AddSlot("Attachment");
+        child.LocalPosition = new float3(0, 0, 1 / parentUnit);
+        copies.Bind();
+        var provider = (SphereMesh)sphere.GetComponent<MeshRenderer>().Mesh.Target;
+        var radii = sphere.GlobalScale * provider.Radius.Value;
+        if ((sphere.GlobalPosition - new float3(0, 1, 0)).Magnitude > 1e-5f ||
+            (radii - float3.One * .5f).Magnitude > 1e-5f ||
+            (child.GlobalPosition - new float3(0, 1, 1)).Magnitude > 1e-5f)
+            throw new Exception($"Sphere under FBX unit {parentUnit}: center={sphere.GlobalPosition}, radii={radii}, attachment={child.GlobalPosition}");
+        Console.WriteLine($"PASS: built-in sphere under FBX unit {parentUnit}, center={sphere.GlobalPosition}, radii={radii}");
+        root.Destroy();
+    }
+
     public static async Task Run(Slot parent, string temp)
     {
+        foreach (float parentUnit in new[] { 1f, .01f })
+            await CheckBuiltInSphere(parent, parentUnit);
         var root = parent.AddSlot("Generated mesh regression");
         var assets = root.AddSlot("Assets");
         Slot boneA = root.AddSlot("SameName"), boneB = root.AddSlot("SameName");

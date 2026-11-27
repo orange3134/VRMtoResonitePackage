@@ -24,6 +24,7 @@ def module(name):
 
 unity_compare = module('compare-unity-reference')
 snapshot_check = module('check-package-snapshot')
+geometry = module('avatar_geometry')
 
 
 def sha256(path):
@@ -102,7 +103,7 @@ def validate_structure(data):
     return slots
 
 
-def compare_visemes(unity, converted, slots, transforms, paired):
+def compare_visemes(unity, converted, slots, transforms, paired, excluded):
     descriptors = unity.get('lipSync')
     drivers = converted.get('visemeDrivers')
     if descriptors is None or drivers is None:
@@ -138,6 +139,8 @@ def compare_visemes(unity, converted, slots, transforms, paired):
     for b in source_bindings:
         skin = skins[b['renderer']]
         owner = owners[skin['transform']]
+        if skin['transform'] in excluded:
+            continue
         # Generated expression controls may share a name with the mesh. Resolve only if
         # exactly one candidate has a skin, independently of whether it has a viseme driver.
         candidates = [owner['target']] if owner['target'] else owner['candidates']
@@ -145,7 +148,7 @@ def compare_visemes(unity, converted, slots, transforms, paired):
                    if c['type'] == '[FrooxEngine]FrooxEngine.SkinnedMeshRenderer']
         if skin['id'] in paired:
             matches = [paired[skin['id']]]
-        if len(matches) != 1 or sum(s['path'] == skin['path'] for s in skins.values()) != 1:
+        if len(matches) != 1 or sum(s['path'] == skin['path'] and s['transform'] not in excluded for s in skins.values()) != 1:
             unknown.append(b)
         else:
             require(type(b['phoneme']) is int and 0 <= b['phoneme'] < len(phonemes), 'invalid Unity phoneme')
@@ -161,9 +164,10 @@ def compare_visemes(unity, converted, slots, transforms, paired):
     invalid = [d['component'] for d in drivers if not d['enabled'] or not d['analyzer']]
     missing, extra = bindings(expected - actual), bindings(actual - expected)
     incomplete = descriptor['mode'] == 4 and {b['phoneme'] for b in source_bindings} != set(range(len(phonemes)))
-    status = ('different' if missing or invalid or (extra and not unknown and not incomplete) else
+    forbidden_silence = actual.keys() & shared_silence.keys()
+    status = ('different' if missing or invalid or forbidden_silence or (extra and not unknown and not incomplete) else
               'unverified' if unknown or incomplete else 'matched')
-    return dict(status=status, mode=descriptor['mode'], expected=len(source_bindings) - sum(shared_silence.values()),
+    return dict(status=status, mode=descriptor['mode'], expected=expected.total() + len(unknown),
                 sharedSilence=bindings(collections.Counter(shared_silence)),
                 matched=sum((expected & actual).values()), missing=missing, extra=extra, invalidDrivers=invalid,
                 unmapped=unknown, incompleteSampling=descriptor['mode'] == 4 and len(sampled) < len(phonemes),
@@ -199,6 +203,73 @@ def compare_skin_size(source, saved):
     if not max(expected) or not max(actual):
         return dict(result, status='unverified', reason='degenerate extent')
     return dict(result, status='no-scale-outlier')
+
+
+AXES = ((1, 0, 0), (0, 1, 0), (0, 0, 1))
+
+
+def sphere_frames(sources, slots, reverse):
+    bones = ('Hips', 'Head', 'LeftUpperArm', 'RightUpperArm')
+    rigs = [c['rigBones'] for s in slots.values() for c in s['components'] if c.get('rigBones')]
+    if len(rigs) == 1 and all(rigs[0].get(b, {}).get('target') in reverse for b in bones):
+        targets = {b: rigs[0][b]['target'] for b in bones}
+        frames, landmarks = [], []
+        for nodes, ids in ((sources, {b: reverse[t] for b, t in targets.items()}), (slots, targets)):
+            anchors = {b: geometry.world(nodes, sid) for b, sid in ids.items()}
+            basis = geometry.frame(anchors)
+            frames.append((anchors['Hips'], basis))
+            landmarks.append([[geometry.dot(geometry.sub(anchors[b], anchors['Hips']), axis)
+                               for axis in basis] for b in bones])
+        if any(math.dist(a, b) > .003 for a, b in zip(*landmarks)):
+            raise ValueError('Humanoid anchors disagree by more than 3 mm')
+        return 'humanoid bones', frames
+    # Non-humanoid fixtures can supply a reviewed mapping for the authored root.
+    root = next((target for target, source in reverse.items() if source == 'r'), None)
+    if root is None:
+        raise ValueError('Missing mapped humanoid anchors or an explicitly mapped avatar root')
+    return 'mapped avatar root', [(geometry.world(nodes, sid),
+            [geometry.world(nodes, sid, axis, rotation_only=True) for axis in AXES])
+            for nodes, sid in ((sources, 'r'), (slots, root))]
+
+
+def compare_sphere(sources, source_id, slots, slot_id, component, reverse):
+    radius = component.get('sphereRadius')
+    result = dict(expectedRadius=.5, actualRadius=radius)
+    if 'sphereRadius' not in component:
+        return dict(result, status='unverified', reason='sphere provider not captured')
+    if radius is None:
+        return dict(result, status='different', reason='renderer does not reference a SphereMesh')
+    require(type(radius) in (int, float) and math.isfinite(radius) and radius >= 0, 'invalid sphere radius')
+    if abs(radius - .5) > 1e-6:
+        return dict(result, status='different', reason='sphere provider radius differs')
+    try:
+        geometry_data = []
+        for nodes, sid, r in ((sources, source_id, .5), (slots, slot_id, radius)):
+            center = geometry.world(nodes, sid)
+            offsets = [geometry.sub(geometry.world(nodes, sid, geometry.mul(axis, r)), center) for axis in AXES]
+            geometry_data.append((center, offsets))
+    except ValueError as error:
+        return dict(result, status='unverified', reason=str(error))
+    try:
+        method, frames = sphere_frames(sources, slots, reverse)
+    except ValueError as error:
+        # The mean squared radius is invariant under rotation. A difference
+        # proves a size change even when we cannot align the centers.
+        rms = [math.sqrt(sum(geometry.dot(v, v) for v in offsets) / 3) for _, offsets in geometry_data]
+        return dict(result, status='unverified' if math.isclose(*rms, abs_tol=1e-6, rel_tol=1e-4) else 'different',
+                    frameReason=str(error), unityRmsRadiusMeters=rms[0], savedRmsRadiusMeters=rms[1])
+    result['referenceFrame'] = method
+    # The three axes and three face diagonals determine the symmetric shape
+    # matrix of an ellipsoid, including shear from rotated non-uniform parents.
+    directions = (*AXES, *(geometry.unit(v) for v in ((1, 1, 0), (1, 0, 1), (0, 1, 1))))
+    for field, (center, offsets), (origin, basis) in zip(('unity', 'saved'), geometry_data, frames):
+        columns = [[geometry.dot(offset, axis) for axis in basis] for offset in offsets]
+        result[field] = dict(centerMeters=[geometry.dot(geometry.sub(center, origin), axis) for axis in basis],
+                             radiiMeters=[math.hypot(*(geometry.dot(col, d) for col in columns)) for d in directions])
+    a, b = result['unity'], result['saved']
+    result['centerDistanceMeters'] = math.dist(a['centerMeters'], b['centerMeters'])
+    size_matches = all(math.isclose(x, y, abs_tol=1e-6, rel_tol=1e-4) for x, y in zip(a['radiiMeters'], b['radiiMeters']))
+    return dict(result, status='matched' if result['centerDistanceMeters'] <= .001 and size_matches else 'different')
 
 
 def weighted_palette(record):
@@ -295,6 +366,19 @@ def compare(unity, parser, converted, overrides=None):
             source_paths[sid] = source_path(t['parent']) + (t['name'],) if t['parent'] else ()
         return source_paths[sid]
 
+    tagged = set(unity.get('editorOnlyTransforms', []))
+    require(tagged <= sources.keys(), 'unknown EditorOnly transform')
+    source_children = collections.defaultdict(list)
+    for source in sources.values():
+        if source['parent']:
+            source_children[source['parent']].append(source)
+    excluded = tagged.copy()
+    pending = list(tagged)
+    while pending:
+        for child in source_children[pending.pop()]:
+            if child['id'] not in excluded:
+                excluded.add(child['id'])
+                pending.append(child['id'])
     by_path = collections.defaultdict(list)
     for sid in sources:
         by_path[source_path(sid)].append(sid)
@@ -322,7 +406,9 @@ def compare(unity, parser, converted, overrides=None):
         path = source_path(sid)
         candidates = suffixes.get(path, []) if path else []
         explicit = sid in overrides
-        if explicit:
+        if sid in excluded:
+            target, status = None, 'excluded'
+        elif explicit:
             target, status = overrides[sid], 'explicit'
         elif len(candidates) == 1 and len(by_path[path]) == 1:
             target, status = candidates[0], 'unique-path-candidate'
@@ -335,6 +421,7 @@ def compare(unity, parser, converted, overrides=None):
                      'source': source, 'converted': slots[target] if target else None})
     # A reviewed explicit assignment can conflict with a name candidate. Do not silently pick either.
     targets = collections.Counter(mapping.values())
+    targets.update(overrides[sid] for sid in excluded if sid in overrides)
     for row in rows:
         if row['target'] and targets[row['target']] > 1:
             mapping.pop(row['sourceId'])
@@ -342,7 +429,7 @@ def compare(unity, parser, converted, overrides=None):
     # A merged accessory collider can occupy the path of a discarded body collider.
     # A zero local offset is invariant to a change of units or axis conventions.
     # Leave identity unresolved if the saved offset fits the other collider alone.
-    collider_owners = {c['transform'] for c in unity['sections']['colliders']}
+    collider_owners = {c['transform'] for c in unity['sections']['colliders']} - excluded
     def at_parent_origin(v):
         return all(abs(n) <= 1e-6 for n in (v.values() if isinstance(v, dict) else v))
     for row in rows:
@@ -356,6 +443,39 @@ def compare(unity, parser, converted, overrides=None):
             row.update(status='ambiguous', target=None, converted=None, reason='competing collider at the parent origin')
     reverse = {target: source for source, target in mapping.items()}
     differences, unverified = [], []
+    retained_editor_only = {}
+    ambiguous_editor_only = set()
+    for row in rows:
+        if row['status'] != 'excluded':
+            continue
+        sid = row['sourceId']
+        row['reason'] = 'EditorOnly hierarchy'
+        if sid in overrides:
+            candidates = [overrides[sid]]
+        else:
+            # A suffix can also occur under a different, already identified Unity
+            # branch. Only consider slots below the same nearest mapped ancestor.
+            parent = sources[sid]['parent']
+            while parent and parent not in mapping:
+                parent = sources[parent]['parent']
+            candidates = []
+            for target in row['candidates']:
+                ancestor = target
+                while ancestor and ancestor not in reverse:
+                    ancestor = slots[ancestor]['parent']
+                if target not in reverse and ancestor == mapping.get(parent):
+                    candidates.append(target)
+        row['candidates'] = candidates
+        if candidates:
+            detail = dict(kind='editor-only-transform', sourceId=sid, candidates=candidates)
+            if sid in overrides or len(candidates) == 1 and len(by_path[source_path(sid)]) == 1:
+                differences.append(detail)
+                retained_editor_only[sid] = candidates[0]
+                row.update(status='unexpected', target=candidates[0], converted=slots[candidates[0]])
+            else:
+                unverified.append(detail)
+                row['status'] = 'ambiguous'
+                ambiguous_editor_only.add(sid)
     for sid, target in mapping.items():
         source, slot = sources[sid], slots[target]
         for field in ('activeSelf', 'activeInHierarchy'):
@@ -376,11 +496,8 @@ def compare(unity, parser, converted, overrides=None):
     # Helper slots may intervene; their indices are part of the ordering path.
     # Missing children must not turn a partial match into a successful group.
     sibling_orders = []
-    source_children = collections.defaultdict(list)
-    for source in sources.values():
-        if source['parent']:
-            source_children[source['parent']].append(source)
     for parent, children in source_children.items():
+        children = [child for child in children if child['id'] not in excluded]
         if len(children) < 2:
             continue
         expected = [c['id'] for c in sorted(children, key=lambda c: c['siblingIndex'])]
@@ -422,19 +539,12 @@ def compare(unity, parser, converted, overrides=None):
         palettes[record['rendererId']] = record
     supported_renderers = {'UnityEngine.MeshRenderer': '[FrooxEngine]FrooxEngine.MeshRenderer',
                            'UnityEngine.SkinnedMeshRenderer': '[FrooxEngine]FrooxEngine.SkinnedMeshRenderer'}
-    tagged = set(unity.get('editorOnlyTransforms', []))
-    require(tagged <= sources.keys(), 'unknown EditorOnly transform')
     empty_meshes = set(unity.get('emptyMeshRenderers', []))
     require(empty_meshes <= {r['id'] for r in unity['sections']['renderers']}, 'unknown empty mesh renderer')
     exclusions = {}
     for renderer in unity['sections']['renderers']:
-        sid = renderer['transform']
-        while sid and sid not in tagged:
-            sid = sources[sid]['parent']
         mesh = renderer['mesh']
-        if sid:
-            exclusions[renderer['id']] = 'EditorOnly hierarchy'
-        elif not mesh.get('guid') and mesh.get('fileId') == '0':
+        if not mesh.get('guid') and mesh.get('fileId') == '0':
             exclusions[renderer['id']] = 'empty Unity mesh reference'
         elif renderer['id'] in empty_meshes:
             exclusions[renderer['id']] = 'Unity mesh has no geometry'
@@ -446,7 +556,7 @@ def compare(unity, parser, converted, overrides=None):
     for slot in slots.values():
         children[slot['parent']].append(slot)
     renderer_slots = {}
-    for sid, target in mapping.items():
+    for sid, target in (mapping | retained_editor_only).items():
         for kind in supported_renderers.values():
             count = expected_counts[sid, kind]
             owner = slots[target]
@@ -459,14 +569,14 @@ def compare(unity, parser, converted, overrides=None):
                 matches = [s for s in candidates if s['path'][-1] == sources[sid]['name']
                            and s['activeInHierarchy'] == owner['activeInHierarchy']
                            and any(c['type'] == kind for c in s['components'])]
-                competing = any(sources[r['transform']]['parent'] == sid and
+                competing = any(r['transform'] not in excluded and sources[r['transform']]['parent'] == sid and
                                 sources[r['transform']]['name'] == sources[sid]['name'] and
                                 supported_renderers.get(r['type']) == kind for r in unity['sections']['renderers'])
                 if len(matches) == 1 and not competing:
                     owner = matches[0]
             renderer_slots[sid, kind] = owner['id']
             saved_ids = [c['id'] for c in owner['components'] if c['type'] == kind]
-            if not count - optional_counts[sid, kind] <= len(saved_ids) <= count:
+            if sid not in excluded and not count - optional_counts[sid, kind] <= len(saved_ids) <= count:
                 differences.append({'kind': 'renderer-count', 'sourceId': sid, 'target': target, 'type': kind,
                                     'expected': count, 'actual': len(saved_ids), 'convertedComponents': saved_ids})
     for renderer in unity['sections']['renderers']:
@@ -477,6 +587,14 @@ def compare(unity, parser, converted, overrides=None):
         row = {'sourceId': renderer['id'], 'targetSlot': target, 'sourceBones': renderer.get('bones'),
                'sourceRootBone': renderer.get('rootBone'), 'status': 'unverified'}
         renderer_rows.append(row)
+        if renderer['transform'] in excluded:
+            row.update(status='excluded', reason='EditorOnly hierarchy')
+            if candidates:
+                row.update(status='unexpected')
+                differences.append(dict(kind='editor-only-renderer', sourceId=renderer['id'], target=target))
+            elif renderer['transform'] in ambiguous_editor_only:
+                row.update(status='unverified', reason='ambiguous EditorOnly slot')
+            continue
         if renderer['id'] in exclusions and not candidates:
             row.update(status='excluded', reason=exclusions[renderer['id']])
             continue
@@ -500,11 +618,11 @@ def compare(unity, parser, converted, overrides=None):
         row.update(targetComponent=component['id'], convertedBones=component['bones'], status='compared')
         if renderer['type'] == 'UnityEngine.MeshRenderer' and renderer['mesh'] == {
                 'guid': '0000000000000000e000000000000000', 'fileId': '10207'}:
-            if 'sphereRadius' not in component:
-                unverified.append(dict(kind='builtin-sphere', sourceId=renderer['id'], reason='sphere provider not captured'))
-            elif component['sphereRadius'] is None or abs(component['sphereRadius'] - .5) > 1e-6:
-                differences.append(dict(kind='builtin-sphere', sourceId=renderer['id'], expectedRadius=.5,
-                                        actualRadius=component['sphereRadius']))
+            sphere = compare_sphere(sources, renderer['transform'], slots, target, component, reverse)
+            row['sphere'] = sphere
+            if sphere['status'] != 'matched':
+                issues = differences if sphere['status'] == 'different' else unverified
+                issues.append(dict(kind='builtin-sphere', sourceId=renderer['id'], **sphere))
         if component['bones'] is not None:
             shape_names = component.get('blendShapeNames')
             source_shapes = renderer['blendShapes']
@@ -562,9 +680,9 @@ def compare(unity, parser, converted, overrides=None):
         branches.append({'id': extra['id'], 'path': extra['path'], 'unmappedSlotCount': len(descendants),
                          'referencedSlotCount': sum(bool(s['referencedBy']) for s in descendants),
                          'componentCounts': dict(collections.Counter(t for s in descendants for t in s['componentTypes']))})
-    unmatched_sources = [r for r in rows if r['target'] is None]
+    unmatched_sources = [r for r in rows if r['target'] is None and r['sourceId'] not in excluded]
     paired = {r['sourceId']: r['targetComponent'] for r in renderer_rows if 'targetComponent' in r}
-    visemes = compare_visemes(unity, converted, slots, rows, paired)
+    visemes = compare_visemes(unity, converted, slots, rows, paired, excluded)
     if visemes['status'] == 'different':
         differences.append({'kind': 'viseme-bindings', **visemes})
     elif visemes['status'] == 'unverified' and 'lipSync' in unity:
