@@ -16,10 +16,10 @@ internal sealed class AvatarSetupOptions
     public bool FaceTracking { get; set; }
     public bool Protect { get; set; } = true;
 
-    /// <summary>Forward offset in meters. Null = zero for an authored view, otherwise eye-distance scaled.</summary>
+    /// <summary>Forward offset in meters. Null uses the default for the viewpoint source.</summary>
     public float? ViewForward { get; set; }
 
-    /// <summary>Upward offset in meters. Null = zero for an authored view, otherwise eye-distance scaled.</summary>
+    /// <summary>Upward offset in meters. Null uses the default for the viewpoint source.</summary>
     public float? ViewUp { get; set; }
 
     /// <summary>Authored viewpoint in world space. Explicit offsets are added without automatic eye offsets.</summary>
@@ -136,9 +136,7 @@ internal static class AvatarSetup
         try
         {
             Slot headsetRef = refs.AddSlot("Headset");
-            Slot viewBone = vrm.Source == ModelSource.Vrm0 && vrm.FirstPersonBoneIndex >= 0
-                ? ResolveModelNode(vrm, vrm.FirstPersonBoneIndex, slotsByName, nodeSlots) : head;
-            headsetRef.GlobalPosition = ComputeEyePosition(rig, vrm, up, forward, options, viewBone);
+            headsetRef.GlobalPosition = ComputeEyePosition(rig, vrm, up, forward, options);
             UniLog.Log($"Avatar viewpoint: position={headsetRef.GlobalPosition}, head={head.GlobalPosition}, " +
                        $"leftEye={rig.TryGetBone(BodyNode.LeftEye)?.GlobalPosition}, rightEye={rig.TryGetBone(BodyNode.RightEye)?.GlobalPosition}, up={up}, forward={forward}");
             headsetRef.GlobalRotation = floatQ.LookRotation(forward, up);
@@ -322,19 +320,12 @@ internal static class AvatarSetup
     // ---------------------------------------------------------------- alignment
 
     /// <summary>
-    /// Uses a source viewpoint when available, otherwise estimates a headset position from the rig.
+    /// Uses the VRChat descriptor when available and otherwise places the headset from the eyes or head.
     /// </summary>
     internal static float3 ComputeEyePosition(BipedRig rig, VrmModel vrm, float3 up, float3 forward,
-        AvatarSetupOptions options, Slot viewBone)
+        AvatarSetupOptions options)
     {
-        float3? viewpoint = options.RigViewpoint?.Resolve(rig) ?? options.ViewPosition;
-        if (viewpoint == null && viewBone != null && vrm?.FirstPersonOffset is {} local)
-        {
-            float3 point = viewBone.LocalPointToGlobal(vrm.ToImportedBoneOffset(local));
-            if (!point.IsNaN && !point.IsInfinity)
-                viewpoint = point;
-        }
-        if (viewpoint is float3 authoredPosition)
+        if ((options.RigViewpoint?.Resolve(rig) ?? options.ViewPosition) is float3 authoredPosition)
         {
             return authoredPosition + forward * (options.ViewForward ?? 0f) + up * (options.ViewUp ?? 0f);
         }
@@ -344,6 +335,10 @@ internal static class AvatarSetup
         if (leftEye != null && rightEye != null)
         {
             float3 eyeMid = (leftEye.GlobalPosition + rightEye.GlobalPosition) * 0.5f;
+            if (vrm?.Source is ModelSource.Vrm0 or ModelSource.Vrm1)
+            {
+                return eyeMid + forward * (options.ViewForward ?? .03f) + up * (options.ViewUp ?? .0066f);
+            }
             float eyeDistance = MathX.Distance(leftEye.GlobalPosition, rightEye.GlobalPosition);
             float forwardOffset = options.ViewForward ?? MathX.Clamp(eyeDistance * 0.7f, 0.03f, 0.09f);
             float upOffset = options.ViewUp ?? MathX.Clamp(eyeDistance * 0.2f, 0.005f, 0.025f);

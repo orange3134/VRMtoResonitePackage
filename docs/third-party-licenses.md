@@ -108,8 +108,8 @@ VRM 0.x の Unity 側の比較には導入済みの UniVRM / UniGLTF 0.128.3 を
 参照範囲はインポーターの実行と生成Prefabの公開フィールド・Meshの読み取りで、
 検証用パッケージ・モデル・採取データを ResoPon の配布物へ追加しない。
 
-VRMの視点処理はVRM仕様の `VRMC_vrm-1.0/lookAt.md`（3942748）とUniVRMの
-`VRMImporterContext.LoadFirstPerson`（2b5ebcf3d、MIT）で座標の定義を確認し、既存の骨座標変換で実装した。
+VRMに格納された視点の解析では、VRM仕様の `VRMC_vrm-1.0/lookAt.md`（3942748）と
+UniVRMの `VRMImporterContext.LoadFirstPerson`（2b5ebcf3d、MIT）で座標の定義を確認した。
 pixiv VRoid ProjectのAvatarSample_Cはローカルの変換比較に使い、回帰テストには独自の合成骨格を使う。
 
 口パク照合では Unity 2022.3.22f1 と VRChat Avatars SDK 3.10.6 のローカル環境で
