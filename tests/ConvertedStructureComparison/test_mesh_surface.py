@@ -6,6 +6,23 @@ compare = runpy.run_path(str(Path(__file__).resolve().parents[2] / 'scripts/comp
 
 
 class MeshSurfaceTests(unittest.TestCase):
+    def test_unused_and_degenerate_vertices_do_not_set_position_tolerance(self):
+        points = [[0, 0, 0], [1, 0, 0], [0, 1, 0]]
+        mesh = dict(positions=points.copy(), savedPositions=[[x, y, z+1] for x, y, z in points],
+                    unityTriangles=[[0, 1, 2]], savedTriangles=[[0, 1, 2]])
+        original = compare(mesh)
+        self.assertEqual(('unverified', 0), (original['status'], original['matchedTriangles']))
+        mesh['positions'].append([200000, 0, 0])
+        mesh['savedPositions'].append([-200000, 0, 0])
+        self.assertEqual(original, compare(mesh))
+        mesh['unityTriangles'].append([0, 1, 3])
+        self.assertEqual(original, compare(mesh))
+        mesh['savedPositions'][:3] = points
+        self.assertEqual('matched', compare(mesh)['status'])
+        mesh['unityTriangles'] = [[0, 1, 3]]
+        mesh['savedTriangles'] = []
+        self.assertEqual('unverified', compare(mesh)['status'])
+
     def test_close_vertices_need_distinct_triangle_occurrences(self):
         mesh = dict(positions=[[0, 0, 0], [.000009, 0, 0], [0, 1, 0], [0, 0, 1]],
                     savedPositions=[[.000004, 0, 0], [-.000008, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -28,6 +45,21 @@ class MeshSurfaceTests(unittest.TestCase):
         mesh = dict(positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]],
                     unityTriangles=[[0, 1, 2], [0, 1, 2]], savedTriangles=[[0, 1, 2]])
         self.assertEqual(1, compare(mesh)['unmatchedUnity'])
+
+    def test_retriangulated_fold_checks_each_side_and_reports_missing_area(self):
+        points = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [1, 0, 1], [1, 1, 1]]
+        original = [[0, 1, 2], [2, 3, 0], [1, 4, 5], [5, 2, 1]]
+        refaced = [[0, 1, 3], [1, 2, 3], [1, 4, 2], [4, 5, 2]]
+        mesh = dict(positions=points, unityTriangles=original, savedTriangles=refaced)
+        result = compare(mesh)
+        self.assertEqual(('matched', 2), (result['status'], result['equivalentPlanarPatches']))
+        # Split the crease on one side only. This must still join the right faces.
+        points.append([1, .5, 0])
+        refaced[2:3] = [[1, 4, 6], [6, 4, 2]]
+        self.assertEqual('matched', compare(mesh)['status'])
+        refaced.pop()
+        result = compare(mesh)
+        self.assertEqual(('different', 1), (result['status'], result['equivalentPlanarPatches']))
 
     def test_collapsed_triangle_cannot_claim_a_drawn_triangle(self):
         thin = [[0, 0, 0], [1, 0, 0], [.5, .000005, 0]]

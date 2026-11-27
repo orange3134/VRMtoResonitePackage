@@ -93,20 +93,12 @@ internal static class VrchatBlendShapeRepair
     internal static async Task<int> ApplyVrm(Slot root, Vrm.VrmModel model)
     {
         int repaired = 0;
-        var slots = root.GetAllChildren().ToLookup(slot => slot.Name);
-        var nodeNames = model.NodeNames.ToLookup(name => name);
-        foreach (var (meshIndex, nodes) in model.MeshToNodes)
+        var renderers = root.GetComponentsInChildren<SkinnedMeshRenderer>();
+        foreach (var (_, meshIndex, skin) in BlendshapeResolver.FindVrmMeshRenderers(model, renderers))
         {
             if (meshIndex < 0 || meshIndex >= model.MeshTargetNames.Count) continue;
             var expected = model.MeshTargetNames[meshIndex];
-            if (expected.Count == 0) continue;
-            foreach (int node in nodes)
-            {
-                string name = model.GetNodeName(node);
-                if (string.IsNullOrEmpty(name) || nodeNames[name].Count() != 1 || slots[name].Count() != 1) continue;
-                var skins = slots[name].Single().GetComponents<SkinnedMeshRenderer>().ToArray();
-                if (skins.Length == 1 && await RepairMesh(root, skins[0], expected, null, 0, null, true)) repaired++;
-            }
+            if (expected.Count > 0 && await RepairMesh(root, skin, expected, null, 0, null, true)) repaired++;
         }
         return repaired;
     }

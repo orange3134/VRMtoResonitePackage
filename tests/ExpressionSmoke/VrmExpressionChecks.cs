@@ -195,11 +195,12 @@ internal static class VrmExpressionChecks
     private static async Task CheckUnnamedMorphs(Slot parent, string artifacts)
     {
         var vrm = WriteFixture(Path.Combine(artifacts, "unnamed-shapes.vrm"), """
-            {"nodes":[{"name":"Face","mesh":0}],"meshes":[
+            {"nodes":[{"name":"Mesh","mesh":0}],"meshes":[
               {"primitives":[{"targets":[{},{},{}]}]},
               {"primitives":[{"targets":[{},{},{},{}],"extras":{"targetNames":["","morph_0"]}},{"targets":[{},{},{}]}]}
             ],"extensions":{"VRM":{"blendShapeMaster":{"blendShapeGroups":[
-              {"name":"Smile","presetName":"joy","binds":[{"mesh":0,"index":1,"weight":100}]}
+              {"name":"Smile","presetName":"joy","binds":[{"mesh":0,"index":1,"weight":100}]},
+              {"name":"A","presetName":"a","binds":[{"mesh":0,"index":0,"weight":100}]}
             ]}}}}
             """);
         Check(vrm.MeshTargetNames[1].SequenceEqual(new[] { "morph_0", "morph_0_", "morph_2" }),
@@ -215,19 +216,28 @@ internal static class VrmExpressionChecks
             // ModelImporter removed the empty first channel.
             foreach (string name in new[] { "morph_1", "morph_2" })
                 mesh.AddBlendShape(name).AddFrame(1).SetPositionDelta(0, new float3(0, 0, .1f));
-            var provider = root.AttachComponent<StaticMesh>();
+            var provider = root.AddSlot("Assets").AddSlot("Meshes").AddSlot("Mesh").AttachComponent<StaticMesh>();
             provider.URL.Value = await root.Engine.LocalDB.SaveAssetAsync(mesh);
             await default(ToWorld);
-            var face = root.AddSlot("Face").AttachComponent<SkinnedMeshRenderer>();
+            var other = root.AddSlot("Mesh").AttachComponent<SkinnedMeshRenderer>();
+            other.Mesh.Target = provider;
+            var face = root.AddSlot("Mesh").AttachComponent<SkinnedMeshRenderer>();
             face.Mesh.Target = provider;
-            for (int i = 0; i < 7200 && face.MeshBlendshapeCount != 2; i++) await default(NextUpdate);
-            Check(await VrchatBlendShapeRepair.ApplyVrm(root, vrm) == 1, "restore the empty unnamed VRM morph");
+            for (int i = 0; i < 7200 && (face.BlendShapeWeights.Count != 2 || other.BlendShapeWeights.Count != 2); i++)
+                await default(NextUpdate);
+            Check(face.BlendShapeWeights.Count == 2 && other.BlendShapeWeights.Count == 2, "both imported renderer weights are ready");
+            Check(await VrchatBlendShapeRepair.ApplyVrm(root, vrm) == 0, "two same-named renderers stay ambiguous");
+            other.Slot.Name = "Other";
+            var vowel = vrm.Expressions.Single(e => e.Preset == "aa").Binds.Single();
+            Check(new BlendshapeResolver(root, vrm).Resolve(vowel) == null, "missing named channel cannot drive a shifted index");
+            Check(await VrchatBlendShapeRepair.ApplyVrm(root, vrm) == 1, "restore the empty morph despite a same-named asset slot");
             for (int i = 0; i < 7200 && face.MeshBlendshapeCount != 3; i++) await default(NextUpdate);
             Check(face.Mesh.Asset.Data.BlendShapes.Select(s => s.Name).SequenceEqual(new[] { "morph_0", "morph_1", "morph_2" }),
                 "restored unnamed morphs retain source order");
             var resolver = new BlendshapeResolver(root, vrm);
-            Check(resolver.Resolve(vrm.Expressions.Single().Binds.Single()) == face.GetBlendShape("morph_1"),
-                "the authored index still drives the second morph after repair");
+            Check(resolver.Resolve(vowel) == face.GetBlendShape("morph_0"), "vowel drives the restored first channel");
+            Check(resolver.Resolve(vrm.Expressions.Single(e => e.Preset == "happy").Binds.Single()) == face.GetBlendShape("morph_1"),
+                "second morph drives the authored renderer even when another mesh has the same channel");
         }
         finally { root.Destroy(); }
     }

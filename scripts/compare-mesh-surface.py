@@ -49,23 +49,24 @@ def compare_positioned(data):
         return result
     unity_faces = drawn_faces(points, data['unityTriangles'])
     saved_faces = drawn_faces(saved, data['savedTriangles'])
-    span = max((max(axis) - min(axis) for axis in zip(*points)), default=0)
-    if not span and not saved_faces:
-        return dict(status='unverified', reason='no mesh extent')
+    if not unity_faces and not saved_faces:
+        return dict(status='unverified', reason='no drawable faces')
     if not unity_faces or not saved_faces:
-        return dict(status='different' if unity_faces or saved_faces else 'matched', matchedTriangles=0,
+        return dict(status='different', matchedTriangles=0,
                     unmatchedUnity=len(unity_faces), unmatchedSaved=len(saved_faces))
-    tolerance = span * 1e-5
+    used = {i for face in unity_faces for i in face}
+    tolerance = extent(points, used) * 1e-5
     def cell(p):
         return tuple(math.floor(n / tolerance) for n in p)
     grid = defaultdict(list)
-    for i, p in enumerate(points):
-        grid[cell(p)].append(i)
-    candidates = []
-    for p in saved:
+    for i in used:
+        grid[cell(points[i])].append(i)
+    candidates = {}
+    for j in {i for face in saved_faces for i in face}:
+        p = saved[j]
         x, y, z = cell(p)
-        candidates.append([i for a, b, c in product((-1, 0, 1), repeat=3)
-                           for i in grid.get((x+a, y+b, z+c), ()) if math.dist(p, points[i]) <= tolerance])
+        candidates[j] = [i for a, b, c in product((-1, 0, 1), repeat=3)
+                         for i in grid.get((x+a, y+b, z+c), ()) if math.dist(p, points[i]) <= tolerance]
     # Each source triangle occurrence can be claimed once. An augmenting path
     # can revise an earlier choice when several near-coincident corners compete.
     source = defaultdict(list)
@@ -127,17 +128,82 @@ def patch_edges(points, faces):
 
     # Connect faces sharing any positive length, including a long edge meeting
     # two shorter edges. A single shared endpoint does not connect two patches.
-    neighbors = defaultdict(list)
+    edge_groups = []
+    memberships = defaultdict(list)
     for spans in intervals.values():
-        furthest = owner = None
-        for start, end, face in sorted(spans):
-            if furthest is not None and start < furthest:
-                neighbors[owner].append(face)
-                neighbors[face].append(owner)
-                if end <= furthest:
-                    continue
-            furthest, owner = end, face
-    return lines, neighbors
+        if len(spans) < 2:
+            continue
+        events = defaultdict(lambda: ([], []))
+        for start, end, face in spans:
+            events[start][0].append(face)
+            events[end][1].append(face)
+        active = set()
+        added = False
+        for _, (starts, ends) in sorted(events.items()):
+            if ends:
+                # Record faces covering the same open interval as a group. This
+                # keeps every plane reachable at a crease without storing every
+                # pair of neighbours. Successive ends only shrink the last group.
+                if added and len(active) > 1:
+                    index = len(edge_groups)
+                    edge_groups.append(tuple(active))
+                    for face in active:
+                        memberships[face].append(index)
+                active.difference_update(ends)
+                added = False
+            if starts:
+                active.update(starts)
+                added = True
+    return lines, memberships, edge_groups
+
+
+def extent(points, indices):
+    return max(max(points[i][k] for i in indices) - min(points[i][k] for i in indices) for k in range(3))
+
+
+def connected_patch(seed, remaining, memberships, edge_groups, accepts=None):
+    remaining.remove(seed)
+    stack, patch = [seed], []
+    visited = set()
+    while stack:
+        face = stack.pop()
+        patch.append(face)
+        for index in memberships[face]:
+            if index in visited:
+                continue
+            visited.add(index)
+            for other in edge_groups[index]:
+                if other in remaining and (accepts is None or accepts(other)):
+                    remaining.remove(other)
+                    stack.append(other)
+    return patch
+
+
+def planar_patches(points, faces, memberships, edge_groups, normals):
+    remaining = set(faces)
+    while remaining:
+        region = connected_patch(next(iter(remaining)), remaining, memberships, edge_groups)
+        region_extent = extent(points, {i for f in region for i in f})
+        available = set(region)
+        # A large face gives a stable reference plane. First preserve the usual
+        # tolerance for a single, nearly planar region. At a fold, grow each
+        # patch on its own seed plane so a chain of faces cannot turn a corner.
+        for seed in sorted(region, key=lambda f: (math.hypot(*normals[f]), f), reverse=True):
+            if seed not in available:
+                continue
+            axis, origin = normals[seed], points[seed[0]]
+            length = math.hypot(*axis)
+
+            def fits(face, scale):
+                return dot(axis, normals[face]) != 0 and all(
+                    abs(dot(axis, subtract(points[i], origin))) <= length * scale * 1e-5 for i in face)
+
+            if len(available) == len(region) and all(fits(face, region_extent) for face in region):
+                yield region, axis
+                break
+            seed_extent = extent(points, seed)
+            yield connected_patch(seed, available, memberships, edge_groups,
+                                  lambda f: fits(f, max(seed_extent, extent(points, f)))), axis
 
 
 def compare(data):
@@ -160,43 +226,21 @@ def compare(data):
     # Connected residual patches must lie on one plane and cover the same area.
     # After orienting each triangle toward that plane, its signed boundary counts
     # encode the jump in coverage (including overlaps and holes) across each edge.
-    remaining = set(left) | set(right)
-    lines, neighbors = patch_edges(points, remaining)
+    residual = set(left) | set(right)
+    normals = {face: normal(face) for face in residual}
+    lines, memberships, edge_groups = patch_edges(points, residual)
     unmatched = [0, 0]
     equivalent = 0
-    while remaining:
-        seed = remaining.pop()
-        stack, patch = [seed], []
-        while stack:
-            face = stack.pop()
-            patch.append(face)
-            for adjacent in neighbors[face]:
-                if adjacent in remaining:
-                    remaining.remove(adjacent)
-                    stack.append(adjacent)
-        ref = max(patch, key=lambda f: math.hypot(*normal(f)))
-        axis = normal(ref)
-        origin = points[ref[0]]
-        vertices = {i for f in patch for i in f}
-        # Use the patch's own size so a tiny detail on a large model is not flattened.
-        extent = max(max(points[i][k] for i in vertices) - min(points[i][k] for i in vertices) for k in range(3))
-        tolerance = math.hypot(*axis) * extent * 1e-5
-        planar = all(abs(dot(axis, subtract(points[i], origin))) <= tolerance for i in vertices)
+    for patch, axis in planar_patches(points, residual, memberships, edge_groups, normals):
         boundary = Counter()
-        if planar:
-            for face in patch:
-                orientation = dot(axis, normal(face))
-                if orientation == 0:
-                    planar = False
-                    break
-                count = (left[face] - right[face]) * (1 if orientation > 0 else -1)
-                for a, b in edges(face):
-                    # On each line, oriented coverage changes only at endpoints.
-                    # Splitting an edge adds equal and opposite changes at its new vertex.
-                    line = lines[min(a, b), max(a, b)]
-                    boundary[line, tuple(points[a])] += count
-                    boundary[line, tuple(points[b])] -= count
-        if planar and not any(boundary.values()):
+        for face in patch:
+            count = (left[face] - right[face]) * (1 if dot(axis, normals[face]) > 0 else -1)
+            for a, b in edges(face):
+                # Splitting an edge adds equal and opposite changes at its new vertex.
+                line = lines[min(a, b), max(a, b)]
+                boundary[line, tuple(points[a])] += count
+                boundary[line, tuple(points[b])] -= count
+        if not any(boundary.values()):
             equivalent += 1
         else:
             unmatched[0] += sum(left[f] for f in patch)

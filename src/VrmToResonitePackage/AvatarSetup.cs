@@ -1411,12 +1411,29 @@ internal sealed class BlendshapeResolver
             resolvedNodes?.TryGetValue(node, out slot);
             _identityRenderers[node] = _renderers.Where(skin => skin.Slot == slot).ToArray();
         }
+        if (vrm.Source is ModelSource.Vrm0 or ModelSource.Vrm1)
+            foreach (var (node, _, skin) in FindVrmMeshRenderers(vrm, _renderers))
+                _identityRenderers.TryAdd(node, [skin]);
 
         string RelativePath(Slot slot)
         {
             var parts = new Stack<string>();
             for (; slot != null && slot != root; slot = slot.Parent) parts.Push(slot.Name);
             return string.Join("/", parts);
+        }
+    }
+
+    internal static IEnumerable<(int Node, int Mesh, SkinnedMeshRenderer Skin)> FindVrmMeshRenderers(
+        VrmModel vrm, IEnumerable<SkinnedMeshRenderer> renderers)
+    {
+        var sourceNames = vrm.NodeNames.ToLookup(name => name);
+        var skins = renderers.ToLookup(skin => skin.Slot.Name);
+        foreach (var (mesh, nodes) in vrm.MeshToNodes)
+        foreach (int node in nodes)
+        {
+            string name = vrm.GetNodeName(node);
+            if (!string.IsNullOrEmpty(name) && sourceNames[name].Count() == 1 && skins[name].Count() == 1)
+                yield return (node, mesh, skins[name].Single());
         }
     }
 
@@ -1511,11 +1528,11 @@ internal sealed class BlendshapeResolver
         }
         foreach (SkinnedMeshRenderer skin in EnumerateCandidates(bind))
         {
-            // Animator morph indices address the synthetic name table, not the FBX's
-            // shape order. A missing named shape cannot safely fall back to that index.
+            // On an identified renderer the authored name is authoritative. Stripping
+            // an empty channel can leave a different shape at the same numeric index.
             if (targetName != null && (bind.RequiredRendererName != null || _vrm.MeshBindingPaths.ContainsKey(bind.MeshIndex) ||
                 (_vrm.MeshToNodes.TryGetValue(bind.MeshIndex, out var targetNodes) &&
-                 targetNodes.Any(_vrm.NodeTargets.ContainsKey)))) break;
+                 targetNodes.Any(_identityRenderers.ContainsKey)))) break;
             if (bind.MorphIndex >= 0 && bind.MorphIndex < skin.MeshBlendshapeCount)
             {
                 return (skin, skin.BlendShapeWeights.GetElement(bind.MorphIndex));
@@ -1534,7 +1551,7 @@ internal sealed class BlendshapeResolver
             yield break;
         }
         if (_vrm.MeshToNodes.TryGetValue(bind.MeshIndex, out var identityNodes) &&
-            identityNodes.Any(_vrm.NodeTargets.ContainsKey))
+            identityNodes.Any(_identityRenderers.ContainsKey))
         {
             foreach (int node in identityNodes)
                 if (_identityRenderers.TryGetValue(node, out var renderers))
